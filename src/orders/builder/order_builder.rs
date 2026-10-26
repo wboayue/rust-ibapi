@@ -560,8 +560,7 @@ impl<T> OrderBuilder<T> {
         self
     }
 
-    /// Relative + Limit combo - combo order whose legs fill as relative orders, capped by a
-    /// limit price on the combo (`REL + LMT`)
+    /// Relative + Limit combo (`REL + LMT`); `limit_price` caps the combo
     ///
     /// # Examples
     ///
@@ -575,11 +574,13 @@ impl<T> OrderBuilder<T> {
     /// ```
     pub fn relative_limit_combo(mut self, limit_price: impl Into<f64>) -> Self {
         self.limit_price = Some(limit_price.into());
+        // `build()` sends `aux_price` for the REL combos, so clear any an earlier setter wrote;
+        // C# `OrderSamples` sets none.
+        self.aux_price = None;
         self.order_type(OrderType::RelativeLimitCombo)
     }
 
-    /// Relative + Market combo - combo order whose legs fill as relative orders, with no limit
-    /// on the combo (`REL + MKT`)
+    /// Relative + Market combo (`REL + MKT`), with no limit price
     ///
     /// # Examples
     ///
@@ -590,7 +591,8 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, "REL + MKT");
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
-    pub fn relative_market_combo(self) -> Self {
+    pub fn relative_market_combo(mut self) -> Self {
+        self.aux_price = None;
         self.order_type(OrderType::RelativeMarketCombo)
     }
 

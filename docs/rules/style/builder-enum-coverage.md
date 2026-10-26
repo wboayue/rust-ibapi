@@ -62,7 +62,7 @@ sed -n '/^pub enum OrderType {/,/^}/p' src/orders/builder/types.rs \
 The pattern matches a setter's write (`Some(OrderType::X)` or `self.order_type(OrderType::X)`),
 so doc examples and `build()`'s comparisons don't count. It prints three rows today. `ComboLimit`
 and `ComboMarket` are not gaps: they send `LMT` and `MKT`, the same wire as `.limit()` and
-`.market()`. `Volatility` is one — reachable only as `.order_type(OrderType::Volatility)`, since
+`.market()`. `Volatility` is a real gap — reachable only as `.order_type(OrderType::Volatility)`, since
 `.volatility(..)` sets the figure, not the type (#1082). `MarketOnOpen` / `LimitOnOpen` had no
 named setter until #1073, which sent them as plain day orders through `.order_type(..)`;
 `RelativeLimitCombo` / `RelativeMarketCombo` got theirs in #1076.
@@ -94,10 +94,10 @@ touch either side.
   way in for `Unknown(raw)` and no named per-variant methods were added — the raw value comes
   from a decode, and a `.unknown("Z")` method would read as an invitation to invent wire
   strings.
-- #1076 — `.relative_limit_combo()` / `.relative_market_combo()`, the two `OrderType` gaps the
-  recipe above was added to surface. Neither takes an offset, matching C# `OrderSamples`.
 - #822 — `TimeInForce` gained `GoodTillCrossing` and `.good_till_crossing()` in the same PR,
   as the directive says. Its open-enum `Unknown(raw)` arm is the one variant with no named
   method, deliberately: the raw value comes from a decode, so the general
   `.time_in_force(..)` setter is the only sensible way in and a `.unknown("GTZ")` method
   would read as an invitation to invent wire strings.
+- #1076 — `.relative_limit_combo()` / `.relative_market_combo()`, the two `OrderType` gaps the
+  recipe above was added to surface. Neither takes an offset, matching C# `OrderSamples`.
