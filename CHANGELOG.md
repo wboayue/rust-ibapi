@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `historical_data(..).request_id()` and `historical_data(..).subscribe()` (sync and async): a historical bar request the caller owns. Its id is known before anything is sent, it is sent once and never resent, `ending`/`between` and `buffer_limit` apply, and its frames come as the now-public `HistoricalDataFrame`: `Bars`, then `End`. Unlike `fetch()`, a dropped wait loses no bars read so far, and `cancel_and_drain` reports when TWS is done (a cancel of a running request is confirmed with 162). Examples `historical_data_subscribe` and `async_historical_data_subscribe` (#1189).
 - `news::HistoricalNewsPage`, from `historical_news(..).page()` (async and blocking): the headlines as `articles`, and `has_more`, TWS's flag that more headlines are available than it returned (#1211).
 - `AccountId` converts from `&String` and `&AccountId`, so a borrowed account id passes to any `impl Into<AccountId>` parameter (#1204).
+- `ClientBuilder::handshake_timeout(Duration)` (async and blocking): how long `connect` and each automatic reconnect wait for each frame of the TWS startup exchange (the handshake acknowledgement, then the account-info frames). Default 30 seconds per frame, the limit the blocking client already applied; the TCP connect itself is not bounded. Past it, `connect` fails with `Error::Io` of kind `TimedOut` (#1224).
 
 ### Changed
 
@@ -62,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning` on any order. TWS goes on with the order after it. It arrives on every `exercise_options` request, where it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading (#1210).
 - `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
+- Async `connect` fails with `Error::Io` of kind `TimedOut` when TWS accepts the TCP connection but a startup frame (the handshake acknowledgement or an account-info frame) does not arrive within `handshake_timeout` (default 30 seconds per frame). Previously it waited forever, and so did an automatic reconnect that reached such a gateway (#1224).
 
 ## [5.7.0] - 2026-11-05
 

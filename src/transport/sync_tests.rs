@@ -48,6 +48,20 @@ fn encode_request_contract_data(_server_version: i32, request_id: i32, contract:
     ))
 }
 
+/// The handshake timeout in read timeouts: rounded up, never zero.
+#[test]
+fn startup_timeout_limit_rounds_up_to_at_least_one() {
+    for (timeout, expected) in [
+        (Duration::from_secs(30), 30),
+        (Duration::from_secs(5), 5),
+        (Duration::from_millis(1500), 2),
+        (Duration::from_millis(1), 1),
+        (Duration::ZERO, 1),
+    ] {
+        assert_eq!(startup_timeout_limit(timeout), expected, "{timeout:?}");
+    }
+}
+
 #[test]
 fn thread_safe() {
     assert_send_and_sync::<Connection<TcpSocket>>();

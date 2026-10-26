@@ -37,7 +37,7 @@
 
 use std::time::Duration;
 
-use crate::connection::common::{ConnectionConfig, StartupCallback};
+use crate::connection::common::{ConnectionConfig, StartupCallback, DEFAULT_HANDSHAKE_TIMEOUT};
 use crate::errors::Error;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 use crate::transport::rate_limiter::RateLimiter;
@@ -54,6 +54,8 @@ pub(super) struct BuilderState {
     pub(super) startup_callback: Option<StartupCallback>,
     /// `None` means retry forever; the default is `Some(MAX_RECONNECT_ATTEMPTS)`.
     pub(super) max_reconnect_attempts: Option<u32>,
+    /// Per startup frame; the default is `DEFAULT_HANDSHAKE_TIMEOUT`.
+    pub(super) handshake_timeout: Duration,
     /// `None` (the default) sends without limit.
     pub(super) rate_limiter: Option<RateLimiter>,
     /// `None` (the default) leaves request-id one-shots unbounded.
@@ -68,6 +70,7 @@ impl Default for BuilderState {
             tcp_no_delay: true,
             startup_callback: None,
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
+            handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
             rate_limiter: None,
             one_shot_timeout: None,
         }
@@ -92,6 +95,11 @@ impl BuilderState {
         if self.one_shot_timeout == Some(Duration::ZERO) {
             return Err(Error::InvalidArgument("ClientBuilder: one_shot_timeout must be longer than zero".into()));
         }
+        if self.handshake_timeout.is_zero() {
+            return Err(Error::InvalidArgument(
+                "ClientBuilder: handshake_timeout must be greater than zero".into(),
+            ));
+        }
         Ok(ClientConfig {
             connection: ConnectionConfig {
                 address: self
@@ -103,6 +111,7 @@ impl BuilderState {
                 tcp_no_delay: self.tcp_no_delay,
                 startup_callback: self.startup_callback,
                 max_reconnect_attempts: self.max_reconnect_attempts,
+                handshake_timeout: self.handshake_timeout,
             },
             rate_limiter: self.rate_limiter,
             one_shot_timeout: self.one_shot_timeout,
@@ -216,6 +225,36 @@ pub mod sync_impl {
             self
         }
 
+        /// How long to wait for each frame of the TWS startup exchange (the
+        /// handshake acknowledgement, then the account-info frames) on the
+        /// first connect and on every automatic reconnect. Default: 30 seconds
+        /// per frame; the blocking client rounds the value up to whole seconds. The
+        /// TCP connect itself is not bounded by this setting.
+        ///
+        /// TWS answers late while it is still starting up, and not at all
+        /// until the user accepts the connection when API connections need
+        /// approval. Past the timeout, `connect` fails with `Error::Io` of
+        /// kind `TimedOut`, and a reconnect attempt that times out counts as
+        /// one failed attempt. Zero is rejected with `Error::InvalidArgument`
+        /// at connect time.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # use ibapi::client::blocking::Client;
+        /// use std::time::Duration;
+        ///
+        /// let _ = Client::builder()
+        ///     .address("127.0.0.1:4002")
+        ///     .client_id(100)
+        ///     .handshake_timeout(Duration::from_secs(120))
+        ///     .connect();
+        /// ```
+        pub fn handshake_timeout(mut self, timeout: Duration) -> Self {
+            self.state.handshake_timeout = timeout;
+            self
+        }
+
         /// Cap the messages sent to TWS with a [`RateLimiter`]. Default: no
         /// limit. Pass clones of one limiter to every client connected to the
         /// same gateway; see [`RateLimiter`] for what is counted and how.
@@ -301,8 +340,23 @@ pub mod sync_impl {
         ///
         /// # Errors
         ///
-        /// [`Error::ClientIdInUse`] when another connection holds the client
-        /// id; connect with a different id. Not retried here.
+        /// - [`Error::InvalidArgument`] if `address` or `client_id` is missing,
+        ///   `rate_limiter` allows 0 messages per second, or `handshake_timeout`
+        ///   or `one_shot_timeout` is zero.
+        /// - [`Error::Io`] if the TCP connect or a socket read or write during
+        ///   the startup exchange fails; of kind `TimedOut` if a startup frame
+        ///   does not arrive within `handshake_timeout`.
+        /// - [`Error::ConnectionRejected`] if TWS closes the connection during
+        ///   the handshake (typically a trusted-IP mismatch), or if the server's
+        ///   next valid order id is at or above 1,500,000,000, which is reserved
+        ///   for request ids.
+        /// - [`Error::ClientIdInUse`] when another connection holds the client
+        ///   id; connect with a different id. Not retried here.
+        /// - [`Error::ServerVersion`] if TWS is older than the crate's minimum
+        ///   server version.
+        /// - [`Error::Parse`] if the handshake acknowledgement cannot be read;
+        ///   [`Error::ProtobufDecode`] or [`Error::UnexpectedWireFormat`] if an
+        ///   account-info frame cannot be decoded.
         ///
         /// # Examples
         ///
@@ -327,8 +381,23 @@ pub mod sync_impl {
         ///
         /// # Errors
         ///
-        /// [`Error::ClientIdInUse`] when another connection holds the client
-        /// id; connect with a different id. Not retried here.
+        /// - [`Error::InvalidArgument`] if `address` or `client_id` is missing,
+        ///   `rate_limiter` allows 0 messages per second, or `handshake_timeout`
+        ///   or `one_shot_timeout` is zero.
+        /// - [`Error::Io`] if the TCP connect or a socket read or write during
+        ///   the startup exchange fails; of kind `TimedOut` if a startup frame
+        ///   does not arrive within `handshake_timeout`.
+        /// - [`Error::ConnectionRejected`] if TWS closes the connection during
+        ///   the handshake (typically a trusted-IP mismatch), or if the server's
+        ///   next valid order id is at or above 1,500,000,000, which is reserved
+        ///   for request ids.
+        /// - [`Error::ClientIdInUse`] when another connection holds the client
+        ///   id; connect with a different id. Not retried here.
+        /// - [`Error::ServerVersion`] if TWS is older than the crate's minimum
+        ///   server version.
+        /// - [`Error::Parse`] if the handshake acknowledgement cannot be read;
+        ///   [`Error::ProtobufDecode`] or [`Error::UnexpectedWireFormat`] if an
+        ///   account-info frame cannot be decoded.
         ///
         /// # Examples
         ///
@@ -511,6 +580,39 @@ pub mod async_impl {
             self
         }
 
+        /// How long to wait for each frame of the TWS startup exchange (the
+        /// handshake acknowledgement, then the account-info frames) on the
+        /// first connect and on every automatic reconnect. Default: 30 seconds
+        /// per frame; the blocking client rounds the value up to whole seconds. The
+        /// TCP connect itself is not bounded by this setting.
+        ///
+        /// TWS answers late while it is still starting up, and not at all
+        /// until the user accepts the connection when API connections need
+        /// approval. Past the timeout, `connect` fails with `Error::Io` of
+        /// kind `TimedOut`, and a reconnect attempt that times out counts as
+        /// one failed attempt. Zero is rejected with `Error::InvalidArgument`
+        /// at connect time.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # async fn run() -> Result<(), ibapi::Error> {
+        /// use std::time::Duration;
+        /// use ibapi::Client;
+        ///
+        /// let _client = Client::builder()
+        ///     .address("127.0.0.1:4002")
+        ///     .client_id(100)
+        ///     .handshake_timeout(Duration::from_secs(120))
+        ///     .connect()
+        ///     .await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn handshake_timeout(mut self, timeout: Duration) -> Self {
+            self.state.handshake_timeout = timeout;
+            self
+        }
+
         /// Cap the messages sent to TWS with a [`RateLimiter`]. Default: no
         /// limit. Pass clones of one limiter to every client connected to the
         /// same gateway; see [`RateLimiter`] for what is counted and how.
@@ -603,8 +705,23 @@ pub mod async_impl {
         ///
         /// # Errors
         ///
-        /// [`Error::ClientIdInUse`] when another connection holds the client
-        /// id; connect with a different id. Not retried here.
+        /// - [`Error::InvalidArgument`] if `address` or `client_id` is missing,
+        ///   `rate_limiter` allows 0 messages per second, `handshake_timeout`
+        ///   or `one_shot_timeout` is zero, or `channel_capacity` is 0.
+        /// - [`Error::Io`] if the TCP connect or a socket read or write during
+        ///   the startup exchange fails; of kind `TimedOut` if a startup frame
+        ///   does not arrive within `handshake_timeout`.
+        /// - [`Error::ConnectionRejected`] if TWS closes the connection during
+        ///   the handshake (typically a trusted-IP mismatch), or if the server's
+        ///   next valid order id is at or above 1,500,000,000, which is reserved
+        ///   for request ids.
+        /// - [`Error::ClientIdInUse`] when another connection holds the client
+        ///   id; connect with a different id. Not retried here.
+        /// - [`Error::ServerVersion`] if TWS is older than the crate's minimum
+        ///   server version.
+        /// - [`Error::Parse`] if the handshake acknowledgement cannot be read;
+        ///   [`Error::ProtobufDecode`] or [`Error::UnexpectedWireFormat`] if an
+        ///   account-info frame cannot be decoded.
         ///
         /// # Examples
         ///
@@ -631,8 +748,23 @@ pub mod async_impl {
         ///
         /// # Errors
         ///
-        /// [`Error::ClientIdInUse`] when another connection holds the client
-        /// id; connect with a different id. Not retried here.
+        /// - [`Error::InvalidArgument`] if `address` or `client_id` is missing,
+        ///   `rate_limiter` allows 0 messages per second, `handshake_timeout`
+        ///   or `one_shot_timeout` is zero, or `channel_capacity` is 0.
+        /// - [`Error::Io`] if the TCP connect or a socket read or write during
+        ///   the startup exchange fails; of kind `TimedOut` if a startup frame
+        ///   does not arrive within `handshake_timeout`.
+        /// - [`Error::ConnectionRejected`] if TWS closes the connection during
+        ///   the handshake (typically a trusted-IP mismatch), or if the server's
+        ///   next valid order id is at or above 1,500,000,000, which is reserved
+        ///   for request ids.
+        /// - [`Error::ClientIdInUse`] when another connection holds the client
+        ///   id; connect with a different id. Not retried here.
+        /// - [`Error::ServerVersion`] if TWS is older than the crate's minimum
+        ///   server version.
+        /// - [`Error::Parse`] if the handshake acknowledgement cannot be read;
+        ///   [`Error::ProtobufDecode`] or [`Error::UnexpectedWireFormat`] if an
+        ///   account-info frame cannot be decoded.
         ///
         /// # Examples
         ///

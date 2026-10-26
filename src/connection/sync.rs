@@ -1,19 +1,20 @@
 //! Synchronous connection implementation
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use log::{debug, info};
 
 use super::common::{
-    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionConfig, ConnectionHandler, ConnectionProtocol,
-    StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS,
+    parse_handshake_ack, parse_raw_message, require_protobuf_support, startup_timed_out, AccountInfo, ConnectionConfig, ConnectionHandler,
+    ConnectionProtocol, StartupCallback, StartupHandshakeContext, DEFAULT_HANDSHAKE_TIMEOUT, MAX_ACCOUNT_INFO_ATTEMPTS,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{encode_raw_length, ResponseMessage};
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
-use crate::transport::sync::{NoticeBroadcaster, ShutdownSignal, Stream, TcpSocket, STARTUP_TIMEOUT_LIMIT};
+use crate::transport::sync::{startup_timeout_limit, NoticeBroadcaster, ShutdownSignal, Stream, TcpSocket};
 
 type Response = Result<ResponseMessage, Error>;
 
@@ -25,6 +26,9 @@ pub struct Connection<S: Stream> {
     /// Reconnection attempts before `reconnect` gives up; `None` retries
     /// forever. Defaults to `Some(`[`MAX_RECONNECT_ATTEMPTS`]`)`.
     pub(crate) max_reconnect_attempts: Option<u32>,
+    /// How long `establish_connection` waits for each startup frame. Defaults
+    /// to [`DEFAULT_HANDSHAKE_TIMEOUT`].
+    pub(crate) handshake_timeout: Duration,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
     /// Optional typed-message callback supplied via [`ClientBuilder::startup_callback`].
@@ -65,6 +69,7 @@ impl Connection<TcpSocket> {
         let socket = TcpSocket::connect(&config.address, config.tcp_no_delay)?;
         let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_broadcaster);
         connection.max_reconnect_attempts = config.max_reconnect_attempts;
+        connection.handshake_timeout = config.handshake_timeout;
         connection.establish_connection()?;
         Ok(connection)
     }
@@ -88,6 +93,7 @@ impl<S: Stream> Connection<S> {
                 ..Default::default()
             }),
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
+            handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
             startup_callback,
@@ -240,18 +246,16 @@ impl<S: Stream> Connection<S> {
 
     /// Read one startup frame body, waiting out read timeouts: a loaded
     /// gateway can take longer than one socket timeout to answer. Gives up
-    /// after [`STARTUP_TIMEOUT_LIMIT`] consecutive timeouts.
+    /// once `handshake_timeout` worth of consecutive timeouts have passed.
     fn read_startup_frame(&self) -> Result<Vec<u8>, Error> {
+        let limit = startup_timeout_limit(self.handshake_timeout);
         let mut timeouts = 0;
         loop {
             match self.socket.read_message() {
                 Err(e) if e.is_read_timeout() => {
                     timeouts += 1;
-                    if timeouts >= STARTUP_TIMEOUT_LIMIT {
-                        return Err(Error::Io(std::io::Error::new(
-                            std::io::ErrorKind::TimedOut,
-                            format!("no startup reply from TWS after {timeouts} read timeouts"),
-                        )));
+                    if timeouts >= limit {
+                        return Err(startup_timed_out(self.handshake_timeout));
                     }
                 }
                 result => return result,
@@ -320,6 +324,7 @@ impl<S: Stream> Connection<S> {
                 ..Default::default()
             }),
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
+            handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
             recorder: MessageRecorder::disabled(),
             connection_handler: ConnectionHandler::default(),
             startup_callback: None,

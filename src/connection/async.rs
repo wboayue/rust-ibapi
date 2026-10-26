@@ -2,13 +2,14 @@
 
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use log::{debug, info};
 use tokio::sync::{broadcast, Mutex};
 
 use super::common::{
-    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionConfig, ConnectionHandler, ConnectionProtocol,
-    StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS,
+    parse_handshake_ack, parse_raw_message, require_protobuf_support, startup_timed_out, AccountInfo, ConnectionConfig, ConnectionHandler,
+    ConnectionProtocol, StartupCallback, StartupHandshakeContext, DEFAULT_HANDSHAKE_TIMEOUT, MAX_ACCOUNT_INFO_ATTEMPTS,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -39,6 +40,9 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     /// Reconnection attempts before `reconnect` gives up; `None` retries
     /// forever. Defaults to `Some(`[`MAX_RECONNECT_ATTEMPTS`]`)`.
     pub(crate) max_reconnect_attempts: Option<u32>,
+    /// How long `establish_connection` waits for each startup frame. Defaults
+    /// to [`DEFAULT_HANDSHAKE_TIMEOUT`].
+    pub(crate) handshake_timeout: Duration,
     /// Shared with the bus so `reconnect` can abandon its backoff as soon as
     /// shutdown is requested. See [`AsyncConnection::shutdown_signal`].
     shutdown: Arc<ShutdownSignal>,
@@ -69,6 +73,7 @@ impl AsyncConnection<AsyncTcpSocket> {
         let socket = AsyncTcpSocket::connect(&config.address, config.tcp_no_delay).await?;
         let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_sender);
         connection.max_reconnect_attempts = config.max_reconnect_attempts;
+        connection.handshake_timeout = config.handshake_timeout;
         connection.establish_connection().await?;
         Ok(connection)
     }
@@ -94,6 +99,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
             startup_callback,
             notice_broadcaster: NoticeBroadcaster::new(notice_sender),
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
+            handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
             shutdown: Arc::new(ShutdownSignal::default()),
             market_data_type_request: std::sync::Mutex::new(None),
         }
@@ -248,12 +254,24 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
     /// Read a message from the connection
     pub(crate) async fn read_message(&self) -> Response {
-        let data = self.socket.read_message().await?;
+        self.decode_frame(&self.socket.read_message().await?)
+    }
 
-        let message = parse_raw_message(&data)?;
+    fn decode_frame(&self, data: &[u8]) -> Response {
+        let message = parse_raw_message(data)?;
         self.recorder.record_response(&message);
 
         Ok(message)
+    }
+
+    /// Read one startup frame body, giving up with `TimedOut` once
+    /// `handshake_timeout` passes without it: a gateway that accepts the TCP
+    /// connection but never answers must not hang connect.
+    async fn read_startup_frame(&self) -> Result<Vec<u8>, Error> {
+        match tokio::time::timeout(self.handshake_timeout, self.socket.read_message()).await {
+            Ok(result) => result,
+            Err(_elapsed) => Err(startup_timed_out(self.handshake_timeout)),
+        }
     }
 
     /// Write raw bytes with a length prefix
@@ -270,7 +288,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
         self.socket.write_all(&handshake).await?;
 
-        let ack = parse_handshake_ack(&self.connection_handler, self.socket.read_message().await)?;
+        let ack = parse_handshake_ack(&self.connection_handler, self.read_startup_frame().await)?;
 
         let mut connection_metadata = self.connection_metadata.lock().await;
         self.server_version_cache.store(ack.server_version, Ordering::Release);
@@ -293,7 +311,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
         let mut attempts = 0;
         let ctx = self.handshake_context();
         loop {
-            let message = self.read_message().await?;
+            let message = self.decode_frame(&self.read_startup_frame().await?)?;
             let info = self.connection_handler.parse_account_info(&message, &ctx)?;
 
             attempts += 1;
