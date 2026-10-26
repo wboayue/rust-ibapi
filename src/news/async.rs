@@ -106,6 +106,10 @@ impl Client {
 
     /// Requests news article body
     ///
+    /// # Errors
+    ///
+    /// [`Error::Parse`] if TWS reports an article type other than text (`0`) or binary (`1`).
+    ///
     /// # Examples
     ///
     /// ```no_run
