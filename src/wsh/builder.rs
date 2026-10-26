@@ -12,6 +12,7 @@
 
 use time::Date;
 
+use crate::accounts::types::ContractId;
 use crate::wsh::{AutoFill, WshEventData};
 use crate::Error;
 
@@ -31,10 +32,10 @@ pub struct WshEventDataBuilder<'a, C> {
 }
 
 impl<'a, C> WshEventDataBuilder<'a, C> {
-    pub(crate) fn new(client: &'a C, contract_id: i32) -> Self {
+    pub(crate) fn new(client: &'a C, contract_id: impl Into<ContractId>) -> Self {
         Self {
             client,
-            contract_id,
+            contract_id: contract_id.into().value(),
             start_date: None,
             end_date: None,
             limit: None,

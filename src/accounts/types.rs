@@ -34,6 +34,18 @@ impl From<&str> for AccountId {
     }
 }
 
+impl From<&String> for AccountId {
+    fn from(s: &String) -> Self {
+        Self(s.clone())
+    }
+}
+
+impl From<&AccountId> for AccountId {
+    fn from(id: &AccountId) -> Self {
+        id.clone()
+    }
+}
+
 /// Model code identifier
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -4,6 +4,7 @@ use time::OffsetDateTime;
 
 use super::common::{self, decoders, encoders};
 use super::*;
+use crate::accounts::types::ContractId;
 use crate::client::blocking::{ClientRequestBuilders, Subscription, SubscriptionBuilderExt};
 use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
@@ -109,15 +110,21 @@ impl Client {
     // builder would buy nothing over positional args (docs/rules/style/param-budget.md).
     pub fn historical_news(
         &self,
-        contract_id: i32,
+        contract_id: impl Into<ContractId>,
         provider_codes: &[&str],
         start_time: OffsetDateTime,
         end_time: OffsetDateTime,
         total_results: u16,
     ) -> Result<Subscription<NewsArticle>, Error> {
         let builder = self.request();
-        let request =
-            encoders::encode_request_historical_news(builder.request_id(), contract_id, provider_codes, start_time, end_time, total_results)?;
+        let request = encoders::encode_request_historical_news(
+            builder.request_id(),
+            contract_id.into().value(),
+            provider_codes,
+            start_time,
+            end_time,
+            total_results,
+        )?;
         builder.send(request)
     }
 

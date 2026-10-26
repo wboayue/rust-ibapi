@@ -11,6 +11,7 @@
 //! with an empty chain or a rejection. See
 //! [param budget](../../docs/rules/style/param-budget.md).
 
+use crate::accounts::types::ContractId;
 use crate::client::ids::RequestId;
 use crate::contracts::{OptionChain, SecurityType};
 use crate::Error;
@@ -34,12 +35,18 @@ pub struct OptionChainBuilder<'a, C> {
 }
 
 impl<'a, C> OptionChainBuilder<'a, C> {
-    pub(crate) fn new(client: &'a C, symbol: &'a str, security_type: SecurityType, contract_id: i32, request_id: RequestId) -> Self {
+    pub(crate) fn new(
+        client: &'a C,
+        symbol: &'a str,
+        security_type: SecurityType,
+        contract_id: impl Into<ContractId>,
+        request_id: RequestId,
+    ) -> Self {
         Self {
             client,
             symbol,
             security_type,
-            contract_id,
+            contract_id: contract_id.into().value(),
             exchange: None,
             request_id,
             buffer_limit: None,
