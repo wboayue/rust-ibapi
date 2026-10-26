@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `ExecutionFilterSide`, `OptionRight` and `LegAction` are no longer `#[non_exhaustive]`, so a `match` on them can be exhaustive without a wildcard arm. Each covers a closed set of TWS values (#1081).
+
 ### Fixed
 
 - `order_status_stream` and `wait_for_fill` (sync and async) return `Error::OrderIdInRequestRange` for an order id at or above 1,500,000,000, as the other order methods do. Previously the stream never matched a status, so `wait_for_fill` waited out its timeout and returned `TimedOut` (#1069).

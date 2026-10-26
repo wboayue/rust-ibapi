@@ -11,7 +11,7 @@ triggers:
   - collecting a Subscription into a Vec inside a Client method
 symbols: [Subscription, filter_data, SubscriptionItem, FilterDataStream, DisplayGroupSubscription]
 related: [dual-feature-types, no-parity-wrappers, exercise-production-code]
-precedents: ["#550", "#598", "#735"]
+precedents: ["#550", "#598", "#735", "#1081"]
 memory: [feedback_stream_adapter_consume_form, feedback_subscription_for_yields_subscription_item, feedback_result_flatten_drops_errors]
 ---
 
@@ -78,3 +78,5 @@ and a per-method test — see
   across the examples.
 - #735 — swept every `Some(Ok(..))` consumption site after finding two that dropped routed
   errors; every other site already handled `Some(Err(e))`.
+- #1081 — finished #598's sweep in the sync doc examples, where `for x in &sub` had survived:
+  thirteen sites moved to `iter_data()` with an explicit `Err` arm.
