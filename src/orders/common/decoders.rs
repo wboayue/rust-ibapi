@@ -60,9 +60,9 @@ pub(crate) fn decode_open_order_proto(p: crate::proto::OpenOrder) -> Result<Orde
 pub(crate) fn decode_order_status_proto(p: crate::proto::OrderStatus) -> Result<OrderStatus, Error> {
     Ok(OrderStatus {
         order_id: p.order_id.unwrap_or_default(),
-        status: crate::proto::decoders::parse_required(p.status.as_deref(), "OrderStatus")?,
-        filled: crate::proto::decoders::parse_decimal_or_zero(p.filled.as_deref())?,
-        remaining: crate::proto::decoders::parse_decimal_or_zero(p.remaining.as_deref())?,
+        status: parse_required(p.status.as_deref(), "OrderStatus")?,
+        filled: parse_decimal_or_zero(p.filled.as_deref())?,
+        remaining: parse_decimal_or_zero(p.remaining.as_deref())?,
         average_fill_price: p.avg_fill_price,
         perm_id: p.perm_id.unwrap_or_default(),
         parent_id: p.parent_id.unwrap_or_default(),
@@ -101,8 +101,8 @@ pub(crate) fn decode_commission_report_proto(p: crate::proto::CommissionAndFeesR
         execution_id: p.exec_id.unwrap_or_default(),
         commission: p.commission_and_fees.unwrap_or_default(),
         currency: p.currency.unwrap_or_default(),
-        realized_pnl: crate::proto::decoders::optional_f64(p.realized_pnl),
-        yields: crate::proto::decoders::optional_f64(p.bond_yield),
+        realized_pnl: optional_f64(p.realized_pnl),
+        yields: optional_f64(p.bond_yield),
         yield_redemption_date: p.yield_redemption_date.unwrap_or_default(),
     })
 }
@@ -111,10 +111,10 @@ pub(crate) fn decode_next_valid_id_proto(p: crate::proto::NextValidId) -> Result
     Ok(p.order_id.unwrap_or_default())
 }
 
-// === Proto → domain converters ===
+// === Sub-message decoders (shared by the frame decoders above) ===
 
-// `Order` has ~200 fields; one assignment per line keeps each wire field's conversion
-// on its own line.
+// Linted for the first time after leaving proto/'s blanket allow; struct-literal rewrite
+// tracked in #1084.
 #[allow(clippy::field_reassign_with_default)]
 pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     let mut order = Order::default();

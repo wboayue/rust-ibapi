@@ -1,4 +1,5 @@
 use super::*;
+use crate::orders::common::decoders::decode_order;
 use crate::orders::{self, Action, TimeInForce, WhatIfType};
 
 #[test]
@@ -211,7 +212,7 @@ fn encode_unknown_condition_round_trips() {
         volume: Some(1000),
     };
     for wire in [sparse, populated] {
-        let order = crate::orders::common::decoders::decode_order(&proto::Order {
+        let order = decode_order(&proto::Order {
             action: Some("BUY".into()),
             conditions: vec![wire.clone()],
             ..Default::default()
@@ -229,7 +230,7 @@ fn encode_unknown_condition_absent_conjunction_returns_as_and() {
         r#type: Some(2),
         ..Default::default()
     };
-    let order = crate::orders::common::decoders::decode_order(&proto::Order {
+    let order = decode_order(&proto::Order {
         action: Some("BUY".into()),
         conditions: vec![wire.clone()],
         ..Default::default()
