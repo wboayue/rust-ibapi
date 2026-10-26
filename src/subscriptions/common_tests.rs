@@ -217,13 +217,16 @@ fn rejection_ends_request_only_for_verified_codes() {
         verified,
         other,
     };
+    // Wire literals, not the `notice.rs` constants: the table pins IB's codes
+    // independently of the names. `other` is the code a leak would come from
+    // where one is known (10197 on market data, 165 on scanners).
     let cases = [
         case("TickTypes", rejection_ends::<TickTypes>, Some(200), 10197),
-        case("Bar", rejection_ends::<Bar>, Some(200), 321),
-        case("Trade", rejection_ends::<Trade>, Some(200), 321),
-        case("BidAsk", rejection_ends::<BidAsk>, Some(200), 321),
-        case("MidPoint", rejection_ends::<MidPoint>, Some(200), 321),
-        case("MarketDepths", rejection_ends::<MarketDepths>, Some(200), 309),
+        case("Bar", rejection_ends::<Bar>, Some(200), 10197),
+        case("Trade", rejection_ends::<Trade>, Some(200), 10197),
+        case("BidAsk", rejection_ends::<BidAsk>, Some(200), 10197),
+        case("MidPoint", rejection_ends::<MidPoint>, Some(200), 10197),
+        case("MarketDepths", rejection_ends::<MarketDepths>, Some(200), 10197),
         case("HistoricalBarUpdate", rejection_ends::<HistoricalBarUpdate>, Some(200), 162),
         case("PnL", rejection_ends::<PnL>, Some(321), 200),
         case("PnLSingle", rejection_ends::<PnLSingle>, Some(321), 200),

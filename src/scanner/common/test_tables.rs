@@ -2,7 +2,7 @@
 
 use crate::common::test_utils::helpers::{proto_error_response, proto_response, TEST_REQ_ID_FIRST};
 use crate::contracts::Symbol;
-use crate::messages::{IncomingMessages, Notice, NoticeCategory, ResponseMessage, HMDS_QUERY_MESSAGE_CODE};
+use crate::messages::{IncomingMessages, Notice, NoticeCategory, ResponseMessage, HMDS_QUERY_MESSAGE_CODE, NO_SECURITY_DEFINITION_CODE};
 use crate::scanner::{ScannerData, ScannerSubscription};
 use crate::testdata::builders::scanner::{scanner_data, scanner_data_row};
 use crate::testdata::builders::ResponseProtoEncoder;
@@ -11,7 +11,7 @@ use crate::testdata::builders::ResponseProtoEncoder;
 pub(crate) const NO_ITEMS_MESSAGE: &str = "Historical Market Data Service query message:no items retrieved";
 
 /// A genuine rejection: still ends the subscription.
-pub(crate) const REJECTION_CODE: i32 = 200;
+pub(crate) const REJECTION_CODE: i32 = NO_SECURITY_DEFINITION_CODE;
 
 const NVDA_CONTRACT_ID: i32 = 4815747;
 
