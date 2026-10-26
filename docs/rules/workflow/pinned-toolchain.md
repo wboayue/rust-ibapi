@@ -17,14 +17,17 @@ memory: [feedback_ci_clippy_flags, reference_llvm_cov_toolchain_pairing]
 `v2-stable`** — and `.github/workflows/ci.yml` pins `dtolnay/rust-toolchain@<same version>`.
 Local and CI must run the same compiler, or clippy disagrees about what is a warning.
 
-To upgrade: bump `rust-toolchain.toml` and **every** `dtolnay/rust-toolchain@` pin in
-`ci.yml` in the same PR, fix the new lints, verify CI green.
+To upgrade: bump `rust-toolchain.toml` and the `dtolnay/rust-toolchain@` pins of the `ci` and
+`basic-checks` jobs in `ci.yml` in the same PR, fix the new lints, verify CI green. **Leave the
+`msrv` job's pin alone** — it tracks `rust-version` in `Cargo.toml`, not the toolchain.
 
 ## Why
 
-`ci.yml` pins the version in **two** jobs — the feature matrix and `basic-checks`. Bumping
-only the first leaves the second on the old compiler, which is exactly the split the pin
-exists to prevent.
+`ci.yml` pins the toolchain version in **two** jobs — the feature matrix (`ci`) and
+`basic-checks`. Bumping only the first leaves the second on the old compiler, which is exactly
+the split the pin exists to prevent. A third job, `msrv`, pins `@1.88` and runs
+`cargo +1.88 check` against `rust-version = "1.88"`; bumping it with the toolchain silently
+raises the MSRV.
 
 Not every workflow is pinned, deliberately:
 
@@ -37,4 +40,5 @@ Not every workflow is pinned, deliberately:
   MSRV.
 
 Because `rust-toolchain.toml` is per-branch, a `v2-stable` backport compiles under 1.93.0.
-Code that relies on a 1.94+ feature builds on `main` and fails there.
+Code that relies on a 1.94+ feature builds on `main` and fails there. On `main` itself the
+library must still build under 1.88, which the `msrv` job checks.

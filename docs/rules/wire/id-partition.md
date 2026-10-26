@@ -24,7 +24,8 @@ table happens to hold the number.
 which yields a `RequestId`. Pass `request_id.raw()` to the encoder and the
 `RequestId` to the bus. There is no public way to mint one: request ids are
 crate-minted only, and callers read a live request's id from
-`Subscription::request_id()` / `ContractDetailsBuilder::request_id()`.
+`Subscription::request_id()`, `ContractDetailsBuilder::request_id()` or
+`OptionChainBuilder::request_id()`.
 
 **Accepting an order id from a caller** → take `impl Into<OrderId>`
 (`orders::OrderId`, public; `i32` converts), then check at the entry point:

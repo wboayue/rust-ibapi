@@ -12,7 +12,7 @@ triggers:
 symbols: [ResponseProtoEncoder, encode_proto, proto_response, text_response, MessageBusStub, ordered_responses, Error::UnexpectedWireFormat, assert_rejects_text_framing, with_connection_resets]
 related: [proto-only-decoding, fixture-migration, exercise-production-code]
 precedents: ["#534", "#543", "#731", "#735", "#743", "#747"]
-memory: [feedback_test_fixtures_placement, feedback_testdata_builder_no_new, feedback_no_speculative_test_infra, project_error_response_builder_gap, feedback_mirror_production_patterns]
+memory: [feedback_test_fixtures_placement, feedback_testdata_builder_no_new, feedback_no_speculative_test_infra, feedback_mirror_production_patterns]
 ---
 
 Response fixtures live in `src/testdata/builders/<domain>.rs` as `ResponseProtoEncoder`
@@ -87,8 +87,9 @@ being routed. Two consequences pull in opposite directions:
 
 **It can drop the connection.** `with_connection_resets(n)` answers the first `n` requests with
 a bare `RoutedItem::Error(Error::ConnectionReset)` and no responses — what a dropped socket
-looks like — so a retrying request path can be asserted on by resend count. Only `server_time`
-uses it today; nothing checks that the other one-shot sites retry, so an API whose retry wiring
+looks like — so a retrying request path can be asserted on by resend count. `server_time` (in
+`request_helpers_tests.rs`) and `historical_data` assert their retry with it, and `wait_for_fill`
+asserts it fails on a reset; nothing checks that the other one-shot sites retry, so an API whose retry wiring
 matters needs its own test rather than an assumption.
 
 ## Note on `server_version`

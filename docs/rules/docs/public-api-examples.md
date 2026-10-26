@@ -18,7 +18,7 @@ followed by a runnable example — `no_run` is the norm, `ignore` is acceptable 
 canonical happy-path call.
 
 The heading is part of it. A bare fenced block still compiles under `cargo test --doc`, but
-docs.rs renders no "Examples" section for it, and the file stops matching its 132 siblings.
+docs.rs renders no "Examples" section for it, and the file stops matching its siblings.
 Spell it `# Examples`, plural, even when there is one.
 
 Exempt: struct field getters and trivial `is_*` predicates. An example on those is noise.
@@ -44,7 +44,9 @@ than the other examples in the same file. See [doc parity audit](doc-parity-audi
 
 #751 closed the backfill: re-counted then as 143 of 154 `impl Client` methods with
 `# Examples`, the other eleven being trivial client accessors that are exempt. A new method
-ships with its example.
+ships with its example. Since then a singular `# Example` has crept in, including on both
+`submit_oca_orders` (`grep -rnE '^\s*//[/!] # Example\s*$' src | grep -v _tests.rs`); those are
+not exempt.
 
 ## Precedents
 

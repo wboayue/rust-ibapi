@@ -7,16 +7,16 @@ triggers:
   - wrapping a tokio channel in a struct so both sides look alike
   - the async half of a mirrored pair would only delegate
   - deciding whether sync/async duplication is acceptable
-symbols: [BroadcastSender, broadcast::Sender, filter_data, FilterData, FilterDataStream, deliver_to_request_id]
+symbols: [BroadcastSender, broadcast::Sender, filter_data, FilterData, FilterDataStream, deliver_to_order_or_request, NoticeBroadcaster]
 related: [dual-feature-types, subscription-consumer-idiom]
-precedents: ["#512"]
+precedents: ["#512", "#872"]
 memory: []
 ---
 
 Don't wrap a `tokio::sync::broadcast::Sender` / `mpsc` / similar in a struct just so the async
 side mirrors the sync side. Store the runtime type directly on the bus.
 
-The sync side often needs a real wrapper — `Mutex<Vec<crossbeam Sender<Notice>>>` plus manual
+The sync side often needs a real wrapper — `Mutex<Option<Vec<crossbeam Sender<Notice>>>>` plus manual
 pruning of dropped receivers. The async side gets `subscribe()` and auto-prune from tokio, so
 the equivalent wrapper would be a no-op delegate. Asymmetry here is correct.
 
@@ -28,8 +28,12 @@ have matching semantics when the async one is only forwarding.
 
 The test is whether **both** sides have real behavior:
 
-- `deliver_to_request_id` — genuine mirror. Both `transport/sync.rs` and `transport/async.rs`
-  implement routing logic; the async one is `async fn`. Acceptable duplication.
+- `deliver_to_order_or_request` — genuine mirror. Both `transport/sync.rs` and
+  `transport/async.rs` implement the routing logic. Acceptable duplication.
+- `NoticeBroadcaster` — genuine mirror, though the async half wraps a `broadcast::Sender`. Both
+  hold their sender(s) in a `Mutex<Option<..>>` so `close` can end every `NoticeStream`,
+  including one subscribed after the close (#872). That is behavior a bare sender lacks, which
+  is what separates it from the forwarding struct below.
 - `filter_data` — genuine mirror. Both sides define the method, and the return types differ
   because the abstractions differ: sync yields `FilterData<I>` (an `Iterator` adapter), async
   yields `FilterDataStream<S>` (a `Stream` adapter).
@@ -40,7 +44,9 @@ The test is whether **both** sides have real behavior:
 
 - #512 — the global `NoticeStream` work, where the sync side kept
   `Mutex<Vec<Sender<Notice>>>` with manual pruning and the async side stored the broadcast
-  sender directly rather than growing a matching wrapper.
+  sender directly rather than growing a matching wrapper. #872 later gave the async side its
+  own `NoticeBroadcaster`, held on the connection, because shutdown needed `close`. Not a
+  counter-example: the wrapper came with real behavior, not for symmetry.
 
 > **Correction.** The pre-migration `CLAUDE.md` rule named the acceptable mirror as
 > "`filter_data` / `filter_data_stream`". There is no `filter_data_stream` method. Both sides

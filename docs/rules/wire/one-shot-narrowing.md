@@ -31,6 +31,11 @@ the frame. A one-shot API's decoder therefore takes the *decoded* `prost` type, 
 give the payload an `impl ProtoPayload` (`src/proto/payload.rs`) if it lacks one, which
 `expect_proto` will demand anyway since it cannot infer `MESSAGE_ID` otherwise.
 
+The exception is the four option-computation one-shots (`calculate_option_price`,
+`calculate_implied_volatility`, sync and async). Their processor calls
+`OptionComputation::decode`, a `StreamDecoder` whose message-type match backstops any other
+frame (#740), so they narrow without `expect_proto`.
+
 **Every one-shot helper retries.** `one_shot_by_request_id` for a request-id request,
 `one_shot_shared` (or `one_shot_shared_matching`, below) for a shared channel. None takes a
 `ProtocolFeature`. The handshake requires server version 213, so most one-shots need no check;
@@ -73,8 +78,8 @@ structural â€” a site could not name a payload decoder without naming a frame â€
 arguments unrelated to the compiler, so a mispairing built and ran. Catching that took a
 hand-listed roster and a source-scraping test, and the pair was spelled twice per API since sync
 and async each carry a call site. #749 moved it onto the payload type, where it is a property
-rather than an argument: 25 `impl ProtoPayload` declarations replace 50 call-site literals plus
-the roster.
+rather than an argument: 25 `impl ProtoPayload` declarations (26 today) replaced 50 call-site
+literals plus the roster.
 
 That is not the same as "the type system enforces it". A wrong `MESSAGE_ID` in an impl is still
 possible; it is caught by the per-API round-trip tests, which now fail with `expected

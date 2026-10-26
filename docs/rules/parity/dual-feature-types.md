@@ -36,8 +36,8 @@ Trait method return types and `Client::*` signatures must spell out the full per
 Naive same-name sibling structs gated `#[cfg(feature = "sync")]` / `#[cfg(feature = "async")]`
 compile fine in each single-feature build and then collide under `--all-features`. The alias
 indirection is what lets both types exist at once while one name stays canonical, so
-`cargo check --all-features` is the check that matters here — see
-[feature matrix](feature-matrix.md), whose CI legs do not cover it.
+`cargo check --all-features` is the check that matters here — the `all-features` leg of the
+[feature matrix](feature-matrix.md).
 
 `async` is a Rust keyword, so any path crossing that module needs the raw identifier:
 `crate::subscriptions::r#async::Subscription`. Plain `async::` is a parse error, not a
@@ -49,8 +49,8 @@ feature-splitting, so state the receiver types explicitly when scoping this work
 
 `Subscription` predates the convention: same dual-export idea, but flat
 `subscriptions/sync.rs` + `subscriptions/async.rs` files instead of `sync_impl` / `async_impl`
-submodules. Don't copy that file layout for new types. Its two halves do now agree on
-everything else, including the generic shape — both are `Subscription<T: StreamDecoder<T>>`
+submodules. Don't copy that file layout for new types. Its two halves agree on the generic
+shape — both are `Subscription<T: StreamDecoder<T>>`
 dispatching statically on `T`, both carry `#[allow(private_bounds)]` because `StreamDecoder` is
 `pub(crate)`. A divergence in the *impl* of a dual-feature type reads as deliberate long after
 it stopped being so, so bring the halves together rather than documenting the gap.
