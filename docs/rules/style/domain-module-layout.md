@@ -11,7 +11,7 @@ triggers:
   - splitting a builder's sync and async impl blocks
 symbols: [Client, common, proto]
 related: [narrow-reexports, sibling-test-files, dual-feature-types]
-precedents: ["#657", "#1080"]
+precedents: ["#657", "#1080", "#1078"]
 memory: [project_domain_module_pattern, project_main_flat_helpers_nested_pattern]
 ---
 
@@ -20,8 +20,9 @@ A domain owns its client surface. Its `impl Client` blocks live in `<domain>/syn
 cross-cutting client mechanics (connect, ids, server version, disconnect).
 
 - Shared sync/async logic goes under `<domain>/common/`.
-- Protobuf decoders go in `<domain>/common/decoders.rs`; converters shared across domains go in
-  `src/proto/decoders.rs`.
+- Protobuf decoders and encoders go in `<domain>/common/{decoders,encoders}.rs`, including the
+  sub-message converters (`decode_order`, `encode_order`) a domain's frame codecs share;
+  converters used by more than one domain go in `src/proto/{decoders,encoders}.rs`.
 - Public types go in `<domain>/mod.rs`, ungated by feature flags.
 - Prefer the flat `<domain>/sync.rs` over `<domain>/sync/mod.rs` — the project minimizes
   `mod.rs` files.
@@ -62,10 +63,7 @@ example of adding a module.
 - #1080 — moved `Client::submit_oca_orders` out of `orders/builder/{sync,async}_impl.rs` into
   `orders/{sync,async}.rs` beside `submit_order`: a client method in a helper file is drift even
   inside the right domain.
-
-## Known drift
-
-Two single-domain converters still sit in the shared `src/proto/` modules —
-`decode_contract_details` and `encode_scanner_subscription` — tracked in #1078 (the orders
-converters moved in its first PR). Don't add to them there; a new single-domain function goes
-in `<domain>/common/`.
+- #1078 — moved the single-domain converters out of `src/proto/`: the orders sub-message
+  codecs (#1085), then `decode_contract_and_details` and `encode_subscription_params`. A private
+  helper moved with its caller only when no other domain used it — `decode_soft_dollar_tier`
+  (accounts) and `encode_contract_with_order` (wrapped by the shared `encode_contract`) stayed.

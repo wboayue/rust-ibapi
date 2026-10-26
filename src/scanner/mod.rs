@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 // Common implementation modules
 mod common;
+// Test fixtures encode the request body with the production encoder.
+#[cfg(test)]
+pub(crate) use common::encoders::encode_subscription_params;
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]

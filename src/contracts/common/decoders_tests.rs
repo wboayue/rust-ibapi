@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::common::test_utils::helpers::{assert_missing_field, assert_rejects_text_framing};
+use crate::common::test_utils::helpers::{assert_decimal_parse_error, assert_missing_field, assert_rejects_text_framing};
 use crate::messages::IncomingMessages;
 use prost::Message;
 
@@ -279,4 +279,57 @@ fn decode_bond_contract_details_live_shape() {
     assert_eq!(details.contract_month, "202611");
     assert_eq!(details.time_zone_id, "US/Eastern");
     assert_eq!(details.maturity, "", "no last trade date on the wire, so no maturity");
+}
+
+// === decode_contract_and_details ===
+
+/// A `proto::Contract` carrying a `sec_type`, for tests that are not about the
+/// `Other("")` fallback in `decode_contract`.
+fn stk_contract() -> crate::proto::Contract {
+    crate::proto::Contract {
+        sec_type: Some("STK".into()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn decode_contract_details_rejects_malformed_min_size() {
+    let details = proto::ContractDetails {
+        min_size: Some("abc".into()),
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_contract_and_details(&stk_contract(), &details), "abc");
+}
+
+#[test]
+fn decode_contract_details_rejects_malformed_min_tick() {
+    let details = proto::ContractDetails {
+        min_tick: Some("abc".into()),
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_contract_and_details(&stk_contract(), &details), "abc");
+}
+
+// === ContractDetails size rules are optional (issue #716) ===
+
+#[test]
+fn decode_contract_details_absent_size_rules_are_none() {
+    // Contracts without size rules omit these entirely; `0.0` would have been a
+    // nonsense size increment.
+    let details = decode_contract_and_details(&stk_contract(), &proto::ContractDetails::default()).unwrap();
+
+    assert_eq!(details.min_size, None);
+    assert_eq!(details.size_increment, None);
+    assert_eq!(details.suggested_size_increment, None);
+}
+
+#[test]
+fn decode_contract_details_preserves_fractional_size_increment() {
+    let details = proto::ContractDetails {
+        size_increment: Some("0.0001".into()),
+        ..Default::default()
+    };
+    let decoded = decode_contract_and_details(&stk_contract(), &details).unwrap();
+
+    assert_eq!(decoded.size_increment, Some(0.0001));
 }

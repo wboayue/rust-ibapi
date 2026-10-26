@@ -5,7 +5,7 @@ use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
 use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
 use crate::proto;
-use crate::scanner::ScannerSubscription;
+use crate::scanner::{encode_subscription_params, ScannerSubscription};
 
 empty_request_builder!(
     ScannerParametersRequestBuilder,
@@ -58,7 +58,7 @@ impl RequestEncoder for ScannerSubscriptionRequestBuilder {
     fn to_proto(&self) -> Self::Proto {
         proto::ScannerSubscriptionRequest {
             req_id: Some(self.request_id),
-            scanner_subscription: Some(proto::encoders::encode_scanner_subscription(&self.subscription, &self.filter)),
+            scanner_subscription: Some(encode_subscription_params(&self.subscription, &self.filter)),
         }
     }
 }
