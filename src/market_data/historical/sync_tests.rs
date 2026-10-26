@@ -1128,7 +1128,7 @@ fn historical_data_error_message_response() {
         162,
         "Historical Market Data Service error message:No market data permissions.",
     )]));
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let result = client
         .historical_data(&Contract::stock("MSFT").build(), BarSize::Hour)
@@ -1137,6 +1137,8 @@ fn historical_data_error_message_response() {
 
     let err = result.expect_err("expected error from server");
     assert!(err.to_string().contains("No market data permissions"), "got: {err}");
+    // TWS ended the query with its error; a cancel would draw 366.
+    assert_eq!(historical_requests_and_cancels(&message_bus), (1, 0));
 }
 
 #[test]

@@ -44,11 +44,14 @@ impl<T> SubscriptionItem<T> {
 pub enum Drained {
     /// TWS sent the end marker: the request is over at TWS.
     Ended,
-    /// TWS sent an error for the request: the request is over at TWS.
+    /// TWS answered with an error for the request. For request types whose
+    /// errors aren't known to end the request at TWS, the drop still writes
+    /// the cancel.
     Rejected(Notice),
     /// No terminal evidence: the deadline passed, or the stream had already
-    /// ended with an error (such as a buffer overflow), after which TWS's state
-    /// can't be observed. Treat the request id as possibly still live.
+    /// ended with an error on our side (such as a buffer overflow), after
+    /// which TWS's state can't be observed. Treat the request id as possibly
+    /// still live.
     Unconfirmed,
 }
 
@@ -275,6 +278,15 @@ pub(crate) trait StreamDecoder<T> {
     /// See [`classify`](crate::messages::classify) for why this is not a
     /// classification change.
     fn is_nonterminal_notice(_notice: &Notice) -> bool {
+        false
+    }
+
+    /// Whether a terminal error notice also ends the request at TWS, so drop
+    /// writes no cancel (TWS would answer it with 366). Opt in only where
+    /// that is wire-verified: ending the stream on our side doesn't prove TWS
+    /// ended the request, and a skipped cancel then leaks it at TWS (a market
+    /// data line, a scanner slot). Default: `false`, the cancel is written.
+    fn rejection_ends_request(_notice: &Notice) -> bool {
         false
     }
 

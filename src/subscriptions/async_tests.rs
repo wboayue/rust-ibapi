@@ -1133,6 +1133,35 @@ async fn drain_after_error_is_unconfirmed_and_cancels_on_drop() {
     assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "the drop writes the cancel");
 }
 
+/// A rejection read before the drain is still TWS's answer; the decoder
+/// doesn't opt into `rejection_ends_request`, so the drop writes the cancel.
+#[tokio::test]
+async fn drain_after_read_rejection_is_rejected() {
+    let mut f = drain_fixture();
+    let notice = crate::messages::Notice::synthesized(200, "No security definition".to_string());
+    f.tx.send(RoutedItem::Error(Error::Notice(notice.clone()))).unwrap();
+    assert!(matches!(f.subscription.next().await, Some(Err(Error::Notice(_)))));
+
+    assert_eq!(
+        f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(),
+        Drained::Rejected(notice)
+    );
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "the drop writes the cancel");
+}
+
+/// Without a request id the error may be a request-less one fanned out to
+/// every shared stream, so it isn't recorded as this request's rejection.
+#[tokio::test]
+async fn drain_after_error_without_request_id_is_unconfirmed() {
+    let mut f = subscription_with::<CancellableEndItem>(None, None, DecoderContext::default());
+    let notice = crate::messages::Notice::synthesized(200, "No security definition".to_string());
+    f.tx.send(RoutedItem::Error(Error::Notice(notice))).unwrap();
+    assert!(matches!(f.subscription.next().await, Some(Err(Error::Notice(_)))));
+
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Unconfirmed);
+}
+
 #[tokio::test]
 async fn drain_session_error_is_err() {
     let f = drain_fixture();

@@ -25,7 +25,7 @@ use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
 use crate::common::error_helpers;
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Error, ToField};
 
@@ -552,6 +552,13 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
 
     fn is_snapshot_end(&self) -> bool {
         matches!(self, Self::End { .. })
+    }
+
+    /// Any error, not a code list: a one-shot query has nothing to continue
+    /// after one. Verified live for 162, 200 and 10314, where TWS answers a
+    /// cancel with 366 (no query found).
+    fn rejection_ends_request(_notice: &Notice) -> bool {
+        true
     }
 }
 

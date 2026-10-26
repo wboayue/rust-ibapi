@@ -304,7 +304,7 @@ async fn historical_data_error_response() {
         "Historical Market Data Service error message:No market data permissions.",
     )]));
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     let contract = test_contract();
 
     let result = client.historical_data(&contract, BarSize::Hour).duration(Duration::days(1)).fetch().await;
@@ -313,6 +313,8 @@ async fn historical_data_error_response() {
         result.unwrap_err().to_string().contains("No market data permissions"),
         "Error should contain the error message"
     );
+    // TWS ended the query with its error; a cancel would draw 366.
+    assert_eq!(historical_requests_and_cancels(&message_bus).await, (1, 0));
 }
 
 /// TWS sends 2188 on the error callback and then delivers the bars: the account
