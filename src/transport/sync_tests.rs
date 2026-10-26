@@ -19,6 +19,7 @@ use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, Reques
 use crate::orders::common::encode_place_order;
 use crate::orders::{order_builder, Action};
 use crate::testdata::builders::contracts::contract_data;
+use crate::testdata::builders::orders::next_valid_id;
 use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::transport::raw_capture::{test_support, RawFrameTap};
@@ -273,9 +274,10 @@ fn managed_accounts_response(accounts: &str) -> ResponseMessage {
 }
 
 fn next_valid_id_response(order_id: i32) -> ResponseMessage {
-    use prost::Message;
-    let bytes = crate::proto::NextValidId { order_id: Some(order_id) }.encode_to_vec();
-    proto_response(crate::messages::IncomingMessages::NextValidId, bytes)
+    proto_response(
+        crate::messages::IncomingMessages::NextValidId,
+        next_valid_id().order_id(order_id).encode_proto(),
+    )
 }
 
 #[test]
@@ -1622,7 +1624,7 @@ fn one_shot_shared_request_does_not_see_earlier_error() -> Result<(), Error> {
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::NextValidId as i32,
-        &crate::proto::NextValidId { order_id: Some(90) },
+        &next_valid_id().order_id(90).to_proto(),
     ));
     bus.dispatch()?;
 

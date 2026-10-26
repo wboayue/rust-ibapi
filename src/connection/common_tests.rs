@@ -4,6 +4,8 @@ use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::common::test_utils::helpers::{binary_text, proto_error_response, proto_response, CapturingSink};
 use crate::messages::IncomingMessages;
 use crate::messages::{HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, MESSAGE_ID_LEN, UNKNOWN_MESSAGE_TYPE_CODE};
+use crate::testdata::builders::orders::next_valid_id;
+use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::{Arc, Mutex};
 use time::macros::datetime;
 use time_tz::TimeZone;
@@ -231,11 +233,9 @@ fn dispatch_unsolicited_notice_only_fires_notice_sink() {
 
 #[test]
 fn parse_account_info_callback_not_invoked_for_next_valid_id() {
-    use prost::Message;
-
     // NextValidId is consumed internally — neither callback fires.
     let handler = ConnectionHandler::default();
-    let bytes = crate::proto::NextValidId { order_id: Some(1000) }.encode_to_vec();
+    let bytes = next_valid_id().order_id(1000).encode_proto();
     let message = proto_response(IncomingMessages::NextValidId, bytes);
 
     let fired = Arc::new(Mutex::new(false));
@@ -273,8 +273,6 @@ fn parse_account_info_callback_not_invoked_for_managed_accounts() {
 
 #[test]
 fn parse_account_info_multiple_messages_callback() {
-    use prost::Message;
-
     let handler = ConnectionHandler::default();
     let count = Arc::new(Mutex::new(0));
     let count_clone = count.clone();
@@ -292,7 +290,7 @@ fn parse_account_info_multiple_messages_callback() {
     handler.parse_account_info(&msg2, &cbs).unwrap();
 
     // Third message: NextValidId (consumed internally — should NOT trigger callback)
-    let bytes = crate::proto::NextValidId { order_id: Some(1000) }.encode_to_vec();
+    let bytes = next_valid_id().order_id(1000).encode_proto();
     let msg3 = proto_response(IncomingMessages::NextValidId, bytes);
     handler.parse_account_info(&msg3, &cbs).unwrap();
 
@@ -656,11 +654,8 @@ fn startup_message_message_type_typed_variants() {
 
 #[test]
 fn parse_account_info_next_valid_id_protobuf() {
-    use prost::Message;
-
     let handler = ConnectionHandler::default();
-    let proto = crate::proto::NextValidId { order_id: Some(4242) };
-    let bytes = proto.encode_to_vec();
+    let bytes = next_valid_id().order_id(4242).encode_proto();
     let message = proto_response(IncomingMessages::NextValidId, bytes);
 
     let info = handler

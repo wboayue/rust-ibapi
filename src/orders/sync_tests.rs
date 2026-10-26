@@ -434,6 +434,7 @@ fn auto_open_orders() {
 
     assert_request(&message_bus, 0, &auto_open_orders_request().auto_bind(api_only));
     let subscription = results.expect("auto_open_orders");
+    // OpenOrderEnd is terminal for auto_open_orders too: the stream ends rather than waiting for binds.
     assert!(subscription.next().is_none(), "OpenOrderEnd alone must end the stream with no orders");
 }
 

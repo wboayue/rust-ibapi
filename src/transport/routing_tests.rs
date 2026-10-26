@@ -4,6 +4,8 @@ use super::*;
 use crate::client::ids::{OrderId, RequestId};
 use crate::common::test_utils::helpers::{error_envelope, proto_response};
 use crate::messages::{is_informational_code, ResponseMessage, DATA_ADVISORY_CODES, WARNING_CODE_RANGE};
+use crate::testdata::builders::orders::next_valid_id;
+use crate::testdata::builders::ResponseProtoEncoder;
 
 #[test]
 fn decoded_error_default() {
@@ -162,10 +164,7 @@ fn determine_routing_shared_message() {
             }
             .encode_to_vec(),
         ),
-        (
-            IncomingMessages::NextValidId,
-            crate::proto::NextValidId { order_id: Some(90) }.encode_to_vec(),
-        ),
+        (IncomingMessages::NextValidId, next_valid_id().order_id(90).encode_proto()),
         (
             IncomingMessages::CurrentTime,
             crate::proto::CurrentTime {

@@ -27,12 +27,12 @@ pub(crate) struct MessageRecorder {
 }
 
 impl MessageRecorder {
-    pub fn new(enabled: bool, recording_dir: String) -> Self {
-        Self { enabled, recording_dir }
-    }
     /// A recorder that writes nothing.
     pub fn disabled() -> Self {
-        Self::new(false, String::new())
+        Self {
+            enabled: false,
+            recording_dir: String::new(),
+        }
     }
 
     /// Read `IBAPI_RECORDING_DIR`. Unset or empty yields [`Self::disabled`].
@@ -59,7 +59,10 @@ impl MessageRecorder {
             return Self::disabled();
         }
 
-        Self::new(true, recording_dir)
+        Self {
+            enabled: true,
+            recording_dir,
+        }
     }
 
     pub fn record_request(&self, data: &[u8]) {

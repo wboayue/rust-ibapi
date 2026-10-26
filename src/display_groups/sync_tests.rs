@@ -50,8 +50,16 @@ fn update_display_group() {
     subscription.update("265598@SMART").expect("update failed");
 
     assert_eq!(request_message_count(&message_bus), 2);
-    assert_request(&message_bus, 0, &subscribe_to_group_events_request().group_id(1));
-    assert_request(&message_bus, 1, &update_display_group_request().contract_info("265598@SMART"));
+    assert_request(
+        &message_bus,
+        0,
+        &subscribe_to_group_events_request().request_id(TEST_REQ_ID_FIRST).group_id(1),
+    );
+    assert_request(
+        &message_bus,
+        1,
+        &update_display_group_request().request_id(TEST_REQ_ID_FIRST).contract_info("265598@SMART"),
+    );
 }
 
 #[test]

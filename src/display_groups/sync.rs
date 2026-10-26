@@ -20,6 +20,7 @@ use super::encoders;
 #[must_use = "DisplayGroupSubscription must be polled (deref to Subscription, then .next() or .iter()) to receive updates; dropping it releases the subscription"]
 pub struct DisplayGroupSubscription {
     inner: Subscription<DisplayGroupUpdate>,
+    // The id the subscription was opened with; `update` must reuse it.
     request_id: i32,
     message_bus: Arc<dyn MessageBus>,
 }
