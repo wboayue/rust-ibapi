@@ -4,7 +4,7 @@ use super::*;
 use crate::common::test_utils::helpers::{assert_missing_field, assert_rejects_text_framing};
 use crate::contracts::Symbol;
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, OrderStatusKind};
+use crate::orders::{Action, OrderStatusKind, UnknownCondition};
 use crate::testdata::builders::orders::{order_bound, OrderBoundResponse};
 use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -581,4 +581,412 @@ fn decode_execution_data_proto_rejects_missing_submessages() {
     ] {
         assert_missing_field(decode_execution_data_proto(frame), name, "ExecutionDetails");
     }
+}
+
+// === decode_order ===
+
+/// The smallest `proto::Order` `decode_order` accepts: `action` is the one
+/// required wire field.
+fn proto_order() -> proto::Order {
+    proto::Order {
+        action: Some("BUY".into()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn decode_order_maps_hedge_max_size() {
+    let proto_order = proto::Order {
+        hedge_max_size: Some(500),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.hedge_max_size, Some(500));
+}
+
+#[test]
+fn decode_order_hedge_max_size_absent_is_none() {
+    let order = decode_order(&proto_order()).unwrap();
+    assert!(order.hedge_max_size.is_none());
+}
+
+#[test]
+fn decode_order_keeps_the_up_to_mid_sentinel() {
+    // PEG BEST "compete up to the midpoint" is sent as +inf; decoding must not drop it like the
+    // f64::MAX unset sentinel.
+    let proto_order = proto::Order {
+        compete_against_best_offset: Some(f64::INFINITY),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.compete_against_best_offset, Some(f64::INFINITY));
+}
+
+// === decode_order deactivate ===
+
+#[test]
+fn decode_order_maps_deactivate() {
+    let proto_order = proto::Order {
+        deactivate: Some(true),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert!(order.deactivate);
+}
+
+#[test]
+fn decode_order_deactivate_absent_is_false() {
+    let order = decode_order(&proto_order()).unwrap();
+    assert!(!order.deactivate);
+}
+
+// === decode_order additional order params ===
+
+#[test]
+fn decode_order_maps_additional_params() {
+    let proto_order = proto::Order {
+        post_only: Some(true),
+        allow_pre_open: Some(true),
+        ignore_open_auction: Some(true),
+        seek_price_improvement: Some(1),
+        what_if_type: Some(1),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert!(order.post_only);
+    assert!(order.allow_pre_open);
+    assert!(order.ignore_open_auction);
+    assert_eq!(order.seek_price_improvement, Some(true));
+    assert_eq!(order.what_if_type, Some(WhatIfType::MarginRequirements));
+}
+
+#[test]
+fn decode_order_additional_params_absent_are_unset() {
+    let order = decode_order(&proto_order()).unwrap();
+    assert!(!order.post_only);
+    assert!(!order.allow_pre_open);
+    assert!(!order.ignore_open_auction);
+    assert_eq!(order.seek_price_improvement, None);
+    assert_eq!(order.what_if_type, None);
+}
+
+#[test]
+fn decode_order_seek_price_improvement_zero_is_false() {
+    let proto_order = proto::Order {
+        seek_price_improvement: Some(0),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.seek_price_improvement, Some(false));
+}
+
+// === decode_order conditions_include_overnight ===
+
+#[test]
+fn decode_order_maps_conditions_include_overnight() {
+    let proto_order = proto::Order {
+        conditions_include_overnight: Some(true),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert!(order.conditions_include_overnight);
+}
+
+#[test]
+fn decode_order_conditions_include_overnight_absent_is_false() {
+    let order = decode_order(&proto_order()).unwrap();
+    assert!(!order.conditions_include_overnight);
+}
+
+// === decode_order tif ===
+
+#[test]
+fn decode_order_preserves_unknown_tif() {
+    // An unmodeled TIF keeps its raw value instead of decoding as DAY — the
+    // bug GoodTillCrossing hit before it was a variant (#822).
+    let proto_order = proto::Order {
+        tif: Some("GTZ".to_string()),
+        ..proto_order()
+    };
+    assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::Unknown("GTZ".to_string()));
+}
+
+#[test]
+fn decode_order_maps_known_tif() {
+    let proto_order = proto::Order {
+        tif: Some("GTX".to_string()),
+        ..proto_order()
+    };
+    assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::GoodTillCrossing);
+}
+
+#[test]
+fn decode_order_tif_absent_or_empty_is_day() {
+    // Upstream omits an empty Tif rather than sending one, so neither form is
+    // an unknown value to preserve (unlike action, which is required).
+    assert_eq!(decode_order(&proto_order()).unwrap().tif, TimeInForce::Day);
+
+    let empty_tif = proto::Order {
+        tif: Some(String::new()),
+        ..proto_order()
+    };
+    assert_eq!(decode_order(&empty_tif).unwrap().tif, TimeInForce::Day);
+}
+
+// === decimal wire fields are routed through parse_optional_decimal (issue #716) ===
+
+#[test]
+fn decode_order_rejects_malformed_total_quantity() {
+    let proto_order = proto::Order {
+        total_quantity: Some("abc".into()),
+        ..proto_order()
+    };
+    assert_decimal_parse_error(decode_order(&proto_order), "abc");
+}
+
+#[test]
+fn decode_order_preserves_fractional_total_quantity() {
+    let proto_order = proto::Order {
+        total_quantity: Some("0.5".into()),
+        ..proto_order()
+    };
+    assert_eq!(decode_order(&proto_order).unwrap().total_quantity, 0.5);
+}
+
+// === decode_order enum fields go through parse_required / parse_optional ===
+
+#[test]
+fn decode_order_rejects_missing_or_empty_action() {
+    // Unlike tif, action has no unset state upstream: an order without a
+    // side is a malformed frame, not a default.
+    for proto_order in [
+        proto::Order {
+            action: None,
+            ..proto_order()
+        },
+        proto::Order {
+            action: Some(String::new()),
+            ..proto_order()
+        },
+    ] {
+        assert!(
+            matches!(decode_order(&proto_order), Err(Error::Parse(_, _, _))),
+            "expected Error::Parse for {proto_order:?}"
+        );
+    }
+}
+
+#[test]
+fn decode_order_rejects_unknown_action() {
+    // Action is closed: an unrecognized side fails the decode rather than
+    // reading as Buy.
+    let proto_order = proto::Order {
+        action: Some("NOTASIDE".into()),
+        ..proto_order()
+    };
+    assert!(matches!(decode_order(&proto_order), Err(Error::Parse(_, _, _))));
+}
+
+#[test]
+fn decode_order_preserves_unknown_string_codes() {
+    // rule80_a and open_close are open: an unrecognized value survives the
+    // decode as Unknown(raw) instead of failing the order stream (tif is
+    // covered by decode_order_preserves_unknown_tif above).
+    let proto_order = proto::Order {
+        rule80_a: Some("Z".into()),
+        open_close: Some("X".into()),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.rule_80_a, Some(Rule80A::Unknown("Z".into())));
+    assert_eq!(order.open_close, Some(OrderOpenClose::Unknown("X".into())));
+}
+
+#[test]
+fn decode_order_empty_optional_strings_are_none() {
+    let proto_order = proto::Order {
+        rule80_a: Some(String::new()),
+        open_close: Some(String::new()),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.rule_80_a, None);
+    assert_eq!(order.open_close, None);
+}
+
+#[test]
+fn decode_order_preserves_unknown_integer_codes() {
+    let proto_order = proto::Order {
+        oca_type: Some(9),
+        trigger_method: Some(99),
+        volatility_type: Some(9),
+        reference_price_type: Some(9),
+        origin: Some(9),
+        short_sale_slot: Some(9),
+        what_if_type: Some(9),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.oca_type, OcaType::Unknown(9));
+    assert_eq!(order.trigger_method, TriggerMethod::Unknown(99));
+    assert_eq!(order.volatility_type, Some(VolatilityType::Unknown(9)));
+    assert_eq!(order.reference_price_type, Some(ReferencePriceType::Unknown(9)));
+    assert_eq!(order.origin, OrderOrigin::Unknown(9));
+    assert_eq!(order.short_sale_slot, ShortSaleSlot::Unknown(9));
+    assert_eq!(order.what_if_type, Some(WhatIfType::Unknown(9)));
+}
+
+#[test]
+fn decode_order_condition_preserves_unknown_trigger_method() {
+    let proto_order = proto::Order {
+        conditions: vec![proto::OrderCondition {
+            r#type: Some(1),
+            trigger_method: Some(99),
+            ..Default::default()
+        }],
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    match &order.conditions[..] {
+        [OrderCondition::Price(price)] => assert_eq!(price.trigger_method, TriggerMethod::Unknown(99)),
+        other => panic!("expected one price condition, got {other:?}"),
+    }
+}
+
+fn populated_condition(condition_type: i32) -> proto::OrderCondition {
+    proto::OrderCondition {
+        r#type: Some(condition_type),
+        is_conjunction_connection: Some(false),
+        is_more: Some(true),
+        con_id: Some(265598),
+        exchange: Some("SMART".into()),
+        symbol: Some("AAPL".into()),
+        sec_type: Some("STK".into()),
+        percent: Some(12),
+        change_percent: Some(2.5),
+        price: Some(150.0),
+        trigger_method: Some(2),
+        time: Some("20251230 14:30:00 US/Eastern".into()),
+        volume: Some(1000),
+    }
+}
+
+#[test]
+fn decode_order_preserves_unknown_condition_type() {
+    // #827: an unmodeled type (2 is unassigned) must not read as a zeroed price condition.
+    let proto_order = proto::Order {
+        conditions: vec![
+            populated_condition(2),
+            proto::OrderCondition {
+                r#type: Some(99),
+                ..Default::default()
+            },
+        ],
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(
+        order.conditions,
+        vec![
+            OrderCondition::Unknown(UnknownCondition {
+                condition_type: 2,
+                is_conjunction: false,
+                is_more: Some(true),
+                contract_id: Some(265598),
+                exchange: Some("SMART".into()),
+                symbol: Some("AAPL".into()),
+                security_type: Some("STK".into()),
+                percent: Some(12),
+                change_percent: Some(2.5),
+                price: Some(150.0),
+                trigger_method: Some(2),
+                time: Some("20251230 14:30:00 US/Eastern".into()),
+                volume: Some(1000),
+            }),
+            OrderCondition::Unknown(UnknownCondition {
+                condition_type: 99,
+                is_conjunction: true,
+                ..Default::default()
+            }),
+        ]
+    );
+}
+
+#[test]
+fn decode_order_condition_missing_type_is_parse_error() {
+    let proto_order = proto::Order {
+        conditions: vec![proto::OrderCondition::default()],
+        ..proto_order()
+    };
+    match decode_order(&proto_order).unwrap_err() {
+        Error::Parse(_, _, msg) => assert!(msg.contains("OrderCondition type"), "got: {msg}"),
+        other => panic!("expected Error::Parse, got {other:?}"),
+    }
+}
+
+#[test]
+fn decode_order_condition_maps_every_type_code() {
+    // Probes the same range as check_wire_code_round_trip: a type added to the
+    // decoder without a row here fails.
+    const MODELED: [i32; 6] = [1, 3, 4, 5, 6, 7];
+    for code in -8..=64 {
+        let condition = decode_order_condition(&proto::OrderCondition {
+            r#type: Some(code),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(condition.condition_type(), code, "code {code}");
+        assert_eq!(
+            matches!(condition, OrderCondition::Unknown(_)),
+            !MODELED.contains(&code),
+            "code {code} decoded as {condition:?}"
+        );
+    }
+}
+
+#[test]
+fn decode_execution_rejects_malformed_shares() {
+    let proto_exec = proto::Execution {
+        side: Some("BOT".into()),
+        shares: Some("abc".into()),
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_execution(&proto_exec), "abc");
+}
+
+#[test]
+fn decode_execution_rejects_malformed_cumulative_quantity() {
+    let proto_exec = proto::Execution {
+        side: Some("BOT".into()),
+        shares: Some("10".into()),
+        cum_qty: Some("abc".into()),
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_execution(&proto_exec), "abc");
+}
+
+#[test]
+fn decode_order_state_sentinel_suggested_size_is_none() {
+    // Regression guard: `optional_string_f64`'s unset semantics had to survive
+    // the swap to `parse_optional_decimal`.
+    let state = proto::OrderState {
+        status: Some("Submitted".into()),
+        suggested_size: Some("2147483647".into()),
+        ..Default::default()
+    };
+    assert_eq!(decode_order_state(&state).unwrap().suggested_size, None);
+}
+
+#[test]
+fn decode_order_state_rejects_malformed_allocation_position() {
+    let state = proto::OrderState {
+        status: Some("Submitted".into()),
+        order_allocations: vec![proto::OrderAllocation {
+            account: Some("DU1234".into()),
+            position: Some("abc".into()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    assert_decimal_parse_error(decode_order_state(&state), "abc");
 }

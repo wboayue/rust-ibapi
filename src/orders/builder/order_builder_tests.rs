@@ -1,11 +1,11 @@
 use super::*;
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::market_data::TradingHours;
+use crate::orders::common::encoders::encode_order;
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
     Action, OcaType, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
 };
-use crate::proto::encoders::encode_order;
 
 fn create_test_contract() -> Contract {
     Contract {

@@ -4,11 +4,10 @@ use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_REQ_ID_FIRST};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
+use crate::orders::common::{encode_execution_filter, encode_order, encode_order_cancel};
 use crate::orders::{ExecutionFilter, ExerciseAction, Order, OrderStatusKind};
 use crate::proto;
-use crate::proto::encoders::{
-    encode_contract, encode_contract_with_order, encode_execution_filter, encode_order, encode_order_cancel, some_bool, some_str,
-};
+use crate::proto::encoders::{encode_contract, encode_contract_with_order, some_bool, some_str};
 
 const TEST_PERM_ID: i64 = 1376327563;
 const TEST_EXEC_ID: &str = "00025b46.63f8f39c.01.01";
