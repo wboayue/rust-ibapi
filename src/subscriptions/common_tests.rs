@@ -188,6 +188,23 @@ fn collect_stop_into_result() {
     ));
 }
 
+#[test]
+fn lag_as_error_fails_only_lag_notices() {
+    let lag = Notice::synthesized(SUBSCRIPTION_LAG_CODE, "fell behind".into());
+    assert!(matches!(
+        lag_as_error::<i32>(Ok(SubscriptionItem::Notice(lag.clone()))),
+        Err(Error::Notice(n)) if n == lag
+    ));
+
+    let warning = Notice::synthesized(2104, "Market data farm OK".into());
+    assert!(matches!(
+        lag_as_error::<i32>(Ok(SubscriptionItem::Notice(warning.clone()))),
+        Ok(SubscriptionItem::Notice(n)) if n == warning
+    ));
+    assert!(matches!(lag_as_error(Ok(SubscriptionItem::Data(7))), Ok(SubscriptionItem::Data(7))));
+    assert!(matches!(lag_as_error::<i32>(Err(Error::ConnectionReset)), Err(Error::ConnectionReset)));
+}
+
 /// Whether `T` skips its cancel after a terminal error with `code`.
 fn rejection_ends<T: StreamDecoder<T>>(code: i32) -> bool {
     T::rejection_ends_request(&Notice::synthesized(code, String::new()))

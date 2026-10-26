@@ -297,6 +297,12 @@ pub(crate) fn unknown_message_type_notice(message: &ResponseMessage) -> Notice {
 /// On receiving this notice the stream is still live, but frames are gone:
 /// reconcile the same way as after a reconnect gap.
 ///
+/// Readers that assemble a complete result fail instead of returning rows
+/// with a gap: `collect_to_end_within`, `next_batch` and the one-shot
+/// requests built on them (`contract_details`, `positions`, `executions`,
+/// ...) return `Error::Notice` carrying this code. `collect_for` and
+/// `collect_until` stop at the gap and return the rows read before it.
+///
 /// - **Market data and other non-order streams** (ticks, bars, depth,
 ///   positions, account updates, PnL, news, contract details): bounded and
 ///   lossy by design — freshness beats completeness, and a feed

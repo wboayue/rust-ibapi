@@ -942,6 +942,94 @@ async fn collect_to_end_without_end_marker_is_unexpected_end() {
     assert!(matches!(sub.collect_to_end().await, Err(Error::UnexpectedEndOfStream)));
 }
 
+// ---- broadcast lag (#1090) ---------------------------------------------------
+
+/// A request-id subscription over a broadcast channel of `capacity`, with
+/// `items` already sent: more items than `capacity` evicts the oldest, so the
+/// first read is a lag notice.
+fn lagged_subscription<T: StreamDecoder<T>>(capacity: usize, items: Vec<RoutedItem>) -> Fixture<T> {
+    let bus = Arc::new(MessageBusStub::default());
+    let (tx, rx) = broadcast::channel(capacity);
+    let internal = AsyncInternalSubscription::new(rx);
+    for item in items {
+        tx.send(item).unwrap();
+    }
+    Fixture {
+        subscription: Subscription::new_from_internal(internal, bus.clone(), Some(1), None, DecoderContext::default()),
+        tx,
+        bus,
+    }
+}
+
+fn is_lag_error(result: &Result<Vec<impl std::fmt::Debug>, Error>) -> bool {
+    matches!(result, Err(Error::Notice(n)) if n.code == crate::messages::SUBSCRIPTION_LAG_CODE)
+}
+
+#[tokio::test]
+async fn collect_to_end_within_fails_on_lag() {
+    // Rows 10 and 20 are evicted; the end marker after the gap must not
+    // turn the remainder into a complete-looking result.
+    let mut f = lagged_subscription::<IntItem>(
+        2,
+        vec![int_frame(10), int_frame(20), int_frame(30), RoutedItem::Error(Error::EndOfStream)],
+    );
+
+    let result = f.subscription.collect_to_end_within(Duration::from_secs(30)).await;
+
+    assert!(is_lag_error(&result), "expected lag error, got {result:?}");
+}
+
+#[tokio::test]
+async fn collect_to_end_fails_on_lag() {
+    let mut f = lagged_subscription::<IntItem>(
+        2,
+        vec![int_frame(10), int_frame(20), int_frame(30), RoutedItem::Error(Error::EndOfStream)],
+    );
+
+    let result = f.subscription.collect_to_end().await;
+
+    assert!(is_lag_error(&result), "expected lag error, got {result:?}");
+}
+
+#[tokio::test]
+async fn collect_for_stops_at_lag() {
+    // The gap ends the window; nothing read after it is returned.
+    let mut f = lagged_subscription::<IntItem>(2, vec![int_frame(10), int_frame(20), int_frame(30)]);
+
+    assert!(f.subscription.collect_for(Duration::from_secs(30)).await.is_empty());
+}
+
+#[tokio::test]
+async fn next_batch_fails_on_lag_then_continues() {
+    let mut f = lagged_subscription::<IntItem>(2, vec![int_frame(10), int_frame(20), int_frame(0)]);
+
+    let gap = f.subscription.next_batch(Duration::from_secs(30)).await.unwrap();
+    assert!(is_lag_error(&gap), "expected lag error, got {gap:?}");
+
+    // Lag is not terminal for the stream: the retained rows form the next batch.
+    assert_eq!(
+        f.subscription.next_batch(Duration::from_secs(30)).await.unwrap().unwrap(),
+        vec![IntItem(20), IntItem(0)]
+    );
+}
+
+#[tokio::test]
+async fn drop_after_lag_error_sends_cancel() {
+    // A lag is our failure, not TWS ending the request: the cancel still goes out.
+    let f = lagged_subscription::<CancellableItem>(2, vec![int_frame(10), int_frame(20), int_frame(30)]);
+    let mut subscription = f.subscription;
+
+    let result = subscription.collect_to_end_within(Duration::from_secs(30)).await;
+    assert!(is_lag_error(&result), "expected lag error, got {result:?}");
+    drop(subscription);
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while f.bus.request_messages().is_empty() && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()]);
+}
+
 // ---- collect_to_end_within --------------------------------------------------
 
 #[tokio::test]
