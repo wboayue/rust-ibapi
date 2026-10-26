@@ -92,6 +92,12 @@ is no closed (`TryFrom<i32>`) form of this shape: these fields are decoded on a 
 path where an error kills the subscription, so a payload variant is the only way to keep the
 conversion total without coercing.
 
+**A one-shot integer field decodes closed.** `ArticleType` (`news_article`, #1070) has no
+`Unknown` variant: a private decoder fn maps the table and returns `Error::Parse` for any other
+code, failing one call rather than a stream. Its public `From<i32>` still coerces and stays
+until a major release (#1071) — an existing `From<i32>` also blocks adding `TryFrom<i32>`,
+through the blanket impl.
+
 **The wire code lives in the `From` impls, not in a discriminant.** #825 first wrote these
 with `#[repr(i32)]` and `Customer = 0` alongside the hand-written `From<T> for i32`, copying
 `Liquidity`. #829 dropped both from all eight: once the payload variant exists nothing reads

@@ -75,6 +75,8 @@ pub enum ArticleType {
     Binary = 1,
 }
 
+/// Maps an unknown code to [`ArticleType::Text`]. The `news_article` decoder does not use this:
+/// it rejects unknown codes. Removal is tracked in #1071.
 impl From<i32> for ArticleType {
     fn from(value: i32) -> Self {
         match value {

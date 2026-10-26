@@ -75,7 +75,8 @@ pub(crate) fn decode_news_article_proto(p: crate::proto::NewsArticle) -> Result<
 }
 
 // One-shot path, so closed: an unknown code fails the call rather than reading as `Text`.
-// Absent is `Text` (code 0), as in the reference client.
+// Absent is `Text` (code 0), as in the reference client. Same table as `From<i32> for
+// ArticleType`, minus its coercion.
 fn decode_article_type(code: i32) -> Result<ArticleType, Error> {
     match code {
         0 => Ok(ArticleType::Text),
