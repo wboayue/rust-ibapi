@@ -42,7 +42,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
     fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         if context.and_then(|ctx| ctx.request_type) == Some(OutgoingMessages::RequestMarketData) {
             let request_id = error_helpers::require_request_id_for(request_id, "cancel market data subscription")?;
-            realtime::common::encoders::encode_cancel_market_data(request_id)
+            realtime::common::encode_cancel_market_data(request_id)
         } else {
             Err(Error::NotImplemented)
         }

@@ -141,7 +141,7 @@ pub trait ConnectionProtocol {
     /// [`AccountInfo`]. Anything else is delegated to
     /// [`dispatch_unsolicited_message`] so the callbacks decide how to surface
     /// (or drop) it.
-    fn parse_account_info(&self, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) -> Result<AccountInfo, Self::Error>;
+    fn parse_account_info(&self, message: &ResponseMessage, ctx: &StartupHandshakeContext<'_>) -> Result<AccountInfo, Self::Error>;
 }
 
 /// Account information received during connection establishment
@@ -231,7 +231,7 @@ impl ConnectionProtocol for ConnectionHandler {
         encode_protobuf_message(OutgoingMessages::StartApi as i32, &request.encode_to_vec())
     }
 
-    fn parse_account_info(&self, message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) -> Result<AccountInfo, Self::Error> {
+    fn parse_account_info(&self, message: &ResponseMessage, ctx: &StartupHandshakeContext<'_>) -> Result<AccountInfo, Self::Error> {
         let mut info = AccountInfo::default();
 
         match message.message_type() {
@@ -261,7 +261,7 @@ impl ConnectionProtocol for ConnectionHandler {
 /// ([`HANDSHAKE_DECODE_FAILURE_CODE`], [`HANDSHAKE_UNKNOWN_FRAME_CODE`] and
 /// [`UNKNOWN_MESSAGE_TYPE_CODE`](crate::UNKNOWN_MESSAGE_TYPE_CODE)) so observers via
 /// [`Client::notice_stream`](crate::Client::notice_stream) can detect them.
-pub(crate) fn dispatch_unsolicited_message(message: &mut ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
+pub(crate) fn dispatch_unsolicited_message(message: &ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;
     use crate::orders::common::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};
 
@@ -296,7 +296,7 @@ pub(crate) fn dispatch_unsolicited_message(message: &mut ResponseMessage, ctx: &
     let kind = message.message_type();
     match kind {
         IncomingMessages::Error => {
-            let notice = Notice::from(&*message);
+            let notice = Notice::from(message);
             notice.log();
             ctx.notice_sink.deliver(notice);
         }

@@ -14,7 +14,7 @@ use log::warn;
 use super::common::{lock, Lease, LeaseRef};
 use crate::client::ids::{OrderId, WireId};
 use crate::messages::{IncomingMessages, Notice, ResponseMessage};
-use crate::orders::common::decoders::decode_order_status;
+use crate::orders::common::decode_order_status;
 use crate::transport::RoutedItem;
 use crate::Error;
 

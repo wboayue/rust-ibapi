@@ -1,7 +1,6 @@
 use super::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBound, OrderBuilder};
 use super::types::{AttachedOrderIds, BracketOrderIds};
 use crate::client::sync::Client;
-use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::orders::OrderId;
 use crate::orders::PlaceOrder;
@@ -105,52 +104,5 @@ impl AttachedOrdersBuilder<'_, Client> {
         let (order, ids) = self.build_with_ids(|| client.next_order_id())?;
         client.submit_order(order.order_id, contract, &order)?;
         Ok(ids)
-    }
-}
-
-/// Submitting several OCA orders in one call.
-impl Client {
-    /// Submit multiple OCA (One-Cancels-All) orders
-    ///
-    /// When one order in the group is filled, all others are automatically cancelled.
-    ///
-    /// # Example
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::orders::OcaType;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract1 = Contract::stock("AAPL").build();
-    /// let contract2 = Contract::stock("MSFT").build();
-    ///
-    /// let order1 = client.order(&contract1)
-    ///     .buy(100)
-    ///     .limit(50.0)
-    ///     .oca_group("MyOCA", OcaType::CancelWithBlock)
-    ///     .build_order().expect("order build failed");
-    ///     
-    /// let order2 = client.order(&contract2)
-    ///     .buy(100)
-    ///     .limit(45.0)
-    ///     .oca_group("MyOCA", OcaType::CancelWithBlock)
-    ///     .build_order().expect("order build failed");
-    ///
-    /// let order_ids = client.submit_oca_orders(
-    ///     vec![(contract1, order1), (contract2, order2)]
-    /// ).expect("OCA submission failed");
-    /// ```
-    pub fn submit_oca_orders(&self, orders: Vec<(Contract, crate::orders::Order)>) -> Result<Vec<OrderId>, Error> {
-        let mut order_ids = Vec::new();
-
-        for (contract, mut order) in orders.into_iter() {
-            let order_id = self.next_order_id();
-            order.order_id = order_id;
-            order_ids.push(OrderId::new(order_id));
-            self.submit_order(order_id, &contract, &order)?;
-        }
-
-        Ok(order_ids)
     }
 }

@@ -12,8 +12,8 @@ use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_order, completed_orders_end,
-    completed_orders_request, execution_data, execution_data_end, executions_request, global_cancel_request, next_valid_order_id_request, open_order,
-    open_order_end, open_orders_request, order_bound, order_status, place_order_request,
+    completed_orders_request, execution_data, execution_data_end, executions_request, global_cancel_request, next_valid_id,
+    next_valid_order_id_request, open_order, open_order_end, open_orders_request, order_bound, order_status, place_order_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -317,10 +317,9 @@ fn global_cancel_cme_tagging() {
 
 #[test]
 fn next_valid_order_id() {
-    let next_valid_id_proto = crate::proto::NextValidId { order_id: Some(43) };
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::NextValidId,
-        prost::Message::encode_to_vec(&next_valid_id_proto),
+        next_valid_id().order_id(43).encode_proto(),
     )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -339,7 +338,7 @@ fn next_valid_order_id() {
 fn next_valid_order_id_below_allocated_mark_does_not_rewind() {
     let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::NextValidId,
-        prost::Message::encode_to_vec(&crate::proto::NextValidId { order_id: Some(5) }),
+        next_valid_id().order_id(5).encode_proto(),
     )]);
 
     let allocated = client.next_order_id();
@@ -403,7 +402,8 @@ fn open_orders() {
     let results = client.open_orders();
 
     assert_request(&message_bus, 0, &open_orders_request());
-    assert!(results.is_ok(), "failed to request open orders: {}", results.err().unwrap());
+    let subscription = results.expect("open_orders");
+    assert!(subscription.next().is_none(), "OpenOrderEnd alone must end the stream with no orders");
 }
 
 #[test]
@@ -417,7 +417,8 @@ fn all_open_orders() {
     let results = client.all_open_orders();
 
     assert_request(&message_bus, 0, &all_open_orders_request());
-    assert!(results.is_ok(), "failed to request all open orders: {}", results.err().unwrap());
+    let subscription = results.expect("all_open_orders");
+    assert!(subscription.next().is_none(), "OpenOrderEnd alone must end the stream with no orders");
 }
 
 #[test]
@@ -432,7 +433,9 @@ fn auto_open_orders() {
     let results = client.auto_open_orders(api_only);
 
     assert_request(&message_bus, 0, &auto_open_orders_request().auto_bind(api_only));
-    assert!(results.is_ok(), "failed to request auto open orders: {}", results.err().unwrap());
+    let subscription = results.expect("auto_open_orders");
+    // OpenOrderEnd is terminal for auto_open_orders too: the stream ends rather than waiting for binds.
+    assert!(subscription.next().is_none(), "OpenOrderEnd alone must end the stream with no orders");
 }
 
 #[test]
@@ -473,7 +476,11 @@ fn executions() {
             .filter(expected_filter),
     );
 
-    assert!(results.is_ok(), "failed to request executions: {}", results.err().unwrap());
+    let subscription = results.expect("executions");
+    assert!(
+        subscription.next().is_none(),
+        "ExecutionDataEnd alone must end the stream with no executions"
+    );
 }
 
 #[test]
@@ -1217,9 +1224,7 @@ fn order_entry_points_reject_request_range_ids() {
 fn next_valid_order_id_rejects_request_range() {
     let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
         IncomingMessages::NextValidId,
-        prost::Message::encode_to_vec(&crate::proto::NextValidId {
-            order_id: Some(REQUEST_ID_FLOOR),
-        }),
+        next_valid_id().order_id(REQUEST_ID_FLOOR).encode_proto(),
     )]);
 
     let result = client.next_valid_order_id();

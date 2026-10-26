@@ -8,8 +8,8 @@ use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem};
 use crate::testdata::builders::contracts::{
-    calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data, contract_data_request,
-    market_rule_request, matching_symbols_request, option_chain_request, smart_components_request,
+    calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data, contract_data_end,
+    contract_data_request, market_rule_request, matching_symbols_request, option_chain_request, smart_components_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
@@ -502,7 +502,13 @@ fn stream_client(responses: Vec<crate::messages::ResponseMessage>, server_versio
 
 #[test]
 fn contract_details_stream_request_id_known_before_send() {
-    let (client, message_bus) = stream_client(vec![contract_data_end(TEST_REQ_ID_FIRST)], server_versions::CANCEL_CONTRACT_DATA);
+    let (client, message_bus) = stream_client(
+        vec![proto_response(
+            IncomingMessages::ContractDataEnd,
+            contract_data_end().request_id(TEST_REQ_ID_FIRST).encode_proto(),
+        )],
+        server_versions::CANCEL_CONTRACT_DATA,
+    );
     let contract = Contract::stock("AAPL").build();
 
     let request = client.contract_details_stream(&contract);
@@ -529,7 +535,14 @@ fn contract_details_stream_unsent_builder_sends_nothing() {
 #[test]
 fn contract_details_stream_yields_rows_then_ends_without_cancel() {
     let (client, message_bus) = stream_client(
-        vec![detail_row(1), detail_row(2), contract_data_end(TEST_REQ_ID_FIRST)],
+        vec![
+            detail_row(1),
+            detail_row(2),
+            proto_response(
+                IncomingMessages::ContractDataEnd,
+                contract_data_end().request_id(TEST_REQ_ID_FIRST).encode_proto(),
+            ),
+        ],
         server_versions::CANCEL_CONTRACT_DATA,
     );
     let contract = Contract::stock("AAPL").build();
@@ -591,7 +604,13 @@ fn contract_details_stream_surfaces_no_definition_error() {
 #[test]
 fn contract_details_writes_no_cancel_after_end() {
     let (client, message_bus) = stream_client(
-        vec![detail_row(1), contract_data_end(TEST_REQ_ID_FIRST)],
+        vec![
+            detail_row(1),
+            proto_response(
+                IncomingMessages::ContractDataEnd,
+                contract_data_end().request_id(TEST_REQ_ID_FIRST).encode_proto(),
+            ),
+        ],
         server_versions::CANCEL_CONTRACT_DATA,
     );
 
@@ -621,7 +640,13 @@ fn contract_details_cancels_after_tws_error() {
 
 #[test]
 fn contract_details_stream_buffer_limit_reaches_the_bus() {
-    let (client, message_bus) = stream_client(vec![contract_data_end(TEST_REQ_ID_FIRST)], server_versions::CANCEL_CONTRACT_DATA);
+    let (client, message_bus) = stream_client(
+        vec![proto_response(
+            IncomingMessages::ContractDataEnd,
+            contract_data_end().request_id(TEST_REQ_ID_FIRST).encode_proto(),
+        )],
+        server_versions::CANCEL_CONTRACT_DATA,
+    );
     let contract = Contract::stock("AAPL").build();
 
     let _bounded = client.contract_details_stream(&contract).buffer_limit(64).subscribe().unwrap();

@@ -9,7 +9,7 @@ triggers:
   - about to change mod foo to pub(crate) mod foo to fix a visibility error
 symbols: [pub(crate), pub(super)]
 related: [domain-module-layout, restrict-after-callers]
-precedents: ["#581"]
+precedents: ["#581", "#1080"]
 memory: [project_domain_module_pattern]
 ---
 
@@ -46,6 +46,10 @@ already-`pub` item is the expensive direction — it surfaces `private_interface
 
 ## Precedents
 
+- #1080 — the audit that restored it: `orders::common::decoders` had drifted back to
+  `pub(crate)` (#1031). Seven other domains' `decoders`/`encoders` were crate-wide with no
+  outside consumer; realtime, accounts and orders `encoders` had a few, now named re-exports. Check with `grep -rn '^pub(crate) mod \(decoders\|encoders\)' src`; only `proto/`
+  should print.
 - #581 — the cost of the other direction. Narrowing `ResponseMessage` from `pub` to
   `pub(crate)` was planned as transparent and surfaced ten warnings across `Error` variants,
   trait impls, and now-uncalled methods.

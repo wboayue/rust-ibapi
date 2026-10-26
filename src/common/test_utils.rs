@@ -126,9 +126,10 @@ pub mod helpers {
 
     /// `NextValidId` proto-framed handshake frame.
     pub fn next_valid_id_frame(order_id: i32) -> Vec<u8> {
+        use crate::testdata::builders::{orders::next_valid_id, ResponseProtoEncoder};
         binary_proto(
             crate::messages::IncomingMessages::NextValidId as i32,
-            &crate::proto::NextValidId { order_id: Some(order_id) },
+            &next_valid_id().order_id(order_id).to_proto(),
         )
     }
 

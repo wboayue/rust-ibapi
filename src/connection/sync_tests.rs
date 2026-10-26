@@ -11,7 +11,7 @@ use crate::client::sync::Client;
 use crate::common::test_utils::helpers::{
     binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, TEST_ACCOUNT,
 };
-use crate::market_data::realtime::common::encoders::encode_request_market_data_type;
+use crate::market_data::realtime::common::encode_request_market_data_type;
 use crate::market_data::MarketDataType;
 use crate::messages::{encode_raw_length, IncomingMessages};
 use crate::server_versions;
@@ -680,7 +680,7 @@ fn one_shot_request_is_retried_after_the_reconnect() {
     bus.process_messages().expect("process_messages");
     let client = Arc::new(Client::stubbed(bus.clone(), server_version));
 
-    let request = crate::accounts::common::encoders::encode_request_managed_accounts().expect("encode");
+    let request = crate::accounts::common::encode_request_managed_accounts().expect("encode");
     let (sender, receiver) = std::sync::mpsc::channel();
     let caller = Arc::clone(&client);
     thread::spawn(move || {

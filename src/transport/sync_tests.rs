@@ -16,9 +16,10 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::Contract;
 use crate::messages::{encode_length, encode_raw_length, OutgoingMessages, RequestMessage, TRANSPORT_RECONNECT_CODE};
-use crate::orders::common::encoders::encode_place_order;
+use crate::orders::common::encode_place_order;
 use crate::orders::{order_builder, Action};
 use crate::testdata::builders::contracts::contract_data;
+use crate::testdata::builders::orders::next_valid_id;
 use crate::testdata::builders::orders::order_bound;
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::transport::raw_capture::{test_support, RawFrameTap};
@@ -273,9 +274,10 @@ fn managed_accounts_response(accounts: &str) -> ResponseMessage {
 }
 
 fn next_valid_id_response(order_id: i32) -> ResponseMessage {
-    use prost::Message;
-    let bytes = crate::proto::NextValidId { order_id: Some(order_id) }.encode_to_vec();
-    proto_response(crate::messages::IncomingMessages::NextValidId, bytes)
+    proto_response(
+        crate::messages::IncomingMessages::NextValidId,
+        next_valid_id().order_id(order_id).encode_proto(),
+    )
 }
 
 #[test]
@@ -453,7 +455,7 @@ fn client_reconnect() -> Result<(), Error> {
     let sv = handler.min_version;
 
     let start_api_bytes = handler.format_start_api(28);
-    let managed_req = crate::accounts::common::encoders::encode_request_managed_accounts().unwrap();
+    let managed_req = crate::accounts::common::encode_request_managed_accounts().unwrap();
     let events = vec![
         Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
         Exchange::new(
@@ -1622,7 +1624,7 @@ fn one_shot_shared_request_does_not_see_earlier_error() -> Result<(), Error> {
 
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::NextValidId as i32,
-        &crate::proto::NextValidId { order_id: Some(90) },
+        &next_valid_id().order_id(90).to_proto(),
     ));
     bus.dispatch()?;
 
@@ -2230,7 +2232,11 @@ fn notice_stream_skips_routed_notices() -> Result<(), Error> {
     bus.dispatch()?;
 
     // Routed to the owner.
-    assert!(request_sub.try_next_routed().is_some(), "owner subscription missed notice");
+    let routed = request_sub.try_next_routed();
+    assert!(
+        matches!(&routed, Some(crate::subscriptions::common::RoutedItem::Notice(notice)) if notice.code == 2104),
+        "owner subscription missed notice: {routed:?}"
+    );
     // NOT delivered to the global stream.
     assert!(notice_stream.try_next().is_none(), "routed notice leaked to global stream");
     Ok(())
@@ -2404,8 +2410,10 @@ fn order_update_stream_receives_open_order() -> Result<(), Error> {
     ));
     bus.dispatch()?;
 
-    assert!(order_sub.next_timeout(TICK).is_some(), "order sub missed open order");
-    assert!(stream_sub.next_timeout(TICK).is_some(), "update stream missed open order");
+    let message = order_sub.next_timeout(TICK).expect("order sub missed open order")?;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::OpenOrder);
+    let message = stream_sub.next_timeout(TICK).expect("update stream missed open order")?;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::OpenOrder);
     Ok(())
 }
 
@@ -3228,7 +3236,7 @@ fn reconnect_replays_market_data_type_before_notice() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let notices = bus.connection.notice_broadcaster.subscribe();
 
-    let packet = crate::market_data::realtime::common::encoders::encode_request_market_data_type(crate::market_data::MarketDataType::Delayed)?;
+    let packet = crate::market_data::realtime::common::encode_request_market_data_type(crate::market_data::MarketDataType::Delayed)?;
     bus.send_market_data_type(&packet)?;
 
     stream.push_inbound(b"xx".to_vec());
@@ -3716,7 +3724,8 @@ fn order_update_stream_survives_a_poisoned_lock() -> Result<(), Error> {
         },
     ));
     bus.dispatch()?;
-    assert!(stream_sub.next_timeout(TICK).is_some(), "update stream missed open order");
+    let message = stream_sub.next_timeout(TICK).expect("update stream missed open order")?;
+    assert_eq!(message.message_type(), crate::messages::IncomingMessages::OpenOrder);
 
     let registered = bus.order_taps.updates_lease().unwrap();
     drop(stream_sub);

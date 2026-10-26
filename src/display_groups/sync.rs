@@ -20,6 +20,8 @@ use super::encoders;
 #[must_use = "DisplayGroupSubscription must be polled (deref to Subscription, then .next() or .iter()) to receive updates; dropping it releases the subscription"]
 pub struct DisplayGroupSubscription {
     inner: Subscription<DisplayGroupUpdate>,
+    // The id the subscription was opened with; `update` must reuse it.
+    request_id: i32,
     message_bus: Arc<dyn MessageBus>,
 }
 
@@ -43,8 +45,7 @@ impl DisplayGroupSubscription {
     /// subscription.update("265598@SMART").expect("update failed");
     /// ```
     pub fn update(&self, contract_info: &str) -> Result<(), Error> {
-        let request_id = self.inner.request_id().expect("subscription has no request ID");
-        let request = encoders::encode_update_display_group(request_id, contract_info)?;
+        let request = encoders::encode_update_display_group(self.request_id, contract_info)?;
         self.message_bus.send_message(&request)
     }
 }
@@ -129,10 +130,12 @@ impl Client {
     /// ```
     pub fn subscribe_to_group_events(&self, group_id: i32) -> Result<DisplayGroupSubscription, Error> {
         let builder = self.request();
-        let request = encoders::encode_subscribe_to_group_events(builder.request_id(), group_id)?;
+        let request_id = builder.request_id();
+        let request = encoders::encode_subscribe_to_group_events(request_id, group_id)?;
         let inner = builder.send(request)?;
         Ok(DisplayGroupSubscription {
             inner,
+            request_id,
             message_bus: self.message_bus.clone(),
         })
     }

@@ -27,40 +27,41 @@ pub(crate) struct MessageRecorder {
 }
 
 impl MessageRecorder {
-    pub fn new(enabled: bool, recording_dir: String) -> Self {
-        Self { enabled, recording_dir }
+    /// A recorder that writes nothing.
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            recording_dir: String::new(),
+        }
     }
+
+    /// Read `IBAPI_RECORDING_DIR`. Unset or empty yields [`Self::disabled`].
     pub fn from_env() -> Self {
         match env::var("IBAPI_RECORDING_DIR") {
-            Ok(dir) => {
-                if dir.is_empty() {
-                    MessageRecorder {
-                        enabled: false,
-                        recording_dir: String::from(""),
-                    }
-                } else {
-                    let format = format_description!("[year]-[month]-[day]-[hour]-[minute]");
-                    let now = OffsetDateTime::now_utc();
-                    let instance_id = RECORDER_ID.fetch_add(1, Ordering::SeqCst);
-                    let recording_dir = format!("{}/{}-{}", dir, now.format(&format).unwrap(), instance_id);
+            Ok(dir) if !dir.is_empty() => Self::recording_to(&dir),
+            _ => Self::disabled(),
+        }
+    }
 
-                    // A diagnostic aid must never be the reason a connection
-                    // fails. This used to `unwrap`, so pointing
-                    // `IBAPI_RECORDING_DIR` at an unwritable path panicked
-                    // during connect — the same policy the raw-frame tap
-                    // applies in `super::raw_capture`.
-                    if let Err(err) = fs::create_dir_all(&recording_dir) {
-                        warn!("message recording disabled: cannot create {recording_dir}: {err}");
-                        return MessageRecorder::new(false, String::from(""));
-                    }
+    /// Record into a fresh `<dir>/<timestamp>-<instance>` directory.
+    ///
+    /// A diagnostic aid must never be the reason a connection fails: a
+    /// directory that cannot be created downgrades to [`Self::disabled`] with a
+    /// warning, the same policy the raw-frame tap applies in `super::raw_capture`.
+    pub fn recording_to(dir: &str) -> Self {
+        let format = format_description!("[year]-[month]-[day]-[hour]-[minute]");
+        let stamp = OffsetDateTime::now_utc().format(format).unwrap_or_else(|_| String::from("unknown"));
+        let instance_id = RECORDER_ID.fetch_add(1, Ordering::SeqCst);
+        let recording_dir = format!("{dir}/{stamp}-{instance_id}");
 
-                    MessageRecorder::new(true, recording_dir)
-                }
-            }
-            _ => MessageRecorder {
-                enabled: false,
-                recording_dir: String::from(""),
-            },
+        if let Err(err) = fs::create_dir_all(&recording_dir) {
+            warn!("message recording disabled: cannot create {recording_dir}: {err}");
+            return Self::disabled();
+        }
+
+        Self {
+            enabled: true,
+            recording_dir,
         }
     }
 

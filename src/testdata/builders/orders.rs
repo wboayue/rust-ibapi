@@ -221,6 +221,36 @@ impl ResponseProtoEncoder for OrderBoundResponse {
     }
 }
 
+// --- NextValidId (msg 9) ---
+
+#[derive(Clone, Copy, Debug)]
+pub struct NextValidIdResponse {
+    pub order_id: i32,
+}
+
+impl Default for NextValidIdResponse {
+    fn default() -> Self {
+        Self { order_id: 90 }
+    }
+}
+
+impl NextValidIdResponse {
+    pub fn order_id(mut self, v: i32) -> Self {
+        self.order_id = v;
+        self
+    }
+}
+
+impl ResponseProtoEncoder for NextValidIdResponse {
+    type Proto = proto::NextValidId;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::NextValidId {
+            order_id: Some(self.order_id),
+        }
+    }
+}
+
 // --- ExecutionData (msg 11) ---
 
 #[derive(Clone, Debug)]
@@ -1115,6 +1145,10 @@ pub fn commission_report() -> CommissionReportResponse {
 
 pub fn order_bound() -> OrderBoundResponse {
     OrderBoundResponse::default()
+}
+
+pub fn next_valid_id() -> NextValidIdResponse {
+    NextValidIdResponse::default()
 }
 
 pub fn execution_data() -> ExecutionDataResponse {

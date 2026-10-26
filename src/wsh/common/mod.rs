@@ -1,7 +1,7 @@
 //! Common functionality for Wall Street Horizon module
 
-pub(crate) mod decoders;
-pub(crate) mod encoders;
+pub(super) mod decoders;
+pub(super) mod encoders;
 pub(crate) mod stream_decoders;
 
 #[cfg(test)]

@@ -288,8 +288,8 @@ impl<S: AsyncStream> AsyncConnection<S> {
         let mut attempts = 0;
         let ctx = self.handshake_context();
         loop {
-            let mut message = self.read_message().await?;
-            let info = self.connection_handler.parse_account_info(&mut message, &ctx)?;
+            let message = self.read_message().await?;
+            let info = self.connection_handler.parse_account_info(&message, &ctx)?;
 
             attempts += 1;
             if account_info.merge(info) || attempts > MAX_ACCOUNT_INFO_ATTEMPTS {

@@ -11,7 +11,7 @@ triggers:
   - splitting a builder's sync and async impl blocks
 symbols: [Client, common, proto]
 related: [narrow-reexports, sibling-test-files, dual-feature-types]
-precedents: ["#657"]
+precedents: ["#657", "#1080"]
 memory: [project_domain_module_pattern, project_main_flat_helpers_nested_pattern]
 ---
 
@@ -59,12 +59,13 @@ example of adding a module.
   `market_data/realtime/{sync,async}.rs`, next to the sibling entry points (`realtime_bars`,
   `tick_by_tick`, `market_depth`) they had diverged from. `client/` now holds only
   cross-cutting mechanics.
+- #1080 — moved `Client::submit_oca_orders` out of `orders/builder/{sync,async}_impl.rs` into
+  `orders/{sync,async}.rs` beside `submit_order`: a client method in a helper file is drift even
+  inside the right domain.
 
 ## Known drift
 
-`Client::submit_oca_orders` is a public client method in an `impl Client` block at
-`orders/builder/sync_impl.rs` and `orders/builder/async_impl.rs` — the right domain, the wrong
-file. The helper carve-out above does not cover it: that blesses `<domain>/<side>/foo.rs`
-*under* the side file, and these are siblings of it. Its body is a loop over `next_order_id()`
-+ `submit_order()` with no builder coupling, so it belongs in `orders/{sync,async}.rs`. Two
-sites; move them when you are next in that file, and do not read them as precedent.
+Single-domain encoders and decoders still sit in the shared `src/proto/` modules —
+`decode_order`, `encode_order` and their siblings for orders, `decode_contract_details`,
+`encode_scanner_subscription` — tracked in #1078. Don't add to them there; a new
+single-domain function goes in `<domain>/common/`.
