@@ -49,6 +49,16 @@ pub(crate) const MARKET_DEPTH_RESET_CODE: i32 = 317;
 /// [`classify`].
 pub(crate) const HMDS_QUERY_MESSAGE_CODE: i32 = 165;
 
+/// "No security definition has been found for the request".
+pub(crate) const NO_SECURITY_DEFINITION_CODE: i32 = 200;
+
+/// "Historical Market Data Service error message" (e.g. a disabled scanner
+/// type, or no data for a historical query).
+pub(crate) const HMDS_ERROR_CODE: i32 = 162;
+
+/// "Error validating request" (e.g. an invalid account code).
+pub(crate) const REQUEST_VALIDATION_CODE: i32 = 321;
+
 /// Range of error codes that are considered warnings: the whole `21xx` band.
 ///
 /// IB's published table stops at 2169, but the gateway keeps adding codes above

@@ -4,7 +4,7 @@
 //! between sync and async versions, avoiding code duplication.
 
 use crate::accounts::*;
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, REQUEST_VALIDATION_CODE};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -46,6 +46,11 @@ impl StreamDecoder<PnL> for PnL {
         let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_pnl(request_id)
     }
+
+    /// Live: after 321 TWS answers the cancel with 10185 (not subscribed).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == REQUEST_VALIDATION_CODE
+    }
 }
 
 impl StreamDecoder<PnLSingle> for PnLSingle {
@@ -61,6 +66,11 @@ impl StreamDecoder<PnLSingle> for PnLSingle {
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_pnl_single(request_id)
+    }
+
+    /// Live: after 321 TWS answers the cancel with 10186 (not subscribed).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == REQUEST_VALIDATION_CODE
     }
 }
 

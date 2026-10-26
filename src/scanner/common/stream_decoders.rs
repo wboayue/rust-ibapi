@@ -1,5 +1,5 @@
 use crate::common::error_helpers;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, HMDS_QUERY_MESSAGE_CODE};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, HMDS_ERROR_CODE, HMDS_QUERY_MESSAGE_CODE};
 use crate::scanner::common::decoders;
 use crate::scanner::common::encoders;
 use crate::scanner::ScannerData;
@@ -24,5 +24,11 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel scanner subscription")?;
         encoders::encode_cancel_scanner_subscription(request_id)
+    }
+
+    /// Live: after 162 TWS answers the cancel with 365 (no scanner subscription).
+    /// Not 165: its "no items retrieved" form keeps the scanner alive (#886).
+    fn rejection_ends_request(notice: &Notice) -> bool {
+        notice.code == HMDS_ERROR_CODE
     }
 }

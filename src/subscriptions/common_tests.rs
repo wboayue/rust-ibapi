@@ -187,3 +187,62 @@ fn collect_stop_into_result() {
         Err(Error::ConnectionReset)
     ));
 }
+
+/// Whether `T` skips its cancel after a terminal error with `code`.
+fn rejection_ends<T: StreamDecoder<T>>(code: i32) -> bool {
+    T::rejection_ends_request(&Notice::synthesized(code, String::new()))
+}
+
+/// Each opt-in covers only the code verified live to end the request at TWS;
+/// another terminal code still cancels, so a request TWS keeps can't leak.
+#[test]
+fn rejection_ends_request_only_for_verified_codes() {
+    use crate::accounts::{PnL, PnLSingle};
+    use crate::contracts::ContractDetails;
+    use crate::market_data::historical::{HistoricalBarUpdate, HistoricalDataFrame};
+    use crate::market_data::realtime::{Bar, BidAsk, MarketDepths, MidPoint, TickTypes, Trade};
+    use crate::scanner::ScannerData;
+
+    struct Case {
+        decoder: &'static str,
+        ends: fn(i32) -> bool,
+        /// Verified live to end the request at TWS; `None` = no opt-in.
+        verified: Option<i32>,
+        /// Another terminal code, which must still cancel.
+        other: i32,
+    }
+    let case = |decoder, ends, verified, other| Case {
+        decoder,
+        ends,
+        verified,
+        other,
+    };
+    let cases = [
+        case("TickTypes", rejection_ends::<TickTypes>, Some(200), 10197),
+        case("Bar", rejection_ends::<Bar>, Some(200), 321),
+        case("Trade", rejection_ends::<Trade>, Some(200), 321),
+        case("BidAsk", rejection_ends::<BidAsk>, Some(200), 321),
+        case("MidPoint", rejection_ends::<MidPoint>, Some(200), 321),
+        case("MarketDepths", rejection_ends::<MarketDepths>, Some(200), 309),
+        case("HistoricalBarUpdate", rejection_ends::<HistoricalBarUpdate>, Some(200), 162),
+        case("PnL", rejection_ends::<PnL>, Some(321), 200),
+        case("PnLSingle", rejection_ends::<PnLSingle>, Some(321), 200),
+        case("Vec<ScannerData>", rejection_ends::<Vec<ScannerData>>, Some(162), 165),
+        // Silent cancel live (no 366-style reply): nothing to gain, keep the safety net.
+        case("ContractDetails", rejection_ends::<ContractDetails>, None, 200),
+    ];
+    for Case {
+        decoder,
+        ends,
+        verified,
+        other,
+    } in cases
+    {
+        if let Some(code) = verified {
+            assert!(ends(code), "{decoder}: {code} is verified to end the request");
+        }
+        assert!(!ends(other), "{decoder}: {other} must still cancel");
+    }
+    // A one-shot query has nothing to continue after any error.
+    assert!(rejection_ends::<HistoricalDataFrame>(10197));
+}
