@@ -772,6 +772,18 @@ fn drain_after_error_is_unconfirmed_and_cancels_on_drop() {
     assert_eq!(bus.request_messages().len(), 1, "the drop writes the cancel");
 }
 
+/// A rejection read before the drain is still TWS's answer; the decoder
+/// doesn't opt into `rejection_ends_request`, so the drop writes the cancel.
+#[test]
+fn drain_after_read_rejection_is_rejected() {
+    let notice = crate::messages::Notice::synthesized(200, "No security definition".to_string());
+    let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![RoutedItem::Error(Error::Notice(notice.clone()))]);
+    assert!(matches!(sub.next(), Some(Err(Error::Notice(_)))));
+
+    assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Rejected(notice));
+    assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "the drop writes the cancel");
+}
+
 #[test]
 fn drain_session_error_is_err() {
     let (sub, _bus, _signals) = request_subscription::<DrainItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
