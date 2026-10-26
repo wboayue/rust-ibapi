@@ -111,7 +111,7 @@ Shared test tables in `<domain>/common/test_tables.rs` are exercised from both `
 // common/test_tables.rs
 pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
     vec![
-        ContractDetailsTestCase { name: "...", contract: ..., ordered_responses: vec![...], .. },
+        ContractDetailsTestCase { name: "...", contract: /* … */, ordered_responses: vec![/* … */], /* … */ },
         // ...
     ]
 }

@@ -62,6 +62,7 @@ use crate::orders::{Action, OcaType, Order, OrderComboLeg, OrderId, TagValue, Ti
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::at_auction(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "MTL");
 /// ```
 pub fn at_auction(action: Action, quantity: f64, price: f64) -> Order {
     Order {
@@ -84,6 +85,7 @@ pub fn at_auction(action: Action, quantity: f64, price: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::discretionary(Action::Buy, 100.0, 50.0, 0.10);
+/// assert_eq!(order.order_type, "LMT");
 /// ```
 pub fn discretionary(action: Action, quantity: f64, price: f64, discretionary_amount: f64) -> Order {
     Order {
@@ -107,6 +109,7 @@ pub fn discretionary(action: Action, quantity: f64, price: f64, discretionary_am
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::market_order(Action::Buy, 100.0);
+/// assert_eq!(order.order_type, "MKT");
 /// ```
 pub fn market_order(action: Action, quantity: f64) -> Order {
     Order {
@@ -131,6 +134,7 @@ pub fn market_order(action: Action, quantity: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::market_if_touched(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "MIT");
 /// ```
 pub fn market_if_touched(action: Action, quantity: f64, price: f64) -> Order {
     Order {
@@ -151,6 +155,7 @@ pub fn market_if_touched(action: Action, quantity: f64, price: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::market_on_close(Action::Buy, 100.0);
+/// assert_eq!(order.order_type, "MOC");
 /// ```
 pub fn market_on_close(action: Action, quantity: f64) -> Order {
     Order {
@@ -171,6 +176,7 @@ pub fn market_on_close(action: Action, quantity: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::market_on_open(Action::Buy, 100.0);
+/// assert_eq!(order.order_type, "MKT");
 /// ```
 pub fn market_on_open(action: Action, quantity: f64) -> Order {
     Order {
@@ -193,6 +199,7 @@ pub fn market_on_open(action: Action, quantity: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::midpoint_match(Action::Buy, 100.0);
+/// assert_eq!(order.order_type, "MKT");
 /// ```
 pub fn midpoint_match(action: Action, quantity: f64) -> Order {
     Order {
@@ -214,6 +221,7 @@ pub fn midpoint_match(action: Action, quantity: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::midprice(Action::Buy, 100.0, Some(50.0));
+/// assert_eq!(order.order_type, "MIDPRICE");
 /// ```
 pub fn midprice(action: Action, quantity: f64, price_cap: Option<f64>) -> Order {
     Order {
@@ -239,6 +247,7 @@ pub fn midprice(action: Action, quantity: f64, price_cap: Option<f64>) -> Order 
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::pegged_to_market(Action::Buy, 100.0, 0.05);
+/// assert_eq!(order.order_type, "PEG MKT");
 /// ```
 pub fn pegged_to_market(action: Action, quantity: f64, market_offset: f64) -> Order {
     Order {
@@ -262,6 +271,7 @@ pub fn pegged_to_market(action: Action, quantity: f64, market_offset: f64) -> Or
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::sweep_to_fill(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "LMT");
 /// ```
 pub fn sweep_to_fill(action: Action, quantity: f64, price: f64) -> Order {
     Order {
@@ -293,6 +303,7 @@ pub fn sweep_to_fill(action: Action, quantity: f64, price: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::auction_relative(Action::Buy, 100.0, 0.05);
+/// assert_eq!(order.order_type, "REL");
 /// ```
 pub fn auction_relative(action: Action, quantity: f64, offset: f64) -> Order {
     Order {
@@ -314,6 +325,7 @@ pub fn auction_relative(action: Action, quantity: f64, offset: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::block(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "LMT");
 /// ```
 pub fn block(action: Action, quantity: f64, price: f64) -> Order {
     Order {
@@ -337,6 +349,7 @@ pub fn block(action: Action, quantity: f64, price: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::box_top(Action::Buy, 100.0);
+/// assert_eq!(order.order_type, "BOX TOP");
 /// ```
 pub fn box_top(action: Action, quantity: f64) -> Order {
     Order {
@@ -361,6 +374,7 @@ pub fn box_top(action: Action, quantity: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::limit_order(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "LMT");
 /// ```
 pub fn limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
@@ -382,6 +396,7 @@ pub fn limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::limit_order_with_cash_qty(Action::Buy, 50.0, 5000.0);
+/// assert_eq!(order.order_type, "LMT");
 /// ```
 pub fn limit_order_with_cash_qty(action: Action, limit_price: f64, cash_qty: f64) -> Order {
     Order {
@@ -403,6 +418,7 @@ pub fn limit_order_with_cash_qty(action: Action, limit_price: f64, cash_qty: f64
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::limit_on_close(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "LOC");
 /// ```
 pub fn limit_on_close(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
@@ -424,6 +440,7 @@ pub fn limit_on_close(action: Action, quantity: f64, limit_price: f64) -> Order 
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::limit_on_open(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "LMT");
 /// ```
 pub fn limit_on_open(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
@@ -453,6 +470,7 @@ pub fn limit_on_open(action: Action, quantity: f64, limit_price: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::passive_relative(Action::Buy, 100.0, 0.05);
+/// assert_eq!(order.order_type, "PASSV REL");
 /// ```
 pub fn passive_relative(action: Action, quantity: f64, offset: f64) -> Order {
     Order {
@@ -476,6 +494,7 @@ pub fn passive_relative(action: Action, quantity: f64, offset: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::pegged_to_midpoint(Action::Buy, 100.0, 0.05, 50.0);
+/// assert_eq!(order.order_type, "PEG MID");
 /// ```
 pub fn pegged_to_midpoint(action: Action, quantity: f64, offset: f64, limit_price: f64) -> Order {
     Order {
@@ -572,6 +591,7 @@ pub fn bracket_order(
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::market_to_limit(Action::Buy, 100.0);
+/// assert_eq!(order.order_type, "MTL");
 /// ```
 pub fn market_to_limit(action: Action, quantity: f64) -> Order {
     Order {
@@ -593,6 +613,7 @@ pub fn market_to_limit(action: Action, quantity: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::market_with_protection(Action::Buy, 100.0);
+/// assert_eq!(order.order_type, "MKT PRT");
 /// ```
 pub fn market_with_protection(action: Action, quantity: f64) -> Order {
     Order {
@@ -616,6 +637,7 @@ pub fn market_with_protection(action: Action, quantity: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::stop(Action::Buy, 100.0, 45.0);
+/// assert_eq!(order.order_type, "STP");
 /// ```
 pub fn stop(action: Action, quantity: f64, stop_price: f64) -> Order {
     Order {
@@ -640,6 +662,7 @@ pub fn stop(action: Action, quantity: f64, stop_price: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::stop_with_protection(Action::Buy, 100.0, 45.0);
+/// assert_eq!(order.order_type, "STP PRT");
 /// ```
 pub fn stop_with_protection(action: Action, quantity: f64, stop_price: f64) -> Order {
     Order {
@@ -664,6 +687,7 @@ pub fn stop_with_protection(action: Action, quantity: f64, stop_price: f64) -> O
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::trailing_stop(Action::Buy, 100.0, 2.0, 45.0);
+/// assert_eq!(order.order_type, "TRAIL");
 /// ```
 pub fn trailing_stop(action: Action, quantity: f64, trailing_percent: f64, trail_stop_price: f64) -> Order {
     Order {
@@ -688,6 +712,7 @@ pub fn trailing_stop(action: Action, quantity: f64, trailing_percent: f64, trail
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::combo_limit_order(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "LMT");
 /// ```
 pub fn combo_limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
@@ -736,6 +761,7 @@ pub(crate) fn non_guaranteed_params() -> Vec<TagValue> {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::combo_market_order(Action::Buy, 100.0);
+/// assert_eq!(order.order_type, "MKT");
 /// ```
 pub fn combo_market_order(action: Action, quantity: f64) -> Order {
     Order {
@@ -758,6 +784,7 @@ pub fn combo_market_order(action: Action, quantity: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::limit_order_for_combo_with_leg_prices(Action::Buy, 100.0, vec![10.0, 11.0]);
+/// assert_eq!(order.order_type, "LMT");
 /// ```
 pub fn limit_order_for_combo_with_leg_prices(action: Action, quantity: f64, leg_prices: Vec<f64>) -> Order {
     let mut order = Order {
@@ -787,6 +814,7 @@ pub fn limit_order_for_combo_with_leg_prices(action: Action, quantity: f64, leg_
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::relative_limit_combo(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "REL + LMT");
 /// ```
 pub fn relative_limit_combo(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
@@ -810,6 +838,7 @@ pub fn relative_limit_combo(action: Action, quantity: f64, limit_price: f64) -> 
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::relative_market_combo(Action::Buy, 100.0);
+/// assert_eq!(order.order_type, "REL + MKT");
 /// ```
 pub fn relative_market_combo(action: Action, quantity: f64) -> Order {
     Order {
@@ -844,6 +873,7 @@ pub fn relative_market_combo(action: Action, quantity: f64) -> Order {
 ///     ],
 ///     OcaType::CancelWithBlock,
 /// );
+/// assert!(orders.iter().all(|order| order.oca_group == "MyOCA"));
 /// ```
 pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: OcaType) -> Vec<Order> {
     for order in &mut oca_orders {
@@ -870,6 +900,7 @@ pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: Oc
 /// use ibapi::orders::{order_builder, Action, VolatilityType};
 ///
 /// let order = order_builder::volatility(Action::Buy, 100.0, 0.2, VolatilityType::Daily);
+/// assert_eq!(order.order_type, "VOL");
 /// ```
 pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volatility_type: VolatilityType) -> Order {
     Order {
@@ -890,6 +921,7 @@ pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volati
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::market_f_hedge(1001, Action::Buy);
+/// assert_eq!(order.hedge_type, "F");
 /// ```
 pub fn market_f_hedge(parent_order_id: impl Into<OrderId>, action: Action) -> Order {
     //FX Hedge orders can only have a quantity of 0
@@ -996,6 +1028,7 @@ pub fn attach_adjustable_stop(parent: &Order, stop_price: f64, adjustment: Adjus
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::what_if_limit_order(Action::Buy, 100.0, 50.0);
+/// assert!(order.what_if);
 /// ```
 pub fn what_if_limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
     let mut order = limit_order(action, quantity, limit_price);
@@ -1113,6 +1146,7 @@ pub fn what_if_limit_order(action: Action, quantity: f64, limit_price: f64) -> O
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::limit_ibkrats(Action::Buy, 100.0, 50.0);
+/// assert_eq!(order.order_type, "LMT");
 /// ```
 pub fn limit_ibkrats(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
@@ -1133,6 +1167,7 @@ pub fn limit_ibkrats(action: Action, quantity: f64, limit_price: f64) -> Order {
 /// use ibapi::orders::{order_builder, Action};
 ///
 /// let order = order_builder::limit_order_with_manual_order_time(Action::Buy, 100.0, 50.0, "20240102 09:30:00 US/Eastern");
+/// assert_eq!(order.manual_order_time, "20240102 09:30:00 US/Eastern");
 /// ```
 pub fn limit_order_with_manual_order_time(action: Action, quantity: f64, limit_price: f64, manual_order_time: &str) -> Order {
     let mut order = limit_order(action, quantity, limit_price);

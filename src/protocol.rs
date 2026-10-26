@@ -220,6 +220,7 @@ impl Features {
 /// * `Err(Error)` if the server version is too old
 ///
 /// # Examples
+///
 /// ```no_run
 /// use ibapi::protocol::{check_version, Features};
 ///
@@ -261,6 +262,7 @@ pub fn is_supported(server_version: i32, feature: ProtocolFeature) -> bool {
 /// * `include_fn` - A closure that adds the field(s) to the message
 ///
 /// # Examples
+///
 /// ```no_run
 /// use ibapi::protocol::{include_if_supported, Features};
 ///

@@ -7,7 +7,7 @@
 | Mode | Command | Primary client path | Blocking client path |
 |------|---------|---------------------|----------------------|
 | Default async | `cargo build` | `client::Client` | – |
-| Sync only | `cargo build --no-default-features --features sync` | `client::Client` | `client::blocking::Client` (same type) |
+| Sync only | `cargo build --no-default-features --features sync` | `client::Client` | `client::blocking::Client` (alias of `client::Client`) |
 | Async + sync | `cargo build --all-features` (or `--no-default-features --features "sync async"`) | `client::Client` (async) | `client::blocking::Client` |
 
 ## Available Features

@@ -20,6 +20,7 @@ impl Client {
     /// that guides you through the order creation process.
     ///
     /// # Examples
+    ///
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;

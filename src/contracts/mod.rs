@@ -388,6 +388,7 @@ impl Contract {
     /// Create a bond contract with CUSIP identifier
     ///
     /// # Examples
+    ///
     /// ```
     /// use ibapi::contracts::Contract;
     ///
@@ -401,6 +402,7 @@ impl Contract {
     /// Create a bond contract with ISIN identifier
     ///
     /// # Examples
+    ///
     /// ```
     /// use ibapi::contracts::Contract;
     ///
@@ -414,6 +416,7 @@ impl Contract {
     /// Create a bond contract with CUSIP or ISIN identifier
     ///
     /// # Examples
+    ///
     /// ```
     /// use ibapi::contracts::{Contract, BondIdentifier, Cusip, Isin};
     ///
