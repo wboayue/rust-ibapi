@@ -267,7 +267,10 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// - [`Error::Notice`] when TWS rejects the request (e.g. 162, no data).
     /// - [`Error::UnexpectedEndOfStream`] if the response closes before the end
     ///   marker, so a partial download is never returned as complete.
-    /// - [`Error::UnexpectedResponse`] if another message arrives in its place.
+    /// - [`Error::UnexpectedResponse`] if the bars and the end marker arrive out of order.
+    ///
+    /// Waits without a time limit. Any error before the end marker cancels the
+    /// request at TWS.
     ///
     /// # Examples
     ///
@@ -359,7 +362,11 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// - [`Error::Notice`] when TWS rejects the request (e.g. 162, no data).
     /// - [`Error::UnexpectedEndOfStream`] if the response closes before the end
     ///   marker, so a partial download is never returned as complete.
-    /// - [`Error::UnexpectedResponse`] if another message arrives in its place.
+    /// - [`Error::UnexpectedResponse`] if the bars and the end marker arrive out of order.
+    ///
+    /// Waits without a time limit; to bound it, wrap the future in
+    /// `tokio::time::timeout`. Dropping it, or any error, before the end marker
+    /// cancels the request at TWS.
     ///
     /// # Examples
     ///

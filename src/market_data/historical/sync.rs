@@ -9,9 +9,8 @@ use crate::client::blocking::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::common::retry::blocking::retry_on_connection_reset;
 use crate::contracts::Contract;
-use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::common::{RoutedItem, SubscriptionItem};
+use crate::subscriptions::common::{filter_notice, RoutedItem, SubscriptionItem};
 use crate::subscriptions::log_cancel_error;
 use crate::subscriptions::sync::{FilterData, Subscription, SubscriptionItemIterExt};
 use crate::transport::{InternalSubscription, MessageBus};
@@ -19,7 +18,7 @@ use crate::{client::sync::Client, Error};
 
 use super::common::tick::{classify, TickAction};
 use super::common::{self, decoders, encoders};
-use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickDecoder, WhatToShow};
+use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, Schedule, TickDecoder, WhatToShow};
 use crate::market_data::TradingHours;
 
 impl Client {
@@ -273,19 +272,29 @@ pub(crate) fn historical_data(
             false,
         )?;
 
-        let subscription = builder.send_raw(request)?;
+        // The window frame is a second read, which is why this is not a
+        // one-shot and cannot use the helpers in `common::request_helpers`.
+        // Dropping the subscription before it, on any error below, sends
+        // TWS's cancel; after it, nothing is sent.
+        let subscription = builder.send::<HistoricalDataFrame>(request)?;
 
-        let message = subscription.next().ok_or(Error::UnexpectedEndOfStream)??;
-        let mut data = decoders::decode_historical_data(message.expect_type(IncomingMessages::HistoricalData)?)?;
-
-        // The end frame is a second read, which is why this is not a one-shot
-        // and cannot use the helpers in `common::request_helpers`. Only the end
-        // frame proves the download is complete, so a close before it is an error.
-        let end_message = subscription.next().ok_or(Error::UnexpectedEndOfStream)??;
-        (data.start, data.end) = decoders::decode_historical_data_end(end_message.expect_type(IncomingMessages::HistoricalDataEnd)?)?;
+        let mut data = next_frame(&subscription)?.into_bars()?;
+        // Only the window frame proves the download is complete, so a close
+        // before it is an error.
+        (data.start, data.end) = next_frame(&subscription)?.into_window()?;
 
         Ok(data)
     })
+}
+
+/// The next frame of a one-shot request, skipping notices.
+fn next_frame(subscription: &Subscription<HistoricalDataFrame>) -> Result<HistoricalDataFrame, Error> {
+    loop {
+        let item = subscription.next().ok_or(Error::UnexpectedEndOfStream)?;
+        if let Some(frame) = filter_notice(item) {
+            return frame;
+        }
+    }
 }
 
 pub(crate) fn historical_data_stream(

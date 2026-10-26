@@ -524,36 +524,24 @@ fn historical_data_up_to_the_second_advisory_is_skipped() {
     assert_eq!(data.bars.len(), 1, "bars sent after the advisory should be returned");
 }
 
+/// The window frame ahead of the bars is out of order.
 #[test]
 fn historical_data_unexpected_response() {
-    // Respond with an unexpected message type (market data type).
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::MarketDataType,
-        Vec::new(),
-    )]));
+    let (result, bus) = fetch_daily(vec![proto_response(
+        IncomingMessages::HistoricalDataEnd,
+        historical_data_end_response().encode_proto(),
+    )]);
+    assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{result:?}");
+    // The window frame ended the request at TWS: nothing to cancel.
+    assert_eq!(historical_requests_and_cancels(&bus), (1, 0));
+}
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    let contract = Contract::stock("MSFT").build();
-    let duration = 2.days();
-    let bar_size = BarSize::Hour;
-    let what_to_show = WhatToShow::Trades;
-    let trading_hours = TradingHours::Regular;
-
-    // This should return an error because the server sent an unexpected response
-    let result = client
-        .historical_data(&contract, bar_size)
-        .what_to_show(what_to_show)
-        .trading_hours(trading_hours)
-        .duration(duration)
-        .fetch();
-    assert!(result.is_err(), "Expected error due to unexpected response type");
-
-    match result {
-        Err(Error::UnexpectedResponse(_)) => {
-            // This is the expected error type
-        }
-        _ => panic!("Expected UnexpectedResponse error"),
-    }
+/// A message type the request doesn't expect is skipped, not taken for a frame.
+#[test]
+fn historical_data_skips_undeclared_message() {
+    let (result, bus) = fetch_daily(vec![proto_response(IncomingMessages::MarketDataType, Vec::new())]);
+    assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "{result:?}");
+    assert_eq!(historical_requests_and_cancels(&bus), (1, 1));
 }
 
 #[test]
@@ -1097,7 +1085,11 @@ fn historical_data_end_of_stream_is_not_retried() {
         matches!(result, Err(Error::UnexpectedEndOfStream)),
         "expected UnexpectedEndOfStream, got {result:?}"
     );
-    assert_eq!(request_message_count(&message_bus), 1, "a closed stream must not be retried");
+    assert_eq!(
+        historical_requests_and_cancels(&message_bus),
+        (1, 1),
+        "a closed stream must not be retried"
+    );
 }
 
 #[test]
@@ -1123,7 +1115,8 @@ fn historical_data_retries_a_connection_reset() {
         .expect("the reset must be retried, not surfaced");
 
     assert_eq!(data.bars.len(), 1);
-    assert_eq!(request_message_count(&message_bus), 2, "the retry must re-send the request");
+    let (requests, _) = historical_requests_and_cancels(&message_bus);
+    assert_eq!(requests, 2, "the retry must re-send the request");
 }
 
 #[test]
@@ -1428,6 +1421,15 @@ fn tick_subscription_skips_unexpected_message_then_yields() {
     assert!(subscription.next().is_none(), "should be done");
 }
 
+/// The historical data requests and cancels written to `bus`.
+fn historical_requests_and_cancels(bus: &MessageBusStub) -> (usize, usize) {
+    let messages = bus.request_messages.read().unwrap();
+    (
+        count_proto_msgs(&messages, OutgoingMessages::RequestHistoricalData),
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalData),
+    )
+}
+
 /// Fetch one day of daily bars against `responses`.
 fn fetch_daily(responses: Vec<crate::messages::ResponseMessage>) -> (Result<HistoricalData, Error>, Arc<MessageBusStub>) {
     let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(responses);
@@ -1450,7 +1452,7 @@ fn historical_data_requires_end_after_a_batch() {
         };
         let (result, bus) = fetch_daily(vec![proto_response(IncomingMessages::HistoricalData, response.encode_proto())]);
         assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "populated={populated}: {result:?}");
-        assert_eq!(request_message_count(&bus), 1, "bare closure must not replay the request");
+        assert_eq!(historical_requests_and_cancels(&bus), (1, 1), "bare closure must not replay the request");
     }
 }
 
@@ -1460,7 +1462,15 @@ fn historical_data_requires_end_message_type() {
     let response = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
     let (result, bus) = fetch_daily(vec![response.clone(), response]);
     assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{result:?}");
-    assert_eq!(request_message_count(&bus), 1);
+    assert_eq!(historical_requests_and_cancels(&bus), (1, 1));
+}
+
+/// A decode failure before the window frame cancels the request at TWS.
+#[test]
+fn historical_data_local_error_cancels() {
+    let (result, bus) = fetch_daily(vec![proto_response(IncomingMessages::HistoricalData, vec![0xff])]);
+    assert!(result.is_err(), "malformed bars must fail");
+    assert_eq!(historical_requests_and_cancels(&bus), (1, 1));
 }
 
 /// An empty result is valid when the broker explicitly completes the request.
