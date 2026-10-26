@@ -267,7 +267,10 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// - [`Error::Notice`] when TWS rejects the request (e.g. 162, no data).
     /// - [`Error::UnexpectedEndOfStream`] if the response closes before the end
     ///   marker, so a partial download is never returned as complete.
-    /// - [`Error::UnexpectedResponse`] if another message arrives in its place.
+    /// - [`Error::UnexpectedResponse`] if the bars and the end marker arrive out of order.
+    ///
+    /// Waits without a time limit; [`fetch_within`](Self::fetch_within) bounds
+    /// the wait. Any error before the end marker cancels the request at TWS.
     ///
     /// # Examples
     ///
@@ -296,6 +299,43 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// # let _ = bars;
     /// ```
     pub fn fetch(self) -> Result<HistoricalData, Error> {
+        self.fetch_until(None)
+    }
+
+    /// [`fetch`](Self::fetch), giving up after `timeout`.
+    ///
+    /// # Errors
+    /// As [`fetch`](Self::fetch), plus [`Error::Timeout`] if the end marker
+    /// hasn't arrived within `timeout`; the request is cancelled at TWS.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    ///
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::{BarSize, ToDuration};
+    /// use ibapi::Error;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// match client
+    ///     .historical_data(&contract, BarSize::Hour)
+    ///     .duration(7.days())
+    ///     .fetch_within(Duration::from_secs(30))
+    /// {
+    ///     Ok(data) => println!("{} bars", data.bars.len()),
+    ///     Err(Error::Timeout) => eprintln!("no answer in 30s"),
+    ///     Err(e) => eprintln!("request failed: {e}"),
+    /// }
+    /// ```
+    pub fn fetch_within(self, timeout: std::time::Duration) -> Result<HistoricalData, Error> {
+        self.fetch_until(Some(std::time::Instant::now() + timeout))
+    }
+
+    fn fetch_until(self, deadline: Option<std::time::Instant>) -> Result<HistoricalData, Error> {
         let (end_date, duration) = self.resolve_for_fetch()?;
         let data = crate::market_data::historical::sync::historical_data(
             self.client,
@@ -305,6 +345,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
             self.bar_size,
             self.what_to_show,
             self.trading_hours,
+            deadline,
         )?;
         Ok(trim_to_range(data, self.between))
     }
@@ -359,7 +400,10 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// - [`Error::Notice`] when TWS rejects the request (e.g. 162, no data).
     /// - [`Error::UnexpectedEndOfStream`] if the response closes before the end
     ///   marker, so a partial download is never returned as complete.
-    /// - [`Error::UnexpectedResponse`] if another message arrives in its place.
+    /// - [`Error::UnexpectedResponse`] if the bars and the end marker arrive out of order.
+    ///
+    /// Waits without a time limit; [`fetch_within`](Self::fetch_within) bounds
+    /// the wait. Any error before the end marker cancels the request at TWS.
     ///
     /// # Examples
     ///
@@ -391,6 +435,45 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn fetch(self) -> Result<HistoricalData, Error> {
+        self.fetch_until(None).await
+    }
+
+    /// [`fetch`](Self::fetch), giving up after `timeout`.
+    ///
+    /// # Errors
+    /// As [`fetch`](Self::fetch), plus [`Error::Timeout`] if the end marker
+    /// hasn't arrived within `timeout`; the request is cancelled at TWS.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    ///
+    /// use ibapi::prelude::*;
+    /// use ibapi::Error;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///
+    ///     match client
+    ///         .historical_data(&contract, HistoricalBarSize::Hour)
+    ///         .duration(7.days())
+    ///         .fetch_within(Duration::from_secs(30))
+    ///         .await
+    ///     {
+    ///         Ok(data) => println!("{} bars", data.bars.len()),
+    ///         Err(Error::Timeout) => eprintln!("no answer in 30s"),
+    ///         Err(e) => eprintln!("request failed: {e}"),
+    ///     }
+    /// }
+    /// ```
+    pub async fn fetch_within(self, timeout: std::time::Duration) -> Result<HistoricalData, Error> {
+        self.fetch_until(Some(tokio::time::Instant::now() + timeout)).await
+    }
+
+    async fn fetch_until(self, deadline: Option<tokio::time::Instant>) -> Result<HistoricalData, Error> {
         let (end_date, duration) = self.resolve_for_fetch()?;
         let data = crate::market_data::historical::r#async::historical_data(
             self.client,
@@ -400,6 +483,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
             self.bar_size,
             self.what_to_show,
             self.trading_hours,
+            deadline,
         )
         .await?;
         Ok(trim_to_range(data, self.between))

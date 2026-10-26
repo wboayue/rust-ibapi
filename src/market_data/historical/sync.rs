@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use log::error;
 use time::OffsetDateTime;
@@ -9,9 +10,8 @@ use crate::client::blocking::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::common::retry::blocking::retry_on_connection_reset;
 use crate::contracts::Contract;
-use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::common::{RoutedItem, SubscriptionItem};
+use crate::subscriptions::common::{filter_notice, RoutedItem, SubscriptionItem};
 use crate::subscriptions::log_cancel_error;
 use crate::subscriptions::sync::{FilterData, Subscription, SubscriptionItemIterExt};
 use crate::transport::{InternalSubscription, MessageBus};
@@ -19,7 +19,7 @@ use crate::{client::sync::Client, Error};
 
 use super::common::tick::{classify, TickAction};
 use super::common::{self, decoders, encoders};
-use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickDecoder, WhatToShow};
+use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, Schedule, TickDecoder, WhatToShow};
 use crate::market_data::TradingHours;
 
 impl Client {
@@ -249,6 +249,11 @@ impl Client {
     }
 }
 
+// pub(crate) internal plumbing called from `HistoricalDataBuilder`; the
+// public API is already a builder, so flat args here are the deliberate
+// seam between the typed builder and the wire encoder (the builder-fed exception in
+// docs/rules/style/param-budget.md).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn historical_data(
     client: &Client,
     contract: &Contract,
@@ -257,10 +262,16 @@ pub(crate) fn historical_data(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
+    deadline: Option<Instant>,
 ) -> Result<HistoricalData, Error> {
     common::validate_historical_data(end_date, what_to_show)?;
 
     retry_on_connection_reset(client, || {
+        // A retry follows a wait for reconnection, which the deadline doesn't bound.
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Err(Error::Timeout);
+        }
+
         let builder = client.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
@@ -273,19 +284,45 @@ pub(crate) fn historical_data(
             false,
         )?;
 
-        let subscription = builder.send_raw(request)?;
+        // Dropping the subscription before the window frame, on any error
+        // below, sends TWS's cancel; after it, nothing is sent.
+        let subscription = builder.send::<HistoricalDataFrame>(request)?;
 
-        let message = subscription.next().ok_or(Error::UnexpectedEndOfStream)??;
-        let mut data = decoders::decode_historical_data(message.expect_type(IncomingMessages::HistoricalData)?)?;
-
-        // The end frame is a second read, which is why this is not a one-shot
-        // and cannot use the helpers in `common::request_helpers`. Only the end
-        // frame proves the download is complete, so a close before it is an error.
-        let end_message = subscription.next().ok_or(Error::UnexpectedEndOfStream)??;
-        (data.start, data.end) = decoders::decode_historical_data_end(end_message.expect_type(IncomingMessages::HistoricalDataEnd)?)?;
+        let mut data = next_frame(&subscription, deadline)?.into_bars()?;
+        // Only the window frame proves the download is complete, so a close
+        // before it is an error.
+        (data.start, data.end) = next_frame(&subscription, deadline)?.into_window()?;
 
         Ok(data)
     })
+}
+
+/// The next frame of a one-shot request, skipping notices; `Error::Timeout`
+/// once `deadline` passes.
+fn next_frame(subscription: &Subscription<HistoricalDataFrame>, deadline: Option<Instant>) -> Result<HistoricalDataFrame, Error> {
+    loop {
+        let item = match deadline {
+            None => subscription.next(),
+            Some(deadline) => {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(Error::Timeout);
+                }
+                subscription.next_timeout(remaining)
+            }
+        };
+        match item {
+            Some(item) => {
+                if let Some(frame) = filter_notice(item) {
+                    return frame;
+                }
+            }
+            // `next_timeout` returns `None` for a timeout and for a closed
+            // channel; only a timeout waits until the deadline.
+            None if deadline.is_some_and(|deadline| Instant::now() >= deadline) => return Err(Error::Timeout),
+            None => return Err(Error::UnexpectedEndOfStream),
+        }
+    }
 }
 
 pub(crate) fn historical_data_stream(

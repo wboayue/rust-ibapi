@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use log::error;
 use time::OffsetDateTime;
 
@@ -12,9 +12,8 @@ use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::common::retry::retry_on_connection_reset;
 use crate::contracts::Contract;
-use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::common::SubscriptionItem;
+use crate::subscriptions::common::{filter_notice, SubscriptionItem};
 use crate::subscriptions::log_cancel_error;
 use crate::subscriptions::r#async::Subscription;
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -22,7 +21,7 @@ use crate::{Client, Error};
 
 use super::common::tick::{classify, TickAction};
 use super::common::{self, decoders, encoders};
-use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickDecoder, WhatToShow};
+use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, Schedule, TickDecoder, WhatToShow};
 use crate::market_data::TradingHours;
 
 // === Public API Functions ===
@@ -275,6 +274,11 @@ impl Client {
     }
 }
 
+// pub(crate) internal plumbing called from `HistoricalDataBuilder`; the
+// public API is already a builder, so flat args here are the deliberate
+// seam between the typed builder and the wire encoder (the builder-fed exception in
+// docs/rules/style/param-budget.md).
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn historical_data(
     client: &Client,
     contract: &Contract,
@@ -283,10 +287,11 @@ pub(crate) async fn historical_data(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
+    deadline: Option<tokio::time::Instant>,
 ) -> Result<HistoricalData, Error> {
     common::validate_historical_data(end_date, what_to_show)?;
 
-    retry_on_connection_reset(client, || async {
+    let fetch = retry_on_connection_reset(client, || async {
         let builder = client.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
@@ -299,20 +304,33 @@ pub(crate) async fn historical_data(
             false,
         )?;
 
-        let mut subscription = builder.send_raw(request).await?;
+        // Dropping the subscription before the window frame, on any error
+        // below or with the future, sends TWS's cancel; after it, nothing is sent.
+        let mut subscription = builder.send::<HistoricalDataFrame>(request).await?;
 
-        let message = subscription.next().await.ok_or(Error::UnexpectedEndOfStream)??;
-        let mut data = decoders::decode_historical_data(message.expect_type(IncomingMessages::HistoricalData)?)?;
-
-        // The end frame is a second read, which is why this is not a one-shot
-        // and cannot use the helpers in `common::request_helpers`. Only the end
-        // frame proves the download is complete, so a close before it is an error.
-        let end_message = subscription.next().await.ok_or(Error::UnexpectedEndOfStream)??;
-        (data.start, data.end) = decoders::decode_historical_data_end(end_message.expect_type(IncomingMessages::HistoricalDataEnd)?)?;
+        let mut data = next_frame(&mut subscription).await?.into_bars()?;
+        // Only the window frame proves the download is complete, so a close
+        // before it is an error.
+        (data.start, data.end) = next_frame(&mut subscription).await?.into_window()?;
 
         Ok(data)
-    })
-    .await
+    });
+
+    match deadline {
+        // The deadline covers retries and the waits for reconnection between them.
+        Some(deadline) => tokio::time::timeout_at(deadline, fetch).await.map_err(|_elapsed| Error::Timeout)?,
+        None => fetch.await,
+    }
+}
+
+/// The next frame of a one-shot request, skipping notices.
+async fn next_frame(subscription: &mut Subscription<HistoricalDataFrame>) -> Result<HistoricalDataFrame, Error> {
+    loop {
+        let item = subscription.next().await.ok_or(Error::UnexpectedEndOfStream)?;
+        if let Some(frame) = filter_notice(item) {
+            return frame;
+        }
+    }
 }
 
 pub(crate) async fn historical_data_stream(

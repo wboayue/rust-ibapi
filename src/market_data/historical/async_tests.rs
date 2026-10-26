@@ -363,10 +363,10 @@ async fn historical_data_up_to_the_second_advisory_is_skipped() {
 
 #[tokio::test]
 async fn historical_data_unexpected_response() {
-    // 1 = TickPrice — wrong type for historical_data.
+    // The window frame ahead of the bars is out of order.
     assert_unexpected_response(
         server_versions::SIZE_RULES,
-        proto_response(IncomingMessages::TickPrice, Vec::new()),
+        proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto()),
         |c| async move {
             c.historical_data(&test_contract(), BarSize::Hour)
                 .duration(Duration::days(1))
@@ -937,6 +937,91 @@ async fn streaming_subscription_sends_cancel_on_drop() {
         1,
         "should send exactly one cancel message on drop"
     );
+}
+
+/// The historical data requests and cancels written to `bus`, once the
+/// cancels that drops spawn have run.
+async fn historical_requests_and_cancels(bus: &MessageBusStub) -> (usize, usize) {
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    let messages = bus.request_messages.read().unwrap();
+    (
+        count_proto_msgs(&messages, OutgoingMessages::RequestHistoricalData),
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalData),
+    )
+}
+
+/// Dropping the `fetch` future before the window frame cancels the request at TWS.
+#[tokio::test]
+async fn historical_data_dropped_fetch_cancels() {
+    let bus = Arc::new(MessageBusStub::default().keeping_channels_open());
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let contract = test_contract();
+    let fetch = client.historical_data(&contract, BarSize::Hour).duration(Duration::days(1)).fetch();
+    let elapsed = tokio::time::timeout(tokio::time::Duration::from_millis(20), fetch).await;
+
+    assert!(elapsed.is_err(), "the stub never answers");
+    assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1));
+}
+
+/// No answer within the bound: `Error::Timeout`, and the request is cancelled at TWS.
+#[tokio::test]
+async fn historical_data_fetch_within_times_out_and_cancels() {
+    let bus = Arc::new(MessageBusStub::default().keeping_channels_open());
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let result = client
+        .historical_data(&test_contract(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch_within(std::time::Duration::from_millis(20))
+        .await;
+
+    assert!(matches!(result, Err(Error::Timeout)), "{result:?}");
+    assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1));
+}
+
+/// An answer within the bound completes as `fetch` does, with nothing to cancel.
+#[tokio::test]
+async fn historical_data_fetch_within_completes() {
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(historical_data_bar(1_678_886_400).ohlc(185.50, 186.00, 185.25, 185.75))
+                .encode_proto(),
+        ),
+        proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto()),
+    ]));
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let data = client
+        .historical_data(&test_contract(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch_within(std::time::Duration::from_secs(5))
+        .await
+        .expect("answered within the bound");
+
+    assert_eq!(data.bars.len(), 1);
+    assert_eq!(historical_requests_and_cancels(&bus).await, (1, 0));
+}
+
+/// A decode failure before the window frame cancels the request at TWS.
+#[tokio::test]
+async fn historical_data_local_error_cancels() {
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistoricalData,
+        vec![0xff],
+    )]));
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let result = client
+        .historical_data(&test_contract(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch()
+        .await;
+
+    assert!(result.is_err(), "malformed bars must fail");
+    assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1));
 }
 
 #[tokio::test]
