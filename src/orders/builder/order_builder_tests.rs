@@ -170,6 +170,7 @@ fn at_auction() {
     let order = builder.build().unwrap();
     assert_eq!(order.order_type, "MTL");
     assert_eq!(order.limit_price, Some(100.00));
+    assert_eq!(order.tif, TimeInForce::Auction);
 }
 
 #[test]
@@ -2265,6 +2266,40 @@ fn each_type_sends_exactly_the_price_fields_it_uses() {
         assert_eq!(order.mid_offset_at_whole, mid_offsets.map(|m| m.at_whole), "{order_type:?}");
         assert_eq!(order.mid_offset_at_half, mid_offsets.map(|m| m.at_half), "{order_type:?}");
     }
+}
+
+/// The on-open and auction types send a plain `MKT` / `LMT` / `MTL`; the time in force is what
+/// makes them, so `.order_type(..)` sets it as their named setters do.
+#[test]
+fn order_type_sets_the_time_in_force_its_type_implies() {
+    for order_type in ALL_ORDER_TYPES {
+        let order = every_price_field(order_type.clone()).build().unwrap();
+        let expected = match order_type {
+            OrderType::MarketOnOpen | OrderType::LimitOnOpen => TimeInForce::OnOpen,
+            OrderType::AtAuction => TimeInForce::Auction,
+            _ => TimeInForce::Day,
+        };
+        assert_eq!(order.tif, expected, "{order_type:?}");
+    }
+
+    let order = Order::builder().buy(100).order_type(OrderType::MarketOnOpen).build().unwrap();
+    assert_eq!(order, Order::builder().buy(100).market_on_open().build().unwrap());
+
+    let order = Order::builder()
+        .buy(100)
+        .order_type(OrderType::MarketOnOpen)
+        .good_till_canceled()
+        .build()
+        .unwrap();
+    assert_eq!(order.tif, TimeInForce::GoodTillCanceled, "a later time-in-force setter wins");
+
+    let order = Order::builder()
+        .buy(100)
+        .good_till_canceled()
+        .order_type(OrderType::MarketOnOpen)
+        .build()
+        .unwrap();
+    assert_eq!(order.tif, TimeInForce::OnOpen, "replaces an earlier time in force");
 }
 
 // === Pegged orders ===

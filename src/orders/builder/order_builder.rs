@@ -432,6 +432,11 @@ impl<T> OrderBuilder<T> {
     /// that doesn't take it is dropped: `.limit(100.0).order_type(OrderType::PeggedToStock)` sends
     /// no limit price. Prefer the named setter (`.relative(..)`, `.pegged_to_midpoint(..)`, ...).
     ///
+    /// `MarketOnOpen`, `LimitOnOpen` and `AtAuction` go out as `MKT`, `LMT` and `MTL`; the time in
+    /// force is what makes them, so these also set it (`OnOpen`, `OnOpen`, `Auction`), as their
+    /// named setters do. It replaces an earlier time in force; a later time-in-force setter
+    /// overrides it.
+    ///
     /// # Examples
     ///
     /// ```
@@ -444,6 +449,9 @@ impl<T> OrderBuilder<T> {
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
     pub fn order_type(mut self, order_type: OrderType) -> Self {
+        if let Some(tif) = order_type.implied_time_in_force() {
+            self.time_in_force = tif;
+        }
         self.order_type = Some(order_type);
         self
     }
@@ -554,10 +562,8 @@ impl<T> OrderBuilder<T> {
 
     /// At Auction - for pre-market opening period execution
     pub fn at_auction(mut self, price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::AtAuction);
         self.limit_price = Some(price.into());
-        self.time_in_force = TimeInForce::Auction;
-        self
+        self.order_type(OrderType::AtAuction)
     }
 
     /// Market on Close - executes as market order at or near closing price
@@ -574,18 +580,14 @@ impl<T> OrderBuilder<T> {
     }
 
     /// Market on Open - executes as market order at market open
-    pub fn market_on_open(mut self) -> Self {
-        self.order_type = Some(OrderType::Market);
-        self.time_in_force = TimeInForce::OnOpen;
-        self
+    pub fn market_on_open(self) -> Self {
+        self.order_type(OrderType::MarketOnOpen)
     }
 
     /// Limit on Open - executes as limit order at market open
     pub fn limit_on_open(mut self, limit_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::Limit);
         self.limit_price = Some(limit_price.into());
-        self.time_in_force = TimeInForce::OnOpen;
-        self
+        self.order_type(OrderType::LimitOnOpen)
     }
 
     /// Market with Protection - market order with protection against extreme price movements (futures only)

@@ -9,7 +9,7 @@ triggers:
   - seeing an unreachable!() or panic!() arm in a caller matching on a builder-set enum
 symbols: [OrderBuilder, Action, unreachable]
 related: [param-budget, domain-module-layout]
-precedents: ["#549", "#822", "#832", "#833"]
+precedents: ["#549", "#822", "#832", "#833", "#1073"]
 memory: [feedback_builder_enum_coverage_audit]
 ---
 
