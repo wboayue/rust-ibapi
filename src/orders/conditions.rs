@@ -489,6 +489,10 @@ impl PriceConditionBuilder {
     }
 
     /// Build the price condition.
+    ///
+    /// # Panics
+    ///
+    /// If neither `greater_than()` nor `less_than()` was called.
     pub fn build(self) -> PriceCondition {
         PriceCondition {
             contract_id: self.contract_id,
@@ -570,6 +574,10 @@ impl TimeConditionBuilder {
     }
 
     /// Build the time condition.
+    ///
+    /// # Panics
+    ///
+    /// If neither `greater_than()` nor `less_than()` was called.
     pub fn build(self) -> TimeCondition {
         TimeCondition {
             time: self
@@ -646,6 +654,10 @@ impl MarginConditionBuilder {
     }
 
     /// Build the margin condition.
+    ///
+    /// # Panics
+    ///
+    /// If neither `greater_than()` nor `less_than()` was called.
     pub fn build(self) -> MarginCondition {
         MarginCondition {
             percent: self
@@ -805,6 +817,10 @@ impl VolumeConditionBuilder {
     }
 
     /// Build the volume condition.
+    ///
+    /// # Panics
+    ///
+    /// If neither `greater_than()` nor `less_than()` was called.
     pub fn build(self) -> VolumeCondition {
         VolumeCondition {
             contract_id: self.contract_id,
@@ -891,6 +907,10 @@ impl PercentChangeConditionBuilder {
     }
 
     /// Build the percent change condition.
+    ///
+    /// # Panics
+    ///
+    /// If neither `greater_than()` nor `less_than()` was called.
     pub fn build(self) -> PercentChangeCondition {
         PercentChangeCondition {
             contract_id: self.contract_id,

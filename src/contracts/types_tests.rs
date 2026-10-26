@@ -163,9 +163,11 @@ fn strike_new_accepts_positive() {
 }
 
 #[test]
-fn strike_new_rejects_zero_and_negative() {
+fn strike_new_rejects_non_positive_and_non_finite() {
     assert!(Strike::new(0.0).is_err());
     assert!(Strike::new(-1.0).is_err());
+    assert!(Strike::new(f64::NAN).is_err());
+    assert!(Strike::new(f64::INFINITY).is_err());
 }
 
 #[test]

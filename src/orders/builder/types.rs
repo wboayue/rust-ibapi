@@ -89,10 +89,7 @@ pub struct Quantity(f64);
 impl Quantity {
     /// Create a validated quantity ensuring it is positive and finite.
     pub fn new(value: f64) -> Result<Self, ValidationError> {
-        if value <= 0.0 {
-            return Err(ValidationError::InvalidQuantity(value));
-        }
-        if value.is_nan() || value.is_infinite() {
+        if !value.is_finite() || value <= 0.0 {
             return Err(ValidationError::InvalidQuantity(value));
         }
         Ok(Self(value))
@@ -112,7 +109,7 @@ pub struct Price(f64);
 impl Price {
     /// Create a validated price ensuring it is finite.
     pub fn new(value: f64) -> Result<Self, ValidationError> {
-        if value.is_nan() || value.is_infinite() {
+        if !value.is_finite() {
             return Err(ValidationError::InvalidPrice(value));
         }
         Ok(Self(value))

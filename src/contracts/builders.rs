@@ -118,6 +118,10 @@ impl OptionBuilder<Missing, Missing, Missing> {
 // Can only set strike when symbol is present
 impl<E> OptionBuilder<Symbol, Missing, E> {
     /// Specify the option strike price.
+    ///
+    /// # Panics
+    ///
+    /// If `price` is not positive and finite (zero, negative, NaN or infinite).
     pub fn strike(self, price: f64) -> OptionBuilder<Symbol, Strike, E> {
         OptionBuilder {
             symbol: self.symbol,
