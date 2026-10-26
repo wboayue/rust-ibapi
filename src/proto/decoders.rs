@@ -90,6 +90,8 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
 /// [`parse_optional_decimal`], collapsing "no value" to `0.0`.
 ///
 /// For fields whose public type is plain `f64` and so cannot represent "unset".
+/// Where `0` would fabricate a plausible value and live capture shows the field
+/// is always sent, use [`required_decimal`] instead.
 /// `0.0` is what those fields produced for an absent or empty wire value before
 /// [`parse_optional_decimal`] existed, so this preserves that behaviour while
 /// still erroring on malformed input.
@@ -115,9 +117,9 @@ pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
 ///
 /// For `f64` fields where `0` would fabricate a plausible but wrong value (a flat
 /// position, a fully filled order) and live capture shows TWS always sends the
-/// field, including an explicit `"0"` — positions (#1088), order status
-/// `filled` / `remaining` (#1089). Otherwise use [`parse_decimal_or_zero`] or
-/// [`parse_optional_decimal`]: a decode error ends the stream it arrives on.
+/// field, including an explicit `"0"` (evidence: #1088, #1089). Otherwise use
+/// [`parse_decimal_or_zero`] or [`parse_optional_decimal`]: a decode error ends
+/// the stream it arrives on.
 pub(crate) fn required_decimal(opt: Option<&str>, field: &str, message: &str) -> Result<f64, Error> {
     required(parse_optional_decimal(opt)?, field, message)
 }
