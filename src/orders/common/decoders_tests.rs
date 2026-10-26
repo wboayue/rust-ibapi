@@ -410,6 +410,65 @@ fn decode_order_status_proto_rejects_malformed_remaining() {
     assert_decimal_parse_error(super::decode_order_status_proto(p), "abc");
 }
 
+// Absent or "unset" filled/remaining: Error::Parse, not a fabricated 0 (#1089).
+// A remaining defaulted to 0 made a partial fill read as Filled via
+// OrderStatus::outcome(). Live, TWS sends an explicit "0" in every state.
+#[test]
+fn decode_order_status_proto_requires_filled_and_remaining() {
+    let partial = || crate::proto::OrderStatus {
+        order_id: Some(1),
+        status: Some("Submitted".into()),
+        filled: Some("40".into()),
+        remaining: Some("60".into()),
+        ..Default::default()
+    };
+    let sentinel = || Some("9223372036854775807".to_string());
+    let cases = [
+        ("filled absent", "filled", crate::proto::OrderStatus { filled: None, ..partial() }),
+        (
+            "filled sentinel",
+            "filled",
+            crate::proto::OrderStatus {
+                filled: sentinel(),
+                ..partial()
+            },
+        ),
+        (
+            "remaining absent",
+            "remaining",
+            crate::proto::OrderStatus {
+                remaining: None,
+                ..partial()
+            },
+        ),
+        (
+            "remaining sentinel",
+            "remaining",
+            crate::proto::OrderStatus {
+                remaining: sentinel(),
+                ..partial()
+            },
+        ),
+    ];
+    for (label, field, p) in cases {
+        match super::decode_order_status_proto(p) {
+            Err(Error::Parse(_, name, reason)) => {
+                assert_eq!(name, field, "{label}");
+                assert_eq!(reason, "missing in OrderStatus", "{label}");
+            }
+            other => panic!("{label}: expected Error::Parse, got {other:?}"),
+        }
+    }
+
+    let filled = super::decode_order_status_proto(crate::proto::OrderStatus {
+        filled: Some("100".into()),
+        remaining: Some("0".into()),
+        ..partial()
+    })
+    .unwrap();
+    assert_eq!((filled.filled, filled.remaining), (100.0, 0.0), "explicit \"0\" remaining decodes");
+}
+
 #[test]
 fn order_binding_decodes_all_identity_fields() {
     let message = crate::common::test_utils::helpers::proto_response(IncomingMessages::OrderBound, order_bound().client_id(7).encode_proto());

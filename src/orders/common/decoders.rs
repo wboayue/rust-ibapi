@@ -7,7 +7,8 @@ use crate::orders::{
 use crate::orders::{CommissionReport, ExecutionData, OrderBound, OrderData, OrderStatus};
 use crate::proto;
 use crate::proto::decoders::{
-    decode_soft_dollar_tier, optional_f64, parse_decimal_or_zero, parse_optional, parse_optional_decimal, parse_required, required, s, tag_values,
+    decode_soft_dollar_tier, optional_f64, parse_decimal_or_zero, parse_optional, parse_optional_decimal, parse_required, required, required_decimal,
+    s, tag_values,
 };
 use crate::Error;
 
@@ -61,8 +62,8 @@ pub(crate) fn decode_order_status_proto(p: crate::proto::OrderStatus) -> Result<
     Ok(OrderStatus {
         order_id: p.order_id.unwrap_or_default(),
         status: parse_required(p.status.as_deref(), "OrderStatus")?,
-        filled: parse_decimal_or_zero(p.filled.as_deref())?,
-        remaining: parse_decimal_or_zero(p.remaining.as_deref())?,
+        filled: required_decimal(p.filled.as_deref(), "filled", "OrderStatus")?,
+        remaining: required_decimal(p.remaining.as_deref(), "remaining", "OrderStatus")?,
         average_fill_price: p.avg_fill_price,
         perm_id: p.perm_id.unwrap_or_default(),
         parent_id: p.parent_id.unwrap_or_default(),

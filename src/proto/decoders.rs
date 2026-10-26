@@ -109,6 +109,19 @@ pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
     Ok(parse_optional_decimal(opt)?.unwrap_or(0.0))
 }
 
+/// Parse a required decimal-typed wire field: absent, empty or an "unset"
+/// sentinel is `Error::Parse` naming `field` (C# maps all of them to
+/// `decimal.MaxValue`, upstream's "unset").
+///
+/// For `f64` fields where `0` would fabricate a plausible but wrong value (a flat
+/// position, a fully filled order) and live capture shows TWS always sends the
+/// field, including an explicit `"0"` — positions (#1088), order status
+/// `filled` / `remaining` (#1089). Otherwise use [`parse_decimal_or_zero`] or
+/// [`parse_optional_decimal`]: a decode error ends the stream it arrives on.
+pub(crate) fn required_decimal(opt: Option<&str>, field: &str, message: &str) -> Result<f64, Error> {
+    required(parse_optional_decimal(opt)?, field, message)
+}
+
 /// Parse a required enumerated wire field. Both `None` and empty strings
 /// surface as `Error::Parse`: an empty wire on a required field is a TWS
 /// protocol bug, not a default. Silent fallback to `T::default()` masks
