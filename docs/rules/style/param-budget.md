@@ -10,12 +10,14 @@ triggers:
   - a public method takes several Option arguments
 symbols: [too_many_arguments]
 related: [domain-module-layout, macros-last-resort, doc-parity-audit]
-precedents: ["#549", "#573", "#660", "#752", "#792"]
+precedents: ["#549", "#573", "#660", "#752", "#792", "#1079"]
 memory: [feedback_rule19_builder_fed_helpers_exception, feedback_magic_none_split_to_builder]
 ---
 
-Three parameters is the budget. The receiver does not count — `fn foo(&self, a, b, c)` is at
-the limit, `fn foo(&self, a, b, c, d)` is over it.
+Three parameters is the budget for the **public API** — anything rustdoc shows. The receiver
+does not count — `fn foo(&self, a, b, c)` is at the limit, `fn foo(&self, a, b, c, d)` is over
+it. `pub(crate)` and private functions are out of scope and need no annotation at four to seven
+arguments.
 
 Over the budget, pick by what the arguments *are*:
 
@@ -28,10 +30,12 @@ Over the budget, pick by what the arguments *are*:
   `client.foo(a, b, c, d, e)` is no worse than `client.foo(a).b(b).c(c).d(d).e(e).run()`; a
   mechanical builder conversion buys nothing.
 
-`pub(crate)` helpers called from a builder's finalisers are the documented exception — the
-public surface is already a builder, and the flat-arg helper is the deliberate seam to the wire
-encoder. Annotate with `#[allow(clippy::too_many_arguments)]` and say so in a comment; the four
-such sites in `market_data/historical/` are the pattern to copy.
+Internal functions are exempt because the budget protects callers, and every caller of a
+`pub(crate)` fn is in the tree: reshaping one never breaks a user. Most are seams between a
+public builder's finaliser and the wire encoder, where the typed surface already exists; the
+rest are transport and request plumbing. At eight or more arguments clippy forces
+`#[allow(clippy::too_many_arguments)]`; add a one-line reason, as the four sites in
+`market_data/historical/` do.
 
 ## Why
 
@@ -51,13 +55,14 @@ split, `foo(Option<T>)` → `foo(T)` + `foo_default()` → builder is the planne
 the split is a waypoint, not the destination. Both sub-rules live in
 [doc parity audit](../docs/doc-parity-audit.md).
 
-Violations are open: dozens of non-test functions take four to seven parameters, most of them
-builder-fed `pub(crate)` seams without the exception comment. #1079 holds the inventory and the
-open decision on whether `pub(crate)` seams stay in scope. `historical_news` (five required
-arguments) was reviewed and kept flat (#901).
+The public sites over budget are all-required and kept flat with a reason: `historical_news`
+(five arguments, #901), `Contract::option` (superseded by `Contract::call()` / `put()`), and the
+client-less `orders::order_builder` free functions (module doc explains).
 
 ## Precedents
 
+- #1079 — scoped the budget to the public API. An inventory found ~60 internal 4–7-arg
+  functions; annotating each would have been churn with no caller to protect.
 - #901 — free functions whose same-typed prices came in a different order from the fluent
   method of the same name (`stop_limit(.., limit, stop)` vs `.stop_limit(stop, limit)`) were
   removed in favor of `Order::builder()`, and #660's `PeggedToBenchmark` folded into it. Fix

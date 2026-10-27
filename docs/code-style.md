@@ -14,7 +14,7 @@
 - Modules own one domain (accounts, orders, market_data)
 - Functions do one thing: encode, decode, validate, or orchestrate
 - Max 50 lines per function; extract if larger
-- Three parameters is the budget; the receiver does not count. See [param budget](rules/style/param-budget.md) for what a fourth argument should become and when a flat signature is still right.
+- Three parameters is the budget for public API; the receiver does not count, and `pub(crate)` / private fns are exempt. See [param budget](rules/style/param-budget.md) for what a fourth argument should become and when a flat signature is still right.
 
 ### Composition
 - Combine small, focused components to build complex behavior

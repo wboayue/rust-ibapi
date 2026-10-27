@@ -104,6 +104,8 @@ impl Client {
     /// }
     /// # Ok::<(), ibapi::Error>(())
     /// ```
+    // Flat by design (#901): all five arguments are required with no meaningful default, so a
+    // builder would buy nothing over positional args (docs/rules/style/param-budget.md).
     pub fn historical_news(
         &self,
         contract_id: i32,

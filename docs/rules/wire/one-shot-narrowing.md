@@ -91,8 +91,7 @@ FamilyCodes, got .. kind: UserInfo` rather than decoding one message's bytes int
 and asserting on the result.
 
 `expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than another
-parameter on the two one-shot helpers, which take three and four arguments against a budget of
-three (see [param budget](../style/param-budget.md)) with no builder in front of them.
+parameter on the two one-shot helpers, keeping their signatures at three and four arguments.
 
 ## Why every one-shot retries
 
