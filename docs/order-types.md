@@ -866,14 +866,14 @@ let order_id = client.order(&option_contract)
 
 ### Volatility Order
 
-Prices an option order from a volatility figure; TWS derives the limit price.
+Prices an option order from a volatility figure, given as a percentage (`40.0` = 40%); TWS derives the limit price.
 
 ```rust
 use ibapi::orders::VolatilityType;
 
 let order_id = client.order(&option_contract)
     .buy(10)
-    .volatility_order(0.40, VolatilityType::Annual)
+    .volatility_order(40.0, VolatilityType::Annual)
     .submit()?;
 ```
 

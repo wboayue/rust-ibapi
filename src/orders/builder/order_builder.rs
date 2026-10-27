@@ -626,16 +626,18 @@ impl<T> OrderBuilder<T> {
         self.order_type(OrderType::LimitOnOpen)
     }
 
-    /// Volatility order (`VOL`) - TWS derives the limit price from `volatility` (options only)
+    /// Volatility order (`VOL`) - TWS derives the limit price from `volatility` (options and futures options)
+    ///
+    /// `volatility` is a percentage (`40.0` = 40%), per C# `OrderSamples`.
     ///
     /// # Examples
     ///
     /// ```
     /// use ibapi::orders::{Order, VolatilityType};
     ///
-    /// let order = Order::builder().buy(1).volatility_order(0.25, VolatilityType::Annual).build()?;
+    /// let order = Order::builder().buy(1).volatility_order(40.0, VolatilityType::Annual).build()?;
     /// assert_eq!(order.order_type, "VOL");
-    /// assert_eq!(order.volatility, Some(0.25));
+    /// assert_eq!(order.volatility, Some(40.0));
     /// assert_eq!(order.volatility_type, Some(VolatilityType::Annual));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
@@ -1159,7 +1161,7 @@ impl<T> OrderBuilder<T> {
 
     // Additional order attributes
 
-    /// Set the volatility figure for a volatility order.
+    /// Set the volatility figure for a volatility order, as a percentage (`40.0` = 40%).
     ///
     /// Sets the figure only, not the order type; [`volatility_order`](Self::volatility_order)
     /// builds a VOL order in one call.
@@ -1182,12 +1184,13 @@ impl<T> OrderBuilder<T> {
     /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
     /// # let contract = Contract::stock("AAPL").build();
     /// use ibapi::orders::VolatilityType;
+    /// use ibapi::orders::builder::OrderType;
     ///
-    /// // `volatility_order` takes a type; a later `volatility_type` call replaces it.
     /// let _ = client
     ///     .order(&contract)
     ///     .buy(1)
-    ///     .volatility_order(0.25, VolatilityType::Daily)
+    ///     .order_type(OrderType::Volatility)
+    ///     .volatility(40.0)
     ///     .volatility_type(VolatilityType::Annual)
     ///     .submit()
     ///     .await?;
@@ -1216,7 +1219,7 @@ impl<T> OrderBuilder<T> {
     /// let _ = client
     ///     .order(&contract)
     ///     .buy(1)
-    ///     .volatility_order(0.25, VolatilityType::Annual)
+    ///     .volatility_order(40.0, VolatilityType::Annual)
     ///     .reference_price_type(ReferencePriceType::AverageOfNBBO)
     ///     .submit()
     ///     .await?;

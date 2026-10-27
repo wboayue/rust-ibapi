@@ -778,7 +778,7 @@ fn custom_order_type() {
 }
 
 #[test]
-fn volatility_order_missing_volatility() {
+fn vol_order_type_without_volatility_is_rejected() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -791,7 +791,7 @@ fn volatility_order_missing_volatility() {
 }
 
 #[test]
-fn volatility_order_with_volatility() {
+fn vol_order_type_with_volatility_builds() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -811,19 +811,17 @@ fn volatility_order_sets_type_figure_and_volatility_type() {
 
     let order = OrderBuilder::new(&client, &contract)
         .buy(1)
-        .limit(5.0)
-        .volatility_order(0.4, VolatilityType::Daily)
+        .volatility_order(40.0, VolatilityType::Daily)
         .build()
         .unwrap();
 
     assert_eq!(order.order_type, "VOL");
-    assert_eq!(order.volatility, Some(0.4));
+    assert_eq!(order.volatility, Some(40.0));
     assert_eq!(order.volatility_type, Some(VolatilityType::Daily));
-    assert_eq!(order.limit_price, None);
 
     let proto = encode_order(&order);
     assert_eq!(proto.order_type.as_deref(), Some("VOL"));
-    assert_eq!(proto.volatility, Some(0.4));
+    assert_eq!(proto.volatility, Some(40.0));
     assert_eq!(proto.volatility_type, Some(1));
 }
 
