@@ -76,7 +76,8 @@ fn order_row(client_id: i32, order_id: i32, kind: OrderStatusKind, filled: f64) 
     data.order.order_id = order_id;
     data.order.perm_id = 900 + i64::from(order_id);
     data.order.parent_id = 3;
-    data.order.total_quantity = 100.0;
+    // A 100-share order: TWS reports a completed order's unfilled quantity as its total.
+    data.order.total_quantity = 100.0 - filled;
     data.order.filled_quantity = filled;
     data.order_state.status = kind;
     Orders::OrderData(data)
@@ -143,4 +144,36 @@ fn completed_status_is_built_from_the_order() {
 fn lookup_wait_is_at_least_the_minimum() {
     assert_eq!(lookup_wait(Instant::now()), LOOKUP_MIN_WAIT);
     assert!(lookup_wait(Instant::now() + Duration::from_secs(30)) > Duration::from_secs(29));
+}
+
+/// TWS sends a filled completed order's total as `0` (#1116), so nothing remains.
+#[test]
+fn completed_status_of_a_filled_order_has_nothing_remaining() {
+    let found = completed_status(&[order_row(7, 13, OrderStatusKind::Filled, 100.0)], 7, OrderId(13)).unwrap();
+
+    assert_eq!((found.filled, found.remaining), (100.0, 0.0));
+}
+
+/// A completed record's status alone decides, so a `totalQuantity` TWS left
+/// out (decoded `0`) can't turn a partly filled, cancelled order into a fill.
+#[test]
+fn observe_completed_goes_by_status() {
+    use OrderStatusKind::*;
+    let cases = [
+        ("filled", status(Filled, 100.0, 0.0), Some("Filled")),
+        ("cancelled after a partial fill", status(Cancelled, 40.0, 60.0), Some("Ended")),
+        ("cancelled, total left out", status(Cancelled, 40.0, 0.0), Some("Ended")),
+        ("inactive", status(Inactive, 0.0, 100.0), Some("Ended")),
+        ("still working", status(Submitted, 40.0, 0.0), None),
+    ];
+    for (name, input, expected) in cases {
+        let outcome = FillTracker::default().observe_completed(input);
+        let variant = outcome.map(|o| match o {
+            OrderOutcome::Filled(_) => "Filled",
+            OrderOutcome::Ended(_) => "Ended",
+            OrderOutcome::TimedOut(_) => "TimedOut",
+            OrderOutcome::Rejected(_) => "Rejected",
+        });
+        assert_eq!(variant, expected, "{name}");
+    }
 }

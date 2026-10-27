@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `wait_for_fill` (sync and async) no longer reports a negative `remaining` for an order it finds among completed orders, e.g. one placed before a reconnect. TWS reports a completed order's `total_quantity` as the quantity left unfilled (`0` once filled), and it was read as the size ordered: a filled order came back with `remaining: -1.0`. The `completed_orders` docs now say what `total_quantity` holds (#1116).
 - The `Order::what_if_type` and `OrderBuilder::what_if_type` docs said an order with `what_if_type` but not `what_if` is placed live. TWS rejects it with error 321 and nothing is placed; set it with `.analyze()`. `seek_price_improvement` and `ignore_open_auction` docs now say what open-order reports carry back (#1115).
 - The `calculate_option_price` docs and examples now give its volatility as a fraction (`0.2` = 20%), as TWS reads it. They said a percentage (`20.0` for 20%) and passed `100.0`, so following them priced the option at 100 times the intended volatility (#1114).
 - `head_timestamp`, `histogram_data`, `historical_schedules(..).fetch()`, `calculate_option_price`, `calculate_implied_volatility`, `wsh_metadata` and `wsh_event_data_by_contract(..).fetch()` now cancel the request at TWS when dropped before the answer (a dropped future, a timeout, a local error), instead of leaving it running against pacing limits. A response of an unexpected message type is now skipped rather than reported as `Error::UnexpectedResponse` (#1107).

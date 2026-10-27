@@ -137,6 +137,9 @@ impl Client {
 
     /// Requests completed [`crate::orders::Order`]s.
     ///
+    /// A completed order's `total_quantity` is the quantity left unfilled, not the size
+    /// ordered: `0` for a filled order. The size ordered is `total_quantity + filled_quantity`.
+    ///
     /// # Arguments
     /// * `api_only` - request only orders placed by the API.
     ///
@@ -676,7 +679,7 @@ impl Client {
         let mut first = statuses.try_next();
         if first.is_none() {
             if let Some(status) = self.find_finished(order_id, deadline)? {
-                if let Some(outcome) = tracker.observe(status) {
+                if let Some(outcome) = tracker.observe_completed(status) {
                     return Ok(outcome);
                 }
             }
