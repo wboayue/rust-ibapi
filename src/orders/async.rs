@@ -678,7 +678,7 @@ impl Client {
         let first = statuses.next().now_or_never();
         if first.is_none() {
             if let Some(status) = self.find_finished(order_id, deadline).await? {
-                if let Some(outcome) = tracker.observe(status) {
+                if let Some(outcome) = tracker.observe_completed(status) {
                     return Ok(outcome);
                 }
             }

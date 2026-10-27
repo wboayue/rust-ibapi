@@ -90,6 +90,9 @@ pub struct Order {
     /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
     pub action: Action,
     /// The number of positions being bought/sold.
+    ///
+    /// In completed-order reports, TWS sends the quantity left unfilled instead (`0` once
+    /// filled); the size ordered is `total_quantity + filled_quantity`.
     pub total_quantity: f64,
     /// The order's type.
     pub order_type: String,

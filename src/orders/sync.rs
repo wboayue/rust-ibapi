@@ -679,7 +679,7 @@ impl Client {
         let mut first = statuses.try_next();
         if first.is_none() {
             if let Some(status) = self.find_finished(order_id, deadline)? {
-                if let Some(outcome) = tracker.observe(status) {
+                if let Some(outcome) = tracker.observe_completed(status) {
                     return Ok(outcome);
                 }
             }

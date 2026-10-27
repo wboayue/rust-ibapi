@@ -153,3 +153,27 @@ fn completed_status_of_a_filled_order_has_nothing_remaining() {
 
     assert_eq!((found.filled, found.remaining), (100.0, 0.0));
 }
+
+/// A completed record's status alone decides, so a `totalQuantity` TWS left
+/// out (decoded `0`) can't turn a partly filled, cancelled order into a fill.
+#[test]
+fn observe_completed_goes_by_status() {
+    use OrderStatusKind::*;
+    let cases = [
+        ("filled", status(Filled, 100.0, 0.0), Some("Filled")),
+        ("cancelled after a partial fill", status(Cancelled, 40.0, 60.0), Some("Ended")),
+        ("cancelled, total left out", status(Cancelled, 40.0, 0.0), Some("Ended")),
+        ("inactive", status(Inactive, 0.0, 100.0), Some("Ended")),
+        ("still working", status(Submitted, 40.0, 0.0), None),
+    ];
+    for (name, input, expected) in cases {
+        let outcome = FillTracker::default().observe_completed(input);
+        let variant = outcome.map(|o| match o {
+            OrderOutcome::Filled(_) => "Filled",
+            OrderOutcome::Ended(_) => "Ended",
+            OrderOutcome::TimedOut(_) => "TimedOut",
+            OrderOutcome::Rejected(_) => "Rejected",
+        });
+        assert_eq!(variant, expected, "{name}");
+    }
+}

@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 use crate::client::ids::OrderId;
-use crate::orders::{OrderData, OrderOutcome, OrderStatus, Orders};
+use crate::orders::{OrderData, OrderOutcome, OrderStatus, OrderStatusKind, Orders};
 use crate::Error;
 
 /// The least time `wait_for_fill` gives each lookup reply (open orders, then
@@ -69,6 +69,21 @@ impl FillTracker {
             self.last = Some(status);
         }
         outcome
+    }
+
+    /// Take the status built from a completed-order record ([`completed_status`]).
+    /// Its status is final, so the status alone decides: unlike a live status,
+    /// nothing remaining after a fill doesn't mean filled here, since a
+    /// `totalQuantity` TWS left out decodes as `0`.
+    pub(crate) fn observe_completed(&mut self, status: OrderStatus) -> Option<OrderOutcome> {
+        if status.status == OrderStatusKind::Filled {
+            Some(OrderOutcome::Filled(status))
+        } else if status.status.is_terminal() {
+            Some(OrderOutcome::Ended(status))
+        } else {
+            self.last = Some(status);
+            None
+        }
     }
 
     /// The outcome for an error on the status stream: an order rejection
