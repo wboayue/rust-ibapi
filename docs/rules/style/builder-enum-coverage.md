@@ -9,7 +9,7 @@ triggers:
   - seeing an unreachable!() or panic!() arm in a caller matching on a builder-set enum
 symbols: [OrderBuilder, Action, OrderType, unreachable]
 related: [param-budget, domain-module-layout]
-precedents: ["#549", "#822", "#832", "#833", "#1073", "#1076"]
+precedents: ["#549", "#822", "#832", "#833", "#1073", "#1076", "#1082"]
 memory: [feedback_builder_enum_coverage_audit]
 ---
 
@@ -60,10 +60,9 @@ sed -n '/^pub enum OrderType {/,/^}/p' src/orders/builder/types.rs \
 ```
 
 The pattern matches a setter's write (`Some(OrderType::X)` or `self.order_type(OrderType::X)`),
-so doc examples and `build()`'s comparisons don't count. It prints three rows today. `ComboLimit`
+so doc examples and `build()`'s comparisons don't count. It prints two rows today. `ComboLimit`
 and `ComboMarket` are not gaps: they send `LMT` and `MKT`, the same wire as `.limit()` and
-`.market()`. `Volatility` is a real gap — reachable only as `.order_type(OrderType::Volatility)`, since
-`.volatility(..)` sets the figure, not the type (#1082). `MarketOnOpen` / `LimitOnOpen` had no
+`.market()`. `MarketOnOpen` / `LimitOnOpen` had no
 named setter until #1073, which sent them as plain day orders through `.order_type(..)`;
 `RelativeLimitCombo` / `RelativeMarketCombo` got theirs in #1076.
 
@@ -101,3 +100,6 @@ touch either side.
   would read as an invitation to invent wire strings.
 - #1076 — `.relative_limit_combo()` / `.relative_market_combo()`, the two `OrderType` gaps the
   recipe above was added to surface. Neither takes an offset, matching C# `OrderSamples`.
+- #1082 — `.volatility_order(volatility, VolatilityType)` for `OrderType::Volatility`. The obvious
+  name, `.volatility(..)`, already set the figure on its own; making it set the type too would
+  silently change the order type for existing callers, so the setter got a new name instead.

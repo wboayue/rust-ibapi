@@ -48,6 +48,7 @@ let order = Order::builder().buy(100).limit(150.0).build()?;
   - [Sweep to Fill](#sweep-to-fill)
   - [Block Order](#block-order)
   - [Box Top](#box-top)
+  - [Volatility Order](#volatility-order)
 - [Complex Orders](#complex-orders)
   - [Bracket Orders](#bracket-orders)
   - [Preset Attached Orders](#preset-attached-orders)
@@ -862,6 +863,22 @@ let order_id = client.order(&option_contract)
 ```
 
 **Products:** OPT (BOX exchange only)
+
+### Volatility Order
+
+Prices an option order from a volatility figure, given as a percentage (`40.0` = 40%); TWS derives the limit price.
+
+```rust
+use ibapi::orders::VolatilityType;
+
+let order_id = client.order(&option_contract)
+    .buy(10)
+    .volatility_order(40.0, VolatilityType::Annual)
+    .submit()?;
+```
+
+**Products:** FOP, OPT
+**Optional:** `.reference_price_type(..)` sets how TWS computes the limit price.
 
 ## Complex Orders
 
