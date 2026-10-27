@@ -106,6 +106,7 @@ fn connect_handshakes_against_real_socket() {
     assert_eq!(client.client_id(), 100);
     assert_eq!(client.server_version(), SERVER_VERSION);
     assert!(client.time_zone().is_some());
+    assert_eq!(client.handshake_managed_accounts(), [TEST_ACCOUNT]);
     assert_eq!(client.next_order_id(), 9000);
 }
 

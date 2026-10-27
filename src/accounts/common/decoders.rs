@@ -54,13 +54,14 @@ pub(crate) fn decode_server_time_millis_proto(proto: crate::proto::CurrentTimeIn
 }
 
 pub(crate) fn decode_managed_accounts_proto(p: crate::proto::ManagedAccounts) -> Result<Vec<String>, Error> {
-    Ok(p.accounts_list
-        .as_deref()
-        .unwrap_or_default()
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .collect())
+    Ok(split_account_list(p.accounts_list.as_deref().unwrap_or_default()))
+}
+
+/// Splits TWS's comma-separated account list, dropping empty entries (TWS
+/// may end the list with a comma). Shared with the handshake's copy on
+/// `Client`, so both read the same wire list the same way.
+pub(crate) fn split_account_list(list: &str) -> Vec<String> {
+    list.split(',').filter(|s| !s.is_empty()).map(String::from).collect()
 }
 
 pub(crate) fn decode_account_multi_value(message: &ResponseMessage) -> Result<AccountMultiValue, Error> {
