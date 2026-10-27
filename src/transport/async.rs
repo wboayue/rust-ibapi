@@ -18,7 +18,7 @@ pub(crate) use shutdown::ShutdownSignal;
 
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
@@ -31,7 +31,7 @@ use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::accounts::types::AccountId;
-use crate::client::id_generator::ClientIdManager;
+use crate::client::handshake_state::HandshakeState;
 use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{is_cancel_frame, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
@@ -246,6 +246,12 @@ pub trait AsyncMessageBus: Send + Sync {
 
     fn is_connected(&self) -> bool;
 
+    /// Counts sessions: 0 at connect, bumped each time a reconnect resets
+    /// the bus. A subscription compares it with the generation its request
+    /// was sent in: once they differ, the request died with an earlier
+    /// session and a cancel would name an id the current session never saw.
+    fn session_generation(&self) -> u64;
+
     /// The runtime the bus was built on. `Drop` impls spawn their async
     /// cleanup here, so it runs even when the drop is on a thread with no
     /// runtime of its own.
@@ -270,6 +276,9 @@ pub struct AsyncInternalSubscription {
     lease: Option<(Lease, RouteKey)>,
     /// The shared-channel ticket, for a shared-channel subscription.
     shared: Option<SharedTicket>,
+    /// The bus session generation the request was sent in; see
+    /// [`AsyncMessageBus::session_generation`].
+    session: u64,
     /// Items this receiver has read, shared with a bounded route
     /// (`registry::RouteBound`) so it can tell how many are unread. `Sender::len()`
     /// can't: it counts values not yet seen by every receiver, and
@@ -296,6 +305,7 @@ impl Clone for AsyncInternalSubscription {
             // no-op while another clone still holds the lease.
             lease: self.lease.clone(),
             shared: self.shared,
+            session: self.session,
             reads: None,
             class: self.class,
         }
@@ -323,6 +333,7 @@ impl AsyncInternalSubscription {
             cleanup_sender: None,
             lease: None,
             shared: None,
+            session: 0,
             reads: None,
             class: ChannelClass::default(),
         }
@@ -336,6 +347,7 @@ impl AsyncInternalSubscription {
             cleanup_sender: Some(cleanup_sender),
             lease: None,
             shared: None,
+            session: 0,
             reads: None,
             class: ChannelClass::default(),
         }
@@ -350,6 +362,12 @@ impl AsyncInternalSubscription {
     /// Mark this a subscription to the shared channel `ticket` names.
     fn shared(mut self, ticket: SharedTicket) -> Self {
         self.shared = Some(ticket);
+        self
+    }
+
+    /// Record the bus session generation the request was sent in.
+    pub(crate) fn in_session(mut self, session: u64) -> Self {
+        self.session = session;
         self
     }
 
@@ -435,6 +453,10 @@ impl AsyncInternalSubscription {
         self.shared
     }
 
+    pub(crate) fn session(&self) -> u64 {
+        self.session
+    }
+
     /// Send the cleanup signal, releasing this handle's lease first.
     ///
     /// The order matters: the cleanup task removes a registration only once
@@ -493,11 +515,13 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     /// Latching shutdown flag, shared with the connection so a reconnect in
     /// progress sees the request.
     shutdown: Arc<ShutdownSignal>,
-    /// The client's order-ID generator, raised from the NextValidId frame the
-    /// reconnect handshake re-receives. Installed once via
-    /// [`Self::set_order_ids`] before the processing task starts; absent in
-    /// bus-only test fixtures, which never reconnect a client.
-    order_ids: OnceLock<Arc<ClientIdManager>>,
+    /// The client state a reconnect's handshake refreshes (order-id floor,
+    /// server version). Installed once via [`Self::set_handshake_state`]
+    /// before the processing task starts; absent in bus-only test fixtures,
+    /// which never reconnect a client.
+    handshake_state: OnceLock<HandshakeState>,
+    /// See [`AsyncMessageBus::session_generation`]; bumped in `reset_channels`.
+    session_generation: AtomicU64,
     /// Outbound rate limiter, if the client was built with one. Installed
     /// once via [`Self::set_rate_limiter`] before any request is sent.
     rate_limiter: OnceLock<RateLimiter>,
@@ -548,7 +572,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             runtime: Handle::current(),
             process_task: std::sync::Mutex::new(None),
             shutdown,
-            order_ids: OnceLock::new(),
+            handshake_state: OnceLock::new(),
+            session_generation: AtomicU64::new(0),
             rate_limiter: OnceLock::new(),
             connection_state: Arc::new(ConnectionSignal::default()),
         };
@@ -597,11 +622,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         message_bus
     }
 
-    /// Installs the client's order-ID generator so a successful reconnect
-    /// re-seeds it from the handshake's NextValidId. Called exactly once,
-    /// before [`Self::process_messages`] starts the processing task.
-    pub(crate) fn set_order_ids(&self, order_ids: Arc<ClientIdManager>) {
-        self.order_ids.set(order_ids).expect("order-id generator installed twice");
+    /// Installs the client state a successful reconnect refreshes from its
+    /// handshake. Called exactly once, before [`Self::process_messages`]
+    /// starts the processing task.
+    pub(crate) fn set_handshake_state(&self, state: HandshakeState) {
+        self.handshake_state.set(state).expect("handshake state installed twice");
     }
 
     /// Installs the outbound rate limiter. Called at most once, before the
@@ -663,16 +688,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                             break;
                                         }
 
-                                        // The handshake re-received NextValidId; raise
-                                        // the client's generator from the server's floor so
-                                        // allocation never resumes below it. Only the initial
-                                        // connection seeded the generator before this. Do it
-                                        // before reporting the session as live so a caller
-                                        // gating on `is_connected()` cannot allocate below
-                                        // the new floor.
-                                        if let Some(order_ids) = message_bus.order_ids.get() {
-                                            let metadata = message_bus.connection.connection_metadata().await;
-                                            order_ids.raise_order_id_from_server(metadata.next_order_id);
+                                        // Before reporting the session as live; see
+                                        // `HandshakeState::refresh`.
+                                        if let Some(state) = message_bus.handshake_state.get() {
+                                            state.refresh(&message_bus.connection.connection_metadata().await);
                                         }
 
                                         info!("Successfully reconnected to TWS/Gateway");
@@ -816,6 +835,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// reconnect is attempted.
     async fn reset_channels(&self) {
         debug!("resetting message bus channels");
+        // Before failing the routes, so a subscription that reads the reset
+        // already sees the new generation.
+        self.session_generation.fetch_add(1, Ordering::AcqRel);
 
         self.requests.fail_all(|| Error::ConnectionReset.into());
         self.orders.fail_all(|| Error::ConnectionReset.into());
@@ -1021,6 +1043,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         class: ChannelClass,
         bound: Option<BufferBound>,
     ) -> Result<AsyncInternalSubscription, Error> {
+        // Read before the gate: a reset after this read leaves the
+        // subscription in the old session, which is where its request went.
+        let session = self.session_generation();
         self.ensure_connected()?;
 
         let capacity = bound.map_or(class.capacity(self.channel_capacity), |bound| bound.limit + 1);
@@ -1041,6 +1066,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // sends a second, harmless signal: `release` spares a replacement.
         let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, key(id))
+            .in_session(session)
             .class(class);
         let subscription = match reads {
             Some(reads) => subscription.counting_reads(reads),
@@ -1087,6 +1113,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         account: Option<&AccountId>,
         message: Vec<u8>,
     ) -> Result<AsyncInternalSubscription, Error> {
+        // See `open_route`.
+        let session = self.session_generation();
         self.ensure_connected()?;
         self.throttle(&message).await;
 
@@ -1094,6 +1122,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .shared(ticket)
+            .in_session(session)
             .class(ChannelClass::of_shared(message_type)))
     }
 }
@@ -1162,6 +1191,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         let NewTap { receiver, lease, .. } = self.order_taps.subscribe_status(order_id, capacity).map_err(|e| self.ended_reason(e))?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderStatus(order_id))
+            .in_session(self.session_generation())
             .class(ChannelClass::Order))
     }
 
@@ -1170,6 +1200,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         let NewTap { receiver, lease, .. } = self.order_taps.subscribe_updates(capacity).map_err(|e| self.ended_reason(e))?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderUpdateStream)
+            .in_session(self.session_generation())
             .class(ChannelClass::OrderStream))
     }
 
@@ -1204,6 +1235,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     fn is_connected(&self) -> bool {
         self.connection_state.is_connected() && !self.shutdown.is_requested()
+    }
+
+    fn session_generation(&self) -> u64 {
+        self.session_generation.load(Ordering::Acquire)
     }
 
     fn runtime_handle(&self) -> &Handle {

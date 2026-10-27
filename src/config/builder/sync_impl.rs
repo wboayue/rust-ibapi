@@ -37,7 +37,7 @@ impl UpdateConfigBuilder<'_, Client> {
     /// println!("{response:?}");
     /// ```
     pub fn submit(self) -> Result<UpdateConfigResponse, Error> {
-        check_version(self.client.server_version, Features::UPDATE_CONFIG)?;
+        check_version(self.client.server_version(), Features::UPDATE_CONFIG)?;
 
         request_helpers::blocking::one_shot_by_request_id(
             self.client,

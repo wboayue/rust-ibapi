@@ -22,6 +22,7 @@
 //! spelling is non-canonical.
 
 pub(crate) mod builders;
+pub(crate) mod handshake_state;
 pub(crate) mod id_generator;
 pub(crate) mod ids;
 

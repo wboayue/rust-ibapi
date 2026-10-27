@@ -28,7 +28,7 @@ impl Client {
     /// println!("{config:?}");
     /// ```
     pub fn config(&self) -> Result<Config, Error> {
-        check_version(self.server_version, Features::CONFIG)?;
+        check_version(self.server_version(), Features::CONFIG)?;
 
         request_helpers::blocking::one_shot_by_request_id(self, encoders::encode_request_config, expect_proto(decoders::decode_config_proto))
     }

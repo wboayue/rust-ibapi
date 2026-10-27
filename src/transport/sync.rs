@@ -5,6 +5,7 @@
 use std::collections::{hash_map, HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -13,7 +14,7 @@ use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info, trace, warn};
 
 use crate::accounts::types::AccountId;
-use crate::client::id_generator::ClientIdManager;
+use crate::client::handshake_state::HandshakeState;
 use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::sync::Connection;
 
@@ -320,11 +321,13 @@ pub struct TcpMessageBus<S: Stream> {
     shutdown_recv: Receiver<()>,
     /// Shared with the connection so a reconnect in progress sees the request.
     shutdown: Arc<ShutdownSignal>,
-    /// The client's order-ID generator, raised from the NextValidId frame the
-    /// reconnect handshake re-receives. Installed once via
-    /// [`Self::set_order_ids`] before the dispatcher thread starts; absent in
-    /// bus-only test fixtures, which never reconnect a client.
-    order_ids: OnceLock<Arc<ClientIdManager>>,
+    /// The client state a reconnect's handshake refreshes (order-id floor,
+    /// server version). Installed once via [`Self::set_handshake_state`]
+    /// before the dispatcher thread starts; absent in bus-only test fixtures,
+    /// which never reconnect a client.
+    handshake_state: OnceLock<HandshakeState>,
+    /// See [`MessageBus::session_generation`]; bumped in `reset`.
+    session_generation: AtomicU64,
     /// Outbound rate limiter, if the client was built with one. Installed
     /// once via [`Self::set_rate_limiter`] before any request is sent.
     rate_limiter: OnceLock<RateLimiter>,
@@ -353,18 +356,18 @@ impl<S: Stream> TcpMessageBus<S> {
             shutdown_send,
             shutdown_recv,
             shutdown,
-            order_ids: OnceLock::new(),
+            handshake_state: OnceLock::new(),
+            session_generation: AtomicU64::new(0),
             rate_limiter: OnceLock::new(),
             order_taps,
             connection_state: ConnectionSignal::default(),
         }
     }
 
-    /// Installs the client's order-ID generator so a successful reconnect
-    /// re-seeds it from the handshake's NextValidId. Called exactly once,
-    /// before the dispatcher thread starts.
-    pub(crate) fn set_order_ids(&self, order_ids: Arc<ClientIdManager>) {
-        self.order_ids.set(order_ids).expect("order-id generator installed twice");
+    /// Installs the client state a successful reconnect refreshes from its
+    /// handshake. Called exactly once, before the dispatcher thread starts.
+    pub(crate) fn set_handshake_state(&self, state: HandshakeState) {
+        self.handshake_state.set(state).expect("handshake state installed twice");
     }
 
     /// Installs the outbound rate limiter. Called at most once, before the
@@ -463,6 +466,9 @@ impl<S: Stream> TcpMessageBus<S> {
 
     fn reset(&self) {
         debug!("reset message bus");
+        // Before failing the routes, so a subscription that reads the reset
+        // already sees the new generation.
+        self.session_generation.fetch_add(1, Ordering::AcqRel);
 
         self.requests.fail_all(|| Error::ConnectionReset.into());
         self.orders.fail_all(|| Error::ConnectionReset.into());
@@ -569,14 +575,10 @@ impl<S: Stream> TcpMessageBus<S> {
                     return Err(Error::Shutdown);
                 }
 
-                // The handshake re-received NextValidId; raise the client's
-                // generator from the server's floor so allocation never
-                // resumes below it. Only the initial connection seeded the
-                // generator before this. Do it before reporting the session
-                // as live so a caller gating on `is_connected()` cannot
-                // allocate below the new floor.
-                if let Some(order_ids) = self.order_ids.get() {
-                    order_ids.raise_order_id_from_server(self.connection.connection_metadata().next_order_id);
+                // Before reporting the session as live; see
+                // `HandshakeState::refresh`.
+                if let Some(state) = self.handshake_state.get() {
+                    state.refresh(&self.connection.connection_metadata());
                 }
 
                 info!("successfully reconnected to TWS/Gateway");
@@ -777,6 +779,9 @@ impl<S: Stream> TcpMessageBus<S> {
     /// Register `request_id`'s channel, optionally with an unread-item cap,
     /// then write the request.
     fn open_request(&self, request_id: RequestId, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
+        // Read before the gate: a reset after this read leaves the
+        // subscription in the old session, which is where its request went.
+        let session = self.session_generation();
         self.ensure_connected()?;
 
         let (sender, receiver) = channel::unbounded();
@@ -803,6 +808,7 @@ impl<S: Stream> TcpMessageBus<S> {
             .signaler(self.signals_send.clone())
             .lease(lease)
             .request_id(request_id)
+            .session(session)
             .build();
 
         Ok(subscription)
@@ -899,6 +905,8 @@ impl<S: Stream> TcpMessageBus<S> {
     // Registers a subscription of `message_type` and writes its request;
     // `account` for account updates (see `SharedCounts`).
     fn send_shared(&self, message_type: OutgoingMessages, account: Option<&AccountId>, message: &[u8]) -> Result<InternalSubscription, Error> {
+        // See `open_request`.
+        let session = self.session_generation();
         self.ensure_connected()?;
 
         // A queue of its own, registered before the write so no response can
@@ -925,6 +933,7 @@ impl<S: Stream> TcpMessageBus<S> {
             .signaler(self.signals_send.clone())
             .lease(lease)
             .shared(ticket)
+            .session(session)
             .build();
 
         Ok(subscription)
@@ -937,6 +946,8 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn send_order_request(&self, order_id: OrderId, message: &[u8]) -> Result<InternalSubscription, Error> {
+        // See `open_request`.
+        let session = self.session_generation();
         self.ensure_connected()?;
 
         let (sender, receiver) = channel::unbounded();
@@ -958,6 +969,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             .signaler(self.signals_send.clone())
             .lease(lease)
             .order_id(order_id)
+            .session(session)
             .build();
 
         Ok(subscription)
@@ -984,6 +996,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             .signaler(self.signals_send.clone())
             .lease(lease)
             .order_status(order_id)
+            .session(self.session_generation())
             .build())
     }
 
@@ -998,6 +1011,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             .sender(sender)
             .signaler(self.signals_send.clone())
             .lease(lease)
+            .session(self.session_generation())
             .build())
     }
 
@@ -1034,6 +1048,10 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
     fn is_connected(&self) -> bool {
         self.connection_state.is_connected() && !self.is_shutting_down()
+    }
+
+    fn session_generation(&self) -> u64 {
+        self.session_generation.load(Ordering::Acquire)
     }
 }
 
