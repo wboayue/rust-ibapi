@@ -67,7 +67,7 @@ TWS allows one connection per client id. It answers a second one with error 326 
 1. Connect with a different client id, or close the other connection (another process, or a client you didn't drop)
 2. Match on `Error::ClientIdInUse` to retry with another id
 
-After a dropped connection, TWS can keep the old session until it notices the socket is dead. The automatic reconnect retries 326 for that reason, and gives up with `ClientIdInUse` only once its attempts run out.
+After a dropped connection, TWS can keep the old session until it notices the socket is dead. The automatic reconnect retries 326 for that reason. If its attempts run out, the client fails with `ConnectionFailed`, and the error log names the cause.
 
 ### Connection Timeout
 

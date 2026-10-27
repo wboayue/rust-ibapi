@@ -89,8 +89,8 @@ impl StartupMessage {
     }
 }
 
-/// Handshake-time context bundling the optional typed-message callback and the
-/// mandatory notice sink. Internal use only; the public surface is
+/// Handshake-time context bundling the client id `start_api` sent, the
+/// optional typed-message callback and the mandatory notice sink. Internal use only; the public surface is
 /// `ClientBuilder` (`crate::client::ClientBuilder` for async,
 /// `crate::client::blocking::ClientBuilder` for sync).
 pub(crate) struct StartupHandshakeContext<'a> {

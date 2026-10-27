@@ -19,8 +19,8 @@ use crate::transport::sync::{Io, Reconnect, Stream};
 
 #[derive(Default, Debug)]
 struct Inner {
-    /// `None` is a queued hang-up: one read returns EOF, as from a peer that
-    /// closed this connection; reads after a reconnect continue past it.
+    /// `None` is a queued hang-up: the read that reaches it returns EOF, as
+    /// from a peer that closed this connection.
     inbound: VecDeque<Option<Vec<u8>>>,
     outbound: Vec<u8>,
     hung_up: bool,

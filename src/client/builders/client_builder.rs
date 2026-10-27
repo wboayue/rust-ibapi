@@ -257,6 +257,11 @@ pub mod sync_impl {
         /// you need them. Post-connect, `client.notice_stream()` still works
         /// for runtime-only unrouted notices.
         ///
+        /// # Errors
+        ///
+        /// [`Error::ClientIdInUse`] when another connection holds the client
+        /// id; connect with a different id. Not retried here.
+        ///
         /// # Examples
         ///
         /// ```no_run
@@ -277,6 +282,11 @@ pub mod sync_impl {
         /// captures handshake-time notices (farm-status 2104/2106/2158,
         /// connectivity 1100/1101/1102, etc.) plus every unrouted notice for
         /// the lifetime of the connection. Survives auto-reconnects.
+        ///
+        /// # Errors
+        ///
+        /// [`Error::ClientIdInUse`] when another connection holds the client
+        /// id; connect with a different id. Not retried here.
         ///
         /// # Examples
         ///
@@ -514,6 +524,11 @@ pub mod async_impl {
         /// you need them. Post-connect, `client.notice_stream()` still works
         /// for runtime-only unrouted notices.
         ///
+        /// # Errors
+        ///
+        /// [`Error::ClientIdInUse`] when another connection holds the client
+        /// id; connect with a different id. Not retried here.
+        ///
         /// # Examples
         ///
         /// ```no_run
@@ -536,6 +551,11 @@ pub mod async_impl {
         /// captures handshake-time notices (farm-status 2104/2106/2158,
         /// connectivity 1100/1101/1102, etc.) plus every unrouted notice for
         /// the lifetime of the connection. Survives auto-reconnects.
+        ///
+        /// # Errors
+        ///
+        /// [`Error::ClientIdInUse`] when another connection holds the client
+        /// id; connect with a different id. Not retried here.
         ///
         /// # Examples
         ///

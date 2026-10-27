@@ -83,7 +83,8 @@ pub enum Error {
     /// Returned by `Client::connect`, which doesn't retry. The automatic
     /// reconnect does retry it: after a dropped connection TWS can hold the
     /// old session until it notices the socket is dead, and frees the id
-    /// then. If every attempt meets it, the reconnect gives up with it.
+    /// then. If every attempt meets it, the client fails with
+    /// [`Error::ConnectionFailed`]; the error log names the cause.
     #[error("client id {client_id} is already in use by another connection")]
     ClientIdInUse {
         /// The refused client id.
