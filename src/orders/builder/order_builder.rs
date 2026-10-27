@@ -626,6 +626,25 @@ impl<T> OrderBuilder<T> {
         self.order_type(OrderType::LimitOnOpen)
     }
 
+    /// Volatility order (`VOL`) - TWS derives the limit price from `volatility` (options only)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::orders::{Order, VolatilityType};
+    ///
+    /// let order = Order::builder().buy(1).volatility_order(0.25, VolatilityType::Annual).build()?;
+    /// assert_eq!(order.order_type, "VOL");
+    /// assert_eq!(order.volatility, Some(0.25));
+    /// assert_eq!(order.volatility_type, Some(VolatilityType::Annual));
+    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// ```
+    pub fn volatility_order(mut self, volatility: f64, volatility_type: VolatilityType) -> Self {
+        self.volatility = Some(volatility);
+        self.volatility_type = Some(volatility_type);
+        self.order_type(OrderType::Volatility)
+    }
+
     /// Market with Protection - market order with protection against extreme price movements (futures only)
     pub fn market_with_protection(mut self) -> Self {
         self.order_type = Some(OrderType::MarketWithProtection);
@@ -1140,7 +1159,10 @@ impl<T> OrderBuilder<T> {
 
     // Additional order attributes
 
-    /// Set volatility for volatility orders
+    /// Set the volatility figure for a volatility order.
+    ///
+    /// Sets the figure only, not the order type; [`volatility_order`](Self::volatility_order)
+    /// builds a VOL order in one call.
     pub fn volatility(mut self, volatility: f64) -> Self {
         self.volatility = Some(volatility);
         self
@@ -1160,13 +1182,12 @@ impl<T> OrderBuilder<T> {
     /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
     /// # let contract = Contract::stock("AAPL").build();
     /// use ibapi::orders::VolatilityType;
-    /// use ibapi::orders::builder::OrderType;
     ///
+    /// // `volatility_order` takes a type; a later `volatility_type` call replaces it.
     /// let _ = client
     ///     .order(&contract)
     ///     .buy(1)
-    ///     .order_type(OrderType::Volatility)
-    ///     .volatility(0.25)
+    ///     .volatility_order(0.25, VolatilityType::Daily)
     ///     .volatility_type(VolatilityType::Annual)
     ///     .submit()
     ///     .await?;
@@ -1190,14 +1211,12 @@ impl<T> OrderBuilder<T> {
     /// # use ibapi::contracts::Contract;
     /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
     /// # let contract = Contract::stock("AAPL").build();
-    /// use ibapi::orders::ReferencePriceType;
-    /// use ibapi::orders::builder::OrderType;
+    /// use ibapi::orders::{ReferencePriceType, VolatilityType};
     ///
     /// let _ = client
     ///     .order(&contract)
     ///     .buy(1)
-    ///     .order_type(OrderType::Volatility)
-    ///     .volatility(0.25)
+    ///     .volatility_order(0.25, VolatilityType::Annual)
     ///     .reference_price_type(ReferencePriceType::AverageOfNBBO)
     ///     .submit()
     ///     .await?;
