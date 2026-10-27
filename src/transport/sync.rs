@@ -13,7 +13,7 @@ use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info, trace, warn};
 
 use crate::accounts::types::AccountId;
-use crate::client::id_generator::ClientIdManager;
+use crate::client::handshake_state::HandshakeState;
 use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::sync::Connection;
 
@@ -320,11 +320,11 @@ pub struct TcpMessageBus<S: Stream> {
     shutdown_recv: Receiver<()>,
     /// Shared with the connection so a reconnect in progress sees the request.
     shutdown: Arc<ShutdownSignal>,
-    /// The client's order-ID generator, raised from the NextValidId frame the
-    /// reconnect handshake re-receives. Installed once via
-    /// [`Self::set_order_ids`] before the dispatcher thread starts; absent in
-    /// bus-only test fixtures, which never reconnect a client.
-    order_ids: OnceLock<Arc<ClientIdManager>>,
+    /// The client state a reconnect's handshake refreshes (order-id floor,
+    /// server version). Installed once via [`Self::set_handshake_state`]
+    /// before the dispatcher thread starts; absent in bus-only test fixtures,
+    /// which never reconnect a client.
+    handshake_state: OnceLock<HandshakeState>,
     /// Outbound rate limiter, if the client was built with one. Installed
     /// once via [`Self::set_rate_limiter`] before any request is sent.
     rate_limiter: OnceLock<RateLimiter>,
@@ -353,18 +353,17 @@ impl<S: Stream> TcpMessageBus<S> {
             shutdown_send,
             shutdown_recv,
             shutdown,
-            order_ids: OnceLock::new(),
+            handshake_state: OnceLock::new(),
             rate_limiter: OnceLock::new(),
             order_taps,
             connection_state: ConnectionSignal::default(),
         }
     }
 
-    /// Installs the client's order-ID generator so a successful reconnect
-    /// re-seeds it from the handshake's NextValidId. Called exactly once,
-    /// before the dispatcher thread starts.
-    pub(crate) fn set_order_ids(&self, order_ids: Arc<ClientIdManager>) {
-        self.order_ids.set(order_ids).expect("order-id generator installed twice");
+    /// Installs the client state a successful reconnect refreshes from its
+    /// handshake. Called exactly once, before the dispatcher thread starts.
+    pub(crate) fn set_handshake_state(&self, state: HandshakeState) {
+        self.handshake_state.set(state).expect("handshake state installed twice");
     }
 
     /// Installs the outbound rate limiter. Called at most once, before the
@@ -569,14 +568,10 @@ impl<S: Stream> TcpMessageBus<S> {
                     return Err(Error::Shutdown);
                 }
 
-                // The handshake re-received NextValidId; raise the client's
-                // generator from the server's floor so allocation never
-                // resumes below it. Only the initial connection seeded the
-                // generator before this. Do it before reporting the session
-                // as live so a caller gating on `is_connected()` cannot
-                // allocate below the new floor.
-                if let Some(order_ids) = self.order_ids.get() {
-                    order_ids.raise_order_id_from_server(self.connection.connection_metadata().next_order_id);
+                // Before reporting the session as live; see
+                // `HandshakeState::refresh`.
+                if let Some(state) = self.handshake_state.get() {
+                    state.refresh(&self.connection.connection_metadata());
                 }
 
                 info!("successfully reconnected to TWS/Gateway");

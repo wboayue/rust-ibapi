@@ -20,6 +20,7 @@ use crate::messages::OutgoingMessages;
 use crate::transport::sync::NoticeBroadcaster;
 use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus};
 
+use super::handshake_state::{HandshakeState, ServerVersion};
 use super::id_generator::ClientIdManager;
 use super::ids::{OrderId, RequestId};
 
@@ -29,8 +30,8 @@ use super::ids::{OrderId, RequestId};
 /// Tracks some global information such as server version and server time.
 /// Supports generation of order ids.
 pub struct Client {
-    /// IB server version
-    pub(crate) server_version: i32,
+    /// IB server version, shared with the transport so a reconnect updates it.
+    server_version: Arc<ServerVersion>,
     pub(crate) connection_time: Option<OffsetDateTime>,
     pub(crate) time_zone: Option<&'static Tz>,
     handshake_managed_accounts: Vec<String>,
@@ -106,10 +107,10 @@ impl Client {
 
         let client = Client::new(connection_metadata, message_bus.clone())?;
 
-        // Share the order-ID generator with the bus so a successful reconnect
-        // re-seeds it from the handshake's NextValidId; must be installed
-        // before the dispatcher thread starts.
-        message_bus.set_order_ids(client.id_manager.clone());
+        // Share the state a reconnect's handshake refreshes (order-id floor,
+        // server version) with the bus; must be installed before the
+        // dispatcher thread starts.
+        message_bus.set_handshake_state(client.handshake_state());
         if let Some(limiter) = config.rate_limiter {
             message_bus.set_rate_limiter(limiter);
         }
@@ -122,7 +123,7 @@ impl Client {
 
     fn new(connection_metadata: ConnectionMetadata, message_bus: Arc<dyn MessageBus>) -> Result<Client, Error> {
         let client = Client {
-            server_version: connection_metadata.server_version,
+            server_version: Arc::new(ServerVersion::new(connection_metadata.server_version)),
             connection_time: connection_metadata.connection_time,
             time_zone: connection_metadata.time_zone,
             handshake_managed_accounts: split_account_list(&connection_metadata.managed_accounts),
@@ -132,6 +133,14 @@ impl Client {
         };
 
         Ok(client)
+    }
+
+    /// The state the transport refreshes on reconnect, sharing this client's.
+    fn handshake_state(&self) -> HandshakeState {
+        HandshakeState {
+            order_ids: self.id_manager.clone(),
+            server_version: self.server_version.clone(),
+        }
     }
 
     /// Returns the ID assigned to the [Client].
@@ -157,8 +166,9 @@ impl Client {
         self.id_manager.raise_order_id(order_id);
     }
 
-    /// Returns the version of the TWS API server to which the client is connected.
-    /// This version is determined during the initial connection handshake.
+    /// Returns the version of the TWS API server to which the client is connected,
+    /// as negotiated in the connection handshake. Updated when the client
+    /// reconnects, since the gateway may come back on a different build.
     ///
     /// # Examples
     ///
@@ -170,7 +180,7 @@ impl Client {
     /// println!("Connected to TWS server version: {server_version:?}");
     /// ```
     pub fn server_version(&self) -> i32 {
-        self.server_version
+        self.server_version.get()
     }
 
     /// Returns the gateway's clock reading when the client connected, or
@@ -217,7 +227,7 @@ impl Client {
 
     /// Returns a decoder context for this client
     pub(crate) fn decoder_context(&self) -> crate::subscriptions::DecoderContext {
-        crate::subscriptions::DecoderContext::new(self.server_version)
+        crate::subscriptions::DecoderContext::new(self.server_version())
     }
 
     /// Returns true if the client is currently connected to TWS/IB Gateway.
@@ -355,7 +365,7 @@ impl Client {
     #[cfg(test)]
     pub(crate) fn stubbed(message_bus: Arc<dyn MessageBus>, server_version: i32) -> Client {
         Client {
-            server_version,
+            server_version: Arc::new(ServerVersion::new(server_version)),
             connection_time: None,
             time_zone: None,
             handshake_managed_accounts: Vec::new(),
@@ -401,7 +411,7 @@ impl Drop for Client {
 impl Debug for Client {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Client")
-            .field("server_version", &self.server_version)
+            .field("server_version", &self.server_version())
             .field("server_time", &self.connection_time)
             .field("client_id", &self.client_id)
             .finish()

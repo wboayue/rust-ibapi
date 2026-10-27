@@ -18,13 +18,14 @@ use crate::transport::{
 };
 use crate::Error;
 
+use super::handshake_state::{HandshakeState, ServerVersion};
 use super::id_generator::ClientIdManager;
 use super::ids::{OrderId, RequestId};
 
 /// Asynchronous TWS API Client
 pub struct Client {
-    /// IB server version
-    pub(crate) server_version: i32,
+    /// IB server version, shared with the transport so a reconnect updates it.
+    server_version: Arc<ServerVersion>,
     pub(crate) connection_time: Option<OffsetDateTime>,
     pub(crate) time_zone: Option<&'static Tz>,
     handshake_managed_accounts: Vec<String>,
@@ -117,10 +118,10 @@ impl Client {
 
         let client = Client::new(connection_metadata, message_bus.clone())?;
 
-        // Share the order-ID generator with the bus so a successful reconnect
-        // re-seeds it from the handshake's NextValidId; must be installed
-        // before the processing task starts.
-        message_bus.set_order_ids(client.id_manager.clone());
+        // Share the state a reconnect's handshake refreshes (order-id floor,
+        // server version) with the bus; must be installed before the
+        // processing task starts.
+        message_bus.set_handshake_state(client.handshake_state());
         if let Some(limiter) = config.rate_limiter {
             message_bus.set_rate_limiter(limiter);
         }
@@ -133,7 +134,7 @@ impl Client {
 
     fn new(connection_metadata: ConnectionMetadata, message_bus: Arc<dyn AsyncMessageBus>) -> Result<Client, Error> {
         let client = Client {
-            server_version: connection_metadata.server_version,
+            server_version: Arc::new(ServerVersion::new(connection_metadata.server_version)),
             connection_time: connection_metadata.connection_time,
             time_zone: connection_metadata.time_zone,
             handshake_managed_accounts: split_account_list(&connection_metadata.managed_accounts),
@@ -145,8 +146,17 @@ impl Client {
         Ok(client)
     }
 
-    /// Returns the version of the TWS API server to which the client is connected.
-    /// This version is determined during the initial connection handshake.
+    /// The state the transport refreshes on reconnect, sharing this client's.
+    fn handshake_state(&self) -> HandshakeState {
+        HandshakeState {
+            order_ids: self.id_manager.clone(),
+            server_version: self.server_version.clone(),
+        }
+    }
+
+    /// Returns the version of the TWS API server to which the client is connected,
+    /// as negotiated in the connection handshake. Updated when the client
+    /// reconnects, since the gateway may come back on a different build.
     ///
     /// # Examples
     ///
@@ -161,7 +171,7 @@ impl Client {
     /// }
     /// ```
     pub fn server_version(&self) -> i32 {
-        self.server_version
+        self.server_version.get()
     }
 
     /// Returns the gateway's clock reading when the client connected, or
@@ -211,7 +221,7 @@ impl Client {
 
     /// Returns a decoder context for this client
     pub(crate) fn decoder_context(&self) -> crate::subscriptions::DecoderContext {
-        crate::subscriptions::DecoderContext::new(self.server_version)
+        crate::subscriptions::DecoderContext::new(self.server_version())
     }
 
     /// Returns true if the client is currently connected to TWS/IB Gateway.

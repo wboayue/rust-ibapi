@@ -215,3 +215,20 @@ async fn builder_connect_with_notice_stream_captures_handshake_notice() {
         .expect("notice stream closed");
     assert_eq!(n.code, 2104);
 }
+
+/// `server_version()` and new requests' decoder context read the version the
+/// transport refreshes on reconnect, not a copy taken at connect (#1105).
+#[tokio::test]
+async fn server_version_follows_reconnect_handshake() {
+    let client = Client::stubbed(Arc::new(MessageBusStub::default()), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let metadata = crate::connection::ConnectionMetadata {
+        next_order_id: 5000,
+        server_version: server_versions::CONDITIONS_INCLUDE_OVERNIGHT,
+        ..Default::default()
+    };
+
+    client.handshake_state().refresh(&metadata);
+
+    assert_eq!(client.server_version(), server_versions::CONDITIONS_INCLUDE_OVERNIGHT);
+    assert_eq!(client.decoder_context().server_version, server_versions::CONDITIONS_INCLUDE_OVERNIGHT);
+}

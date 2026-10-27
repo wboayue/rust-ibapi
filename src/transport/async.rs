@@ -31,7 +31,7 @@ use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::accounts::types::AccountId;
-use crate::client::id_generator::ClientIdManager;
+use crate::client::handshake_state::HandshakeState;
 use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{is_cancel_frame, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
@@ -493,11 +493,11 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     /// Latching shutdown flag, shared with the connection so a reconnect in
     /// progress sees the request.
     shutdown: Arc<ShutdownSignal>,
-    /// The client's order-ID generator, raised from the NextValidId frame the
-    /// reconnect handshake re-receives. Installed once via
-    /// [`Self::set_order_ids`] before the processing task starts; absent in
-    /// bus-only test fixtures, which never reconnect a client.
-    order_ids: OnceLock<Arc<ClientIdManager>>,
+    /// The client state a reconnect's handshake refreshes (order-id floor,
+    /// server version). Installed once via [`Self::set_handshake_state`]
+    /// before the processing task starts; absent in bus-only test fixtures,
+    /// which never reconnect a client.
+    handshake_state: OnceLock<HandshakeState>,
     /// Outbound rate limiter, if the client was built with one. Installed
     /// once via [`Self::set_rate_limiter`] before any request is sent.
     rate_limiter: OnceLock<RateLimiter>,
@@ -548,7 +548,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             runtime: Handle::current(),
             process_task: std::sync::Mutex::new(None),
             shutdown,
-            order_ids: OnceLock::new(),
+            handshake_state: OnceLock::new(),
             rate_limiter: OnceLock::new(),
             connection_state: Arc::new(ConnectionSignal::default()),
         };
@@ -597,11 +597,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         message_bus
     }
 
-    /// Installs the client's order-ID generator so a successful reconnect
-    /// re-seeds it from the handshake's NextValidId. Called exactly once,
-    /// before [`Self::process_messages`] starts the processing task.
-    pub(crate) fn set_order_ids(&self, order_ids: Arc<ClientIdManager>) {
-        self.order_ids.set(order_ids).expect("order-id generator installed twice");
+    /// Installs the client state a successful reconnect refreshes from its
+    /// handshake. Called exactly once, before [`Self::process_messages`]
+    /// starts the processing task.
+    pub(crate) fn set_handshake_state(&self, state: HandshakeState) {
+        self.handshake_state.set(state).expect("handshake state installed twice");
     }
 
     /// Installs the outbound rate limiter. Called at most once, before the
@@ -663,16 +663,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                             break;
                                         }
 
-                                        // The handshake re-received NextValidId; raise
-                                        // the client's generator from the server's floor so
-                                        // allocation never resumes below it. Only the initial
-                                        // connection seeded the generator before this. Do it
-                                        // before reporting the session as live so a caller
-                                        // gating on `is_connected()` cannot allocate below
-                                        // the new floor.
-                                        if let Some(order_ids) = message_bus.order_ids.get() {
-                                            let metadata = message_bus.connection.connection_metadata().await;
-                                            order_ids.raise_order_id_from_server(metadata.next_order_id);
+                                        // Before reporting the session as live; see
+                                        // `HandshakeState::refresh`.
+                                        if let Some(state) = message_bus.handshake_state.get() {
+                                            state.refresh(&message_bus.connection.connection_metadata().await);
                                         }
 
                                         info!("Successfully reconnected to TWS/Gateway");

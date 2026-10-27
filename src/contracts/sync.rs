@@ -104,7 +104,7 @@ impl Client {
     /// client.cancel_contract_details(request_id).expect("cancel failed");
     /// ```
     pub fn cancel_contract_details(&self, request_id: i32) -> Result<(), Error> {
-        check_version(self.server_version, Features::CANCEL_CONTRACT_DATA)?;
+        check_version(self.server_version(), Features::CANCEL_CONTRACT_DATA)?;
 
         let message = encoders::encode_cancel_contract_data(request_id)?;
         self.send_message(message)?;

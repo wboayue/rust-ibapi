@@ -1,4 +1,6 @@
 use super::*;
+use crate::client::handshake_state::{HandshakeState, ServerVersion};
+use crate::client::id_generator::ClientIdManager;
 use crate::client::ids::{OrderId, RequestId};
 use crate::common::test_utils::helpers::order_status_frame;
 use crate::connection::common::{ConnectionHandler, ConnectionProtocol};
@@ -516,15 +518,16 @@ fn is_connected_stays_true_after_reconnect() -> Result<(), Error> {
     Ok(())
 }
 
-/// A successful automatic reconnect replays the handshake, whose
-/// `NextValidId` is a fresh server floor for order IDs. The bus must raise
-/// the client's generator from it: before this, only the initial connection
-/// seeded the generator and every reconnect silently discarded the value,
-/// leaving allocation stale against the server.
+/// A successful automatic reconnect replays the handshake, which carries a
+/// fresh server floor for order IDs (`NextValidId`) and may negotiate a
+/// different server version (the gateway restarted on another build). The
+/// bus must refresh both on the client: before this, only the initial
+/// connection set them (#1105).
 #[test]
-fn reconnect_raises_order_ids_from_handshake() -> Result<(), Error> {
+fn reconnect_refreshes_handshake_state() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
+    let new_sv = handler.max_version;
 
     let start_api_bytes = handler.format_start_api(28);
     let events = vec![
@@ -537,7 +540,10 @@ fn reconnect_raises_order_ids_from_handshake() -> Result<(), Error> {
                 ResponseMessage::from_simple("\0"),
             ],
         ), // RESTART
-        Exchange::simple(&handshake_request(&handler), &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+        Exchange::simple(
+            &handshake_request(&handler),
+            &[&format!("{new_sv}|20250323 22:21:01 Greenwich Mean Time|")],
+        ),
         Exchange::new(
             start_api_bytes,
             vec![managed_accounts_response("DU1234567"), next_valid_id_response(5000)],
@@ -549,7 +555,11 @@ fn reconnect_raises_order_ids_from_handshake() -> Result<(), Error> {
     let bus = TcpMessageBus::new(connection);
 
     let order_ids = Arc::new(ClientIdManager::new(100)?);
-    bus.set_order_ids(order_ids.clone());
+    let server_version = Arc::new(ServerVersion::new(sv));
+    bus.set_handshake_state(HandshakeState {
+        order_ids: order_ids.clone(),
+        server_version: server_version.clone(),
+    });
 
     bus.dispatch()?; // reads "\0", reconnects, handshake re-receives NextValidId(5000)
 
@@ -558,6 +568,7 @@ fn reconnect_raises_order_ids_from_handshake() -> Result<(), Error> {
         5000,
         "order-id generator should be raised from the reconnect handshake"
     );
+    assert_eq!(server_version.get(), new_sv, "server version should be the reconnect handshake's");
 
     Ok(())
 }

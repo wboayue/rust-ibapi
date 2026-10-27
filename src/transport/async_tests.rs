@@ -6,6 +6,7 @@
 //! binary-text-payload framing that `parse_raw_message` expects post-floor-213:
 //! `[4-byte BE msg_id][NUL-delimited remaining fields]`, produced by `body()`.
 
+use crate::client::handshake_state::{HandshakeState, ServerVersion};
 use crate::common::test_utils::helpers::order_status_frame;
 use crate::orders::OrderStatusKind;
 use std::sync::Arc;
@@ -2032,12 +2033,12 @@ async fn ensure_shutdown_joins_processing_task() {
 }
 
 /// A successful automatic reconnect replays the handshake, whose
-/// `NextValidId` is a fresh server floor for order IDs. The bus must raise
-/// the client's generator from it: before this, only the initial connection
-/// seeded the generator and every reconnect silently discarded the value,
-/// leaving allocation stale against the server.
+/// `NextValidId` is a fresh server floor for order IDs, and it may negotiate a
+/// different server version (the gateway restarted on another build). The
+/// bus must refresh both on the client: before this, only the initial
+/// connection set them (#1105).
 #[tokio::test]
-async fn reconnect_raises_order_ids_from_handshake() {
+async fn reconnect_refreshes_handshake_state() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -2046,13 +2047,18 @@ async fn reconnect_raises_order_ids_from_handshake() {
     // id), which the processing loop classifies as connection lost.
     stream.push_inbound(b"xx".to_vec());
     // Frames the reconnect handshake consumes, in order.
-    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+    let new_version = server_versions::CONDITIONS_INCLUDE_OVERNIGHT;
+    for frame in handshake_frames(new_version, "EST", 5000) {
         stream.push_inbound(frame);
     }
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     let order_ids = Arc::new(crate::client::id_generator::ClientIdManager::new(100).unwrap());
-    bus.set_order_ids(order_ids.clone());
+    let server_version = Arc::new(ServerVersion::new(server_versions::PROTOBUF_REST_MESSAGES_3));
+    bus.set_handshake_state(HandshakeState {
+        order_ids: order_ids.clone(),
+        server_version: server_version.clone(),
+    });
 
     bus.clone().process_messages().expect("process_messages");
 
@@ -2064,6 +2070,8 @@ async fn reconnect_raises_order_ids_from_handshake() {
         );
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
+    // Refreshed in the same step as the order ids.
+    assert_eq!(server_version.get(), new_version, "server version should be the reconnect handshake's");
 }
 
 #[tokio::test]
