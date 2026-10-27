@@ -62,11 +62,11 @@ or functions taking `&Client`. `cargo check` must pass. Paste the checked code i
 ## Attribution
 
 Credit every outside contribution — this is the one thing the notes carry that the changelog
-does not. Look up the PR author and the issue reporter:
+does not. PR authors and closing issues are in `$S/prs.tsv` from the changelog audit; look up
+issue reporters there:
 
 ```bash
-gh pr view N --json author,closingIssuesReferences
-gh issue view M --json author
+gh issue view M --json author -q .author.login
 ```
 
 End the item with `Thanks to @username for the contribution (#N).` (PR author) or

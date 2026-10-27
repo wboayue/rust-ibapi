@@ -353,7 +353,7 @@ For maintainers creating new releases:
 1. Bump PR: `Cargo.toml` version, date the `[Unreleased]` section of `CHANGELOG.md`, update
    install snippets in `README.md` and `docs/`
 2. Squash-merge once CI is green
-3. Tag the merge commit: `just tag vX.Y.Z`
+3. Annotated tag on the squash commit: `git tag -a vX.Y.Z <sha> -m "Release X.Y.Z"`, push it
 4. Publish the GitHub release
 5. Publish to crates.io with `cargo publish`
 
