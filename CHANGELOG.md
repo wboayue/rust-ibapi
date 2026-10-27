@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.4.0] - 2026-10-27
+
 ### Added
 
 - `ClientBuilder::one_shot_timeout` (sync and async) bounds every one-shot request, one that returns a value rather than a subscription, with `Error::Timeout`. Without it, requests answered on their own request id (`historical_data(..).fetch()`, `head_timestamp`, the option calculations, ...) still wait without a limit, and the rest keep their 30-second bound. On timeout, a request TWS can cancel is cancelled (#1095).
@@ -26,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `Order::what_if_type` and `OrderBuilder::what_if_type` docs said an order with `what_if_type` but not `what_if` is placed live. TWS rejects it with error 321 and nothing is placed; set it with `.analyze()`. `seek_price_improvement` and `ignore_open_auction` docs now say what open-order reports carry back (#1115).
 - The `calculate_option_price` docs and examples now give its volatility as a fraction (`0.2` = 20%), as TWS reads it. They said a percentage (`20.0` for 20%) and passed `100.0`, so following them priced the option at 100 times the intended volatility (#1114).
 - `head_timestamp`, `histogram_data`, `historical_schedules(..).fetch()`, `calculate_option_price`, `calculate_implied_volatility`, `wsh_metadata` and `wsh_event_data_by_contract(..).fetch()` now cancel the request at TWS when dropped before the answer (a dropped future, a timeout, a local error), instead of leaving it running against pacing limits. A response of an unexpected message type is now skipped rather than reported as `Error::UnexpectedResponse` (#1107).
+- `historical_data(..).fetch()` (sync and async) cancels the request at TWS when dropped before the last bar arrives (a dropped future, a decode error, an out-of-order frame), instead of leaving it running against pacing limits. A response of an unexpected message type is now skipped; `Error::UnexpectedResponse` is reserved for frames arriving out of order (#1094).
+- A subscription ended by a TWS rejection that TWS itself has already closed no longer writes a cancel when dropped, so TWS stops answering with a "not found" error (366, 300, 310, 365, 10185/10186). Applies to the one-shot `historical_data(..).fetch()` for any rejection, and to market data, realtime bars, tick-by-tick, market depth, streaming historical bars, PnL and scanner subscriptions for the live-verified codes (200, 321, 162). Other rejections still cancel, so a request TWS keeps open isn't leaked (#1097, #1098).
 - A subscription that was open when the client reconnected no longer writes a cancel when it's cancelled or dropped afterwards. The request ended with the old session, so the cancel named an id the new session had never seen, and TWS answered it with an error (#1105).
 - `Client::server_version()`, and the version checks and decoding that use it, follow the version negotiated when the client reconnects. Previously they kept the first connection's, so after the gateway restarted on a different build the client could refuse a request the new server supports, or send one it doesn't (#1105).
 - Connecting with a client id another connection holds returns the new `Error::ClientIdInUse { client_id }` (TWS error 326) instead of an I/O end-of-file error that looked like a network failure. `connect` doesn't retry it. The automatic reconnect does, because after a dropped connection TWS can hold the old session's id until it notices the socket is dead (#1091).
@@ -462,7 +466,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.3.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.4.0...HEAD
+[5.4.0]: https://github.com/wboayue/rust-ibapi/compare/v5.3.0...v5.4.0
 [5.3.0]: https://github.com/wboayue/rust-ibapi/compare/v5.2.0...v5.3.0
 [5.2.0]: https://github.com/wboayue/rust-ibapi/compare/v5.1.0...v5.2.0
 [5.1.0]: https://github.com/wboayue/rust-ibapi/compare/v5.0.0...v5.1.0
