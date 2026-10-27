@@ -146,8 +146,7 @@ impl Client {
     }
 
     /// Returns the version of the TWS API server to which the client is connected.
-    /// This version is determined during the initial connection handshake;
-    /// a reconnect doesn't update it.
+    /// This version is determined during the initial connection handshake.
     ///
     /// # Examples
     ///
