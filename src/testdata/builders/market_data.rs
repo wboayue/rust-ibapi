@@ -293,11 +293,10 @@ impl RequestEncoder for HistogramDataRequestBuilder {
     }
 }
 
-// Cancel builders (cancel_historical_data, cancel_historical_ticks)
-// intentionally omitted: the production cancel paths fire from subscription
-// drop handlers and have no per-test consumer that needs body verification.
-// cancel_histogram_data and cancel_head_timestamp have no production path yet;
-// their encoders are unit-tested in historical/common/encoders_tests.rs.
+// Cancel builders intentionally omitted: the production cancel paths fire
+// from subscription drop handlers and have no per-test consumer that needs
+// body verification. The encoders are unit-tested in
+// historical/common/encoders_tests.rs.
 
 // =============================================================================
 // Realtime request builders

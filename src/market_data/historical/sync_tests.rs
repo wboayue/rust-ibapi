@@ -64,18 +64,24 @@ where
     assert!(err.to_string().contains(feature.name), "expected '{}', got: {err}", feature.name);
 }
 
-// Feeds a single response of another message type, asserts the call fails with
-// `Error::UnexpectedResponse`. Pairs with `assert_version_check_fails`.
-fn assert_unexpected_response<F, T>(server_version: i32, response: crate::messages::ResponseMessage, call: F)
+// Feeds a single frame of a message type the request doesn't expect: it is
+// skipped, the stream closes before the answer, and the request is cancelled
+// at TWS with `cancel`.
+fn assert_skips_undeclared<F, T>(server_version: i32, response: crate::messages::ResponseMessage, cancel: OutgoingMessages, call: F)
 where
     F: FnOnce(Client) -> Result<T, Error>,
 {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![response]));
-    let client = Client::stubbed(message_bus, server_version);
+    let client = Client::stubbed(message_bus.clone(), server_version);
     let Err(err) = call(client) else {
-        panic!("expected UnexpectedResponse failure");
+        panic!("expected UnexpectedEndOfStream");
     };
-    assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got: {err:?}");
+    assert!(
+        matches!(err, Error::UnexpectedEndOfStream),
+        "expected UnexpectedEndOfStream, got: {err:?}"
+    );
+    let messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(count_proto_msgs(&messages, cancel), 1, "no answer, so the request is cancelled");
 }
 
 #[test]
@@ -1010,11 +1016,12 @@ fn streaming_subscription_cancel_prevents_duplicate_on_drop() {
 }
 
 #[test]
-fn head_timestamp_unexpected_response() {
+fn head_timestamp_skips_undeclared_message() {
     // 17 = HistoricalData — wrong type for head_timestamp (expects 88).
-    assert_unexpected_response(
+    assert_skips_undeclared(
         server_versions::SIZE_RULES,
         proto_response(IncomingMessages::HistoricalData, Vec::new()),
+        OutgoingMessages::CancelHeadTimestamp,
         |c| c.head_timestamp(&Contract::stock("MSFT").build(), WhatToShow::Trades, TradingHours::Regular),
     );
 }
@@ -1173,10 +1180,11 @@ fn historical_schedules_ending_now() {
 }
 
 #[test]
-fn historical_schedule_unexpected_response() {
-    assert_unexpected_response(
+fn historical_schedule_skips_undeclared_message() {
+    assert_skips_undeclared(
         server_versions::HISTORICAL_SCHEDULE,
         proto_response(IncomingMessages::HistoricalData, Vec::new()),
+        OutgoingMessages::CancelHistoricalData,
         |c| c.historical_schedules(&Contract::stock("MSFT").build(), Duration::days(1)).fetch(),
     );
 }

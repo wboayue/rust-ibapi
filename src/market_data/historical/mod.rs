@@ -25,6 +25,7 @@ use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
 use crate::common::error_helpers;
+use crate::common::request_helpers::CancellableOneShot;
 use crate::messages::{IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Error, ToField};
@@ -564,6 +565,55 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
     /// cancel with 366 (no query found).
     fn rejection_ends_request(_notice: &Notice) -> bool {
         true
+    }
+}
+
+/// The earliest data point request behind `head_timestamp`.
+pub(crate) enum HeadTimestampRequest {}
+
+impl CancellableOneShot for HeadTimestampRequest {
+    type Proto = crate::proto::HeadTimestamp;
+    type Output = OffsetDateTime;
+
+    fn decode(payload: Self::Proto) -> Result<OffsetDateTime, Error> {
+        common::decoders::decode_head_timestamp_proto(payload)
+    }
+
+    fn cancel(request_id: i32) -> Result<Vec<u8>, Error> {
+        common::encoders::encode_cancel_head_timestamp(request_id)
+    }
+}
+
+/// The request behind `histogram_data`.
+pub(crate) enum HistogramRequest {}
+
+impl CancellableOneShot for HistogramRequest {
+    type Proto = crate::proto::HistogramData;
+    type Output = Vec<HistogramEntry>;
+
+    fn decode(payload: Self::Proto) -> Result<Vec<HistogramEntry>, Error> {
+        common::decoders::decode_histogram_data_proto(payload)
+    }
+
+    fn cancel(request_id: i32) -> Result<Vec<u8>, Error> {
+        common::encoders::encode_cancel_histogram_data(request_id)
+    }
+}
+
+/// The historical data request for `WhatToShow::Schedule`, behind
+/// `historical_schedule`. Cancelled like any historical data request.
+pub(crate) enum ScheduleRequest {}
+
+impl CancellableOneShot for ScheduleRequest {
+    type Proto = crate::proto::HistoricalSchedule;
+    type Output = Schedule;
+
+    fn decode(payload: Self::Proto) -> Result<Schedule, Error> {
+        common::decoders::decode_historical_schedule_proto(payload)
+    }
+
+    fn cancel(request_id: i32) -> Result<Vec<u8>, Error> {
+        common::encoders::encode_cancel_historical_data(request_id)
     }
 }
 

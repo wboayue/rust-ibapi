@@ -310,3 +310,287 @@ fn expect_proto_rejects_text_framing_of_the_expected_type() {
     let err = processor(&message).expect_err("text framing must be rejected");
     assert!(matches!(err, Error::UnexpectedWireFormat(_)), "got {err:?}");
 }
+
+/// `one_shot_cancelling` (#1107): cancelled at TWS unless the request ended
+/// there, by its answer or a TWS error.
+mod cancelling {
+    use std::sync::Arc;
+
+    use super::super::CancellableOneShot;
+    use crate::common::test_utils::helpers::{count_proto_msgs, proto_error_response, proto_response, TEST_REQ_ID_FIRST};
+    use crate::contracts::Contract;
+    use crate::market_data::historical::{BarSize, Duration, WhatToShow};
+    use crate::market_data::TradingHours;
+    use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
+    use crate::stubs::MessageBusStub;
+    use crate::{server_versions, Error};
+
+    const REQUEST: &[u8] = b"request";
+    const CANCEL: &[u8] = b"cancel";
+
+    /// Answered by a `HeadTimestamp` frame (any request-id-routed payload
+    /// does; the debug routing guard rejects one that isn't).
+    enum Answered {}
+
+    impl CancellableOneShot for Answered {
+        type Proto = crate::proto::HeadTimestamp;
+        type Output = ();
+
+        fn decode(_payload: Self::Proto) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn cancel(_request_id: i32) -> Result<Vec<u8>, Error> {
+            Ok(CANCEL.to_vec())
+        }
+    }
+
+    /// Its answer fails to decode.
+    enum Undecodable {}
+
+    impl CancellableOneShot for Undecodable {
+        type Proto = crate::proto::HeadTimestamp;
+        type Output = ();
+
+        fn decode(_payload: Self::Proto) -> Result<(), Error> {
+            Err(Error::Simple("bad answer".into()))
+        }
+
+        fn cancel(_request_id: i32) -> Result<Vec<u8>, Error> {
+            Ok(CANCEL.to_vec())
+        }
+    }
+
+    fn answer() -> ResponseMessage {
+        proto_response(IncomingMessages::HeadTimestamp, vec![])
+    }
+
+    fn tws_error() -> ResponseMessage {
+        proto_error_response(TEST_REQ_ID_FIRST, 200, "No security definition has been found for the request")
+    }
+
+    fn cancels(bus: &MessageBusStub) -> usize {
+        bus.request_messages().iter().filter(|m| m.as_slice() == CANCEL).count()
+    }
+
+    struct Case {
+        label: &'static str,
+        responses: Vec<ResponseMessage>,
+        /// Whether the answer decodes (`Answered`) or fails to (`Undecodable`).
+        decodes: bool,
+        ok: bool,
+        cancels: usize,
+    }
+
+    fn cases() -> Vec<Case> {
+        vec![
+            Case {
+                label: "answered",
+                responses: vec![answer()],
+                decodes: true,
+                ok: true,
+                cancels: 0,
+            },
+            Case {
+                label: "TWS error ends the request",
+                responses: vec![tws_error()],
+                decodes: true,
+                ok: false,
+                cancels: 0,
+            },
+            Case {
+                label: "closed before the answer",
+                responses: vec![],
+                decodes: true,
+                ok: false,
+                cancels: 1,
+            },
+            Case {
+                label: "answer fails to decode",
+                responses: vec![answer()],
+                decodes: false,
+                ok: false,
+                cancels: 1,
+            },
+        ]
+    }
+
+    #[cfg(feature = "sync")]
+    #[test]
+    fn sync_cancels_unless_ended_at_tws() {
+        use crate::client::blocking::Client;
+        use crate::common::request_helpers::blocking::one_shot_cancelling;
+
+        for Case {
+            label,
+            responses,
+            decodes,
+            ok,
+            cancels: expected_cancels,
+        } in cases()
+        {
+            let bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
+            let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+            let encoder = |_| Ok(REQUEST.to_vec());
+
+            let result = if decodes {
+                one_shot_cancelling::<Answered>(&client, encoder)
+            } else {
+                one_shot_cancelling::<Undecodable>(&client, encoder)
+            };
+
+            assert_eq!(result.is_ok(), ok, "{label}: {result:?}");
+            assert_eq!(bus.request_messages()[0], REQUEST, "{label}");
+            assert_eq!(cancels(&bus), expected_cancels, "{label}");
+        }
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_cancels_unless_ended_at_tws() {
+        use crate::common::request_helpers::one_shot_cancelling;
+        use crate::Client;
+
+        for Case {
+            label,
+            responses,
+            decodes,
+            ok,
+            cancels: expected_cancels,
+        } in cases()
+        {
+            let bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
+            let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+            let encoder = |_| Ok(REQUEST.to_vec());
+
+            let result = if decodes {
+                one_shot_cancelling::<Answered>(&client, encoder).await
+            } else {
+                one_shot_cancelling::<Undecodable>(&client, encoder).await
+            };
+            // Drop spawns its cancel; let it run.
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+            assert_eq!(result.is_ok(), ok, "{label}: {result:?}");
+            assert_eq!(bus.request_messages()[0], REQUEST, "{label}");
+            assert_eq!(cancels(&bus), expected_cancels, "{label}");
+        }
+    }
+
+    /// The case the issue is about: a caller's timeout drops the pending
+    /// future, and the request is cancelled at TWS.
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_timeout_cancels() {
+        use crate::common::request_helpers::one_shot_cancelling;
+        use crate::Client;
+
+        let bus = Arc::new(MessageBusStub::default().keeping_channels_open());
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+        let pending = one_shot_cancelling::<Answered>(&client, |_| Ok(REQUEST.to_vec()));
+        let result = tokio::time::timeout(std::time::Duration::from_millis(20), pending).await;
+        assert!(result.is_err(), "no answer, so the wait times out");
+
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
+        while cancels(&bus) == 0 && tokio::time::Instant::now() < deadline {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(cancels(&bus), 1);
+    }
+
+    fn stock() -> Contract {
+        Contract::stock("AAPL").build()
+    }
+
+    fn option() -> Contract {
+        Contract::call("AAPL").strike(240.0).expires_on(2026, 11, 20).build()
+    }
+
+    /// Every cancellable one-shot goes through `one_shot_cancelling` with its
+    /// own cancel: unanswered, each sends the cancel IB defines for it.
+    #[cfg(feature = "sync")]
+    #[test]
+    fn sync_requests_send_their_cancel() {
+        use crate::client::blocking::Client;
+
+        type Call = fn(&Client);
+        let requests: [(&str, Call, OutgoingMessages); 7] = [
+            (
+                "head_timestamp",
+                |c| drop(c.head_timestamp(&stock(), WhatToShow::Trades, TradingHours::Regular)),
+                OutgoingMessages::CancelHeadTimestamp,
+            ),
+            (
+                "histogram_data",
+                |c| drop(c.histogram_data(&stock(), TradingHours::Regular, BarSize::Week)),
+                OutgoingMessages::CancelHistogramData,
+            ),
+            (
+                "historical_schedules",
+                |c| drop(c.historical_schedules(&stock(), Duration::days(1)).fetch()),
+                OutgoingMessages::CancelHistoricalData,
+            ),
+            (
+                "calculate_option_price",
+                |c| drop(c.calculate_option_price(&option(), 0.3, 235.0)),
+                OutgoingMessages::CancelOptionPrice,
+            ),
+            (
+                "calculate_implied_volatility",
+                |c| drop(c.calculate_implied_volatility(&option(), 10.0, 235.0)),
+                OutgoingMessages::CancelImpliedVolatility,
+            ),
+            ("wsh_metadata", |c| drop(c.wsh_metadata()), OutgoingMessages::CancelWshMetaData),
+            (
+                "wsh_event_data",
+                |c| drop(c.wsh_event_data_by_contract(1).fetch()),
+                OutgoingMessages::CancelWshEventData,
+            ),
+        ];
+
+        for (label, call, cancel) in requests {
+            let bus = Arc::new(MessageBusStub::default());
+            call(&Client::stubbed(bus.clone(), server_versions::CONDITIONS_INCLUDE_OVERNIGHT));
+            assert_eq!(count_proto_msgs(&bus.request_messages(), cancel), 1, "{label}");
+        }
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_requests_send_their_cancel() {
+        use crate::Client;
+
+        let bus = || Arc::new(MessageBusStub::default());
+        let client = |bus: &Arc<MessageBusStub>| Client::stubbed(bus.clone(), server_versions::CONDITIONS_INCLUDE_OVERNIGHT);
+        let mut runs = Vec::new();
+
+        let b = bus();
+        drop(client(&b).head_timestamp(&stock(), WhatToShow::Trades, TradingHours::Regular).await);
+        runs.push(("head_timestamp", b, OutgoingMessages::CancelHeadTimestamp));
+        let b = bus();
+        drop(client(&b).histogram_data(&stock(), TradingHours::Regular, BarSize::Week).await);
+        runs.push(("histogram_data", b, OutgoingMessages::CancelHistogramData));
+        let b = bus();
+        drop(client(&b).historical_schedules(&stock(), Duration::days(1)).fetch().await);
+        runs.push(("historical_schedules", b, OutgoingMessages::CancelHistoricalData));
+        let b = bus();
+        drop(client(&b).calculate_option_price(&option(), 0.3, 235.0).await);
+        runs.push(("calculate_option_price", b, OutgoingMessages::CancelOptionPrice));
+        let b = bus();
+        drop(client(&b).calculate_implied_volatility(&option(), 10.0, 235.0).await);
+        runs.push(("calculate_implied_volatility", b, OutgoingMessages::CancelImpliedVolatility));
+        let b = bus();
+        drop(client(&b).wsh_metadata().await);
+        runs.push(("wsh_metadata", b, OutgoingMessages::CancelWshMetaData));
+        let b = bus();
+        drop(client(&b).wsh_event_data_by_contract(1).fetch().await);
+        runs.push(("wsh_event_data", b, OutgoingMessages::CancelWshEventData));
+
+        // Drops spawn their cancels; let them run.
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        for (label, bus, cancel) in runs {
+            assert_eq!(count_proto_msgs(&bus.request_messages(), cancel), 1, "{label}");
+        }
+    }
+}

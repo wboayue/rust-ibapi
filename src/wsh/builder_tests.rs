@@ -5,7 +5,7 @@
 //! positional arguments, and every caller in the tree passed `None` for four of
 //! them.
 
-use crate::common::test_utils::helpers::{decode_request_proto, request_message_count};
+use crate::common::test_utils::helpers::decode_request_proto;
 use crate::server_versions;
 use crate::wsh::AutoFill;
 use time::macros::date;
@@ -19,11 +19,10 @@ mod sync_tests {
     fn bare_contract_request_sends_no_filters() {
         let (client, bus) = create_blocking_test_client_with_version(server_versions::WSH_EVENT_DATA_FILTERS_DATE);
 
-        // No response is configured, so the fetch ends in UnexpectedEndOfStream —
-        // the request is what this asserts on.
+        // No response is configured, so the fetch ends in UnexpectedEndOfStream
+        // (and cancels) — the request is what this asserts on.
         let _ = client.wsh_event_data_by_contract(76792991).fetch();
 
-        assert_eq!(request_message_count(&bus), 1);
         let request: crate::proto::WshEventDataRequest = decode_request_proto(&bus, 0);
         assert_eq!(request.con_id, Some(76792991));
         assert_eq!(request.start_date, None, "an unset date must be absent, not empty");
@@ -81,7 +80,6 @@ mod async_tests {
 
         let _ = client.wsh_event_data_by_contract(76792991).fetch().await;
 
-        assert_eq!(request_message_count(&bus), 1);
         let request: crate::proto::WshEventDataRequest = decode_request_proto(&bus, 0);
         assert_eq!(request.con_id, Some(76792991));
         assert_eq!(request.start_date, None, "an unset date must be absent, not empty");

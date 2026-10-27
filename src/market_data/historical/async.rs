@@ -4,24 +4,27 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use log::error;
 use time::OffsetDateTime;
 
 use crate::client::ClientRequestBuilders;
-use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
+use crate::common::request_helpers::{self, empty_on_end_of_stream};
 use crate::common::retry::retry_on_connection_reset;
 use crate::contracts::Contract;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::common::{filter_notice, lag_as_error, SubscriptionItem};
+use crate::subscriptions::common::SubscriptionItem;
 use crate::subscriptions::log_cancel_error;
 use crate::subscriptions::r#async::Subscription;
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::{Client, Error};
 
 use super::common::tick::{classify, TickAction};
-use super::common::{self, decoders, encoders};
-use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, Schedule, TickDecoder, WhatToShow};
+use super::common::{self, encoders};
+use super::{
+    BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, Schedule,
+    ScheduleRequest, TickDecoder, WhatToShow,
+};
 use crate::market_data::TradingHours;
 
 // === Public API Functions ===
@@ -56,11 +59,9 @@ impl Client {
     /// }
     /// ```
     pub async fn head_timestamp(&self, contract: &Contract, what_to_show: WhatToShow, trading_hours: TradingHours) -> Result<OffsetDateTime, Error> {
-        request_helpers::one_shot_by_request_id(
-            self,
-            |request_id| encoders::encode_request_head_timestamp(request_id, contract, what_to_show, trading_hours.use_rth()),
-            expect_proto(decoders::decode_head_timestamp_proto),
-        )
+        request_helpers::one_shot_cancelling::<HeadTimestampRequest>(self, |request_id| {
+            encoders::encode_request_head_timestamp(request_id, contract, what_to_show, trading_hours.use_rth())
+        })
         .await
     }
 
@@ -264,11 +265,9 @@ impl Client {
     /// }
     /// ```
     pub async fn histogram_data(&self, contract: &Contract, trading_hours: TradingHours, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
-        request_helpers::one_shot_by_request_id(
-            self,
-            |request_id| encoders::encode_request_histogram_data(request_id, contract, trading_hours.use_rth(), period),
-            expect_proto(decoders::decode_histogram_data_proto),
-        )
+        request_helpers::one_shot_cancelling::<HistogramRequest>(self, |request_id| {
+            encoders::encode_request_histogram_data(request_id, contract, trading_hours.use_rth(), period)
+        })
         .await
         .or_else(empty_on_end_of_stream)
     }
@@ -304,25 +303,14 @@ pub(crate) async fn historical_data(
         // the future, sends TWS's cancel; after it, nothing is sent.
         let mut subscription = builder.send::<HistoricalDataFrame>(request).await?;
 
-        let mut data = next_frame(&mut subscription).await?.into_bars()?;
+        let mut data = request_helpers::next_frame(&mut subscription).await?.into_bars()?;
         // Only the window frame proves the download is complete, so a close
         // before it is an error.
-        (data.start, data.end) = next_frame(&mut subscription).await?.into_window()?;
+        (data.start, data.end) = request_helpers::next_frame(&mut subscription).await?.into_window()?;
 
         Ok(data)
     })
     .await
-}
-
-/// The next frame of a one-shot request, skipping notices. A broadcast lag
-/// fails the request: the frame it evicted can't be read.
-async fn next_frame(subscription: &mut Subscription<HistoricalDataFrame>) -> Result<HistoricalDataFrame, Error> {
-    loop {
-        let item = subscription.next().await.ok_or(Error::UnexpectedEndOfStream)?;
-        if let Some(frame) = filter_notice(lag_as_error(item)) {
-            return frame;
-        }
-    }
 }
 
 pub(crate) async fn historical_data_stream(
@@ -387,13 +375,9 @@ pub(crate) async fn historical_schedule(
     end_date: Option<OffsetDateTime>,
     duration: Duration,
 ) -> Result<Schedule, Error> {
-    request_helpers::one_shot_by_request_id(
-        client,
-        |request_id| {
-            encoders::encode_request_historical_data(request_id, contract, end_date, duration, BarSize::Day, WhatToShow::Schedule, true, false)
-        },
-        expect_proto(decoders::decode_historical_schedule_proto),
-    )
+    request_helpers::one_shot_cancelling::<ScheduleRequest>(client, |request_id| {
+        encoders::encode_request_historical_data(request_id, contract, end_date, duration, BarSize::Day, WhatToShow::Schedule, true, false)
+    })
     .await
 }
 

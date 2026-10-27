@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `head_timestamp`, `histogram_data`, `historical_schedules(..).fetch()`, `calculate_option_price`, `calculate_implied_volatility`, `wsh_metadata` and `wsh_event_data_by_contract(..).fetch()` now cancel the request at TWS when dropped before the answer (a dropped future, a timeout, a local error), instead of leaving it running against pacing limits. A response of an unexpected message type is now skipped rather than reported as `Error::UnexpectedResponse` (#1107).
 - A subscription that was open when the client reconnected no longer writes a cancel when it's cancelled or dropped afterwards. The request ended with the old session, so the cancel named an id the new session had never seen, and TWS answered it with an error (#1105).
 - `Client::server_version()`, and the version checks and decoding that use it, follow the version negotiated when the client reconnects. Previously they kept the first connection's, so after the gateway restarted on a different build the client could refuse a request the new server supports, or send one it doesn't (#1105).
 - Connecting with a client id another connection holds returns the new `Error::ClientIdInUse { client_id }` (TWS error 326) instead of an I/O end-of-file error that looked like a network failure. `connect` doesn't retry it. The automatic reconnect does, because after a dropped connection TWS can hold the old session's id until it notices the socket is dead (#1091).

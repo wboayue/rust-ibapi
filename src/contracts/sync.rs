@@ -1,3 +1,4 @@
+use super::common::stream_decoders::{ImpliedVolatilityRequest, OptionPriceRequest};
 use super::common::{decoders, encoders};
 use super::*;
 use crate::client::blocking::{ClientRequestBuilders, Subscription};
@@ -5,7 +6,6 @@ use crate::client::ids::RequestId;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::StreamDecoder;
 use crate::{client::sync::Client, Error};
 
 impl Client {
@@ -236,11 +236,9 @@ impl Client {
     /// println!("calculation: {calculation:?}");
     /// ```
     pub fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
-        request_helpers::blocking::one_shot_by_request_id(
-            self,
-            |request_id| encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price),
-            |message| OptionComputation::decode(&self.decoder_context(), message),
-        )
+        request_helpers::blocking::one_shot_cancelling::<OptionPriceRequest>(self, |request_id| {
+            encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price)
+        })
     }
 
     /// Calculates the implied volatility based on the hypothetical option price and underlying price.
@@ -263,11 +261,9 @@ impl Client {
     /// println!("calculation: {calculation:?}");
     /// ```
     pub fn calculate_implied_volatility(&self, contract: &Contract, option_price: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
-        request_helpers::blocking::one_shot_by_request_id(
-            self,
-            |request_id| encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price),
-            |message| OptionComputation::decode(&self.decoder_context(), message),
-        )
+        request_helpers::blocking::one_shot_cancelling::<ImpliedVolatilityRequest>(self, |request_id| {
+            encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price)
+        })
     }
 
     /// Build a request for an underlying's option chain: one [`OptionChain`] per

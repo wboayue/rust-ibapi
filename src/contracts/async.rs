@@ -1,5 +1,6 @@
 //! Asynchronous implementation of contract management functionality
 
+use super::common::stream_decoders::{ImpliedVolatilityRequest, OptionPriceRequest};
 use super::common::{decoders, encoders};
 use super::*;
 use crate::client::ids::RequestId;
@@ -7,7 +8,7 @@ use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{StreamDecoder, Subscription};
+use crate::subscriptions::Subscription;
 use crate::{Client, Error};
 
 impl Client {
@@ -225,11 +226,9 @@ impl Client {
     /// }
     /// ```
     pub async fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
-        request_helpers::one_shot_by_request_id(
-            self,
-            |request_id| encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price),
-            |message| OptionComputation::decode(&self.decoder_context(), message),
-        )
+        request_helpers::one_shot_cancelling::<OptionPriceRequest>(self, |request_id| {
+            encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price)
+        })
         .await
     }
 
@@ -262,11 +261,9 @@ impl Client {
         option_price: f64,
         underlying_price: f64,
     ) -> Result<OptionComputation, Error> {
-        request_helpers::one_shot_by_request_id(
-            self,
-            |request_id| encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price),
-            |message| OptionComputation::decode(&self.decoder_context(), message),
-        )
+        request_helpers::one_shot_cancelling::<ImpliedVolatilityRequest>(self, |request_id| {
+            encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price)
+        })
         .await
     }
 

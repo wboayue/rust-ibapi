@@ -1,7 +1,9 @@
 use super::*;
+use crate::common::request_helpers::OneShot;
 use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, proto_error_response, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
 };
+use crate::contracts::common::stream_decoders::OptionPriceRequest;
 use crate::contracts::common::test_tables::*;
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
@@ -212,7 +214,8 @@ async fn stream_decoders() {
 
         match &test_case.expected_result {
             StreamDecoderResult::OptionComputation { price, delta } => {
-                let result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message);
+                let result =
+                    OneShot::<OptionPriceRequest>::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message).map(OneShot::into_inner);
                 assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
                 let computation = result.unwrap();
                 assert_eq!(computation.option_price, Some(*price), "Test '{}' price mismatch", test_case.name);
@@ -239,7 +242,8 @@ async fn stream_decoders() {
                         test_case.name
                     );
                 } else {
-                    let opt_result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message.clone());
+                    let opt_result = OneShot::<OptionPriceRequest>::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message.clone())
+                        .map(OneShot::into_inner);
                     let chain_result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES), &message);
                     assert!(
                         opt_result.is_err() && chain_result.is_err(),
@@ -255,16 +259,7 @@ async fn stream_decoders() {
 #[tokio::test]
 async fn cancel_messages() {
     for test_case in cancel_message_test_cases() {
-        let context = test_case.request_type.map(|rt| DecoderContext::default().with_request_type(rt));
-
-        let result = match test_case.decoder_type {
-            "OptionComputation" => OptionComputation::cancel_message(server_versions::SIZE_RULES, test_case.request_id, context.as_ref()),
-            "OptionChain" => {
-                // OptionChain doesn't implement cancel_message
-                Err(crate::Error::Simple("cancel not implemented".to_string()))
-            }
-            _ => panic!("Unknown decoder type"),
-        };
+        let result = (test_case.cancel)(test_case.request_id);
 
         match &test_case.expected_msg_id {
             Ok(expected_id) => {
