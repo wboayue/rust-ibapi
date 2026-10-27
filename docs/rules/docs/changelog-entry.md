@@ -6,9 +6,8 @@ status: active
 triggers:
   - opening a PR that changes public behavior or API
   - unsure whether a change is user-facing
-  - cutting a release
 symbols: [CHANGELOG.md, Unreleased]
-related: [release-notes, user-docs-sync, restrict-after-callers]
+related: [user-docs-sync, restrict-after-callers]
 precedents: ["#677", "#716"]
 memory: []
 ---
@@ -32,14 +31,12 @@ no behavior change. The test is "would a downstream user notice?" If no, skip it
 
 ## On release
 
-1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (ISO 8601).
-2. Add a fresh empty `## [Unreleased]` above it. Version sections stay newest-first.
-3. Update the link-reference definitions at the bottom — `[Unreleased]` →
-   `compare/vX.Y.Z...HEAD`, `[X.Y.Z]` → its compare or tag URL.
+Dating the section and updating the compare links is part of the `/release` skill
+([`.claude/skills/release`](../../../.claude/skills/release/SKILL.md)).
 
 ## Why
 
-The changelog is the append-as-you-go record; [release notes](release-notes.md) are the same
+The changelog is the append-as-you-go record; [release notes](../../../.claude/skills/release/references/release-notes.md) are the same
 entries expanded with code samples at release time. Writing it at release time instead means
 reconstructing intent from merge commits, which is when "silently truncated fractional sizes"
 becomes "fix decimal parsing" and the reader learns nothing.

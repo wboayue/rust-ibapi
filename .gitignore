@@ -20,7 +20,8 @@ Cargo.lock
 
 .vscode
 
-# Claude Code local state
-.claude/
+# Claude Code local state; project skills are checked in
+.claude/*
+!.claude/skills/
 # Local implementation plans (see docs/rules/workflow/plans-and-issues.md)
 /plans/

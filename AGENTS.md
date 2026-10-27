@@ -131,7 +131,8 @@ precedents. Every rule now lives in a node; nothing is inline.
 - **Removing or renaming anything public** →
   [user docs sync](docs/rules/docs/user-docs-sync.md) — `README.md` and `docs/migration-5.0.md`
   ship with the change; their fenced Rust snippets are compiled by nothing
-- **Drafting GitHub release notes** → [release notes](docs/rules/docs/release-notes.md)
+- **Cutting a release or drafting release notes** → the `/release` skill
+  ([`.claude/skills/release`](.claude/skills/release/SKILL.md))
 - **Establishing, changing, or retiring a project convention** →
   [maintaining the rule graph](#maintaining-the-rule-graph), below
 

@@ -350,12 +350,14 @@ For detailed solutions, see the [Troubleshooting Guide](docs/troubleshooting.md)
 
 For maintainers creating new releases:
 
-1. Update version in `Cargo.toml`
-2. Run all tests and checks
-3. Create and push version tag
-4. Create GitHub release
+1. Bump PR: `Cargo.toml` version, date the `[Unreleased]` section of `CHANGELOG.md`, update
+   install snippets in `README.md` and `docs/`
+2. Squash-merge once CI is green
+3. Annotated tag on the squash commit: `git tag -a vX.Y.Z <sha> -m "Release X.Y.Z"`, push it
+4. Publish the GitHub release
 5. Publish to crates.io with `cargo publish`
 
-See the full release process in the advanced documentation.
+The full procedure, including the changelog audit and release-notes format, is the `/release`
+Claude Code skill in [`.claude/skills/release`](.claude/skills/release/SKILL.md).
 
 Thank you for contributing to rust-ibapi!
