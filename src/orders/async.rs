@@ -366,7 +366,7 @@ impl Client {
     ///
     /// # Errors
     /// - [`Error::OrderIdInRequestRange`] if TWS returns an id at or above 1,500,000,000 (reserved for request ids).
-    /// - [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    /// - [`Error::Timeout`] if TWS sends no answer within 30 seconds, or within [`one_shot_timeout`](crate::ClientBuilder::one_shot_timeout) when set.
     ///
     /// # Examples
     ///

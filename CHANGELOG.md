@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ClientBuilder::one_shot_timeout` (sync and async) bounds every one-shot request, one that returns a value rather than a subscription, with `Error::Timeout`. Without it, requests answered on their own request id (`historical_data(..).fetch()`, `head_timestamp`, the option calculations, ...) still wait without a limit, and the rest keep their 30-second bound. On timeout, a request TWS can cancel is cancelled (#1095).
 - `Client::handshake_managed_accounts()` (sync and async) returns the accounts TWS sent at connect, with no round trip. It isn't updated on reconnect; `managed_accounts()` still fetches the current list (#1092).
 - `OrderBuilder::volatility_order` sets the `VOL` order type with its volatility figure and `VolatilityType`, previously reachable only through `.order_type(..)` (#1082).
 - `OrderBuilder::relative_limit_combo` and `relative_market_combo` set the `REL + LMT` and `REL + MKT` combo order types, previously reachable only through `.order_type(..)` (#1076).
 
 ### Changed
 
+- A one-shot request's timeout, the 30-second default included, now bounds the whole call. The clock no longer restarts when the request is resent after a connection reset (#1095).
 - `ExecutionFilterSide`, `OptionRight` and `LegAction` are no longer `#[non_exhaustive]`, so a `match` on them can be exhaustive without a wildcard arm; an existing `_ =>` arm now warns as unreachable and can be removed. Each covers a closed set of TWS values. The async `TickSubscription` no longer requires `T: Send` (#1081).
 - Internal: clippy now lints the hand-written protobuf converters; its allow covers only the generated code (#1084).
 

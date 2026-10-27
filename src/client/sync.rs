@@ -6,6 +6,7 @@
 
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::time::Duration;
 
 use log::debug;
 use time::OffsetDateTime;
@@ -39,6 +40,8 @@ pub struct Client {
 
     client_id: i32,                   // ID of client.
     id_manager: Arc<ClientIdManager>, // Manages request and order ID generation
+    /// `ClientBuilder::one_shot_timeout`; `None` leaves request-id one-shots unbounded.
+    one_shot_timeout: Option<Duration>,
 }
 
 impl Client {
@@ -105,7 +108,8 @@ impl Client {
 
         let message_bus = Arc::new(TcpMessageBus::new(connection));
 
-        let client = Client::new(connection_metadata, message_bus.clone())?;
+        let mut client = Client::new(connection_metadata, message_bus.clone())?;
+        client.one_shot_timeout = config.one_shot_timeout;
 
         // Share the state a reconnect's handshake refreshes (order-id floor,
         // server version) with the bus; must be installed before the
@@ -130,6 +134,7 @@ impl Client {
             message_bus,
             client_id: connection_metadata.client_id,
             id_manager: Arc::new(ClientIdManager::new(connection_metadata.next_order_id)?),
+            one_shot_timeout: None,
         };
 
         Ok(client)
@@ -153,6 +158,11 @@ impl Client {
     /// The client maintains a sequence of order IDs. This function returns the next order ID in the sequence.
     pub fn next_order_id(&self) -> i32 {
         self.id_manager.next_order_id().value()
+    }
+
+    /// How long a one-shot request waits for TWS's answer, if the caller bounded it.
+    pub(crate) fn one_shot_timeout(&self) -> Option<Duration> {
+        self.one_shot_timeout
     }
 
     /// Allocates a request ID for a request this crate sends.
@@ -372,7 +382,15 @@ impl Client {
             message_bus,
             client_id: 100,
             id_manager: Arc::new(ClientIdManager::new(crate::common::test_utils::helpers::TEST_ORDER_ID_SEED).expect("sub-floor test seed")),
+            one_shot_timeout: None,
         }
+    }
+
+    /// [`stubbed`](Self::stubbed) with `ClientBuilder::one_shot_timeout` set.
+    #[cfg(test)]
+    pub(crate) fn with_one_shot_timeout(mut self, timeout: Duration) -> Client {
+        self.one_shot_timeout = Some(timeout);
+        self
     }
 
     pub(crate) fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<InternalSubscription, Error> {

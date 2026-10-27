@@ -257,8 +257,11 @@ pub(crate) fn historical_data(
     trading_hours: TradingHours,
 ) -> Result<HistoricalData, Error> {
     common::validate_historical_data(end_date, what_to_show)?;
+    // One deadline for both reads and every resend.
+    let deadline = request_helpers::blocking::one_shot_deadline(client);
 
     retry_on_connection_reset(client, || {
+        request_helpers::blocking::check_deadline(deadline)?;
         let builder = client.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
@@ -277,10 +280,10 @@ pub(crate) fn historical_data(
         // TWS's cancel; after it, nothing is sent.
         let subscription = builder.send::<HistoricalDataFrame>(request)?;
 
-        let mut data = request_helpers::blocking::next_frame(&subscription)?.into_bars()?;
+        let mut data = request_helpers::blocking::next_frame(&subscription, deadline)?.into_bars()?;
         // Only the window frame proves the download is complete, so a close
         // before it is an error.
-        (data.start, data.end) = request_helpers::blocking::next_frame(&subscription)?.into_window()?;
+        (data.start, data.end) = request_helpers::blocking::next_frame(&subscription, deadline)?.into_window()?;
 
         Ok(data)
     })

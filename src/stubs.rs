@@ -4,6 +4,7 @@ use std::{
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         LazyLock, Mutex, RwLock,
     },
+    time::Duration,
 };
 
 #[cfg(feature = "sync")]
@@ -64,6 +65,8 @@ pub(crate) struct MessageBusStub {
     /// Keep every stubbed subscription open after its scripted items, as a
     /// real one is until TWS answers. See [`MessageBusStub::keeping_channels_open`].
     keep_open: AtomicBool,
+    /// How long `wait_connected` takes. See [`MessageBusStub::with_reconnect_delay`].
+    reconnect_delay: Duration,
     #[cfg(feature = "sync")]
     open_sync_senders: Mutex<Vec<channel::Sender<RoutedItem>>>,
     #[cfg(feature = "async")]
@@ -98,6 +101,7 @@ impl Default for MessageBusStub {
             #[cfg(feature = "async")]
             status_senders: Mutex::default(),
             keep_open: AtomicBool::new(false),
+            reconnect_delay: Duration::ZERO,
             #[cfg(feature = "sync")]
             open_sync_senders: Mutex::default(),
             #[cfg(feature = "async")]
@@ -152,6 +156,13 @@ impl MessageBusStub {
     /// has not sent; for timeout tests.
     pub fn keeping_channels_open(self) -> Self {
         self.keep_open.store(true, Ordering::SeqCst);
+        self
+    }
+
+    /// Make each `wait_connected` take `delay`, as a reconnect does; with
+    /// [`Self::with_connection_resets`], a retry resumes only after it.
+    pub fn with_reconnect_delay(mut self, delay: Duration) -> Self {
+        self.reconnect_delay = delay;
         self
     }
 
@@ -324,7 +335,10 @@ impl MessageBus for MessageBusStub {
     fn ensure_shutdown(&self) {}
 
     fn wait_connected(&self) -> Result<(), Error> {
-        Ok(()) // Stub is always connected
+        if !self.reconnect_delay.is_zero() {
+            std::thread::sleep(self.reconnect_delay);
+        }
+        Ok(())
     }
 
     fn is_connected(&self) -> bool {
@@ -474,7 +488,12 @@ impl AsyncMessageBus for MessageBusStub {
     }
 
     async fn wait_connected(&self) -> Result<(), Error> {
-        Ok(()) // Stub is always connected
+        // Even a zero sleep yields, letting a dropped subscription's spawned
+        // cancel run before the retry; tests counting requests rely on it not.
+        if !self.reconnect_delay.is_zero() {
+            tokio::time::sleep(self.reconnect_delay).await;
+        }
+        Ok(())
     }
 
     fn is_connected(&self) -> bool {

@@ -35,6 +35,8 @@
 //! shape exactly — no `.await`, [`crate::client::blocking::NoticeStream`]
 //! instead of the async one.
 
+use std::time::Duration;
+
 use crate::connection::common::{ConnectionConfig, StartupCallback};
 use crate::errors::Error;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
@@ -54,6 +56,8 @@ pub(super) struct BuilderState {
     pub(super) max_reconnect_attempts: Option<u32>,
     /// `None` (the default) sends without limit.
     pub(super) rate_limiter: Option<RateLimiter>,
+    /// `None` (the default) leaves request-id one-shots unbounded.
+    pub(super) one_shot_timeout: Option<Duration>,
 }
 
 impl Default for BuilderState {
@@ -65,15 +69,17 @@ impl Default for BuilderState {
             startup_callback: None,
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
             rate_limiter: None,
+            one_shot_timeout: None,
         }
     }
 }
 
 /// Output of [`BuilderState::validate`]: the connection settings with
-/// `address` and `client_id` unwrapped, plus the client-side rate limiter.
+/// `address` and `client_id` unwrapped, plus the client-side settings.
 pub(crate) struct ClientConfig {
     pub(crate) connection: ConnectionConfig,
     pub(crate) rate_limiter: Option<RateLimiter>,
+    pub(crate) one_shot_timeout: Option<Duration>,
 }
 
 impl BuilderState {
@@ -82,6 +88,9 @@ impl BuilderState {
             return Err(Error::InvalidArgument(
                 "ClientBuilder: rate_limiter must allow at least 1 message per second".into(),
             ));
+        }
+        if self.one_shot_timeout == Some(Duration::ZERO) {
+            return Err(Error::InvalidArgument("ClientBuilder: one_shot_timeout must be longer than zero".into()));
         }
         Ok(ClientConfig {
             connection: ConnectionConfig {
@@ -96,6 +105,7 @@ impl BuilderState {
                 max_reconnect_attempts: self.max_reconnect_attempts,
             },
             rate_limiter: self.rate_limiter,
+            one_shot_timeout: self.one_shot_timeout,
         })
     }
 }
@@ -105,6 +115,7 @@ pub mod sync_impl {
     //! Sync `ClientBuilder` for the blocking transport.
 
     use std::sync::Arc;
+    use std::time::Duration;
 
     use super::BuilderState;
     use crate::client::sync::Client;
@@ -226,6 +237,36 @@ pub mod sync_impl {
             self
         }
 
+        /// Fail a one-shot request, one that returns a value rather than a
+        /// subscription, with [`Error::Timeout`] when TWS hasn't answered
+        /// within `timeout`. Default: requests answered on their own request id,
+        /// such as `historical_data(..).fetch()`, `head_timestamp` and the
+        /// option calculations, wait without a limit; the rest fail after 30 s.
+        ///
+        /// The clock starts when the call does and keeps running across the
+        /// resends after a connection reset; a reconnect in progress is waited
+        /// out, not cut short. A request TWS can cancel is cancelled on timeout.
+        /// Subscriptions are not affected: bound those with
+        /// `collect_to_end_within`. `timeout` must be longer than zero, or the
+        /// connect fails with [`Error::InvalidArgument`].
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # use ibapi::client::blocking::Client;
+        /// use std::time::Duration;
+        ///
+        /// let _ = Client::builder()
+        ///     .address("127.0.0.1:4002")
+        ///     .client_id(100)
+        ///     .one_shot_timeout(Duration::from_secs(60))
+        ///     .connect();
+        /// ```
+        pub fn one_shot_timeout(mut self, timeout: Duration) -> Self {
+            self.state.one_shot_timeout = Some(timeout);
+            self
+        }
+
         /// Set a callback for unsolicited typed messages during the handshake.
         ///
         /// Fires for `OpenOrder`, `OrderStatus`, account updates, and other
@@ -320,6 +361,7 @@ pub mod async_impl {
     //! Async `ClientBuilder` for the tokio-backed transport.
 
     use std::sync::Arc;
+    use std::time::Duration;
 
     use tokio::sync::broadcast;
 
@@ -488,6 +530,39 @@ pub mod async_impl {
         /// ```
         pub fn rate_limiter(mut self, limiter: RateLimiter) -> Self {
             self.state.rate_limiter = Some(limiter);
+            self
+        }
+
+        /// Fail a one-shot request, one that returns a value rather than a
+        /// subscription, with [`Error::Timeout`] when TWS hasn't answered
+        /// within `timeout`. Default: requests answered on their own request id,
+        /// such as `historical_data(..).fetch()`, `head_timestamp` and the
+        /// option calculations, wait without a limit; the rest fail after 30 s.
+        ///
+        /// The clock starts when the call does and keeps running across the
+        /// resends after a connection reset; a reconnect in progress is waited
+        /// out, not cut short. A request TWS can cancel is cancelled on timeout.
+        /// Subscriptions are not affected: bound those with
+        /// `collect_to_end_within`. `timeout` must be longer than zero, or the
+        /// connect fails with [`Error::InvalidArgument`].
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # async fn run() -> Result<(), ibapi::Error> {
+        /// use ibapi::Client;
+        /// use std::time::Duration;
+        ///
+        /// let _client = Client::builder()
+        ///     .address("127.0.0.1:4002")
+        ///     .client_id(100)
+        ///     .one_shot_timeout(Duration::from_secs(60))
+        ///     .connect()
+        ///     .await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn one_shot_timeout(mut self, timeout: Duration) -> Self {
+            self.state.one_shot_timeout = Some(timeout);
             self
         }
 

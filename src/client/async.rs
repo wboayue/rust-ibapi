@@ -1,6 +1,7 @@
 //! Asynchronous client implementation
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use log::debug;
 use time::OffsetDateTime;
@@ -33,6 +34,8 @@ pub struct Client {
 
     client_id: i32,                   // ID of client.
     id_manager: Arc<ClientIdManager>, // Manages request and order ID generation
+    /// `ClientBuilder::one_shot_timeout`; `None` leaves request-id one-shots unbounded.
+    one_shot_timeout: Option<Duration>,
 }
 
 impl Drop for Client {
@@ -116,7 +119,8 @@ impl Client {
 
         let message_bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, channel_capacity));
 
-        let client = Client::new(connection_metadata, message_bus.clone())?;
+        let mut client = Client::new(connection_metadata, message_bus.clone())?;
+        client.one_shot_timeout = config.one_shot_timeout;
 
         // Share the state a reconnect's handshake refreshes (order-id floor,
         // server version) with the bus; must be installed before the
@@ -141,6 +145,7 @@ impl Client {
             message_bus,
             client_id: connection_metadata.client_id,
             id_manager: Arc::new(ClientIdManager::new(connection_metadata.next_order_id)?),
+            one_shot_timeout: None,
         };
 
         Ok(client)
@@ -377,6 +382,11 @@ impl Client {
         self.id_manager.next_order_id().value()
     }
 
+    /// How long a one-shot request waits for TWS's answer, if the caller bounded it.
+    pub(crate) fn one_shot_timeout(&self) -> Option<Duration> {
+        self.one_shot_timeout
+    }
+
     /// Allocates a request ID for a request this crate sends.
     pub(crate) fn mint_request_id(&self) -> RequestId {
         self.id_manager.next_request_id()
@@ -427,6 +437,13 @@ impl Client {
         };
 
         Client::new(connection_metadata, message_bus).expect("Failed to create stubbed client")
+    }
+
+    /// [`stubbed`](Self::stubbed) with `ClientBuilder::one_shot_timeout` set.
+    #[cfg(test)]
+    pub(crate) fn with_one_shot_timeout(mut self, timeout: Duration) -> Self {
+        self.one_shot_timeout = Some(timeout);
+        self
     }
 }
 
