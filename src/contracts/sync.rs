@@ -220,7 +220,7 @@ impl Client {
     ///
     /// # Arguments
     /// * `contract`        - The [Contract] object representing the option for which the calculation is being requested.
-    /// * `volatility`      - Hypothetical volatility as a percentage (e.g., 20.0 for 20%).
+    /// * `volatility`      - Hypothetical annualized volatility as a fraction (`0.2` = 20%).
     /// * `underlying_price` - Hypothetical price of the underlying asset.
     ///
     /// # Examples
@@ -232,7 +232,7 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::option("AAPL", "20251219", 150.0, OptionRight::Call);
-    /// let calculation = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
+    /// let calculation = client.calculate_option_price(&contract, 0.2, 235.0).expect("request failed");
     /// println!("calculation: {calculation:?}");
     /// ```
     pub fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {

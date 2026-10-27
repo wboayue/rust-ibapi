@@ -16,6 +16,6 @@ fn main() {
 
     let contract = Contract::call("AAPL").strike(240.0).expires_on(2025, 6, 20).build();
 
-    let calculation = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
+    let calculation = client.calculate_option_price(&contract, 0.2, 235.0).expect("request failed");
     println!("calculation: {calculation:?}");
 }
