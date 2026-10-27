@@ -18,7 +18,7 @@ pub(crate) use shutdown::ShutdownSignal;
 
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
@@ -245,6 +245,12 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn wait_connected(&self) -> Result<(), Error>;
 
     fn is_connected(&self) -> bool;
+
+    /// Counts sessions: 0 at connect, bumped each time a reconnect resets
+    /// the bus. A subscription compares it with the value at its creation:
+    /// once it differs, the request died with an earlier session and a
+    /// cancel would name an id the current session never saw.
+    fn session_generation(&self) -> u64;
 
     /// The runtime the bus was built on. `Drop` impls spawn their async
     /// cleanup here, so it runs even when the drop is on a thread with no
@@ -498,6 +504,8 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     /// before the processing task starts; absent in bus-only test fixtures,
     /// which never reconnect a client.
     handshake_state: OnceLock<HandshakeState>,
+    /// See [`AsyncMessageBus::session_generation`]; bumped in `reset_channels`.
+    session_generation: AtomicU64,
     /// Outbound rate limiter, if the client was built with one. Installed
     /// once via [`Self::set_rate_limiter`] before any request is sent.
     rate_limiter: OnceLock<RateLimiter>,
@@ -549,6 +557,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             process_task: std::sync::Mutex::new(None),
             shutdown,
             handshake_state: OnceLock::new(),
+            session_generation: AtomicU64::new(0),
             rate_limiter: OnceLock::new(),
             connection_state: Arc::new(ConnectionSignal::default()),
         };
@@ -810,6 +819,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// reconnect is attempted.
     async fn reset_channels(&self) {
         debug!("resetting message bus channels");
+        // Before failing the routes, so a subscription that reads the reset
+        // already sees the new generation.
+        self.session_generation.fetch_add(1, Ordering::AcqRel);
 
         self.requests.fail_all(|| Error::ConnectionReset.into());
         self.orders.fail_all(|| Error::ConnectionReset.into());
@@ -1198,6 +1210,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     fn is_connected(&self) -> bool {
         self.connection_state.is_connected() && !self.shutdown.is_requested()
+    }
+
+    fn session_generation(&self) -> u64 {
+        self.session_generation.load(Ordering::Acquire)
     }
 
     fn runtime_handle(&self) -> &Handle {

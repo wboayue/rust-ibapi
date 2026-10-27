@@ -399,14 +399,28 @@ fn routed_end_skips_cancel_on_drop() {
 #[test]
 fn error_end_still_cancels() {
     // Only the end marker proves TWS finished; after an error the cancel goes out as before.
-    let (sub, bus, signals) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
+    let (sub, bus, signals) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::Simple("boom".into()))]);
 
-    assert!(matches!(sub.next(), Some(Err(Error::ConnectionReset))));
+    assert!(matches!(sub.next(), Some(Err(Error::Simple(_)))));
     assert!(!sub.ended_natively());
 
     drop(sub);
     assert_eq!(bus.request_messages().len(), 1, "cancel written after an error end");
     assert!(unregistered_request(&signals), "route kept after cancel");
+}
+
+/// A reconnect ended the request at TWS along with the old session; the new
+/// session never saw its id. Dropped after the reconnect, even without having
+/// read the reset, it writes no cancel but still releases its route.
+#[test]
+fn drop_after_reconnect_skips_cancel() {
+    let (sub, bus, signals) = request_subscription::<EndOfStreamItem>(vec![RoutedItem::Error(Error::ConnectionReset)]);
+
+    bus.start_new_session();
+    drop(sub);
+
+    assert!(bus.request_messages().is_empty(), "no cancel for a request from an earlier session");
+    assert!(unregistered_request(&signals), "route still released");
 }
 
 // --- cancel releases the route ------------------------------------------

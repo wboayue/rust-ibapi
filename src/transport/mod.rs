@@ -291,6 +291,12 @@ pub(crate) trait MessageBus: Send + Sync {
     fn wait_connected(&self) -> Result<(), Error>;
 
     fn is_connected(&self) -> bool;
+
+    /// Counts sessions: 0 at connect, bumped each time a reconnect resets
+    /// the bus. A subscription compares it with the value at its creation:
+    /// once it differs, the request died with an earlier session and a
+    /// cancel would name an id the current session never saw.
+    fn session_generation(&self) -> u64;
 }
 
 // InternalSubscription - handles receiving messages for sync subscriptions

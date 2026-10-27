@@ -460,6 +460,24 @@ async fn subscription_cancel() {
     assert_eq!(f.bus.request_messages().len(), 1);
 }
 
+/// A reconnect ended the request at TWS along with the old session; the new
+/// session never saw its id, so neither `cancel()` nor drop writes a cancel.
+#[tokio::test]
+async fn cancel_after_reconnect_sends_nothing() {
+    let f = subscription_with::<CancellableItem>(Some(123), None, DecoderContext::default());
+    f.bus.start_new_session();
+
+    f.subscription.cancel().await;
+    assert!(f.bus.request_messages().is_empty(), "cancel() wrote to the new session");
+
+    let g = subscription_with::<CancellableItem>(Some(124), None, DecoderContext::default());
+    g.bus.start_new_session();
+    drop(g.subscription);
+    // Drop spawns its cancel; give it the chance to run.
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert!(g.bus.request_messages().is_empty(), "drop wrote to the new session");
+}
+
 #[tokio::test]
 async fn subscription_cancel_without_cancel_message_sends_nothing() {
     // `StreamDecoder::cancel_message` defaults to `Err(NotImplemented)`.

@@ -528,6 +528,7 @@ fn reconnect_refreshes_handshake_state() -> Result<(), Error> {
     let handler = ConnectionHandler::default();
     let sv = handler.min_version;
     let new_sv = handler.max_version;
+    assert_ne!(sv, new_sv, "the reconnect must negotiate a different version to test anything");
 
     let start_api_bytes = handler.format_start_api(28);
     let events = vec![
@@ -4289,4 +4290,17 @@ fn wait_for_fill_skips_completed_when_order_is_open() {
         "{outcome:?}"
     );
     drop(tws.join().unwrap());
+}
+
+/// A reset starts a new session generation, which subscriptions made before
+/// it compare against to skip a cancel the new session couldn't place.
+#[test]
+fn reset_starts_new_session_generation() {
+    let bus = TcpMessageBus::new(Connection::stubbed(MemoryStream::default(), 28));
+    assert_eq!(bus.session_generation(), 0);
+
+    bus.reset();
+    bus.reset();
+
+    assert_eq!(bus.session_generation(), 2);
 }

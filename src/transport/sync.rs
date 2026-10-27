@@ -5,6 +5,7 @@
 use std::collections::{hash_map, HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -325,6 +326,8 @@ pub struct TcpMessageBus<S: Stream> {
     /// before the dispatcher thread starts; absent in bus-only test fixtures,
     /// which never reconnect a client.
     handshake_state: OnceLock<HandshakeState>,
+    /// See [`MessageBus::session_generation`]; bumped in `reset`.
+    session_generation: AtomicU64,
     /// Outbound rate limiter, if the client was built with one. Installed
     /// once via [`Self::set_rate_limiter`] before any request is sent.
     rate_limiter: OnceLock<RateLimiter>,
@@ -354,6 +357,7 @@ impl<S: Stream> TcpMessageBus<S> {
             shutdown_recv,
             shutdown,
             handshake_state: OnceLock::new(),
+            session_generation: AtomicU64::new(0),
             rate_limiter: OnceLock::new(),
             order_taps,
             connection_state: ConnectionSignal::default(),
@@ -462,6 +466,9 @@ impl<S: Stream> TcpMessageBus<S> {
 
     fn reset(&self) {
         debug!("reset message bus");
+        // Before failing the routes, so a subscription that reads the reset
+        // already sees the new generation.
+        self.session_generation.fetch_add(1, Ordering::AcqRel);
 
         self.requests.fail_all(|| Error::ConnectionReset.into());
         self.orders.fail_all(|| Error::ConnectionReset.into());
@@ -1029,6 +1036,10 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
     fn is_connected(&self) -> bool {
         self.connection_state.is_connected() && !self.is_shutting_down()
+    }
+
+    fn session_generation(&self) -> u64 {
+        self.session_generation.load(Ordering::Acquire)
     }
 }
 

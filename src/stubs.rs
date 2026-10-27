@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         LazyLock, Mutex, RwLock,
     },
 };
@@ -46,6 +46,8 @@ pub(crate) struct MessageBusStub {
     /// Requests still to be answered with [`Error::ConnectionReset`] before the
     /// configured responses are served. See [`MessageBusStub::with_connection_resets`].
     connection_resets: AtomicUsize,
+    /// What `session_generation` reports; see [`MessageBusStub::start_new_session`].
+    session_generation: AtomicU64,
     /// The runtime the stub was built on, if any; sync-only tests build it
     /// with none. See [`AsyncMessageBus::runtime_handle`].
     #[cfg(feature = "async")]
@@ -71,6 +73,14 @@ pub(crate) struct MessageBusStub {
 // Separate tracking for order update subscriptions to maintain backward compatibility
 static ORDER_UPDATE_SUBSCRIPTION_TRACKER: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
+impl MessageBusStub {
+    /// Simulate a reconnect's reset: subscriptions made before it now belong
+    /// to an earlier session.
+    pub(crate) fn start_new_session(&self) {
+        self.session_generation.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 impl Default for MessageBusStub {
     fn default() -> Self {
         Self {
@@ -80,6 +90,7 @@ impl Default for MessageBusStub {
             #[cfg(feature = "async")]
             executions_requests: RwLock::new(vec![]),
             connection_resets: AtomicUsize::new(0),
+            session_generation: AtomicU64::new(0),
             #[cfg(feature = "async")]
             runtime: tokio::runtime::Handle::try_current().ok(),
             #[cfg(feature = "sync")]
@@ -320,6 +331,10 @@ impl MessageBus for MessageBusStub {
         true // Stub always returns connected
     }
 
+    fn session_generation(&self) -> u64 {
+        self.session_generation.load(Ordering::Relaxed)
+    }
+
     // fn process_messages(&mut self, _server_version: i32) -> Result<(), Error> {
     //     Ok(())
     // }
@@ -463,6 +478,10 @@ impl AsyncMessageBus for MessageBusStub {
 
     fn is_connected(&self) -> bool {
         true // Stub always returns connected
+    }
+
+    fn session_generation(&self) -> u64 {
+        self.session_generation.load(Ordering::Relaxed)
     }
 
     fn runtime_handle(&self) -> &tokio::runtime::Handle {

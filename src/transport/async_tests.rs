@@ -2937,3 +2937,16 @@ async fn send_after_shutdown_fails_with_shutdown() {
     let waited = bus.wait_connected().await;
     assert!(matches!(waited, Err(Error::Shutdown)), "wait_connected: {waited:?}");
 }
+
+/// A reset starts a new session generation, which subscriptions made before
+/// it compare against to skip a cancel the new session couldn't place.
+#[tokio::test]
+async fn reset_channels_starts_new_session_generation() {
+    let (_stream, bus) = make_bus();
+    assert_eq!(bus.session_generation(), 0);
+
+    bus.reset_channels().await;
+    bus.reset_channels().await;
+
+    assert_eq!(bus.session_generation(), 2);
+}
