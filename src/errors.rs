@@ -76,6 +76,20 @@ pub enum Error {
     #[error("connection rejected: {0}")]
     ConnectionRejected(String),
 
+    /// TWS refused the session because another connection holds this client
+    /// id (TWS error 326). Connect with a different client id, or close the
+    /// other connection.
+    ///
+    /// Returned by `Client::connect`, which doesn't retry. The automatic
+    /// reconnect does retry it: after a dropped connection TWS can hold the
+    /// old session until it notices the socket is dead, and frees the id
+    /// then. If every attempt meets it, the reconnect gives up with it.
+    #[error("client id {client_id} is already in use by another connection")]
+    ClientIdInUse {
+        /// The refused client id.
+        client_id: i32,
+    },
+
     /// IB Gateway sent a timezone name that could not be mapped to an IANA zone.
     #[error("unrecognized IB Gateway timezone {0:?}; register a mapping with `ibapi::register_timezone_alias({0:?}, \"<IANA-name>\")` before connecting, or set `IBAPI_TIMEZONE_ALIASES={0}=<IANA-name>` in the environment. See https://github.com/wboayue/rust-ibapi/blob/main/docs/troubleshooting.md#gateway-time-zone. To request it as a built-in, file an issue at https://github.com/wboayue/rust-ibapi/issues")]
     UnsupportedTimeZone(String),
@@ -296,7 +310,8 @@ impl Error {
     ///
     /// Returns `false` for failures reconnecting cannot recover, so a read loop can
     /// branch on them separately to stop retrying: intentional teardown
-    /// ([`Error::Shutdown`]), handshake refusal ([`Error::ConnectionRejected`]), and
+    /// ([`Error::Shutdown`]), handshake refusal ([`Error::ConnectionRejected`],
+    /// [`Error::ClientIdInUse`]), and
     /// a session the client gave up on ([`Error::ConnectionFailed`]: reconnection
     /// exhausted, or a read error reconnecting cannot fix).
     ///
@@ -369,6 +384,7 @@ impl Clone for Error {
             Error::InvalidArgument(s) => Error::InvalidArgument(s.clone()),
             Error::ConnectionFailed => Error::ConnectionFailed,
             Error::ConnectionRejected(s) => Error::ConnectionRejected(s.clone()),
+            Error::ClientIdInUse { client_id } => Error::ClientIdInUse { client_id: *client_id },
             Error::UnsupportedTimeZone(s) => Error::UnsupportedTimeZone(s.clone()),
             Error::ConnectionReset => Error::ConnectionReset,
             Error::Cancelled => Error::Cancelled,

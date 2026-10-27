@@ -712,3 +712,56 @@ fn one_shot_request_is_retried_after_the_reconnect() {
 
     MessageBus::ensure_shutdown(&*bus);
 }
+
+const CLIENT_ID_IN_USE: &str = "Unable to connect as the client id is already in use. Retry with a unique client id.";
+
+/// TWS's answer to a held client id: the ack, then one 326 frame (live,
+/// server 226), then it closes the socket.
+fn push_client_id_in_use(stream: &MemoryStream) {
+    stream.push_inbound(handshake_response_frame(SERVER_VERSION, "EST"));
+    stream.push_inbound(error_frame(-1, 326, CLIENT_ID_IN_USE));
+    stream.push_hang_up();
+}
+
+#[test]
+fn establish_connection_reports_client_id_in_use() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
+    push_client_id_in_use(&stream);
+
+    let err = connection.establish_connection().expect_err("must refuse a held client id");
+
+    assert!(matches!(err, Error::ClientIdInUse { client_id: CLIENT_ID }), "got {err:?}");
+}
+
+/// After a dropped connection TWS can hold the old session for a while; the
+/// reconnect keeps trying until it lets go. Pins that 326 stays retryable
+/// there; it passes without the handshake check too.
+#[test]
+fn reconnect_retries_client_id_in_use() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
+    push_handshake(&stream);
+    connection.establish_connection().expect("initial establish_connection failed");
+
+    push_client_id_in_use(&stream);
+    push_handshake(&stream);
+
+    connection.reconnect().expect("reconnect must retry a held client id");
+    assert_eq!(connection.connection_metadata().next_order_id, 90);
+}
+
+#[test]
+fn reconnect_gives_up_with_client_id_in_use() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
+    push_handshake(&stream);
+    connection.establish_connection().expect("initial establish_connection failed");
+
+    for _ in 0..MAX_RECONNECT_ATTEMPTS {
+        push_client_id_in_use(&stream);
+    }
+
+    let err = connection.reconnect().expect_err("every attempt met a held id");
+    assert!(matches!(err, Error::ClientIdInUse { client_id: CLIENT_ID }), "got {err:?}");
+}

@@ -199,6 +199,11 @@ pub const DATA_ADVISORY_CODES: &[i32] = &[MARKET_DEPTH_RESET_CODE, 2188, 10089, 
 /// for callers that bind the constant explicitly.
 pub const REQUEST_ERROR_CODES: &[i32] = &[300, 301, 302, 309, 310, 316, 319, 326, 327, 330, 331, 354, 357, 365, 366, 385, 386];
 
+/// TWS refused the session: another connection holds this client id. Sent
+/// once after `start_api`, then TWS closes the socket; the handshake turns it
+/// into [`Error::ClientIdInUse`](crate::Error::ClientIdInUse).
+pub(crate) const CLIENT_ID_IN_USE_CODE: i32 = 326;
+
 /// Data-farm codes reporting a healthy connection ("…connection is OK").
 /// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
 pub(crate) const FARM_OK_CODES: [i32; 3] = [2104, 2106, 2158];

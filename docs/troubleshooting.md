@@ -53,6 +53,22 @@ Configure IB Gateway/TWS:
 4. Disable **"Read-Only API"** if you need to place orders
 5. Set **Master API client ID** if needed
 
+### Client ID Already in Use
+
+**Error:**
+```
+Error: ClientIdInUse { client_id: 100 }
+client id 100 is already in use by another connection
+```
+
+TWS allows one connection per client id. It answers a second one with error 326 and closes the socket.
+
+**Solutions:**
+1. Connect with a different client id, or close the other connection (another process, or a client you didn't drop)
+2. Match on `Error::ClientIdInUse` to retry with another id
+
+After a dropped connection, TWS can keep the old session until it notices the socket is dead. The automatic reconnect retries 326 for that reason, and gives up with `ClientIdInUse` only once its attempts run out.
+
 ### Connection Timeout
 
 **Error:**

@@ -52,6 +52,11 @@ impl Client {
     /// * `address`   - address of server. e.g. 127.0.0.1:4002
     /// * `client_id` - id of client. e.g. 100
     ///
+    /// # Errors
+    ///
+    /// [`Error::ClientIdInUse`] when another connection holds `client_id`;
+    /// connect with a different id. Not retried here.
+    ///
     /// # Examples
     ///
     /// ```no_run
