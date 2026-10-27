@@ -8,9 +8,10 @@ triggers:
   - passing a processor to one_shot_shared or one_shot_by_request_id
   - wondering whether a one-shot should retry
   - adding a decode_*_proto sibling for a one-shot response
-symbols: [expect_proto, ProtoPayload, one_shot_shared, one_shot_shared_matching, ONE_SHOT_TIMEOUT, one_shot_by_request_id, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset]
+  - adding a one-shot whose request TWS can cancel
+symbols: [expect_proto, ProtoPayload, one_shot_shared, one_shot_shared_matching, ONE_SHOT_TIMEOUT, one_shot_by_request_id, one_shot_cancelling, CancellableOneShot, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset]
 related: [proto-only-decoding, proto-aware-accessors, fixture-builders]
-precedents: ["#736", "#738", "#740", "#741", "#745", "#749"]
+precedents: ["#736", "#738", "#740", "#741", "#745", "#749", "#1107"]
 memory: [project_protobuf_only, feedback_request_id_index_registration]
 ---
 
@@ -31,10 +32,13 @@ the frame. A one-shot API's decoder therefore takes the *decoded* `prost` type, 
 give the payload an `impl ProtoPayload` (`src/proto/payload.rs`) if it lacks one, which
 `expect_proto` will demand anyway since it cannot infer `MESSAGE_ID` otherwise.
 
-The exception is the four option-computation one-shots (`calculate_option_price`,
-`calculate_implied_volatility`, sync and async). Their processor calls
-`OptionComputation::decode`, a `StreamDecoder` whose message-type match backstops any other
-frame (#740), so they narrow without `expect_proto`.
+**A one-shot TWS can cancel goes through `one_shot_cancelling::<K>`** instead, where `K` is a
+`CancellableOneShot`: the payload type (so the frame), its decoder and its cancel encoder. The
+request is read through a typed subscription, so one dropped before its answer (a dropped
+future, a timeout, a local error) is cancelled at TWS rather than left running against pacing;
+the answer and a TWS error each end the request, so neither cancels (#1107). Check C#
+`EClient.cs` for a `cancel*` method when adding a one-shot: head timestamp, histogram,
+historical schedule, option price, implied volatility and both WSH requests have one.
 
 **Every one-shot helper retries.** `one_shot_by_request_id` for a request-id request,
 `one_shot_shared` (or `one_shot_shared_matching`, below) for a shared channel. None takes a
@@ -124,6 +128,10 @@ axis they are not choosing gets chosen for them.
   hand-rolled folds remain. Mechanism above.
 - #745 — dropped `on_none`. 44 of 54 sites passed the same closure and the other 10 passed one
   empty vector spelled two ways, which is the tell that nobody was choosing.
+- #1107 — the seven one-shots with an IB cancel moved to `one_shot_cancelling`; until then a
+  dropped or timed-out request kept running at TWS. Live: each is answered by exactly one
+  frame, so the answer is a snapshot end. A frame of another type is now skipped, not reported
+  as `UnexpectedResponse`, as the typed subscription filters on `RESPONSE_MESSAGE_IDS`.
 - #749 — `ProtoPayload` moved the pair onto the payload; the roster and its scraping test are
   deleted. The plan that proposed this keyed the trait on the **decoded** type, which cannot
   work: `server_time`, `server_time_millis`, and `head_timestamp` all return `OffsetDateTime`,

@@ -145,22 +145,18 @@ pub(crate) fn encode_request_histogram_data(request_id: i32, contract: &Contract
     ))
 }
 
-#[allow(dead_code)]
 pub(crate) fn encode_cancel_histogram_data(request_id: i32) -> Result<Vec<u8>, Error> {
     crate::proto::encoders::encode_cancel_by_id!(request_id, CancelHistogramData, crate::messages::OutgoingMessages::CancelHistogramData)
 }
 
-#[allow(dead_code)]
 pub(crate) fn encode_cancel_head_timestamp(request_id: i32) -> Result<Vec<u8>, Error> {
     crate::proto::encoders::encode_cancel_by_id!(request_id, CancelHeadTimestamp, crate::messages::OutgoingMessages::CancelHeadTimestamp)
 }
 
 // Per-encoder body assertions live in the migrated sync/async tests via
-// `assert_request<B>(builder)`; the historical-data and historical-ticks
-// cancel encoders are exercised through their production paths (subscription
-// drop handlers). `encode_cancel_histogram_data` and
-// `encode_cancel_head_timestamp` have no production path yet (no `Client`
-// method sends them) and are covered by the unit tests below.
+// `assert_request<B>(builder)`; the cancel encoders are exercised through
+// their production paths (subscription drop handlers, and the one-shot
+// cancels in `request_helpers::one_shot_cancelling`) and the unit tests below.
 #[cfg(test)]
 #[path = "encoders_tests.rs"]
 mod tests;

@@ -87,6 +87,29 @@ where
     assert!(matches!(err, Error::UnexpectedResponse(_)), "expected UnexpectedResponse, got: {err:?}");
 }
 
+// Feeds a single frame of a message type the request doesn't expect: it is
+// skipped, the stream closes before the answer, and the request is cancelled
+// at TWS with `cancel`.
+async fn assert_skips_undeclared<F, Fut, T>(server_version: i32, response: crate::messages::ResponseMessage, cancel: OutgoingMessages, call: F)
+where
+    F: FnOnce(Client) -> Fut,
+    Fut: std::future::Future<Output = Result<T, Error>>,
+{
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![response]));
+    let client = Client::stubbed(message_bus.clone(), server_version);
+    let Err(err) = call(client).await else {
+        panic!("expected UnexpectedEndOfStream");
+    };
+    assert!(
+        matches!(err, Error::UnexpectedEndOfStream),
+        "expected UnexpectedEndOfStream, got: {err:?}"
+    );
+    // Drop spawns its cancel; give it the chance to run.
+    tokio::task::yield_now().await;
+    let messages = message_bus.request_messages.read().unwrap().clone();
+    assert_eq!(count_proto_msgs(&messages, cancel), 1, "no answer, so the request is cancelled");
+}
+
 #[tokio::test]
 async fn head_timestamp() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
@@ -1057,11 +1080,12 @@ async fn streaming_subscription_cancel_prevents_duplicate_on_drop() {
 }
 
 #[tokio::test]
-async fn head_timestamp_unexpected_response() {
+async fn head_timestamp_skips_undeclared_message() {
     // 17 = HistoricalData — wrong type for head_timestamp.
-    assert_unexpected_response(
+    assert_skips_undeclared(
         server_versions::BOND_ISSUERID,
         proto_response(IncomingMessages::HistoricalData, Vec::new()),
+        OutgoingMessages::CancelHeadTimestamp,
         |c| async move { c.head_timestamp(&test_contract(), WhatToShow::Trades, TradingHours::Regular).await },
     )
     .await;
@@ -1158,11 +1182,12 @@ async fn historical_data_retries_a_connection_reset() {
 }
 
 #[tokio::test]
-async fn historical_schedules_unexpected_response() {
+async fn historical_schedules_skips_undeclared_message() {
     // 17 = HistoricalData — wrong type for the schedule decoder (expects 106).
-    assert_unexpected_response(
+    assert_skips_undeclared(
         server_versions::BOND_ISSUERID,
         proto_response(IncomingMessages::HistoricalData, Vec::new()),
+        OutgoingMessages::CancelHistoricalData,
         |c| async move { c.historical_schedules(&test_contract(), Duration::days(3)).fetch().await },
     )
     .await;
@@ -1261,7 +1286,7 @@ async fn next_frame_fails_on_lag() {
         crate::subscriptions::DecoderContext::default(),
     );
 
-    match next_frame(&mut subscription).await {
+    match request_helpers::next_frame(&mut subscription).await {
         Err(Error::Notice(n)) => assert_eq!(n.code, crate::messages::SUBSCRIPTION_LAG_CODE),
         other => panic!("expected lag error, got {other:?}"),
     }

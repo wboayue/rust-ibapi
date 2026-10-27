@@ -6,19 +6,22 @@ use log::error;
 use time::OffsetDateTime;
 
 use crate::client::blocking::ClientRequestBuilders;
-use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
+use crate::common::request_helpers::{self, empty_on_end_of_stream};
 use crate::common::retry::blocking::retry_on_connection_reset;
 use crate::contracts::Contract;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::common::{filter_notice, RoutedItem, SubscriptionItem};
+use crate::subscriptions::common::{RoutedItem, SubscriptionItem};
 use crate::subscriptions::log_cancel_error;
 use crate::subscriptions::sync::{FilterData, Subscription, SubscriptionItemIterExt};
 use crate::transport::{InternalSubscription, MessageBus};
 use crate::{client::sync::Client, Error};
 
 use super::common::tick::{classify, TickAction};
-use super::common::{self, decoders, encoders};
-use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, Schedule, TickDecoder, WhatToShow};
+use super::common::{self, encoders};
+use super::{
+    BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, Schedule,
+    ScheduleRequest, TickDecoder, WhatToShow,
+};
 use crate::market_data::TradingHours;
 
 impl Client {
@@ -43,11 +46,9 @@ impl Client {
     /// print!("head_timestamp: {result:?}");
     /// ```
     pub fn head_timestamp(&self, contract: &Contract, what_to_show: WhatToShow, trading_hours: TradingHours) -> Result<OffsetDateTime, Error> {
-        request_helpers::blocking::one_shot_by_request_id(
-            self,
-            |request_id| encoders::encode_request_head_timestamp(request_id, contract, what_to_show, trading_hours.use_rth()),
-            expect_proto(decoders::decode_head_timestamp_proto),
-        )
+        request_helpers::blocking::one_shot_cancelling::<HeadTimestampRequest>(self, |request_id| {
+            encoders::encode_request_head_timestamp(request_id, contract, what_to_show, trading_hours.use_rth())
+        })
     }
 
     /// Build a request for historical bar data.
@@ -239,11 +240,9 @@ impl Client {
     /// }
     /// ```
     pub fn histogram_data(&self, contract: &Contract, trading_hours: TradingHours, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
-        request_helpers::blocking::one_shot_by_request_id(
-            self,
-            |request_id| encoders::encode_request_histogram_data(request_id, contract, trading_hours.use_rth(), period),
-            expect_proto(decoders::decode_histogram_data_proto),
-        )
+        request_helpers::blocking::one_shot_cancelling::<HistogramRequest>(self, |request_id| {
+            encoders::encode_request_histogram_data(request_id, contract, trading_hours.use_rth(), period)
+        })
         .or_else(empty_on_end_of_stream)
     }
 }
@@ -278,23 +277,13 @@ pub(crate) fn historical_data(
         // TWS's cancel; after it, nothing is sent.
         let subscription = builder.send::<HistoricalDataFrame>(request)?;
 
-        let mut data = next_frame(&subscription)?.into_bars()?;
+        let mut data = request_helpers::blocking::next_frame(&subscription)?.into_bars()?;
         // Only the window frame proves the download is complete, so a close
         // before it is an error.
-        (data.start, data.end) = next_frame(&subscription)?.into_window()?;
+        (data.start, data.end) = request_helpers::blocking::next_frame(&subscription)?.into_window()?;
 
         Ok(data)
     })
-}
-
-/// The next frame of a one-shot request, skipping notices.
-fn next_frame(subscription: &Subscription<HistoricalDataFrame>) -> Result<HistoricalDataFrame, Error> {
-    loop {
-        let item = subscription.next().ok_or(Error::UnexpectedEndOfStream)?;
-        if let Some(frame) = filter_notice(item) {
-            return frame;
-        }
-    }
 }
 
 pub(crate) fn historical_data_stream(
@@ -359,13 +348,9 @@ pub(crate) fn historical_schedule(
     end_date: Option<OffsetDateTime>,
     duration: Duration,
 ) -> Result<Schedule, Error> {
-    request_helpers::blocking::one_shot_by_request_id(
-        client,
-        |request_id| {
-            encoders::encode_request_historical_data(request_id, contract, end_date, duration, BarSize::Day, WhatToShow::Schedule, true, false)
-        },
-        expect_proto(decoders::decode_historical_schedule_proto),
-    )
+    request_helpers::blocking::one_shot_cancelling::<ScheduleRequest>(client, |request_id| {
+        encoders::encode_request_historical_data(request_id, contract, end_date, duration, BarSize::Day, WhatToShow::Schedule, true, false)
+    })
 }
 
 // TickSubscription and related types

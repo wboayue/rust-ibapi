@@ -2,8 +2,10 @@
 
 use std::time::Duration;
 
-use crate::messages::ResponseMessage;
+use crate::common::error_helpers;
+use crate::messages::{IncomingMessages, Notice, ResponseMessage};
 use crate::proto::payload::ProtoPayload;
+use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
 /// How long a one-shot on a shared channel waits for its frame before failing
@@ -98,6 +100,51 @@ where
     move |message| decode(message.expect_type(P::MESSAGE_ID)?.proto()?)
 }
 
+/// A one-shot request answered by a single frame on its own request id,
+/// which TWS can cancel. Read with `one_shot_cancelling`, so a request
+/// dropped before its answer (a dropped future, a timeout, a local error) is
+/// cancelled at TWS instead of running on against pacing (#1107).
+pub(crate) trait CancellableOneShot: 'static {
+    /// The answer's payload; its message type is the only frame read.
+    type Proto: ProtoPayload;
+    type Output: Send + 'static;
+
+    fn decode(payload: Self::Proto) -> Result<Self::Output, Error>;
+
+    fn cancel(request_id: i32) -> Result<Vec<u8>, Error>;
+}
+
+/// The answer to a [`CancellableOneShot`], as a subscription reads it.
+///
+/// The answer ends the request (live: exactly one frame, then nothing), so it
+/// is a snapshot end: a subscription that got it sends no cancel. Nor does one
+/// a TWS error ended, since a one-shot has nothing left to cancel.
+///
+/// Not in the `response_message_ids_tests` roster: `RESPONSE_MESSAGE_IDS` and
+/// the one `decode` arm both come from `K::Proto`, so they cannot disagree.
+pub(crate) struct OneShot<K: CancellableOneShot>(K::Output);
+
+impl<K: CancellableOneShot> StreamDecoder<OneShot<K>> for OneShot<K> {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[K::Proto::MESSAGE_ID];
+
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
+        let payload = message.expect_type(K::Proto::MESSAGE_ID)?.proto()?;
+        K::decode(payload).map(Self)
+    }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+        K::cancel(error_helpers::require_request_id_for(request_id, "cancel one-shot request")?)
+    }
+
+    fn is_snapshot_end(&self) -> bool {
+        true
+    }
+
+    fn rejection_ends_request(_notice: &Notice) -> bool {
+        true
+    }
+}
+
 #[cfg(test)]
 #[path = "request_helpers_tests.rs"]
 mod tests;
@@ -107,9 +154,13 @@ mod tests;
 mod sync_impl {
     use std::time::{Duration, Instant};
 
+    use super::{CancellableOneShot, OneShot};
     use crate::client::blocking::ClientRequestBuilders;
     use crate::client::sync::Client;
     use crate::messages::{OutgoingMessages, ResponseMessage};
+    use crate::subscriptions::common::filter_notice;
+    use crate::subscriptions::sync::Subscription;
+    use crate::subscriptions::StreamDecoder;
     use crate::Error;
 
     /// One-shot request answered on the shared channel for its message type,
@@ -187,6 +238,29 @@ mod sync_impl {
             super::fold_one_shot(subscription.next(), &processor)
         })
     }
+
+    /// [`one_shot_by_request_id`] for a request TWS can cancel: dropped before
+    /// its answer, the request is cancelled at TWS.
+    pub fn one_shot_cancelling<K: CancellableOneShot>(client: &Client, encoder: impl Fn(i32) -> Result<Vec<u8>, Error>) -> Result<K::Output, Error> {
+        crate::common::retry::blocking::retry_on_connection_reset(client, || {
+            let builder = client.request();
+            let request = encoder(builder.request_id())?;
+            let subscription = builder.send::<OneShot<K>>(request)?;
+
+            next_frame(&subscription).map(|answer| answer.0)
+        })
+    }
+
+    /// The next frame of a request-id subscription, skipping notices. A close
+    /// before it is `Error::UnexpectedEndOfStream`.
+    pub fn next_frame<T: StreamDecoder<T>>(subscription: &Subscription<T>) -> Result<T, Error> {
+        loop {
+            let item = subscription.next().ok_or(Error::UnexpectedEndOfStream)?;
+            if let Some(frame) = filter_notice(item) {
+                return frame;
+            }
+        }
+    }
 }
 
 // Async implementations
@@ -194,10 +268,15 @@ mod sync_impl {
 mod async_impl {
     use std::time::Duration;
 
+    use futures::StreamExt;
     use tokio::time::Instant;
 
+    use super::{CancellableOneShot, OneShot};
     use crate::client::{Client, ClientRequestBuilders};
     use crate::messages::{OutgoingMessages, ResponseMessage};
+    use crate::subscriptions::common::{filter_notice, lag_as_error};
+    use crate::subscriptions::r#async::Subscription;
+    use crate::subscriptions::StreamDecoder;
     use crate::Error;
 
     /// One-shot request answered on the shared channel for its message type,
@@ -276,6 +355,34 @@ mod async_impl {
             super::fold_one_shot(subscription.next().await, &processor)
         })
         .await
+    }
+
+    /// [`one_shot_by_request_id`] for a request TWS can cancel: dropped before
+    /// its answer, the request is cancelled at TWS.
+    pub async fn one_shot_cancelling<K: CancellableOneShot>(
+        client: &Client,
+        encoder: impl Fn(i32) -> Result<Vec<u8>, Error>,
+    ) -> Result<K::Output, Error> {
+        crate::common::retry::retry_on_connection_reset(client, || async {
+            let builder = client.request();
+            let request = encoder(builder.request_id())?;
+            let mut subscription = builder.send::<OneShot<K>>(request).await?;
+
+            next_frame(&mut subscription).await.map(|answer| answer.0)
+        })
+        .await
+    }
+
+    /// The next frame of a request-id subscription, skipping notices. A close
+    /// before it is `Error::UnexpectedEndOfStream`; a broadcast lag fails the
+    /// read, since the frame it evicted can't be read.
+    pub async fn next_frame<T: StreamDecoder<T> + Send + 'static>(subscription: &mut Subscription<T>) -> Result<T, Error> {
+        loop {
+            let item = subscription.next().await.ok_or(Error::UnexpectedEndOfStream)?;
+            if let Some(frame) = filter_notice(lag_as_error(item)) {
+                return frame;
+            }
+        }
     }
 }
 

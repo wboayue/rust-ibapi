@@ -4,6 +4,7 @@
 //! between sync and async versions, avoiding code duplication.
 
 use crate::common::error_helpers;
+use crate::common::request_helpers::CancellableOneShot;
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::wsh::*;
@@ -34,6 +35,38 @@ impl StreamDecoder<WshEventData> for WshEventData {
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel wsh event data message")?;
+        super::encoders::encode_cancel_wsh_event_data(request_id)
+    }
+}
+
+/// The request behind `wsh_metadata`.
+pub(crate) enum WshMetadataRequest {}
+
+impl CancellableOneShot for WshMetadataRequest {
+    type Proto = crate::proto::WshMetaData;
+    type Output = WshMetadata;
+
+    fn decode(payload: Self::Proto) -> Result<WshMetadata, Error> {
+        decoders::decode_wsh_metadata_proto(payload)
+    }
+
+    fn cancel(request_id: i32) -> Result<Vec<u8>, Error> {
+        super::encoders::encode_cancel_wsh_metadata(request_id)
+    }
+}
+
+/// The by-contract request behind `wsh_event_data`'s `fetch`.
+pub(crate) enum WshEventDataRequest {}
+
+impl CancellableOneShot for WshEventDataRequest {
+    type Proto = crate::proto::WshEventData;
+    type Output = WshEventData;
+
+    fn decode(payload: Self::Proto) -> Result<WshEventData, Error> {
+        decoders::decode_wsh_event_data_proto(payload)
+    }
+
+    fn cancel(request_id: i32) -> Result<Vec<u8>, Error> {
         super::encoders::encode_cancel_wsh_event_data(request_id)
     }
 }

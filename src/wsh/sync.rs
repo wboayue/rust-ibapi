@@ -5,13 +5,11 @@ use time::Date;
 use crate::client::blocking::ClientRequestBuilders;
 use crate::client::sync::Client;
 use crate::subscriptions::sync::Subscription;
-use crate::{
-    common::request_helpers::{self, expect_proto},
-    Error,
-};
+use crate::{common::request_helpers, Error};
 
 use super::builder::{WshEventDataBuilder, WshEventFilterBuilder};
-use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
+use super::common::stream_decoders::{WshEventDataRequest, WshMetadataRequest};
+use super::{encoders, AutoFill, WshEventData, WshMetadata};
 
 impl Client {
     /// Requests metadata from the WSH calendar.
@@ -27,11 +25,7 @@ impl Client {
     /// println!("{metadata:?}");
     /// ```
     pub fn wsh_metadata(&self) -> Result<WshMetadata, Error> {
-        request_helpers::blocking::one_shot_by_request_id(
-            self,
-            encoders::encode_request_wsh_metadata,
-            expect_proto(decoders::decode_wsh_metadata_proto),
-        )
+        request_helpers::blocking::one_shot_cancelling::<WshMetadataRequest>(self, encoders::encode_request_wsh_metadata)
     }
 
     /// Build a request for Wall Street Horizon events on one contract.
@@ -94,11 +88,9 @@ pub(crate) fn wsh_event_data_by_contract(
     limit: Option<i32>,
     auto_fill: Option<AutoFill>,
 ) -> Result<WshEventData, Error> {
-    request_helpers::blocking::one_shot_by_request_id(
-        client,
-        |request_id| encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill),
-        expect_proto(decoders::decode_wsh_event_data_proto),
-    )
+    request_helpers::blocking::one_shot_cancelling::<WshEventDataRequest>(client, |request_id| {
+        encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill)
+    })
 }
 
 /// Request events matching a JSON filter. Reached through

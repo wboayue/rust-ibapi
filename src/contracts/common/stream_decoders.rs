@@ -4,6 +4,7 @@
 //! between sync and async versions, avoiding code duplication.
 
 use crate::common::error_helpers;
+use crate::common::request_helpers::CancellableOneShot;
 use crate::contracts::*;
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::protocol::{check_version, Features};
@@ -32,6 +33,38 @@ impl StreamDecoder<OptionComputation> for OptionComputation {
                 "Unsupported request message type option computation cancel: {other:?}"
             ))),
         }
+    }
+}
+
+/// The request behind `calculate_option_price`.
+pub(crate) enum OptionPriceRequest {}
+
+impl CancellableOneShot for OptionPriceRequest {
+    type Proto = crate::proto::TickOptionComputation;
+    type Output = OptionComputation;
+
+    fn decode(payload: Self::Proto) -> Result<OptionComputation, Error> {
+        decoders::decode_tick_option_computation_proto(payload)
+    }
+
+    fn cancel(request_id: i32) -> Result<Vec<u8>, Error> {
+        encoders::encode_cancel_option_price(request_id)
+    }
+}
+
+/// The request behind `calculate_implied_volatility`.
+pub(crate) enum ImpliedVolatilityRequest {}
+
+impl CancellableOneShot for ImpliedVolatilityRequest {
+    type Proto = crate::proto::TickOptionComputation;
+    type Output = OptionComputation;
+
+    fn decode(payload: Self::Proto) -> Result<OptionComputation, Error> {
+        decoders::decode_tick_option_computation_proto(payload)
+    }
+
+    fn cancel(request_id: i32) -> Result<Vec<u8>, Error> {
+        encoders::encode_cancel_implied_volatility(request_id)
     }
 }
 
