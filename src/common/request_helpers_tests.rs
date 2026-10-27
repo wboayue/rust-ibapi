@@ -176,30 +176,19 @@ mod bounded_wait {
         Arc::new(MessageBusStub::with_ordered_responses(vec![frame(); frames]).keeping_channels_open())
     }
 
-    /// The first request is reset; the resend is answered at once.
-    fn reset_then_answered() -> Arc<MessageBusStub> {
+    /// The first request is reset, and the reconnect outlasts `SHORT`; the
+    /// resend would be answered at once. Answered means the deadline restarted.
+    fn reset_past_the_deadline() -> Arc<MessageBusStub> {
         Arc::new(
             MessageBusStub::with_ordered_responses(vec![frame()])
                 .with_connection_resets(1)
+                .with_reconnect_delay(SHORT * 2)
                 .keeping_channels_open(),
         )
     }
 
     fn encoder() -> Result<Vec<u8>, Error> {
         Ok(vec![])
-    }
-
-    /// An encoder whose first call outlasts `SHORT`, so the resend starts
-    /// past a deadline taken before the first attempt.
-    fn slow_first_encoder() -> impl Fn() -> Result<Vec<u8>, Error> {
-        let calls = Cell::new(0);
-        move || {
-            calls.set(calls.get() + 1);
-            if calls.get() == 1 {
-                std::thread::sleep(SHORT * 2);
-            }
-            Ok(vec![])
-        }
     }
 
     fn foreign_frames_counter(seen: &Cell<usize>) -> impl Fn(&ResponseMessage) -> Result<Option<()>, Error> + '_ {
@@ -258,9 +247,9 @@ mod bounded_wait {
 
         #[test]
         fn shared_deadline_spans_resends() {
-            let bus = reset_then_answered();
+            let bus = reset_past_the_deadline();
             let client = client(bus.clone(), SHORT);
-            let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, slow_first_encoder(), |_| Ok(())).unwrap_err();
+            let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, encoder, |_| Ok(())).unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
             assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
@@ -273,9 +262,8 @@ mod bounded_wait {
 
         #[test]
         fn by_request_id_deadline_spans_resends() {
-            let bus = reset_then_answered();
-            let slow = slow_first_encoder();
-            let error = one_shot_by_request_id(&client(bus.clone(), SHORT), |_| slow(), |_| Ok(())).unwrap_err();
+            let bus = reset_past_the_deadline();
+            let error = one_shot_by_request_id(&client(bus.clone(), SHORT), |_| encoder(), |_| Ok(())).unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
             assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
@@ -337,9 +325,9 @@ mod bounded_wait {
 
         #[tokio::test]
         async fn shared_deadline_spans_resends() {
-            let bus = reset_then_answered();
+            let bus = reset_past_the_deadline();
             let client = client(bus.clone(), SHORT);
-            let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, slow_first_encoder(), |_| Ok(()))
+            let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, encoder, |_| Ok(()))
                 .await
                 .unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
@@ -356,9 +344,8 @@ mod bounded_wait {
 
         #[tokio::test]
         async fn by_request_id_deadline_spans_resends() {
-            let bus = reset_then_answered();
-            let slow = slow_first_encoder();
-            let error = one_shot_by_request_id(&client(bus.clone(), SHORT), |_| slow(), |_| Ok(()))
+            let bus = reset_past_the_deadline();
+            let error = one_shot_by_request_id(&client(bus.clone(), SHORT), |_| encoder(), |_| Ok(()))
                 .await
                 .unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
@@ -436,6 +423,20 @@ mod cancelling {
 
     fn cancels(bus: &MessageBusStub) -> usize {
         bus.request_messages().iter().filter(|m| m.as_slice() == CANCEL).count()
+    }
+
+    fn requests(bus: &MessageBusStub) -> usize {
+        bus.request_messages().iter().filter(|m| m.as_slice() == REQUEST).count()
+    }
+
+    /// The first request is reset, and the reconnect outlasts a 20 ms
+    /// `one_shot_timeout`; the resend would be answered at once.
+    fn reset_past_the_deadline() -> Arc<MessageBusStub> {
+        Arc::new(
+            MessageBusStub::with_ordered_responses(vec![answer()])
+                .with_connection_resets(1)
+                .with_reconnect_delay(std::time::Duration::from_millis(40)),
+        )
     }
 
     struct Case {
@@ -578,6 +579,37 @@ mod cancelling {
         let error = one_shot_cancelling::<Answered>(&client, |_| Ok(REQUEST.to_vec())).unwrap_err();
         assert!(matches!(error, Error::Timeout), "got {error:?}");
         assert_eq!(cancels(&bus), 1);
+    }
+
+    /// A reconnect that outlasts `one_shot_timeout` ends the call without a resend.
+    #[cfg(feature = "sync")]
+    #[test]
+    fn sync_one_shot_timeout_skips_resend_past_deadline() {
+        use crate::client::blocking::Client;
+        use crate::common::request_helpers::blocking::one_shot_cancelling;
+
+        let bus = reset_past_the_deadline();
+        let client =
+            Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3).with_one_shot_timeout(std::time::Duration::from_millis(20));
+
+        let error = one_shot_cancelling::<Answered>(&client, |_| Ok(REQUEST.to_vec())).unwrap_err();
+        assert!(matches!(error, Error::Timeout), "got {error:?}");
+        assert_eq!(requests(&bus), 1, "no resend past the deadline");
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_one_shot_timeout_skips_resend_past_deadline() {
+        use crate::common::request_helpers::one_shot_cancelling;
+        use crate::Client;
+
+        let bus = reset_past_the_deadline();
+        let client =
+            Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3).with_one_shot_timeout(std::time::Duration::from_millis(20));
+
+        let error = one_shot_cancelling::<Answered>(&client, |_| Ok(REQUEST.to_vec())).await.unwrap_err();
+        assert!(matches!(error, Error::Timeout), "got {error:?}");
+        assert_eq!(requests(&bus), 1, "no resend past the deadline");
     }
 
     #[cfg(feature = "async")]

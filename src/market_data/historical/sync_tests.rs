@@ -1500,6 +1500,27 @@ fn historical_data_one_shot_timeout_cancels_between_frames() {
     assert_eq!(historical_requests_and_cancels(&bus), (1, 1));
 }
 
+/// A reconnect that outlasts `one_shot_timeout` ends the fetch without a resend.
+#[test]
+fn historical_data_one_shot_timeout_skips_resend_past_deadline() {
+    let bars = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
+    let end = proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto());
+    let bus = Arc::new(
+        MessageBusStub::with_ordered_responses(vec![bars, end])
+            .with_connection_resets(1)
+            .with_reconnect_delay(std::time::Duration::from_millis(40)),
+    );
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3).with_one_shot_timeout(std::time::Duration::from_millis(20));
+
+    let result = client
+        .historical_data(&Contract::stock("MSFT").build(), BarSize::Day)
+        .duration(Duration::seconds(86_400))
+        .fetch();
+
+    assert!(matches!(result, Err(Error::Timeout)), "{result:?}");
+    assert_eq!(historical_requests_and_cancels(&bus).0, 1, "no resend past the deadline");
+}
+
 /// An empty result is valid when the broker explicitly completes the request.
 #[test]
 fn historical_data_requires_end_accepts_completed_empty_batch() {
