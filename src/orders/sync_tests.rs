@@ -374,7 +374,7 @@ fn completed_orders() {
         assert_eq!(order_data.contract.symbol, Symbol::from("AAPL"), "contract.symbol");
         assert_eq!(order_data.contract.security_type, SecurityType::Stock, "contract.security_type");
         assert_eq!(order_data.order.action, Action::Buy, "order.action");
-        assert_eq!(order_data.order.total_quantity, 100.0, "order.total_quantity");
+        assert_eq!(order_data.order.total_quantity, 0.0, "order.total_quantity");
         assert_eq!(order_data.order.trail_stop_price, Some(150.25), "order.trail_stop_price");
         assert_eq!(
             order_data.order.shareholder, "Not an insider or substantial shareholder",

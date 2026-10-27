@@ -137,6 +137,9 @@ impl Client {
 
     /// Requests completed [`crate::orders::Order`]s.
     ///
+    /// A completed order's `total_quantity` is the quantity left unfilled, not the size
+    /// ordered: `0` for a filled order. The size ordered is `total_quantity + filled_quantity`.
+    ///
     /// # Arguments
     /// * `api_only` - request only orders placed by the API.
     ///

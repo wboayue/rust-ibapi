@@ -654,7 +654,7 @@ impl Default for CompletedOrderResponse {
             local_symbol: "AAPL".to_string(),
             trading_class: "NMS".to_string(),
             action: "BUY".to_string(),
-            total_quantity: 100.0,
+            total_quantity: 0.0,
             order_type: "MKT".to_string(),
             limit_price: Some(0.0),
             aux_price: Some(0.0),

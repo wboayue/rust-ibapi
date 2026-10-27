@@ -4231,7 +4231,7 @@ fn wait_for_fill_finds_order_among_completed() {
             .client_id(client.client_id())
             .order_id(7)
             .status(OrderStatusKind::Cancelled)
-            .total_quantity(100.0)
+            .total_quantity(60.0)
             .filled_quantity(40.0)
             .to_proto(),
     );

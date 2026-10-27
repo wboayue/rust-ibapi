@@ -396,6 +396,9 @@ impl Client {
 
     /// Requests completed [Order]s.
     ///
+    /// A completed order's `total_quantity` is the quantity left unfilled, not the size
+    /// ordered: `0` for a filled order. The size ordered is `total_quantity + filled_quantity`.
+    ///
     /// # Examples
     ///
     /// ```no_run
