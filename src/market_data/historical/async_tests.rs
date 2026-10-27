@@ -1244,6 +1244,30 @@ async fn tick_subscription_error_surfaces_via_err_arm() {
 }
 
 #[tokio::test]
+async fn next_frame_fails_on_lag() {
+    // A lag may have evicted the bars frame; skipping the gap would read the
+    // window frame in its place (#1090).
+    let (tx, rx) = tokio::sync::broadcast::channel(2);
+    for code in [2100, 2101, 2102] {
+        tx.send(RoutedItem::Notice(test_notice(code, "n"))).unwrap();
+    }
+    drop(tx);
+
+    let mut subscription: Subscription<HistoricalDataFrame> = Subscription::new_from_internal(
+        AsyncInternalSubscription::new(rx),
+        Arc::new(MessageBusStub::default()),
+        Some(9000),
+        None,
+        crate::subscriptions::DecoderContext::default(),
+    );
+
+    match next_frame(&mut subscription).await {
+        Err(Error::Notice(n)) => assert_eq!(n.code, crate::messages::SUBSCRIPTION_LAG_CODE),
+        other => panic!("expected lag error, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn tick_subscription_lag_yields_gap_notice_then_data() {
     // Regression test for #779: a consumer that falls behind the broadcast
     // channel receives a synthesized gap notice naming the dropped count,

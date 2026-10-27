@@ -151,8 +151,19 @@ struct Fixture<T: StreamDecoder<T>> {
 
 /// Build a `Subscription<T>` over a fresh broadcast channel and a fresh stub bus.
 fn subscription_with<T: StreamDecoder<T>>(request_id: Option<i32>, order_id: Option<i32>, context: DecoderContext) -> Fixture<T> {
+    subscription_with_capacity(100, request_id, order_id, context)
+}
+
+/// [`subscription_with`] over a broadcast channel of `capacity`: sending more
+/// than `capacity` unread items evicts the oldest, which is how a test lags.
+fn subscription_with_capacity<T: StreamDecoder<T>>(
+    capacity: usize,
+    request_id: Option<i32>,
+    order_id: Option<i32>,
+    context: DecoderContext,
+) -> Fixture<T> {
     let bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(100);
+    let (tx, rx) = broadcast::channel(capacity);
     let internal = AsyncInternalSubscription::new(rx);
     Fixture {
         subscription: Subscription::new_from_internal(internal, bus.clone(), request_id, order_id, context),
@@ -219,16 +230,9 @@ async fn subscription_lag_yields_gap_notice_then_items() {
     // Regression test for #779: falling behind the broadcast channel yields a
     // synthesized gap notice naming the dropped count, then the retained
     // items — not a silent resume.
-    let message_bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(2);
-    for code in [2100, 2101, 2102, 2103] {
-        tx.send(RoutedItem::Notice(test_notice(code, "n"))).unwrap();
-    }
-
     // Capacity 2 with 4 sends: the 2 oldest frames were evicted.
-    let internal = AsyncInternalSubscription::new(rx);
-    let mut subscription: Subscription<NeverDecodes> =
-        Subscription::new_from_internal(internal, message_bus, Some(9000), None, DecoderContext::default());
+    let notices = [2100, 2101, 2102, 2103].map(|code| RoutedItem::Notice(test_notice(code, "n")));
+    let mut subscription = lagged_subscription::<NeverDecodes>(2, notices.into()).subscription;
 
     match subscription.next().await {
         Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n, crate::messages::subscription_lag_notice(2)),
@@ -948,17 +952,11 @@ async fn collect_to_end_without_end_marker_is_unexpected_end() {
 /// `items` already sent: more items than `capacity` evicts the oldest, so the
 /// first read is a lag notice.
 fn lagged_subscription<T: StreamDecoder<T>>(capacity: usize, items: Vec<RoutedItem>) -> Fixture<T> {
-    let bus = Arc::new(MessageBusStub::default());
-    let (tx, rx) = broadcast::channel(capacity);
-    let internal = AsyncInternalSubscription::new(rx);
+    let f = subscription_with_capacity(capacity, Some(1), None, DecoderContext::default());
     for item in items {
-        tx.send(item).unwrap();
+        f.tx.send(item).unwrap();
     }
-    Fixture {
-        subscription: Subscription::new_from_internal(internal, bus.clone(), Some(1), None, DecoderContext::default()),
-        tx,
-        bus,
-    }
+    f
 }
 
 fn is_lag_error(result: &Result<Vec<impl std::fmt::Debug>, Error>) -> bool {
