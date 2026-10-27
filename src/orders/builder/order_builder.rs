@@ -1129,8 +1129,9 @@ impl<T> OrderBuilder<T> {
 
     /// Set what a what-if order checks; see [`WhatIfType`].
     ///
-    /// Takes effect only on a what-if order, i.e. with `.analyze()`. It does not make
-    /// the order what-if: `.submit()` still places a live order.
+    /// Use it with `.analyze()`, which makes the order what-if. It does not make the order
+    /// what-if itself: with `.submit()`, TWS rejects the order with error 321 and nothing is
+    /// placed.
     ///
     /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later.
     ///
