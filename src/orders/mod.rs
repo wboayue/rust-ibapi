@@ -132,6 +132,9 @@ pub struct Order {
     pub allow_pre_open: bool,
     /// Set to true to ignore the opening auction.
     ///
+    /// TWS may not report it back: for a SMART day limit order placed with `true`, the
+    /// open-order report read `false`.
+    ///
     /// Requires TWS/Gateway server version 216 (`ADDITIONAL_ORDER_PARAMS_1`) or later.
     pub ignore_open_auction: bool,
     /// The order ID of the parent order, used for bracket and auto trailing stop orders.
@@ -378,8 +381,9 @@ pub struct Order {
     pub what_if: bool,
     /// What a [`what_if`](Self::what_if) order checks. See [`WhatIfType`] for available options.
     ///
-    /// Takes effect only when [`what_if`](Self::what_if) is `true`; setting it alone does not
-    /// make the order what-if, so the order is placed live.
+    /// Requires [`what_if`](Self::what_if) to be `true`: TWS rejects an order that sets it
+    /// alone with error 321, and nothing is placed. For a stock what-if, the open-order report
+    /// carried `MarginRequirements` whichever type was sent.
     ///
     /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later.
     pub what_if_type: Option<WhatIfType>,
@@ -465,7 +469,8 @@ pub struct Order {
     /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later.
     pub route_marketable_to_bbo: bool,
     /// Whether to seek a better price than the one submitted with the order. `None` sends
-    /// nothing, leaving TWS's default.
+    /// nothing, leaving TWS's default. Open-order reports carry TWS's value, so an order
+    /// placed with `None` reads back as `Some(false)`.
     ///
     /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later.
     pub seek_price_improvement: Option<bool>,
