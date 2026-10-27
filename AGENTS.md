@@ -65,7 +65,7 @@ precedents. Every rule now lives in a node; nothing is inline.
 
 - **Adding a client method, or creating a domain module** →
   [domain module layout](docs/rules/style/domain-module-layout.md)
-- **Writing a function that takes four or more parameters** →
+- **Writing a public function that takes four or more parameters** →
   [param budget](docs/rules/style/param-budget.md) — clippy's `too_many_arguments` only fires
   at eight, so nothing gates this
 - **Exposing one or two items from an otherwise-private module** →

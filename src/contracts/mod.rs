@@ -500,6 +500,8 @@ impl Contract {
     /// assert_eq!(call.strike, 150.0);
     /// assert_eq!(call.right, Some(OptionRight::Call));
     /// ```
+    // Legacy all-required convenience kept flat; `call()` / `put()` are the builder path
+    // (docs/rules/style/param-budget.md).
     pub fn option(symbol: &str, expiration_date: &str, strike: f64, right: OptionRight) -> Contract {
         Contract {
             symbol: symbol.into(),

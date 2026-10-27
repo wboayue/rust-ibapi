@@ -329,8 +329,7 @@ impl Client {
 }
 
 /// Send a contract-details request with a pre-allocated id. Reached through
-/// [`ContractDetailsBuilder::subscribe`]; the flat arguments are the
-/// builder-fed param-budget exception.
+/// [`ContractDetailsBuilder::subscribe`].
 pub(in crate::contracts) async fn contract_details_stream(
     client: &Client,
     contract: &Contract,
@@ -342,8 +341,7 @@ pub(in crate::contracts) async fn contract_details_stream(
 }
 
 /// Request an underlying's option chain. Reached through
-/// [`OptionChainBuilder::subscribe`]; the flat arguments are the builder-fed
-/// param-budget exception.
+/// [`OptionChainBuilder::subscribe`].
 pub(in crate::contracts) async fn option_chain(
     client: &Client,
     symbol: &str,
