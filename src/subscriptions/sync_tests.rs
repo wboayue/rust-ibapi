@@ -423,6 +423,28 @@ fn drop_after_reconnect_skips_cancel() {
     assert!(unregistered_request(&signals), "route still released");
 }
 
+/// A reset can land between the write and `Subscription::new`; the
+/// subscription takes the request's generation from the route, not the bus's
+/// at construction, so it still skips the cancel.
+#[test]
+fn reset_before_construction_skips_cancel() {
+    let (_sender, receiver) = channel::unbounded::<RoutedItem>();
+    let (signaler, _signals) = channel::unbounded();
+    let internal = SubscriptionBuilder::new()
+        .request_id(RequestId::nth(1))
+        .session(0)
+        .receiver(receiver)
+        .signaler(signaler)
+        .lease(Lease::new())
+        .build();
+    let bus = Arc::new(MessageBusStub::default());
+    bus.start_new_session();
+
+    drop(Subscription::<EndOfStreamItem>::new(bus.clone(), internal, DecoderContext::default()));
+
+    assert!(bus.request_messages().is_empty(), "cancel written to the new session");
+}
+
 // --- cancel releases the route ------------------------------------------
 // The cancel message is optional; unregistering is not, so a handle kept
 // after `cancel()` stops collecting frames.

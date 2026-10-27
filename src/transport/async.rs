@@ -247,9 +247,9 @@ pub trait AsyncMessageBus: Send + Sync {
     fn is_connected(&self) -> bool;
 
     /// Counts sessions: 0 at connect, bumped each time a reconnect resets
-    /// the bus. A subscription compares it with the value at its creation:
-    /// once it differs, the request died with an earlier session and a
-    /// cancel would name an id the current session never saw.
+    /// the bus. A subscription compares it with the generation its request
+    /// was sent in: once they differ, the request died with an earlier
+    /// session and a cancel would name an id the current session never saw.
     fn session_generation(&self) -> u64;
 
     /// The runtime the bus was built on. `Drop` impls spawn their async
@@ -276,6 +276,9 @@ pub struct AsyncInternalSubscription {
     lease: Option<(Lease, RouteKey)>,
     /// The shared-channel ticket, for a shared-channel subscription.
     shared: Option<SharedTicket>,
+    /// The bus session generation the request was sent in; see
+    /// [`AsyncMessageBus::session_generation`].
+    session: u64,
     /// Items this receiver has read, shared with a bounded route
     /// (`registry::RouteBound`) so it can tell how many are unread. `Sender::len()`
     /// can't: it counts values not yet seen by every receiver, and
@@ -302,6 +305,7 @@ impl Clone for AsyncInternalSubscription {
             // no-op while another clone still holds the lease.
             lease: self.lease.clone(),
             shared: self.shared,
+            session: self.session,
             reads: None,
             class: self.class,
         }
@@ -329,6 +333,7 @@ impl AsyncInternalSubscription {
             cleanup_sender: None,
             lease: None,
             shared: None,
+            session: 0,
             reads: None,
             class: ChannelClass::default(),
         }
@@ -342,6 +347,7 @@ impl AsyncInternalSubscription {
             cleanup_sender: Some(cleanup_sender),
             lease: None,
             shared: None,
+            session: 0,
             reads: None,
             class: ChannelClass::default(),
         }
@@ -356,6 +362,12 @@ impl AsyncInternalSubscription {
     /// Mark this a subscription to the shared channel `ticket` names.
     fn shared(mut self, ticket: SharedTicket) -> Self {
         self.shared = Some(ticket);
+        self
+    }
+
+    /// Record the bus session generation the request was sent in.
+    pub(crate) fn in_session(mut self, session: u64) -> Self {
+        self.session = session;
         self
     }
 
@@ -439,6 +451,10 @@ impl AsyncInternalSubscription {
     /// `None` otherwise.
     pub(crate) fn shared_ticket(&self) -> Option<SharedTicket> {
         self.shared
+    }
+
+    pub(crate) fn session(&self) -> u64 {
+        self.session
     }
 
     /// Send the cleanup signal, releasing this handle's lease first.
@@ -1027,6 +1043,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         class: ChannelClass,
         bound: Option<BufferBound>,
     ) -> Result<AsyncInternalSubscription, Error> {
+        // Read before the gate: a reset after this read leaves the
+        // subscription in the old session, which is where its request went.
+        let session = self.session_generation();
         self.ensure_connected()?;
 
         let capacity = bound.map_or(class.capacity(self.channel_capacity), |bound| bound.limit + 1);
@@ -1047,6 +1066,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // sends a second, harmless signal: `release` spares a replacement.
         let subscription = AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, key(id))
+            .in_session(session)
             .class(class);
         let subscription = match reads {
             Some(reads) => subscription.counting_reads(reads),
@@ -1093,6 +1113,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         account: Option<&AccountId>,
         message: Vec<u8>,
     ) -> Result<AsyncInternalSubscription, Error> {
+        // See `open_route`.
+        let session = self.session_generation();
         self.ensure_connected()?;
         self.throttle(&message).await;
 
@@ -1100,6 +1122,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .shared(ticket)
+            .in_session(session)
             .class(ChannelClass::of_shared(message_type)))
     }
 }
@@ -1168,6 +1191,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         let NewTap { receiver, lease, .. } = self.order_taps.subscribe_status(order_id, capacity).map_err(|e| self.ended_reason(e))?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderStatus(order_id))
+            .in_session(self.session_generation())
             .class(ChannelClass::Order))
     }
 
@@ -1176,6 +1200,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         let NewTap { receiver, lease, .. } = self.order_taps.subscribe_updates(capacity).map_err(|e| self.ended_reason(e))?;
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .leased(lease, RouteKey::OrderUpdateStream)
+            .in_session(self.session_generation())
             .class(ChannelClass::OrderStream))
     }
 

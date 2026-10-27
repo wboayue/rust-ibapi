@@ -115,7 +115,7 @@ struct RequestState<T: StreamDecoder<T>> {
     /// The bus's session generation when the request was sent. A reconnect
     /// ends the request at TWS along with the old session, so once the bus
     /// has moved on there is nothing to cancel.
-    session: u64,
+    session_generation: u64,
     /// Set by `cancel()` and `cancel_and_drain`: the cancel has been handled,
     /// so no other path writes it again.
     cancelled: AtomicBool,
@@ -172,7 +172,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             order_id,
             shared: internal.shared_ticket(),
             context,
-            session: message_bus.session_generation(),
+            session_generation: internal.session(),
             message_bus,
             cancelled: AtomicBool::new(false),
             stop: StopSignal::default(),
@@ -687,8 +687,8 @@ impl<T: StreamDecoder<T>> RequestState<T> {
     /// ended (a reconnect since it was sent): the cancel would name a request
     /// TWS already finished.
     fn pending_cancel(&self, id: Option<i32>) -> Option<Vec<u8>> {
-        if self.message_bus.session_generation() != self.session {
-            debug!("subscription outlived its session: cancel skipped");
+        if self.message_bus.session_generation() != self.session_generation {
+            debug!("request {:?} outlived its session: cancel skipped", self.request_id);
             return None;
         }
         if self.request_id.is_some() && self.ended_natively.load(Ordering::Relaxed)

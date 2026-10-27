@@ -779,6 +779,9 @@ impl<S: Stream> TcpMessageBus<S> {
     /// Register `request_id`'s channel, optionally with an unread-item cap,
     /// then write the request.
     fn open_request(&self, request_id: RequestId, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
+        // Read before the gate: a reset after this read leaves the
+        // subscription in the old session, which is where its request went.
+        let session = self.session_generation();
         self.ensure_connected()?;
 
         let (sender, receiver) = channel::unbounded();
@@ -805,6 +808,7 @@ impl<S: Stream> TcpMessageBus<S> {
             .signaler(self.signals_send.clone())
             .lease(lease)
             .request_id(request_id)
+            .session(session)
             .build();
 
         Ok(subscription)
@@ -901,6 +905,8 @@ impl<S: Stream> TcpMessageBus<S> {
     // Registers a subscription of `message_type` and writes its request;
     // `account` for account updates (see `SharedCounts`).
     fn send_shared(&self, message_type: OutgoingMessages, account: Option<&AccountId>, message: &[u8]) -> Result<InternalSubscription, Error> {
+        // See `open_request`.
+        let session = self.session_generation();
         self.ensure_connected()?;
 
         // A queue of its own, registered before the write so no response can
@@ -927,6 +933,7 @@ impl<S: Stream> TcpMessageBus<S> {
             .signaler(self.signals_send.clone())
             .lease(lease)
             .shared(ticket)
+            .session(session)
             .build();
 
         Ok(subscription)
@@ -939,6 +946,8 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn send_order_request(&self, order_id: OrderId, message: &[u8]) -> Result<InternalSubscription, Error> {
+        // See `open_request`.
+        let session = self.session_generation();
         self.ensure_connected()?;
 
         let (sender, receiver) = channel::unbounded();
@@ -960,6 +969,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             .signaler(self.signals_send.clone())
             .lease(lease)
             .order_id(order_id)
+            .session(session)
             .build();
 
         Ok(subscription)
@@ -986,6 +996,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             .signaler(self.signals_send.clone())
             .lease(lease)
             .order_status(order_id)
+            .session(self.session_generation())
             .build())
     }
 
@@ -1000,6 +1011,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             .sender(sender)
             .signaler(self.signals_send.clone())
             .lease(lease)
+            .session(self.session_generation())
             .build())
     }
 

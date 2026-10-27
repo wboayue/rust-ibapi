@@ -206,7 +206,7 @@ impl MessageBusStub {
             self.open_async_senders.lock().unwrap().push(sender.clone());
         }
 
-        AsyncInternalSubscription::new(receiver)
+        AsyncInternalSubscription::new(receiver).in_session(self.session_generation.load(Ordering::Relaxed))
     }
 }
 
@@ -363,7 +363,8 @@ fn mock_request(stub: &MessageBusStub, route: MockRoute, message: &[u8]) -> Inte
     let subscription = SubscriptionBuilder::new()
         .signaler(stub.signals.0.clone())
         .lease(Lease::new())
-        .receiver(receiver);
+        .receiver(receiver)
+        .session(stub.session_generation.load(Ordering::Relaxed));
     match route {
         MockRoute::Request(request_id) => subscription.request_id(request_id),
         MockRoute::Order(order_id) => subscription.order_id(order_id),
