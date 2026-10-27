@@ -7,6 +7,7 @@ use time::OffsetDateTime;
 use time_tz::Tz;
 use tokio::sync::broadcast;
 
+use crate::accounts::common::split_account_list;
 use crate::client::builders::client_builder::async_impl::ClientBuilder;
 use crate::client::builders::client_builder::ClientConfig;
 use crate::connection::{r#async::AsyncConnection, ConnectionMetadata};
@@ -26,6 +27,7 @@ pub struct Client {
     pub(crate) server_version: i32,
     pub(crate) connection_time: Option<OffsetDateTime>,
     pub(crate) time_zone: Option<&'static Tz>,
+    handshake_managed_accounts: Vec<String>,
     pub(crate) message_bus: Arc<dyn AsyncMessageBus>,
 
     client_id: i32,                   // ID of client.
@@ -134,6 +136,7 @@ impl Client {
             server_version: connection_metadata.server_version,
             connection_time: connection_metadata.connection_time,
             time_zone: connection_metadata.time_zone,
+            handshake_managed_accounts: split_account_list(&connection_metadata.managed_accounts),
             message_bus,
             client_id: connection_metadata.client_id,
             id_manager: Arc::new(ClientIdManager::new(connection_metadata.next_order_id)?),
@@ -164,6 +167,8 @@ impl Client {
     /// Returns the gateway's clock reading when the client connected, or
     /// `None` if the zone is unrecognized (see [`time_zone`](Self::time_zone))
     /// or the reading is malformed.
+    ///
+    /// From the initial connection; a reconnect doesn't update it.
     pub fn connection_time(&self) -> Option<OffsetDateTime> {
         self.connection_time
     }
@@ -175,8 +180,33 @@ impl Client {
     /// warning at connect). Map such a name with
     /// [`register_timezone_alias`](crate::register_timezone_alias). See
     /// [Gateway Time Zone](https://github.com/wboayue/rust-ibapi/blob/main/docs/troubleshooting.md#gateway-time-zone).
+    ///
+    /// From the initial connection; a reconnect doesn't update it.
     pub fn time_zone(&self) -> Option<&'static Tz> {
         self.time_zone
+    }
+
+    /// Returns the accounts TWS sent when the client connected, with no round
+    /// trip. Empty if TWS sent none.
+    ///
+    /// From the initial connection; a reconnect doesn't update it. For the
+    /// current list, call [`managed_accounts`](Self::managed_accounts).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     for account in client.handshake_managed_accounts() {
+    ///         println!("account: {account}");
+    ///     }
+    /// }
+    /// ```
+    pub fn handshake_managed_accounts(&self) -> &[String] {
+        &self.handshake_managed_accounts
     }
 
     /// Returns a decoder context for this client

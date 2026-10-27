@@ -45,12 +45,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contract = calls.get(calls.len() / 2).ok_or("no listed strikes")?.contract.clone();
     println!("Exercising 1 {} (contract id {})", contract.local_symbol, contract.contract_id);
 
-    let accounts = client.managed_accounts().await?;
+    // The accounts TWS sent at connect: no round trip needed.
+    let account = client.handshake_managed_accounts().first().ok_or("no managed accounts")?;
 
     let mut events = client
         .exercise_options(&contract)
         .exercise(1)
-        .account(&accounts[0])
+        .account(account)
         .override_natural_action() // exercise even if out of the money
         .submit()
         .await?

@@ -36,6 +36,8 @@ async fn managed_accounts_returns_list() {
 
     let accounts = client.managed_accounts().await.expect("managed_accounts failed");
     assert!(!accounts.is_empty());
+    // The handshake's list is the same wire list, kept from connect.
+    assert_eq!(client.handshake_managed_accounts(), accounts);
 }
 
 #[tokio::test]

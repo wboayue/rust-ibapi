@@ -400,6 +400,9 @@ impl Client {
 
     /// Fetch the list of accounts accessible to the current user.
     ///
+    /// For the list TWS sent at connect, with no round trip, see
+    /// [`handshake_managed_accounts`](Self::handshake_managed_accounts).
+    ///
     /// # Errors
     /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
     ///

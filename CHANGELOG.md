@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Client::handshake_managed_accounts()` (sync and async) returns the accounts TWS sent at connect, with no round trip. It isn't updated on reconnect; `managed_accounts()` still fetches the current list (#1092).
 - `OrderBuilder::relative_limit_combo` and `relative_market_combo` set the `REL + LMT` and `REL + MKT` combo order types, previously reachable only through `.order_type(..)` (#1076).
 
 ### Changed
