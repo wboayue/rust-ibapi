@@ -169,11 +169,21 @@ mod sync_impl {
     use crate::subscriptions::StreamDecoder;
     use crate::Error;
 
-    /// When a request-id one-shot started now must be answered by: the
-    /// client's `one_shot_timeout`, if set. Taken once, before the retry, so
-    /// the bound covers every resend.
+    /// Deadline for a request-id one-shot starting now: `one_shot_timeout`
+    /// from now, if set. Taken once, before the retry, so the bound covers
+    /// every resend.
     pub fn one_shot_deadline(client: &Client) -> Option<Instant> {
         client.one_shot_timeout().map(|timeout| Instant::now() + timeout)
+    }
+
+    /// `Error::Timeout` once `deadline` has passed. Checked before each
+    /// attempt sends: a resend after a reconnect that outlasted the deadline
+    /// would leave TWS a request nobody reads.
+    pub fn check_deadline(deadline: Option<Instant>) -> Result<(), Error> {
+        match deadline {
+            Some(deadline) if Instant::now() >= deadline => Err(Error::Timeout),
+            _ => Ok(()),
+        }
     }
 
     /// One-shot request answered on the shared channel for its message type,
@@ -200,6 +210,7 @@ mod sync_impl {
         let deadline = Instant::now() + client.one_shot_timeout().unwrap_or(super::ONE_SHOT_TIMEOUT);
 
         crate::common::retry::blocking::retry_on_connection_reset(client, || {
+            check_deadline(Some(deadline))?;
             let request = encoder()?;
             let subscription = client.shared_request(message_type).send_raw(request)?;
 
@@ -225,13 +236,15 @@ mod sync_impl {
         let deadline = one_shot_deadline(client);
 
         crate::common::retry::blocking::retry_on_connection_reset(client, || {
+            check_deadline(deadline)?;
             let request_id = client.mint_request_id();
             let request = encoder(request_id.raw())?;
             let subscription = client.send_request(request_id, request)?;
 
             let response = match deadline {
                 None => subscription.next(),
-                // Checked first: a queued frame is returned even past the deadline.
+                // `next_before` returns a queued frame even past the deadline,
+                // so check the clock first.
                 Some(deadline) if Instant::now() >= deadline => return Err(Error::Timeout),
                 Some(deadline) => subscription.next_before(deadline)?,
             };
@@ -245,6 +258,7 @@ mod sync_impl {
         let deadline = one_shot_deadline(client);
 
         crate::common::retry::blocking::retry_on_connection_reset(client, || {
+            check_deadline(deadline)?;
             let builder = client.request();
             let request = encoder(builder.request_id())?;
             let subscription = builder.send::<OneShot<K>>(request)?;
@@ -295,11 +309,21 @@ mod async_impl {
     use crate::subscriptions::StreamDecoder;
     use crate::Error;
 
-    /// When a request-id one-shot started now must be answered by: the
-    /// client's `one_shot_timeout`, if set. Taken once, before the retry, so
-    /// the bound covers every resend.
+    /// Deadline for a request-id one-shot starting now: `one_shot_timeout`
+    /// from now, if set. Taken once, before the retry, so the bound covers
+    /// every resend.
     pub fn one_shot_deadline(client: &Client) -> Option<Instant> {
         client.one_shot_timeout().map(|timeout| Instant::now() + timeout)
+    }
+
+    /// `Error::Timeout` once `deadline` has passed. Checked before each
+    /// attempt sends: a resend after a reconnect that outlasted the deadline
+    /// would leave TWS a request nobody reads.
+    pub fn check_deadline(deadline: Option<Instant>) -> Result<(), Error> {
+        match deadline {
+            Some(deadline) if Instant::now() >= deadline => Err(Error::Timeout),
+            _ => Ok(()),
+        }
     }
 
     /// One-shot request answered on the shared channel for its message type,
@@ -326,6 +350,7 @@ mod async_impl {
         let deadline = Instant::now() + client.one_shot_timeout().unwrap_or(super::ONE_SHOT_TIMEOUT);
 
         crate::common::retry::retry_on_connection_reset(client, || async {
+            check_deadline(Some(deadline))?;
             let request = encoder()?;
             let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
@@ -352,6 +377,7 @@ mod async_impl {
         let deadline = one_shot_deadline(client);
 
         crate::common::retry::retry_on_connection_reset(client, || async {
+            check_deadline(deadline)?;
             let request_id = client.mint_request_id();
             let request = encoder(request_id.raw())?;
             let mut subscription = client.send_request(request_id, request).await?;
@@ -376,6 +402,7 @@ mod async_impl {
         let deadline = one_shot_deadline(client);
 
         crate::common::retry::retry_on_connection_reset(client, || async {
+            check_deadline(deadline)?;
             let builder = client.request();
             let request = encoder(builder.request_id())?;
             let mut subscription = builder.send::<OneShot<K>>(request).await?;

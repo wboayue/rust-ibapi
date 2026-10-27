@@ -261,6 +261,7 @@ pub(crate) fn historical_data(
     let deadline = request_helpers::blocking::one_shot_deadline(client);
 
     retry_on_connection_reset(client, || {
+        request_helpers::blocking::check_deadline(deadline)?;
         let builder = client.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),

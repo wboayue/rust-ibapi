@@ -258,9 +258,11 @@ mod bounded_wait {
 
         #[test]
         fn shared_deadline_spans_resends() {
-            let client = client(reset_then_answered(), SHORT);
+            let bus = reset_then_answered();
+            let client = client(bus.clone(), SHORT);
             let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, slow_first_encoder(), |_| Ok(())).unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
 
         #[test]
@@ -271,9 +273,11 @@ mod bounded_wait {
 
         #[test]
         fn by_request_id_deadline_spans_resends() {
+            let bus = reset_then_answered();
             let slow = slow_first_encoder();
-            let error = one_shot_by_request_id(&client(reset_then_answered(), SHORT), |_| slow(), |_| Ok(())).unwrap_err();
+            let error = one_shot_by_request_id(&client(bus.clone(), SHORT), |_| slow(), |_| Ok(())).unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
     }
 
@@ -333,11 +337,13 @@ mod bounded_wait {
 
         #[tokio::test]
         async fn shared_deadline_spans_resends() {
-            let client = client(reset_then_answered(), SHORT);
+            let bus = reset_then_answered();
+            let client = client(bus.clone(), SHORT);
             let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, slow_first_encoder(), |_| Ok(()))
                 .await
                 .unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
 
         #[tokio::test]
@@ -350,11 +356,13 @@ mod bounded_wait {
 
         #[tokio::test]
         async fn by_request_id_deadline_spans_resends() {
+            let bus = reset_then_answered();
             let slow = slow_first_encoder();
-            let error = one_shot_by_request_id(&client(reset_then_answered(), SHORT), |_| slow(), |_| Ok(()))
+            let error = one_shot_by_request_id(&client(bus.clone(), SHORT), |_| slow(), |_| Ok(()))
                 .await
                 .unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
     }
 }
