@@ -989,6 +989,24 @@ async fn historical_data_dropped_fetch_cancels() {
     assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1));
 }
 
+/// `one_shot_timeout` bounds both reads: bars, then silence, times out
+/// and cancels the request at TWS.
+#[tokio::test]
+async fn historical_data_one_shot_timeout_cancels_between_frames() {
+    let bars = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![bars]).keeping_channels_open());
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3).with_one_shot_timeout(std::time::Duration::from_millis(20));
+
+    let result = client
+        .historical_data(&test_contract(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .fetch()
+        .await;
+
+    assert!(matches!(result, Err(Error::Timeout)), "{result:?}");
+    assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1));
+}
+
 /// The window frame ends the request at TWS: nothing to cancel.
 #[tokio::test]
 async fn historical_data_completed_fetch_sends_no_cancel() {
@@ -1286,7 +1304,7 @@ async fn next_frame_fails_on_lag() {
         crate::subscriptions::DecoderContext::default(),
     );
 
-    match request_helpers::next_frame(&mut subscription).await {
+    match request_helpers::next_frame(&mut subscription, None).await {
         Err(Error::Notice(n)) => assert_eq!(n.code, crate::messages::SUBSCRIPTION_LAG_CODE),
         other => panic!("expected lag error, got {other:?}"),
     }

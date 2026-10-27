@@ -151,8 +151,11 @@ mod retry_wiring {
     }
 }
 
+/// The deadline: `one_shot_timeout` when set, else `ONE_SHOT_TIMEOUT` for
+/// shared one-shots and no bound for request-id ones.
 #[cfg(test)]
 mod bounded_wait {
+    use std::cell::Cell;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -173,132 +176,186 @@ mod bounded_wait {
         Arc::new(MessageBusStub::with_ordered_responses(vec![frame(); frames]).keeping_channels_open())
     }
 
+    /// The first request is reset; the resend is answered at once.
+    fn reset_then_answered() -> Arc<MessageBusStub> {
+        Arc::new(
+            MessageBusStub::with_ordered_responses(vec![frame()])
+                .with_connection_resets(1)
+                .keeping_channels_open(),
+        )
+    }
+
     fn encoder() -> Result<Vec<u8>, Error> {
         Ok(vec![])
     }
 
-    #[cfg(feature = "sync")]
-    #[test]
-    fn sync_one_shot_shared_times_out_without_a_frame() {
-        use crate::client::blocking::Client;
-        use crate::common::request_helpers::blocking::one_shot_shared_within;
-
-        let client = Client::stubbed(silent_stub(0), server_versions::SIZE_RULES);
-        let error = one_shot_shared_within(&client, OutgoingMessages::RequestCurrentTime, SHORT, encoder, |_| Ok(())).unwrap_err();
-        assert!(matches!(error, Error::Timeout), "got {error:?}");
+    /// An encoder whose first call outlasts `SHORT`, so the resend starts
+    /// past a deadline taken before the first attempt.
+    fn slow_first_encoder() -> impl Fn() -> Result<Vec<u8>, Error> {
+        let calls = Cell::new(0);
+        move || {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                std::thread::sleep(SHORT * 2);
+            }
+            Ok(vec![])
+        }
     }
 
-    #[cfg(feature = "sync")]
-    #[test]
-    fn sync_one_shot_shared_matching_reads_past_a_foreign_frame() {
-        use crate::client::blocking::Client;
-        use crate::common::request_helpers::blocking::one_shot_shared_matching_within;
-        use std::cell::Cell;
-
-        let client = Client::stubbed(silent_stub(2), server_versions::SIZE_RULES);
-        let seen = Cell::new(0);
-        let processor = |_: &ResponseMessage| {
+    fn foreign_frames_counter(seen: &Cell<usize>) -> impl Fn(&ResponseMessage) -> Result<Option<()>, Error> + '_ {
+        |_| {
             seen.set(seen.get() + 1);
-            Ok((seen.get() == 2).then_some("second"))
-        };
-        let answer = one_shot_shared_matching_within(&client, OutgoingMessages::RequestCurrentTime, SHORT, encoder, processor).unwrap();
-        assert_eq!(answer, "second");
+            Ok(None)
+        }
     }
 
     #[cfg(feature = "sync")]
-    #[test]
-    fn sync_one_shot_shared_matching_times_out_on_foreign_frames_only() {
+    mod sync {
+        use super::*;
         use crate::client::blocking::Client;
-        use crate::common::request_helpers::blocking::one_shot_shared_matching_within;
+        use crate::common::request_helpers::blocking::{one_shot_by_request_id, one_shot_shared, one_shot_shared_matching};
 
-        let client = Client::stubbed(silent_stub(1), server_versions::SIZE_RULES);
-        let error = one_shot_shared_matching_within(&client, OutgoingMessages::RequestCurrentTime, SHORT, encoder, |_| Ok(None::<()>)).unwrap_err();
-        assert!(matches!(error, Error::Timeout), "got {error:?}");
-    }
+        fn client(bus: Arc<MessageBusStub>, timeout: Duration) -> Client {
+            Client::stubbed(bus, server_versions::SIZE_RULES).with_one_shot_timeout(timeout)
+        }
 
-    #[cfg(feature = "sync")]
-    #[test]
-    fn sync_one_shot_shared_matching_stops_reading_at_the_deadline() {
-        use crate::client::blocking::Client;
-        use crate::common::request_helpers::blocking::one_shot_shared_matching_within;
-        use std::cell::Cell;
+        #[test]
+        fn shared_times_out_without_a_frame() {
+            let error = one_shot_shared(&client(silent_stub(0), SHORT), OutgoingMessages::RequestCurrentTime, encoder, |_| Ok(())).unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
 
-        // Foreign frames already queued: a passed deadline must not read them.
-        let client = Client::stubbed(silent_stub(3), server_versions::SIZE_RULES);
-        let seen = Cell::new(0);
-        let processor = |_: &ResponseMessage| {
-            seen.set(seen.get() + 1);
-            Ok(None::<()>)
-        };
-        let error = one_shot_shared_matching_within(&client, OutgoingMessages::RequestCurrentTime, Duration::ZERO, encoder, processor).unwrap_err();
-        assert!(matches!(error, Error::Timeout), "got {error:?}");
-        assert_eq!(seen.get(), 0);
-    }
+        #[test]
+        fn shared_matching_reads_past_a_foreign_frame() {
+            let seen = Cell::new(0);
+            let processor = |_: &ResponseMessage| {
+                seen.set(seen.get() + 1);
+                Ok((seen.get() == 2).then_some("second"))
+            };
+            let answer = one_shot_shared_matching(&client(silent_stub(2), SHORT), OutgoingMessages::RequestCurrentTime, encoder, processor).unwrap();
+            assert_eq!(answer, "second");
+        }
 
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn async_one_shot_shared_times_out_without_a_frame() {
-        use crate::common::request_helpers::one_shot_shared_within;
-        use crate::Client;
+        #[test]
+        fn shared_matching_times_out_on_foreign_frames_only() {
+            let seen = Cell::new(0);
+            let processor = foreign_frames_counter(&seen);
+            let error =
+                one_shot_shared_matching(&client(silent_stub(1), SHORT), OutgoingMessages::RequestCurrentTime, encoder, processor).unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
 
-        let client = Client::stubbed(silent_stub(0), server_versions::SIZE_RULES);
-        let error = one_shot_shared_within(&client, OutgoingMessages::RequestCurrentTime, SHORT, encoder, |_| Ok(()))
-            .await
-            .unwrap_err();
-        assert!(matches!(error, Error::Timeout), "got {error:?}");
-    }
+        #[test]
+        fn shared_matching_stops_reading_at_the_deadline() {
+            // Foreign frames already queued: a passed deadline must not read them.
+            let seen = Cell::new(0);
+            let processor = foreign_frames_counter(&seen);
+            let client = client(silent_stub(3), Duration::ZERO);
+            let error = one_shot_shared_matching(&client, OutgoingMessages::RequestCurrentTime, encoder, processor).unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert_eq!(seen.get(), 0);
+        }
 
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn async_one_shot_shared_matching_reads_past_a_foreign_frame() {
-        use crate::common::request_helpers::one_shot_shared_matching_within;
-        use crate::Client;
-        use std::cell::Cell;
+        #[test]
+        fn shared_deadline_spans_resends() {
+            let client = client(reset_then_answered(), SHORT);
+            let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, slow_first_encoder(), |_| Ok(())).unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
 
-        let client = Client::stubbed(silent_stub(2), server_versions::SIZE_RULES);
-        let seen = Cell::new(0);
-        let processor = |_: &ResponseMessage| {
-            seen.set(seen.get() + 1);
-            Ok((seen.get() == 2).then_some("second"))
-        };
-        let answer = one_shot_shared_matching_within(&client, OutgoingMessages::RequestCurrentTime, SHORT, encoder, processor)
-            .await
-            .unwrap();
-        assert_eq!(answer, "second");
-    }
+        #[test]
+        fn by_request_id_times_out_without_a_frame() {
+            let error = one_shot_by_request_id(&client(silent_stub(0), SHORT), |_| encoder(), |_| Ok(())).unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
 
-    #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn async_one_shot_shared_matching_times_out_on_foreign_frames_only() {
-        use crate::common::request_helpers::one_shot_shared_matching_within;
-        use crate::Client;
-
-        let client = Client::stubbed(silent_stub(1), server_versions::SIZE_RULES);
-        let error = one_shot_shared_matching_within(&client, OutgoingMessages::RequestCurrentTime, SHORT, encoder, |_| Ok(None::<()>))
-            .await
-            .unwrap_err();
-        assert!(matches!(error, Error::Timeout), "got {error:?}");
+        #[test]
+        fn by_request_id_deadline_spans_resends() {
+            let slow = slow_first_encoder();
+            let error = one_shot_by_request_id(&client(reset_then_answered(), SHORT), |_| slow(), |_| Ok(())).unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
     }
 
     #[cfg(feature = "async")]
-    #[tokio::test]
-    async fn async_one_shot_shared_matching_stops_reading_at_the_deadline() {
-        use crate::common::request_helpers::one_shot_shared_matching_within;
+    mod r#async {
+        use super::*;
+        use crate::common::request_helpers::{one_shot_by_request_id, one_shot_shared, one_shot_shared_matching};
         use crate::Client;
-        use std::cell::Cell;
 
-        // Foreign frames already queued: a passed deadline must not read them.
-        let client = Client::stubbed(silent_stub(3), server_versions::SIZE_RULES);
-        let seen = Cell::new(0);
-        let processor = |_: &ResponseMessage| {
-            seen.set(seen.get() + 1);
-            Ok(None::<()>)
-        };
-        let error = one_shot_shared_matching_within(&client, OutgoingMessages::RequestCurrentTime, Duration::ZERO, encoder, processor)
-            .await
-            .unwrap_err();
-        assert!(matches!(error, Error::Timeout), "got {error:?}");
-        assert_eq!(seen.get(), 0);
+        fn client(bus: Arc<MessageBusStub>, timeout: Duration) -> Client {
+            Client::stubbed(bus, server_versions::SIZE_RULES).with_one_shot_timeout(timeout)
+        }
+
+        #[tokio::test]
+        async fn shared_times_out_without_a_frame() {
+            let error = one_shot_shared(&client(silent_stub(0), SHORT), OutgoingMessages::RequestCurrentTime, encoder, |_| Ok(()))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
+
+        #[tokio::test]
+        async fn shared_matching_reads_past_a_foreign_frame() {
+            let seen = Cell::new(0);
+            let processor = |_: &ResponseMessage| {
+                seen.set(seen.get() + 1);
+                Ok((seen.get() == 2).then_some("second"))
+            };
+            let answer = one_shot_shared_matching(&client(silent_stub(2), SHORT), OutgoingMessages::RequestCurrentTime, encoder, processor)
+                .await
+                .unwrap();
+            assert_eq!(answer, "second");
+        }
+
+        #[tokio::test]
+        async fn shared_matching_times_out_on_foreign_frames_only() {
+            let seen = Cell::new(0);
+            let processor = foreign_frames_counter(&seen);
+            let error = one_shot_shared_matching(&client(silent_stub(1), SHORT), OutgoingMessages::RequestCurrentTime, encoder, processor)
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
+
+        #[tokio::test]
+        async fn shared_matching_stops_reading_at_the_deadline() {
+            // Foreign frames already queued: a passed deadline must not read them.
+            let seen = Cell::new(0);
+            let processor = foreign_frames_counter(&seen);
+            let client = client(silent_stub(3), Duration::ZERO);
+            let error = one_shot_shared_matching(&client, OutgoingMessages::RequestCurrentTime, encoder, processor)
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert_eq!(seen.get(), 0);
+        }
+
+        #[tokio::test]
+        async fn shared_deadline_spans_resends() {
+            let client = client(reset_then_answered(), SHORT);
+            let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, slow_first_encoder(), |_| Ok(()))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
+
+        #[tokio::test]
+        async fn by_request_id_times_out_without_a_frame() {
+            let error = one_shot_by_request_id(&client(silent_stub(0), SHORT), |_| encoder(), |_| Ok(()))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
+
+        #[tokio::test]
+        async fn by_request_id_deadline_spans_resends() {
+            let slow = slow_first_encoder();
+            let error = one_shot_by_request_id(&client(reset_then_answered(), SHORT), |_| slow(), |_| Ok(()))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, Error::Timeout), "got {error:?}");
+        }
     }
 }
 
@@ -492,6 +549,43 @@ mod cancelling {
         let result = tokio::time::timeout(std::time::Duration::from_millis(20), pending).await;
         assert!(result.is_err(), "no answer, so the wait times out");
 
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
+        while cancels(&bus) == 0 && tokio::time::Instant::now() < deadline {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(cancels(&bus), 1);
+    }
+
+    /// `one_shot_timeout` ends the wait, and the drop cancels at TWS.
+    #[cfg(feature = "sync")]
+    #[test]
+    fn sync_one_shot_timeout_cancels() {
+        use crate::client::blocking::Client;
+        use crate::common::request_helpers::blocking::one_shot_cancelling;
+
+        let bus = Arc::new(MessageBusStub::default().keeping_channels_open());
+        let client =
+            Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3).with_one_shot_timeout(std::time::Duration::from_millis(20));
+
+        let error = one_shot_cancelling::<Answered>(&client, |_| Ok(REQUEST.to_vec())).unwrap_err();
+        assert!(matches!(error, Error::Timeout), "got {error:?}");
+        assert_eq!(cancels(&bus), 1);
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_one_shot_timeout_cancels() {
+        use crate::common::request_helpers::one_shot_cancelling;
+        use crate::Client;
+
+        let bus = Arc::new(MessageBusStub::default().keeping_channels_open());
+        let client =
+            Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3).with_one_shot_timeout(std::time::Duration::from_millis(20));
+
+        let error = one_shot_cancelling::<Answered>(&client, |_| Ok(REQUEST.to_vec())).await.unwrap_err();
+        assert!(matches!(error, Error::Timeout), "got {error:?}");
+
+        // Drop spawns its cancel; let it run.
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
         while cancels(&bus) == 0 && tokio::time::Instant::now() < deadline {
             tokio::task::yield_now().await;

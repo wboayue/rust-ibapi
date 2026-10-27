@@ -336,6 +336,8 @@ fn main() {
 
 Any `Subscription<T>` can also be collected without a loop: `collect_for(timeout)` returns whatever arrived in time, and `collect_until(timeout, stop)` returns early once the `stop` predicate accepts the items collected so far. For requests that end, such as contract details, `collect_to_end_within(timeout)` collects the whole result or fails with `Error::Timeout`.
 
+Requests that return a value rather than a subscription, such as `historical_data(..).fetch()` or `head_timestamp`, are bounded client-wide instead: set `Client::builder().one_shot_timeout(duration)`, and such a request that TWS hasn't answered in time fails with `Error::Timeout`.
+
 Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/subscriptions/struct.Subscription.html) for more details.
 
 ### Placing Orders

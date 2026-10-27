@@ -1483,6 +1483,23 @@ fn historical_data_local_error_cancels() {
     assert_eq!(historical_requests_and_cancels(&bus), (1, 1));
 }
 
+/// `one_shot_timeout` bounds both reads: bars, then silence, times out
+/// and cancels the request at TWS.
+#[test]
+fn historical_data_one_shot_timeout_cancels_between_frames() {
+    let bars = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![bars]).keeping_channels_open());
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3).with_one_shot_timeout(std::time::Duration::from_millis(20));
+
+    let result = client
+        .historical_data(&Contract::stock("MSFT").build(), BarSize::Day)
+        .duration(Duration::seconds(86_400))
+        .fetch();
+
+    assert!(matches!(result, Err(Error::Timeout)), "{result:?}");
+    assert_eq!(historical_requests_and_cancels(&bus), (1, 1));
+}
+
 /// An empty result is valid when the broker explicitly completes the request.
 #[test]
 fn historical_data_requires_end_accepts_completed_empty_batch() {

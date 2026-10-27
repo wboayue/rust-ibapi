@@ -9,7 +9,7 @@ triggers:
   - wondering whether a one-shot should retry
   - adding a decode_*_proto sibling for a one-shot response
   - adding a one-shot whose request TWS can cancel
-symbols: [expect_proto, ProtoPayload, one_shot_shared, one_shot_shared_matching, ONE_SHOT_TIMEOUT, one_shot_by_request_id, one_shot_cancelling, CancellableOneShot, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset]
+symbols: [expect_proto, ProtoPayload, one_shot_shared, one_shot_shared_matching, ONE_SHOT_TIMEOUT, one_shot_deadline, next_frame, one_shot_by_request_id, one_shot_cancelling, CancellableOneShot, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset]
 related: [proto-only-decoding, proto-aware-accessors, fixture-builders]
 precedents: ["#736", "#738", "#740", "#741", "#745", "#749", "#1107"]
 memory: [project_protobuf_only, feedback_request_id_index_registration]
@@ -51,7 +51,11 @@ The ten sites where "TWS sent nothing" is a legitimate empty answer chain
 `.or_else(empty_on_end_of_stream)`.
 
 A shared one-shot waits at most `ONE_SHOT_TIMEOUT` for its frame and then fails with
-`Error::Timeout`: the frame carries no request id, so nothing else would end the wait. Every
+`Error::Timeout`: the frame carries no request id, so nothing else would end the wait. A
+request-id one-shot waits without a limit. `ClientBuilder::one_shot_timeout` replaces both
+bounds. The helpers take the deadline once, outside `retry_on_connection_reset`, so it bounds
+the whole call; a helper that reads more than once (the historical-data bars, then its window)
+takes it from `one_shot_deadline` and passes it to every `next_frame`. Every
 live subscription of a type receives every frame of that type, so a shared one-shot whose
 frames can belong to a concurrent caller goes through `one_shot_shared_matching`, whose
 processor answers `Ok(None)` for another caller's frame and reads on. `request_fa` (one

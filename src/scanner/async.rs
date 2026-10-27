@@ -13,7 +13,7 @@ impl Client {
     /// Requests an XML list of scanner parameters valid in TWS.
     ///
     /// # Errors
-    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds.
+    /// [`Error::Timeout`] if TWS sends no answer within 30 seconds, or within [`one_shot_timeout`](crate::ClientBuilder::one_shot_timeout) when set.
     ///
     /// # Examples
     ///

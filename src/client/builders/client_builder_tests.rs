@@ -66,6 +66,28 @@ fn validate_rejects_zero_rate_limit() {
     assert_invalid_argument(state.validate().err(), "rate_limiter");
 }
 
+#[test]
+fn validate_passes_one_shot_timeout_through() {
+    assert!(
+        connectable().validate().expect("validate").one_shot_timeout.is_none(),
+        "unbounded by default"
+    );
+
+    let mut state = connectable();
+    state.one_shot_timeout = Some(std::time::Duration::from_secs(60));
+    assert_eq!(
+        state.validate().expect("validate").one_shot_timeout,
+        Some(std::time::Duration::from_secs(60))
+    );
+}
+
+#[test]
+fn validate_rejects_zero_one_shot_timeout() {
+    let mut state = connectable();
+    state.one_shot_timeout = Some(std::time::Duration::ZERO);
+    assert_invalid_argument(state.validate().err(), "one_shot_timeout");
+}
+
 #[cfg(feature = "sync")]
 mod sync_tests {
     use super::super::sync_impl::ClientBuilder;
@@ -104,6 +126,11 @@ mod sync_tests {
         assert!(ClientBuilder::default().state.rate_limiter.is_none());
         let builder = ClientBuilder::default().rate_limiter(crate::RateLimiter::per_second(7));
         assert_eq!(builder.state.rate_limiter.map(|l| l.messages_per_second()), Some(7));
+    }
+    #[test]
+    fn one_shot_timeout_configurator_sets_state() {
+        let builder = ClientBuilder::default().one_shot_timeout(std::time::Duration::from_secs(5));
+        assert_eq!(builder.state.one_shot_timeout, Some(std::time::Duration::from_secs(5)));
     }
 }
 
@@ -158,5 +185,10 @@ mod async_tests {
         assert!(ClientBuilder::default().state.rate_limiter.is_none());
         let builder = ClientBuilder::default().rate_limiter(crate::RateLimiter::per_second(7));
         assert_eq!(builder.state.rate_limiter.map(|l| l.messages_per_second()), Some(7));
+    }
+    #[test]
+    fn one_shot_timeout_configurator_sets_state() {
+        let builder = ClientBuilder::default().one_shot_timeout(std::time::Duration::from_secs(5));
+        assert_eq!(builder.state.one_shot_timeout, Some(std::time::Duration::from_secs(5)));
     }
 }
