@@ -6,35 +6,13 @@
 use crate::common::error_helpers;
 use crate::common::request_helpers::CancellableOneShot;
 use crate::contracts::*;
-use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
 use super::decoders;
 use super::encoders;
-
-impl StreamDecoder<OptionComputation> for OptionComputation {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickOptionComputation];
-
-    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::TickOptionComputation => decoders::decode_tick_option_computation(message),
-            _ => Err(Error::unexpected_response(message)),
-        }
-    }
-
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        let request_id = error_helpers::require_request_id_for(request_id, "cancel option calculations")?;
-        match context.and_then(|c| c.request_type) {
-            Some(OutgoingMessages::ReqCalcImpliedVolat) => encoders::encode_cancel_implied_volatility(request_id),
-            Some(OutgoingMessages::ReqCalcOptionPrice) => encoders::encode_cancel_option_price(request_id),
-            other => Err(Error::InvalidArgument(format!(
-                "Unsupported request message type option computation cancel: {other:?}"
-            ))),
-        }
-    }
-}
 
 /// The request behind `calculate_option_price`.
 pub(crate) enum OptionPriceRequest {}

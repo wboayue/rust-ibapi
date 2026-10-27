@@ -26,9 +26,15 @@ fn decode_wsh_event_data_proto_works() {
 
 #[test]
 fn decode_wsh_metadata_rejects_text_framing() {
+    use crate::common::request_helpers::OneShot;
+    use crate::subscriptions::{DecoderContext, StreamDecoder};
+    use crate::wsh::common::stream_decoders::WshMetadataRequest;
+
     // Text-framed arrival at a proto-only decoder must surface
     // UnexpectedWireFormat (docs/rules/wire/proto-only-decoding.md).
-    assert_rejects_text_framing(IncomingMessages::WshMetaData, "104\09000\0{\"hi\":1}\0", decode_wsh_metadata);
+    assert_rejects_text_framing(IncomingMessages::WshMetaData, "104\09000\0{\"hi\":1}\0", |message| {
+        OneShot::<WshMetadataRequest>::decode(&DecoderContext::default(), message).map(OneShot::into_inner)
+    });
 }
 
 #[test]

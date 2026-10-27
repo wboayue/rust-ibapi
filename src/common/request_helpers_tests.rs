@@ -373,13 +373,45 @@ mod cancelling {
         bus.request_messages().iter().filter(|m| m.as_slice() == CANCEL).count()
     }
 
-    /// (label, responses, decodes, expect Ok, cancels written)
-    fn cases() -> Vec<(&'static str, Vec<ResponseMessage>, bool, bool, usize)> {
+    struct Case {
+        label: &'static str,
+        responses: Vec<ResponseMessage>,
+        /// Whether the answer decodes (`Answered`) or fails to (`Undecodable`).
+        decodes: bool,
+        ok: bool,
+        cancels: usize,
+    }
+
+    fn cases() -> Vec<Case> {
         vec![
-            ("answered", vec![answer()], true, true, 0),
-            ("TWS error ends the request", vec![tws_error()], true, false, 0),
-            ("closed before the answer", vec![], true, false, 1),
-            ("answer fails to decode", vec![answer()], false, false, 1),
+            Case {
+                label: "answered",
+                responses: vec![answer()],
+                decodes: true,
+                ok: true,
+                cancels: 0,
+            },
+            Case {
+                label: "TWS error ends the request",
+                responses: vec![tws_error()],
+                decodes: true,
+                ok: false,
+                cancels: 0,
+            },
+            Case {
+                label: "closed before the answer",
+                responses: vec![],
+                decodes: true,
+                ok: false,
+                cancels: 1,
+            },
+            Case {
+                label: "answer fails to decode",
+                responses: vec![answer()],
+                decodes: false,
+                ok: false,
+                cancels: 1,
+            },
         ]
     }
 
@@ -389,7 +421,14 @@ mod cancelling {
         use crate::client::blocking::Client;
         use crate::common::request_helpers::blocking::one_shot_cancelling;
 
-        for (label, responses, decodes, ok, expected_cancels) in cases() {
+        for Case {
+            label,
+            responses,
+            decodes,
+            ok,
+            cancels: expected_cancels,
+        } in cases()
+        {
             let bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
             let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
             let encoder = |_| Ok(REQUEST.to_vec());
@@ -412,7 +451,14 @@ mod cancelling {
         use crate::common::request_helpers::one_shot_cancelling;
         use crate::Client;
 
-        for (label, responses, decodes, ok, expected_cancels) in cases() {
+        for Case {
+            label,
+            responses,
+            decodes,
+            ok,
+            cancels: expected_cancels,
+        } in cases()
+        {
             let bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
             let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
             let encoder = |_| Ok(REQUEST.to_vec());

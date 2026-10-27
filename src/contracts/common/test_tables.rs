@@ -85,9 +85,8 @@ pub enum StreamDecoderResult {
 /// Test case for cancel message generation
 pub struct CancelMessageTestCase {
     pub name: &'static str,
-    pub decoder_type: &'static str,
+    pub cancel: fn(Option<i32>) -> Result<Vec<u8>, crate::Error>,
     pub request_id: Option<i32>,
-    pub request_type: Option<OutgoingMessages>,
     pub expected_msg_id: Result<i32, &'static str>,
 }
 
@@ -723,43 +722,31 @@ pub fn stream_decoder_test_cases() -> Vec<StreamDecoderTestCase> {
     ]
 }
 
-/// Test cases for cancel message generation
+/// Test cases for cancel message generation: the option one-shots' cancels,
+/// as `OneShot` builds them when dropped before the answer.
 pub fn cancel_message_test_cases() -> Vec<CancelMessageTestCase> {
+    use crate::common::request_helpers::OneShot;
+    use crate::contracts::common::stream_decoders::{ImpliedVolatilityRequest, OptionPriceRequest};
+    use crate::subscriptions::StreamDecoder;
+
     vec![
         CancelMessageTestCase {
             name: "cancel implied volatility calculation",
-            decoder_type: "OptionComputation",
+            cancel: |id| OneShot::<ImpliedVolatilityRequest>::cancel_message(0, id, None),
             request_id: Some(9000),
-            request_type: Some(OutgoingMessages::ReqCalcImpliedVolat),
             expected_msg_id: Ok(OutgoingMessages::CancelImpliedVolatility as i32 + 200),
         },
         CancelMessageTestCase {
             name: "cancel option price calculation",
-            decoder_type: "OptionComputation",
+            cancel: |id| OneShot::<OptionPriceRequest>::cancel_message(0, id, None),
             request_id: Some(9001),
-            request_type: Some(OutgoingMessages::ReqCalcOptionPrice),
             expected_msg_id: Ok(OutgoingMessages::CancelOptionPrice as i32 + 200),
         },
         CancelMessageTestCase {
             name: "cancel option computation without request id",
-            decoder_type: "OptionComputation",
+            cancel: |id| OneShot::<OptionPriceRequest>::cancel_message(0, id, None),
             request_id: None,
-            request_type: Some(OutgoingMessages::ReqCalcOptionPrice),
-            expected_msg_id: Err("Request ID required to cancel option calculations"),
-        },
-        CancelMessageTestCase {
-            name: "cancel option computation without request type",
-            decoder_type: "OptionComputation",
-            request_id: Some(9002),
-            request_type: None,
-            expected_msg_id: Err("Unsupported request message type option computation cancel: None"),
-        },
-        CancelMessageTestCase {
-            name: "cancel option chain - not supported",
-            decoder_type: "OptionChain",
-            request_id: Some(9003),
-            request_type: None,
-            expected_msg_id: Err("cancel not implemented"),
+            expected_msg_id: Err("Request ID required to cancel one-shot request"),
         },
     ]
 }

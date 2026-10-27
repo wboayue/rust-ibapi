@@ -156,14 +156,14 @@ fn check_tick<T: TickDecoder<T>>(roster: &mut Roster) {
 /// kept honest by [`decoder_roster_is_complete`].
 fn check_all() -> Roster {
     use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
-    use crate::contracts::{ContractDetails, OptionChain, OptionComputation};
+    use crate::contracts::{ContractDetails, OptionChain};
     use crate::display_groups::DisplayGroupUpdate;
     use crate::market_data::historical::{HistoricalBarUpdate, HistoricalDataFrame, TickBidAsk, TickLast, TickMidpoint};
     use crate::market_data::realtime::{Bar, BidAsk, MarketDepths, MidPoint, TickTypes, Trade};
     use crate::news::{NewsArticle, NewsBulletin};
     use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderStatus, OrderUpdate, Orders, PlaceOrder};
     use crate::scanner::ScannerData;
-    use crate::wsh::{WshEventData, WshMetadata};
+    use crate::wsh::WshEventData;
 
     let mut roster = Roster::default();
 
@@ -176,7 +176,6 @@ fn check_all() -> Roster {
     check_stream::<PositionUpdateMulti>(&mut roster);
     check_stream::<ContractDetails>(&mut roster);
     check_stream::<OptionChain>(&mut roster);
-    check_stream::<OptionComputation>(&mut roster);
     check_stream::<DisplayGroupUpdate>(&mut roster);
     check_stream::<HistoricalBarUpdate>(&mut roster);
     check_stream::<HistoricalDataFrame>(&mut roster);
@@ -197,7 +196,6 @@ fn check_all() -> Roster {
     check_stream::<PlaceOrder>(&mut roster);
     check_stream::<Vec<ScannerData>>(&mut roster);
     check_stream::<WshEventData>(&mut roster);
-    check_stream::<WshMetadata>(&mut roster);
 
     check_tick::<TickBidAsk>(&mut roster);
     check_tick::<TickLast>(&mut roster);

@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::request_helpers::OneShot;
 use crate::common::test_utils::helpers::{assert_request, proto_response, TEST_REQ_ID_FIRST};
 use crate::messages::IncomingMessages;
 use crate::stubs::MessageBusStub;
@@ -8,6 +9,7 @@ use crate::testdata::builders::wsh::{
     wsh_metadata_response,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
+use crate::wsh::common::stream_decoders::WshMetadataRequest;
 use crate::wsh::common::test_data::{self, json_responses};
 use std::sync::Arc;
 
@@ -245,7 +247,7 @@ fn subscription_integration_table() {
 fn data_stream_cancel_message() {
     let request_id = test_data::REQUEST_ID_METADATA;
 
-    let metadata_cancel = WshMetadata::cancel_message(0, Some(request_id), None).unwrap();
+    let metadata_cancel = OneShot::<WshMetadataRequest>::cancel_message(0, Some(request_id), None).unwrap();
     let metadata_expected = cancel_wsh_metadata_request().request_id(request_id);
     use crate::testdata::builders::RequestEncoder;
     assert_eq!(metadata_cancel, metadata_expected.encode_request());
@@ -262,7 +264,7 @@ fn wsh_metadata_decode_table() {
 
     for test_case in WSH_METADATA_DECODE_TESTS {
         let message = test_case.metadata_message();
-        let result = WshMetadata::decode(&DecoderContext::default(), &message);
+        let result = OneShot::<WshMetadataRequest>::decode(&DecoderContext::default(), &message).map(OneShot::into_inner);
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         assert_eq!(result.unwrap().data_json, test_case.data_json, "Test '{}' json mismatch", test_case.name);

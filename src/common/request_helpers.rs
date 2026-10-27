@@ -124,6 +124,12 @@ pub(crate) trait CancellableOneShot: 'static {
 /// the one `decode` arm both come from `K::Proto`, so they cannot disagree.
 pub(crate) struct OneShot<K: CancellableOneShot>(K::Output);
 
+impl<K: CancellableOneShot> OneShot<K> {
+    pub(crate) fn into_inner(self) -> K::Output {
+        self.0
+    }
+}
+
 impl<K: CancellableOneShot> StreamDecoder<OneShot<K>> for OneShot<K> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[K::Proto::MESSAGE_ID];
 
@@ -247,7 +253,7 @@ mod sync_impl {
             let request = encoder(builder.request_id())?;
             let subscription = builder.send::<OneShot<K>>(request)?;
 
-            next_frame(&subscription).map(|answer| answer.0)
+            next_frame(&subscription).map(OneShot::into_inner)
         })
     }
 
@@ -368,7 +374,7 @@ mod async_impl {
             let request = encoder(builder.request_id())?;
             let mut subscription = builder.send::<OneShot<K>>(request).await?;
 
-            next_frame(&mut subscription).await.map(|answer| answer.0)
+            next_frame(&mut subscription).await.map(OneShot::into_inner)
         })
         .await
     }
