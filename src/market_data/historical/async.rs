@@ -339,8 +339,8 @@ pub(crate) async fn historical_data_stream(
 
 // pub(crate) internal plumbing called from `HistoricalTicksBuilder`; the
 // public API is already a builder, so flat args here are the deliberate
-// seam between the typed builder and the wire encoder (internal, so outside
-// docs/rules/style/param-budget.md).
+// seam between the typed builder and the wire encoder. Internal, so the param
+// budget doesn't apply; the allow is for clippy's 8-arg lint.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn historical_ticks<T: TickDecoder<T>>(
     client: &Client,

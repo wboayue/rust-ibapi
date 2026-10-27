@@ -16,8 +16,8 @@ memory: [feedback_rule19_builder_fed_helpers_exception, feedback_magic_none_spli
 
 Three parameters is the budget for the **public API** — anything rustdoc shows. The receiver
 does not count — `fn foo(&self, a, b, c)` is at the limit, `fn foo(&self, a, b, c, d)` is over
-it. `pub(crate)` and private functions are out of scope and need no annotation at four to seven
-arguments.
+it. Everything else (`pub(crate)`, `pub(in …)`, private) is out of scope and needs no
+annotation at four to seven arguments.
 
 Over the budget, pick by what the arguments *are*:
 
