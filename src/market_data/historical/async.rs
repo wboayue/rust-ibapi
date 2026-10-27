@@ -13,7 +13,7 @@ use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto}
 use crate::common::retry::retry_on_connection_reset;
 use crate::contracts::Contract;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::common::{filter_notice, SubscriptionItem};
+use crate::subscriptions::common::{filter_notice, lag_as_error, SubscriptionItem};
 use crate::subscriptions::log_cancel_error;
 use crate::subscriptions::r#async::Subscription;
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -314,11 +314,12 @@ pub(crate) async fn historical_data(
     .await
 }
 
-/// The next frame of a one-shot request, skipping notices.
+/// The next frame of a one-shot request, skipping notices. A broadcast lag
+/// fails the request: the frame it evicted can't be read.
 async fn next_frame(subscription: &mut Subscription<HistoricalDataFrame>) -> Result<HistoricalDataFrame, Error> {
     loop {
         let item = subscription.next().await.ok_or(Error::UnexpectedEndOfStream)?;
-        if let Some(frame) = filter_notice(item) {
+        if let Some(frame) = filter_notice(lag_as_error(item)) {
             return frame;
         }
     }

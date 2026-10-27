@@ -5,7 +5,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::errors::Error;
-use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage, SUBSCRIPTION_LAG_CODE};
 
 /// An item yielded by a [`Subscription`](crate::subscriptions::Subscription).
 ///
@@ -79,6 +79,20 @@ pub(crate) fn filter_notice<T>(item: Result<SubscriptionItem<T>, Error>) -> Opti
     }
 }
 
+/// Turns a broadcast-lag notice ([`SUBSCRIPTION_LAG_CODE`]) into
+/// `Err(Error::Notice)`; passes everything else through unchanged.
+///
+/// For readers that assemble a complete result from several frames: the
+/// evicted frames can't be recovered, so a result read past the gap would be
+/// missing rows. Streams keep the notice non-terminal. Async only in practice
+/// — the sync transport never lags.
+pub(crate) fn lag_as_error<T>(item: Result<SubscriptionItem<T>, Error>) -> Result<SubscriptionItem<T>, Error> {
+    match item {
+        Ok(SubscriptionItem::Notice(notice)) if notice.code == SUBSCRIPTION_LAG_CODE => Err(Error::Notice(notice)),
+        item => item,
+    }
+}
+
 /// Why a collect loop stopped.
 #[derive(Debug)]
 pub(crate) enum CollectStop {
@@ -129,13 +143,15 @@ pub(crate) enum Bound<I> {
 
 /// Applies one item to `rows`. Returns `Some` when collection ends: on a
 /// terminal error, a snapshot-end sentinel (not appended), or once `stop`
-/// fires on the rows (the triggering row is appended). Notices are logged.
+/// fires on the rows (the triggering row is appended). Notices are logged,
+/// except a broadcast-lag notice, which is terminal ([`lag_as_error`]): the
+/// rows would have a gap.
 pub(crate) fn collect_step<T: StreamDecoder<T>>(
     rows: &mut Vec<T>,
     item: Result<SubscriptionItem<T>, Error>,
     stop: &mut impl FnMut(&[T]) -> bool,
 ) -> Option<CollectStop> {
-    match filter_notice(item)? {
+    match filter_notice(lag_as_error(item))? {
         Ok(value) if value.is_snapshot_end() => Some(CollectStop::Stopped),
         Ok(value) => {
             rows.push(value);

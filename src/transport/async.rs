@@ -401,7 +401,11 @@ impl AsyncInternalSubscription {
         loop {
             let item = std::future::poll_fn(|cx| self.poll_next_routed(cx)).await?;
             // A lag notice maps to `None` here (`into_legacy` drops notices);
-            // its `warn!` already fired inside `poll_next_routed`.
+            // its `warn!` already fired inside `poll_next_routed`. Only
+            // single-frame one-shots read through here: a request-id channel
+            // holding one frame can't lag, and a shared one-shot whose frame
+            // was evicted times out. Multi-frame collectors read through
+            // `Subscription`, where a lag fails the collect (#1090).
             if let Some(legacy) = item.into_legacy() {
                 return Some(legacy);
             }

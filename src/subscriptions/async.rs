@@ -210,7 +210,8 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     /// or a terminal error occurs. Notices are filtered (logged at `warn!`); the
     /// snapshot-end sentinel is not included in the returned `Vec`. On a terminal
     /// error the items collected so far are returned (the error is logged at
-    /// `warn!`).
+    /// `warn!`). A broadcast lag ([`SUBSCRIPTION_LAG_CODE`](crate::SUBSCRIPTION_LAG_CODE))
+    /// counts as one: collection stops at the gap, so the rows have no hole.
     ///
     /// This is the one-shot snapshot terminal: combined with
     /// [`MarketDataBuilder::snapshot`](crate::market_data::realtime::MarketDataBuilder::snapshot),
@@ -288,6 +289,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     /// |---|---|
     /// | End marker (or snapshot end) | `Ok(rows)` |
     /// | Terminal error, such as a TWS rejection ([`Error::Notice`]) | that error |
+    /// | Consumer fell behind and frames were dropped | [`Error::Notice`] with [`SUBSCRIPTION_LAG_CODE`](crate::SUBSCRIPTION_LAG_CODE) |
     /// | Stream closed without the end marker | [`Error::UnexpectedEndOfStream`] |
     /// | `timeout` passed | [`Error::Timeout`]; rows read so far are dropped |
     ///
@@ -345,6 +347,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     /// | `quiet` passed after a row | `Some(Ok(rows))` |
     /// | Stream ended | `Some(Ok(rows))` if any were read, else `None` |
     /// | Terminal error | `Some(Err(_))`; rows of the partial batch are dropped |
+    /// | Consumer fell behind and frames were dropped | `Some(Err(`[`Error::Notice`]`))` with [`SUBSCRIPTION_LAG_CODE`](crate::SUBSCRIPTION_LAG_CODE); the stream stays open for the next batch |
     ///
     /// Notices are logged at `warn!`.
     ///

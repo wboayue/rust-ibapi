@@ -694,6 +694,11 @@ impl AccountSummarySnapshots {
     ///
     /// Not cancel-safe: dropping the future, as `tokio::select!` does with the branches that lose,
     /// drops the rows of a batch still being read.
+    ///
+    /// If the consumer falls behind, frames are dropped and this returns `Error::Notice` with
+    /// [`SUBSCRIPTION_LAG_CODE`](crate::SUBSCRIPTION_LAG_CODE). Later snapshots may then hold
+    /// values the dropped frames updated, since TWS resends only changed tags: cancel and
+    /// resubscribe for a fresh snapshot.
     pub async fn next(&mut self) -> Option<Result<AccountSummarySnapshot, Error>> {
         loop {
             match self.subscription.next_batch(self.quiet).await {
