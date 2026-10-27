@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- The `Order::what_if_type` and `OrderBuilder::what_if_type` docs said an order with `what_if_type` but not `what_if` is placed live. TWS rejects it with error 321 and nothing is placed; set it with `.analyze()`. `seek_price_improvement` and `ignore_open_auction` docs now say what open-order reports carry back (#PR).
+- The `Order::what_if_type` and `OrderBuilder::what_if_type` docs said an order with `what_if_type` but not `what_if` is placed live. TWS rejects it with error 321 and nothing is placed; set it with `.analyze()`. `seek_price_improvement` and `ignore_open_auction` docs now say what open-order reports carry back (#1115).
 - The `calculate_option_price` docs and examples now give its volatility as a fraction (`0.2` = 20%), as TWS reads it. They said a percentage (`20.0` for 20%) and passed `100.0`, so following them priced the option at 100 times the intended volatility (#1114).
 - `head_timestamp`, `histogram_data`, `historical_schedules(..).fetch()`, `calculate_option_price`, `calculate_implied_volatility`, `wsh_metadata` and `wsh_event_data_by_contract(..).fetch()` now cancel the request at TWS when dropped before the answer (a dropped future, a timeout, a local error), instead of leaving it running against pacing limits. A response of an unexpected message type is now skipped rather than reported as `Error::UnexpectedResponse` (#1107).
 - A subscription that was open when the client reconnected no longer writes a cancel when it's cancelled or dropped afterwards. The request ended with the old session, so the cancel named an id the new session had never seen, and TWS answered it with an error (#1105).
