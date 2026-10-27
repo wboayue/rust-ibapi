@@ -60,7 +60,7 @@ while let Some(tick) = stream.next().await {
 ## Common Issues
 
 1. **Connection Refused** - Ensure Gateway/TWS is running with API enabled
-2. **Client ID in Use** - Each connection needs unique ID  
+2. **Client ID in Use** - Each connection needs unique ID; see [troubleshooting](../docs/troubleshooting.md#client-id-already-in-use)  
 3. **No Market Data** - Verify market data subscriptions
 
 ## Environment Variables

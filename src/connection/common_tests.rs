@@ -10,6 +10,8 @@ use std::sync::{Arc, Mutex};
 use time::macros::datetime;
 use time_tz::TimeZone;
 
+const CLIENT_ID: i32 = 100;
+
 /// Test sink that drops every notice. Used when the test cares about the
 /// startup callback, not the notice fan-out.
 #[derive(Default)]
@@ -21,6 +23,7 @@ impl NoticeSink for DiscardingSink {
 fn empty_ctx<'a>() -> StartupHandshakeContext<'a> {
     static SINK: DiscardingSink = DiscardingSink;
     StartupHandshakeContext {
+        client_id: CLIENT_ID,
         startup: None,
         notice_sink: &SINK,
     }
@@ -29,6 +32,7 @@ fn empty_ctx<'a>() -> StartupHandshakeContext<'a> {
 fn startup_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync)) -> StartupHandshakeContext<'a> {
     static SINK: DiscardingSink = DiscardingSink;
     StartupHandshakeContext {
+        client_id: CLIENT_ID,
         startup: Some(cb),
         notice_sink: &SINK,
     }
@@ -36,6 +40,7 @@ fn startup_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync)) -> StartupHan
 
 fn notice_sink_ctx(sink: &CapturingSink) -> StartupHandshakeContext<'_> {
     StartupHandshakeContext {
+        client_id: CLIENT_ID,
         startup: None,
         notice_sink: sink,
     }
@@ -46,6 +51,7 @@ fn notice_sink_ctx(sink: &CapturingSink) -> StartupHandshakeContext<'_> {
 /// receive the synthesized notice).
 fn full_ctx<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync), sink: &'a CapturingSink) -> StartupHandshakeContext<'a> {
     StartupHandshakeContext {
+        client_id: CLIENT_ID,
         startup: Some(cb),
         notice_sink: sink,
     }
@@ -197,6 +203,34 @@ fn dispatch_unsolicited_notice_warning_invokes_notice_sink() {
     assert_eq!(got.message, "Market data farm OK");
 }
 
+/// 326 ends the handshake with `ClientIdInUse`; any other handshake error
+/// is only a notice. Both reach the notice sink.
+#[test]
+fn parse_account_info_error_frames() {
+    // (name, code, client id in use)
+    let cases = [("client id in use", 326, true), ("farm warning", 2104, false), ("hard error", 504, false)];
+
+    for (name, code, in_use) in cases {
+        let message = proto_error_response(-1, code, "msg");
+        let sink = CapturingSink::default();
+
+        let result = ConnectionHandler::default().parse_account_info(&message, &notice_sink_ctx(&sink));
+
+        match result {
+            Err(Error::ClientIdInUse { client_id }) => {
+                assert!(in_use, "{name}: unexpected ClientIdInUse");
+                assert_eq!(client_id, CLIENT_ID, "{name}");
+            }
+            Ok(info) => {
+                assert!(!in_use, "{name}: expected ClientIdInUse");
+                assert_eq!(info.next_order_id, None, "{name}");
+            }
+            Err(e) => panic!("{name}: unexpected error {e:?}"),
+        }
+        assert_eq!(sink.last().map(|n| n.code), Some(code), "{name}: notice still delivered");
+    }
+}
+
 #[test]
 fn dispatch_unsolicited_notice_hard_error_invokes_notice_sink() {
     // Error frame with code 504 — non-warning, non-system message.
@@ -223,6 +257,7 @@ fn dispatch_unsolicited_notice_only_fires_notice_sink() {
     dispatch_unsolicited_message(
         &message,
         &StartupHandshakeContext {
+            client_id: CLIENT_ID,
             startup: Some(&startup_cb),
             notice_sink: &sink,
         },

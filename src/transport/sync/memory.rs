@@ -19,11 +19,23 @@ use crate::transport::sync::{Io, Reconnect, Stream};
 
 #[derive(Default, Debug)]
 struct Inner {
-    inbound: VecDeque<Vec<u8>>,
+    /// `None` is a queued hang-up: the read that reaches it returns EOF, as
+    /// from a peer that closed this connection.
+    inbound: VecDeque<Option<Vec<u8>>>,
     outbound: Vec<u8>,
     hung_up: bool,
     /// Set by `Io::close`; unlike `hung_up`, `reopen` keeps it.
     retired: bool,
+}
+
+impl Inner {
+    /// A new connection doesn't inherit the old one's hang-up: drop a queued
+    /// hang-up the old connection stopped reading just short of.
+    fn end_connection(&mut self) {
+        while matches!(self.inbound.front(), Some(None)) {
+            self.inbound.pop_front();
+        }
+    }
 }
 
 /// In-memory sync stream. Cloning yields another handle to the same shared queues.
@@ -36,7 +48,18 @@ impl MemoryStream {
     /// Append a single message body to the inbound queue. Wakes any blocked reader.
     pub fn push_inbound(&self, body: Vec<u8>) {
         let (mutex, cv) = &*self.inner;
-        mutex.lock().unwrap().inbound.push_back(body);
+        mutex.lock().unwrap().inbound.push_back(Some(body));
+        cv.notify_one();
+    }
+
+    /// Queue a hang-up after the messages already pushed: the read that reaches
+    /// it returns `Error::Io(UnexpectedEof)`, like a peer closing after its
+    /// last frame. Unlike [`hang_up`](Self::hang_up), it ends one connection:
+    /// if the reader stops right before it, a reconnect discards it, so the
+    /// next connection starts at the frame pushed after it.
+    pub fn push_hang_up(&self) {
+        let (mutex, cv) = &*self.inner;
+        mutex.lock().unwrap().inbound.push_back(None);
         cv.notify_one();
     }
 
@@ -70,11 +93,11 @@ impl Io for MemoryStream {
             if guard.retired {
                 return Err(Error::Shutdown);
             }
-            if let Some(body) = guard.inbound.pop_front() {
-                return Ok(body);
-            }
-            if guard.hung_up {
-                return Err(Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, "MemoryStream closed")));
+            match guard.inbound.pop_front() {
+                Some(Some(body)) => return Ok(body),
+                Some(None) => return Err(closed()),
+                None if guard.hung_up => return Err(closed()),
+                None => {}
             }
             guard = cv.wait(guard)?;
         }
@@ -102,15 +125,22 @@ impl Io for MemoryStream {
 impl Reconnect for MemoryStream {
     fn reconnect(&self) -> Result<(), Error> {
         let (mutex, _) = &*self.inner;
-        if mutex.lock()?.retired {
+        let mut inner = mutex.lock()?;
+        if inner.retired {
             return Err(Error::Shutdown);
         }
+        inner.end_connection();
         Ok(())
     }
     fn sleep(&self, _duration: std::time::Duration, _shutdown: &super::ShutdownSignal) {}
 }
 
 impl Stream for MemoryStream {}
+
+/// The error `read_message` returns on a closed peer.
+fn closed() -> Error {
+    Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, "MemoryStream closed"))
+}
 
 #[cfg(test)]
 #[path = "memory_tests.rs"]

@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Connecting with a client id another connection holds returns the new `Error::ClientIdInUse { client_id }` (TWS error 326) instead of an I/O end-of-file error that looked like a network failure. `connect` doesn't retry it. The automatic reconnect does, because after a dropped connection TWS can hold the old session's id until it notices the socket is dead (#1091).
+- Async `collect_to_end_within`, `next_batch`, `contract_details` and account-summary snapshots return `Error::Notice` with `SUBSCRIPTION_LAG_CODE` when the consumer fell behind and frames were dropped, instead of returning `Ok` with rows missing. `collect_for` and `collect_until` stop at the gap and return the rows read before it. Streams still deliver the lag as a non-terminal notice (#1090).
 - An order status with no `filled` or `remaining` quantity (or an "unset" sentinel) returns `Error::Parse` instead of decoding as `0`. A missing `remaining` could make `wait_for_fill` report a partial fill as `Filled`. TWS sends an explicit `"0"` in every observed state, so normal statuses are unaffected (#1089).
 - `positions`, `positions_multi`, `account_updates` and `pnl_single` return `Error::Parse` for a frame with no position quantity, or an "unset" sentinel in it, instead of reporting a flat `0`. TWS sends an explicit `"0"` for a closed position, so normal closes are unaffected (#1088).
 - `Contract::last_trade_date` is now populated from decoded contracts (contract details, open orders, positions, executions, ...) for options and futures. It was always `None` (#1087).

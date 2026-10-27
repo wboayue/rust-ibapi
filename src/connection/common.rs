@@ -13,7 +13,7 @@ use crate::common::timezone::{find_timezone, resolve_local};
 use crate::errors::Error;
 use crate::messages::{
     encode_length, encode_protobuf_message, split_message_id, unknown_message_type_notice, IncomingMessages, Notice, OutgoingMessages,
-    ResponseMessage, HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, PROTOBUF_MSG_ID,
+    ResponseMessage, CLIENT_ID_IN_USE_CODE, HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, PROTOBUF_MSG_ID,
 };
 use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
@@ -89,11 +89,13 @@ impl StartupMessage {
     }
 }
 
-/// Handshake-time context bundling the optional typed-message callback and the
-/// mandatory notice sink. Internal use only; the public surface is
+/// Handshake-time context bundling the client id `start_api` sent, the
+/// optional typed-message callback and the mandatory notice sink. Internal use only; the public surface is
 /// `ClientBuilder` (`crate::client::ClientBuilder` for async,
 /// `crate::client::blocking::ClientBuilder` for sync).
 pub(crate) struct StartupHandshakeContext<'a> {
+    /// The id `start_api` sent, named by [`Error::ClientIdInUse`].
+    pub client_id: i32,
     pub startup: Option<&'a (dyn Fn(StartupMessage) + Send + Sync)>,
     pub notice_sink: &'a (dyn NoticeSink + Sync),
 }
@@ -242,6 +244,13 @@ impl ConnectionProtocol for ConnectionHandler {
             IncomingMessages::ManagedAccounts => {
                 let proto: crate::proto::ManagedAccounts = message.proto()?;
                 info.managed_accounts = proto.accounts_list;
+            }
+            // TWS answers a held client id with this one frame, then closes the
+            // socket; reading on would end in an EOF that looks like a network
+            // failure. Still logged and delivered like any handshake notice.
+            IncomingMessages::Error if Notice::from(message).code == CLIENT_ID_IN_USE_CODE => {
+                dispatch_unsolicited_message(message, ctx);
+                return Err(Error::ClientIdInUse { client_id: ctx.client_id });
             }
             _ => dispatch_unsolicited_message(message, ctx),
         }

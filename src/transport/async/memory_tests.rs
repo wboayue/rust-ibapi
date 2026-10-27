@@ -60,3 +60,29 @@ async fn trait_close_is_terminal() {
     assert!(matches!(stream.reconnect().await, Err(Error::Shutdown)));
     assert!(stream.captured().is_empty());
 }
+
+/// A queued hang-up ends one connection: the read that reaches it is EOF,
+/// and a reconnect drops one the reader stopped just short of, so the next
+/// connection starts at the frame pushed after it.
+#[tokio::test]
+async fn push_hang_up_ends_one_connection() {
+    let stream = MemoryStream::default();
+    stream.push_inbound(b"first".to_vec());
+    stream.push_hang_up();
+    stream.push_inbound(b"next".to_vec());
+
+    assert_eq!(stream.read_message().await.unwrap(), b"first");
+    stream.reconnect().await.unwrap();
+    assert_eq!(
+        stream.read_message().await.unwrap(),
+        b"next",
+        "reconnect skips the old connection's hang-up"
+    );
+
+    stream.push_hang_up();
+    let err = stream.read_message().await.unwrap_err();
+    assert!(
+        matches!(err, Error::Io(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof),
+        "unexpected error: {err:?}"
+    );
+}

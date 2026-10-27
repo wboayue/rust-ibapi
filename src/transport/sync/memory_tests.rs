@@ -52,3 +52,25 @@ fn trait_close_wakes_a_pending_reader() {
     stream.close();
     assert!(matches!(read.join().unwrap(), Err(Error::Shutdown)));
 }
+
+/// A queued hang-up ends one connection: the read that reaches it is EOF,
+/// and a reconnect drops one the reader stopped just short of, so the next
+/// connection starts at the frame pushed after it.
+#[test]
+fn push_hang_up_ends_one_connection() {
+    let stream = MemoryStream::default();
+    stream.push_inbound(b"first".to_vec());
+    stream.push_hang_up();
+    stream.push_inbound(b"next".to_vec());
+
+    assert_eq!(stream.read_message().unwrap(), b"first");
+    stream.reconnect().unwrap();
+    assert_eq!(stream.read_message().unwrap(), b"next", "reconnect skips the old connection's hang-up");
+
+    stream.push_hang_up();
+    let err = stream.read_message().unwrap_err();
+    assert!(
+        matches!(err, Error::Io(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof),
+        "unexpected error: {err:?}"
+    );
+}
