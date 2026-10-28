@@ -15,186 +15,122 @@ memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
 values** — grep captured-wire fixtures and check the C# reference at
-`/Users/wboayue/projects/tws-api/source/csharpclient/client/`. Field-name resemblance to a
-known vocabulary is misleading.
+`/Users/wboayue/projects/tws-api/source/csharpclient/client/`. Field-name resemblance to a known
+vocabulary is misleading.
 
-Once verified: strict enum, `Display` round-trips back to the IB wire string, `FromStr`
-returns `Result<_, Error>`. Decode with the generic helpers in `src/proto/decoders.rs`:
+Once verified: strict enum, `Display` round-trips to the IB wire string, `FromStr` returns
+`Result<_, Error>`. For shape-identical enums, `impl_wire_enum!` (`src/macros.rs`) generates
+`Display`, `FromStr<Err = Error>` and `ToField` from an `as_str` + `from_wire` table. Decode with
+the generic helpers in `src/proto/decoders.rs` — no per-field wrapper:
 
 ```rust
 parse_required::<OrderStatusKind>(proto.status.as_deref(), "status")?   // -> Result<T, Error>
 parse_optional::<OptionRight>(proto.right.as_deref())?                  // -> Result<Option<T>, Error>
 ```
 
-`parse_required` takes a label for the error message; `parse_optional` does not. Each new
-enum only needs `impl FromStr<Err = Error>` — no per-field wrapper.
-
-**The decoder must reject empty or missing input as `Error::Parse`, never fall back to
-`T::default()`.** This assumes a field the wire always carries. Where the reference client's
-decoder treats an absent field as unset (`tif`, #822: `EDecoderUtils` assigns it only if `HasTif`;
-`sec_type`, #855: `decodeContract` sets it only if `HasSecType` and still delivers the frame),
-absent or empty decodes to that field's unset value (`Order::default().tif`,
+**Missing input is `Error::Parse`, never `T::default()`** — for a field the wire always carries.
+Where the reference client treats an absent field as unset and still delivers the frame (`tif`,
+#822: `EDecoderUtils` assigns it only if `HasTif`; `sec_type`, #855: `decodeContract` only if
+`HasSecType`), absent or empty decodes to the field's unset value (`Order::default().tif`,
 `SecurityType::Other("")`); only a direct `"".parse()` is `Error::Parse`.
 
-An unrecognized **value** is a separate question from a missing one. On a streaming
-decode path — where a parse failure terminates the subscription — a value IBKR adds
-later must not become a client-side outage, so such enums are *open*: a non-empty
-unrecognized string parses as a value-preserving `Unknown(String)` variant via
-`impl_wire_enum!(Name, fallback Unknown)`, while empty stays `Error::Parse`. Keep
-matching exact and case-sensitive — a case-variant lands in `Unknown` where it is
-observable, never coerced to the nearest known variant. The variant costs `Copy` and
-makes `as_str` return `&str`; the enum stays deliberately exhaustive so the compiler
-points callers at the new arm. Two consequences the derive path hides when the enum's
-serde form is the wire string, as `OrderStatusKind`'s is: serde must be hand-written (the
-derive would emit the externally tagged `{"Unknown":"..."}` for the payload variant instead
-of the plain wire string), and so must the `utoipa` schema (`PartialSchema` delegating to
-`String`); `TimeInForce` follows it. An enum whose serde form is the derived variant name
-(`Rule80A`, `OrderOpenClose`) keeps its derives: existing variants serialize as before and
-`Unknown` takes the tagged form. There is deliberately no decode-time log when
-`Unknown` is constructed — callers own the signal, as migration §9's example shows.
-`OrderStatusKind` is the precedent (the official C# client's `OrderStatus` has the same
-`Unknown` fallback). The criterion for opening another enum is its decode path, not its
-vocabulary: inbound stream-parsed enums are candidates when the question arises;
-one-shot and outbound-only enums stay closed — a hard error there fails one call, not
-a stream.
+**An unrecognized value on a streaming path parses as `Unknown(String)`.** A parse failure there
+terminates the subscription, so a value IBKR adds later must not become an outage: use
+`impl_wire_enum!(Name, fallback Unknown)`. Empty still errors. Matching stays exact and
+case-sensitive (a case variant lands in `Unknown`, never coerced). The enum stays exhaustive so
+the compiler points callers at the new arm; the payload variant costs `Copy` and makes `as_str`
+return `&str`. No decode-time log — callers own the signal (`docs/migration-4.0.md` §9).
+One-shot and outbound-only enums stay closed: a hard error there fails one call, not a stream.
+
+Serde: if the enum serializes as the wire string (`OrderStatusKind`, `TimeInForce`), serde and the
+`utoipa` schema (`PartialSchema` delegating to `String`) must be hand-written, or the derive emits
+`{"Unknown":"..."}`. If it serializes as the derived variant name (`Rule80A`, `OrderOpenClose`),
+keep the derives; `Unknown` takes the tagged form.
 
 ## Why
 
-A silent `T::default()` masks an incomplete TWS response. The field reads as a plausible
-value, the monitoring loop never sees an error, and the subscription hangs waiting for state
-that already arrived malformed.
+A silent `T::default()` masks an incomplete TWS response: the field reads as plausible, the
+monitoring loop sees no error, and the subscription waits for state that already arrived malformed.
 
-The verification step matters because the wire is not what field names suggest.
-`OrderState.completed_status` sounds enumerated; the wire carries free-form text like
-`"Cancelled by Trader"`. `FundamentalReportType` is documented with six values; TWS accepts
-four. Typing either strictly from the name alone produces a decoder that rejects valid data.
+The wire is not what field names suggest. `OrderState.completed_status` sounds enumerated; it
+carries free-form text like `"Cancelled by Trader"`. Typing strictly from the name produces a
+decoder that rejects valid data.
 
-When a new strict decoder rejects an existing test fixture, **do not broaden `FromStr` to
-accept the literal.** Check `/Users/wboayue/projects/tws-api/samples/` first. PR #559 found
-that `right: "?"` was a VB sample app's display fallback for empty string, never real TWS
-wire — broadening would have baked a display artifact into the parser.
-
-For shape-identical enums, `impl_wire_enum!` in `src/macros.rs` generates `Display`,
-`FromStr<Err = Error>`, and `ToField` from an `as_str` + `from_wire` data table.
+When a new strict decoder rejects an existing test fixture, **don't broaden `FromStr` to accept
+the literal.** Check `/Users/wboayue/projects/tws-api/samples/` first: #559's `right: "?"` was a
+VB sample app's display fallback, never real wire.
 
 ## Integer-coded enums
 
-A field that arrives as an `i32` code (`Liquidity`, `OcaType`, `TriggerMethod`, ...) has no
-missing/empty half: the proto default is a real code. The rule for the value half is the same
-as for strings: **`From<i32>` never coerces an unrecognized code to a known variant.** The
-shape `Liquidity` established is an enum with an `Unknown(i32)` payload variant and a total
-`From<i32>` returning `Unknown(code)` for anything outside the table, so the value is
-observable rather than silently read as `None`, `Default`, or the first listed variant. The
-order enums of this shape also implement `From<T> for i32`, handing the code back, written
-by hand because `value as i32` no longer compiles once a payload variant exists.
-`Unknown(i32)` is `Copy`, so an enum that was `Copy` stays so, and derived serde stays. There
-is no closed (`TryFrom<i32>`) form of this shape: these fields are decoded on a streaming
-path where an error kills the subscription, so a payload variant is the only way to keep the
-conversion total without coercing.
+A field arriving as an `i32` code (`Liquidity`, `OcaType`, `TriggerMethod`, ...) has no
+missing/empty half; the proto default is a real code. **`From<i32>` never coerces an unrecognized
+code to a known variant**: add an `Unknown(i32)` variant and make `From<i32>` total, returning
+`Unknown(code)` outside the table. The order enums also implement `From<T> for i32`, hand-written
+because `value as i32` no longer compiles with a payload variant. `Unknown(i32)` keeps `Copy` and
+derived serde. There is no closed `TryFrom<i32>` form for streaming paths.
 
-**A one-shot integer field decodes closed.** `ArticleType` (`news_article`, #1070) has no
-`Unknown` variant: a private decoder fn maps the table and returns `Error::Parse` for any other
-code, failing one call rather than a stream. Its public `From<i32>` still coerces and stays
-until a major release (#1071) — an existing `From<i32>` also blocks adding `TryFrom<i32>`,
-through the blanket impl.
+**A one-shot integer field decodes closed.** `ArticleType` (`news_article`, #1070) maps the table
+in a private decoder fn and returns `Error::Parse` for any other code. Its public `From<i32>` still
+coerces until a major release (#1071); an existing `From<i32>` also blocks `TryFrom<i32>` through
+the blanket impl.
 
-**The wire code lives in the `From` impls, not in a discriminant.** #825 first wrote these
-with `#[repr(i32)]` and `Customer = 0` alongside the hand-written `From<T> for i32`, copying
-`Liquidity`. #829 dropped both from all eight: once the payload variant exists nothing reads
-the discriminant — `value as i32` will not compile — so `= 0` was decoration that a reader
-takes for the source of truth, and `#[repr(i32)]` (which explicit discriminants on a
-data-carrying enum require) was an ABI commitment in the public API buying nothing. A missing
-match arm is a compile error; `Foo = 5` paired with `Foo => 6` is not. The code is rustdoc'd
-on each variant instead (``Wire code `0`.``).
+**The wire code lives in the `From` impls, not a discriminant.** No `#[repr(i32)]`, no `Foo = 0`:
+with a payload variant nothing reads the discriminant, so it is decoration a reader takes for the
+source of truth, and `#[repr(i32)]` is an ABI commitment buying nothing. A missing match arm is a
+compile error; `Foo = 5` paired with `Foo => 6` is not. Document the code on each variant
+(``Wire code `0`.``).
 
-**An eighth enum, `AuctionStrategy`, was deleted rather than typed.** It took the same shape
-in #825 "for uniformity", on a field the proto `Order` does not carry: IBKR's
-`source/proto/Order.proto` has no `auctionStrategy`, the reference client's
-`EClientUtils.createOrderProto` never sets one, and `grep -rn auction src/proto/` finds only
-`ignore_open_auction`. `AuctionStrategy` was therefore unreachable in both directions at the
-protobuf floor — `Order::auction_strategy` was written by `auction_limit` and dropped by
-`encode_order`, and no decoder ever produced one. #828 went looking for the missing
-`OrderBuilder` setter and found there was nothing for a setter to reach; the enum,
-the `Order` field and `auction_limit`'s fourth parameter went instead, on the `TickEFP`
-precedent. **Uniformity with a sibling enum is not evidence that a field exists** — check
-`Order.proto` for the field name before giving a wire enum this shape.
+**Check `Order.proto` for the field before giving it this shape.** `AuctionStrategy` was typed "for
+uniformity" in #825 on a field the proto `Order` does not carry (IBKR's `Order.proto` has no
+`auctionStrategy`; `EClientUtils.createOrderProto` never sets one; `grep -rn auction_strategy
+src/proto/` finds nothing). It was unreachable both ways, and was deleted with the `Order` field and
+`auction_limit`'s fourth parameter (#828). Uniformity with a sibling enum is not evidence a field
+exists.
 
 ## Required tests
 
-- Both `None` and `Some("")` produce `Err(Error::Parse(..))` for required fields, or
-  `Ok(None)` for optional ones.
-- A `Display` / `FromStr` round-trip over the full variant table.
-- For an open enum: an unrecognized string parses as `Unknown(raw)` and round-trips
-  through `Display` unchanged; empty still errors; a streaming subscription survives a
-  frame carrying the unknown value (see `order_update_stream_survives_unknown_status`).
-- For an integer-coded enum: `check_wire_code_round_trip` over the full code table plus
-  `Unknown(code)` rows, and a decoder test feeding a code outside the table (see
-  `decode_order_preserves_unknown_integer_codes`). The helper takes the `Unknown`
-  constructor and probes every code in `-8..=64` that the table does not list, asserting
-  each lands on `Unknown` — that is what makes the callers' `_every_wire_code` name true,
-  and it fails when a variant is added without a table row. The string enums have no such
-  probe (the value space is unbounded); they need the `modeled_index` guard below instead.
+- Both `None` and `Some("")` produce `Err(Error::Parse(..))` for required fields, or `Ok(None)` for
+  optional ones.
+- A `Display` / `FromStr` round-trip over the full variant table, plus a `modeled_index` guard (an
+  exhaustive match, so a new variant without a table row fails to compile — see
+  `all_tifs_covers_every_variant`).
+- Open enum: an unrecognized string parses as `Unknown(raw)` and round-trips unchanged; empty still
+  errors; a stream survives a frame carrying it (`order_update_stream_survives_unknown_status`).
+- Integer-coded enum: `check_wire_code_round_trip` over the code table plus `Unknown(code)` rows
+  (it probes every unlisted code in `-8..=64` and asserts each lands on `Unknown`), and a decoder
+  test with an out-of-table code (`decode_order_preserves_unknown_integer_codes`).
 
 ## Precedents
 
-`docs/migration-3.0.md` §5, §9–§12, §23, §29, §30 is the shipped-outcome ledger for these
-migrations — consult it rather than re-deriving which fields were converted and why.
+Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §30;
+`docs/migration-4.0.md` §2, §9, §13–§15; `docs/migration-5.0.md` §1, §7. Consult it rather than
+re-deriving which fields were converted.
 
 - #518 — established the pattern (`OrderStatus.status` → `OrderStatusKind`).
-- #556, #558 — established the generic `parse_required` / `parse_optional` shape.
+- #556, #558 — the generic `parse_required` / `parse_optional` shape.
 - #559 — the `right: "?"` fixture-vs-wire lesson.
-- #647 — `FundamentalReportType`: docs listed six values, TWS accepts four.
-- #774 — the closed-enum counter-example: one unrecognized `OrderStatus` string
-  terminated every order stream, including `order_update_stream`. Opened
-  `OrderStatusKind` with `Unknown(String)` via the macro's `fallback` form; the
-  missing/empty half of the directive is unchanged.
-- #822 — `TimeInForce`: the failure without an open enum, on an infallible `From<&str>`
-  rather than a `FromStr`. `GTX` had no variant, so `_ => Day` reported every GTX order
-  as a day order and sent every GTX order as one — no parse error, nothing to observe.
-  Opened it with `impl_wire_enum!(TimeInForce, fallback Unknown)`. Two notes for the
-  next one: absent/empty here collapses to the struct default rather than `Error::Parse`,
-  because upstream omits the field instead of sending it (`EClientUtils` / `EDecoderUtils`)
-  — the directive's missing-input half assumes a field the wire always carries; and the
-  variant table needs its own guard, since an enum this wide is tested from a hand-written
-  table that a new variant does not break (`orders::tests::all_tifs_covers_every_variant`).
-- #825 — the rest of the `src/orders` sweep, on top of #822. Three inherent `from(&str)`
-  methods (`Action` panicked with `todo!()`, `Rule80A` / `OrderOpenClose` returned `None`)
-  moved onto `impl_wire_enum!`; seven `From<i32>` impls that collapsed an unknown code to
-  a known variant took the `Liquidity` shape. Per-enum call: `Action` closed (fixed
-  vocabulary, `Copy` relied on by value); `Rule80A` and `OrderOpenClose` open (optional
-  fields, already not `Copy`, so preserving costs nothing). `decode_order` moved onto
-  `parse_required` / `parse_optional` for those three, so a missing `action` is now
-  `Error::Parse` rather than `Buy` — unlike `tif` above, `action` has no unset state
-  upstream, so an absent one is a malformed frame, not a default. The condition
-  discriminator was left for a separate change — #827 below.
-- #829 — the review follow-up, and a counter-example on two counts. #825's `#[repr(i32)]`
-  plus explicit discriminants copied `Liquidity` faithfully and were still wrong: they
-  duplicate the hand-written `From<T> for i32` that a payload variant forces, and nothing
-  reads them. Copying a precedent is not the same as checking it still earns its shape.
-  #825's `AuctionStrategy` note also named an `OrderBuilder` field as the conversion's one
-  caller without checking the field had a setter — it had none, and the line reading it was
-  unreachable. The `_every_wire_code` test names were the third: they asserted only the rows
-  listed until `check_wire_code_round_trip` gained the `Unknown`-constructor probe.
-- #827 — `OrderCondition`, the discriminator #825 deferred: an unmodeled type decoded as
-  `Price(PriceCondition::default())`, so re-placing the order sent TWS a different
-  condition. When the discriminator selects a *message shape* rather than naming a value,
-  `Unknown(code)` is not enough — the value is the whole message. `Unknown(UnknownCondition)`
-  carries the type code plus every wire field as an `Option`, so encode(decode(p)) == p for
-  every field except an absent conjunction flag, which returns as explicit AND (`Some(true)`).
-  The reference client drops an unknown condition instead, which loses it on the same
-  round-trip. An absent `type` is `Error::Parse` (upstream always sets it). The panicking
-  `From<i32> for OrderCondition` went rather than taking the `Unknown(i32)` shape: it built
-  default-valued conditions, had no caller, and the builders are the construction path.
-- #855 — `SecurityType`, the last inherent `from(&str)` in `src/contracts`. It already preserved
-  an unrecognized value as `Other(String)`, but through a `warn!` outside `FromStr`, so
-  `SecurityType::from` did not resolve like the other wire enums. Moved onto
-  `impl_wire_enum!(SecurityType, fallback Other)`. `sec_type` is the #822-style exception, not a
-  requiredness case: the reference client's `decodeContract` sets `SecType` only `if (HasSecType)`
-  and still delivers the frame, so an absent or empty `sec_type` decodes as `Other("")` through
-  `parse_optional` plus a fallback, as before. Requiring it would end `order_update_stream`,
-  `positions` and every other stream carrying a contract on the first contract without one (the
-  failure #840 fixed), and the #825 `action` precedent does not carry over: an absent `action`
-  became a phantom `Buy`, while an absent `sec_type` is `Other("")`, not `Stock`. The
-  `ContractData` decoder takes #829's `required` for both its submessages, as the reference
-  client's `ContractData` handler in `EDecoder.cs` drops such a frame; the helper now lives in
-  `src/proto/decoders.rs`.
+- #647 — `FundamentalReportType`: docs listed six values, TWS accepted four (module since removed,
+  migration-3.0 §34).
+- #774 — one unrecognized `OrderStatus` string terminated every order stream; opened
+  `OrderStatusKind` with `Unknown(String)` via the macro's `fallback` form.
+- #822 — `TimeInForce`: `_ => Day` on an infallible `From<&str>` reported and sent every GTX order
+  as a day order, with nothing to observe. Opened via `fallback Unknown`; absent/empty collapses to
+  the struct default because upstream omits the field.
+- #825 — the rest of `src/orders`: inherent `from(&str)` methods moved onto `impl_wire_enum!`
+  (`Action` closed; `Rule80A`, `OrderOpenClose` open); seven coercing `From<i32>` impls took the
+  `Liquidity` shape. A missing `action` became `Error::Parse` rather than `Buy` — unlike `tif`, it
+  has no unset state upstream.
+- #829 — review follow-up and counter-example: dropped #825's `#[repr(i32)]` + discriminants
+  (copied faithfully from `Liquidity`, still wrong); found `AuctionStrategy`'s claimed caller had no
+  setter; made `_every_wire_code` test names true with the `Unknown`-constructor probe. Copying a
+  precedent is not checking it still earns its shape.
+- #827 — `OrderCondition`: an unmodeled type decoded as `Price(PriceCondition::default())`, so
+  re-placing the order sent TWS a different condition. When a discriminator selects a *message
+  shape*, `Unknown(code)` is not enough: `Unknown(UnknownCondition)` carries the code plus every wire
+  field as `Option`, so encode(decode(p)) == p except an absent conjunction flag (returns as
+  `Some(true)`). Absent `type` is `Error::Parse`. The panicking `From<i32> for OrderCondition` was
+  removed.
+- #855 — `SecurityType` onto `impl_wire_enum!(SecurityType, fallback Other)`. `sec_type` is the
+  #822-style exception: requiring it would end every stream carrying a contract without one (the
+  failure #840 fixed). The `ContractData` decoder takes `required` (`src/proto/decoders.rs`) for
+  both submessages, as `EDecoder.cs` drops such a frame.

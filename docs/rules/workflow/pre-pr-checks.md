@@ -6,15 +6,15 @@ status: active
 triggers:
   - about to commit or open a pull request
   - finished a change and wondering what to run
-  - CI is green but docs.rs links are broken
+  - CI failed on rustdoc, an example build, or one feature leg only
 symbols: [cargo-fmt, cargo-clippy, RUSTDOCFLAGS, just-test, just-rules-check]
 related: [feature-matrix, integration-crate-builds, coverage-floor, pinned-toolchain]
 precedents: ["#724", "#725"]
 memory: [feedback_ci_clippy_flags, feedback_rustdoc_link_check, feedback_self_review]
 ---
 
-Before opening a PR, run every gate — formatter, clippy in all three feature configurations,
-rustdoc in all three, the tests, and the examples:
+Before opening a PR, run every gate — formatter, then clippy, rustdoc, and examples in all three
+feature configurations, plus the tests:
 
 ```bash
 cargo fmt
@@ -31,39 +31,31 @@ just test
 
 cargo build --examples
 cargo build --examples --no-default-features --features sync
+cargo build --examples --all-features
 ```
-
-`just test` does not build `examples/`, and a signature change breaks examples as readily as it
-breaks callers — that is a whole caller surface the test suite never touches.
 
 Add `just rules-check` when the change touches `AGENTS.md` or `docs/rules/`, and the
 [integration crate builds](integration-crate-builds.md) when it touches a wire surface.
 
 ## Why
 
-**The rustdoc trio is the only check for intra-doc links.** `cargo test --doc` does not cover
-it — that compiles the `# Examples` bodies, and says nothing about whether a
-`[Client::stubbed]`-style intra-doc reference resolves. `ci.yml` runs `cargo doc --no-deps`
-per leg with `RUSTDOCFLAGS=-D warnings`, so CI catches a broken link too; run it locally to
-avoid the round trip.
+- **Rustdoc is the only check for intra-doc links.** `cargo test --doc` compiles `# Examples`
+  bodies; it says nothing about whether a `[Client::stubbed]`-style link resolves.
+- **`just test` does not build `examples/`**, and a signature change breaks examples as readily
+  as callers.
+- **The three configurations are not interchangeable**; `--features sync` is not the sync-only
+  build. See [feature matrix](../parity/feature-matrix.md).
 
-The three feature configurations are not interchangeable and `--features sync` is not the
-sync-only build; see [feature matrix](../parity/feature-matrix.md) for why, and for the
-incident where a sync-only break survived 11 merges.
-
-**Know which half of the list has no safety net.** `ci.yml` re-runs `cargo fmt -- --check`,
-`cargo clippy --all-targets <flags> -- -D warnings`, `cargo test <flags>`, and
-`cargo build --examples` and `cargo doc --no-deps` (with `-D warnings`) on each of the three
-legs, and `basic-checks` runs the rules-graph script — skip those locally and CI catches you.
-Nothing re-runs the [integration crate builds](integration-crate-builds.md); skip those and the
-breakage ships.
-
-Run the CI-covered half locally anyway, on the same toolchain CI uses — see
-[pinned toolchain](pinned-toolchain.md) — because one local loop beats a push-wait-red-fix
-cycle.
+**Know which gates have no safety net.** `ci.yml` re-runs, on each of the three legs,
+`cargo fmt -- --check`, the clippy, `cargo test`, `cargo build --examples`, and `cargo doc`
+commands above; `basic-checks` runs the rules-graph script; `msrv` checks the library on 1.88
+(CI-only — see [pinned toolchain](pinned-toolchain.md)). Nothing re-runs the
+[integration crate builds](integration-crate-builds.md): skip those and the breakage ships.
+Run the CI-covered gates locally anyway, on the pinned toolchain — one local loop beats a
+push-wait-red-fix cycle.
 
 ## Precedents
 
-- #724, #725 — the clippy trio in `CLAUDE.md` had the additive-features bug (its middle config
-  was sync **plus** async), and `just test` / `ci.yml` had it too. All three now spell out one
-  leg per configuration.
+- #724, #725 — the clippy list in `CLAUDE.md`, `just test`, and `ci.yml` all had the
+  additive-features bug (the "sync" config was sync **plus** async); all now spell out one leg
+  per configuration.

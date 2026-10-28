@@ -13,9 +13,9 @@ precedents: ["#657", "#726", "#1042"]
 memory: [feedback_sed_inline_test_extraction, project_main_flat_helpers_nested_pattern]
 ---
 
-Never write an inline `#[cfg(test)] mod tests { ... }` block. Tests go in a flat sibling file
-— `foo.rs` + `foo_tests.rs`, not `foo/mod.rs` + `foo/tests.rs`. The test file opens with
-`use super::*;`.
+Never write an inline `#[cfg(test)] mod tests { ... }` block in an implementation file. Tests
+go in a flat sibling file — `foo.rs` + `foo_tests.rs`, not `foo/mod.rs` + `foo/tests.rs`. The
+test file opens with `use super::*;`.
 
 Wire it in from the implementation file (or the parent `mod.rs`, for domain submodules):
 
@@ -27,30 +27,27 @@ mod tests;
 
 ## Why
 
-The project minimizes `mod.rs` files, and an inline test module makes every implementation
-file longer than the code it holds. No inline `#[cfg(test)] mod ... { }` block remains in
-`src/`, so a new one is drift, not a judgment call.
+The project minimizes `mod.rs` files, and inline tests make every implementation file longer
+than the code it holds. No implementation file carries an inline test block, so a new one is
+drift. (Grouping `mod` blocks *inside* a `*_tests.rs` file is fine, as is the test-support code
+in `src/common/test_utils.rs`.)
 
-The *placement* half is nearly finished: alongside the 115 flat `*_tests.rs` files, 4
-`mod tests;` declarations still resolve to a `<dir>/tests.rs`, all in directories that also hold
-real modules (`find src -name "*_tests.rs" | wc -l` and `find src -name tests.rs | wc -l`,
-2026-10-24, after #1042 flattened the test-only directories and #1054 deleted
-`src/orders/builder/tests.rs`).
-Convert one when you are already editing that module — see
-[modernize touched modules](../workflow/modernize-touched-modules.md) — and do not read the
-surviving `<dir>/tests.rs` files as precedent.
+Residue: four `tests.rs` files remain (`src/tests.rs`, `src/messages/tests.rs`,
+`src/transport/tests.rs`, `src/orders/tests.rs`) beside 118 `*_tests.rs` (2026-10-27;
+`find src -name tests.rs`, `find src -name '*_tests.rs' | wc -l`). Convert one when already
+editing that module — see [modernize touched modules](../workflow/modernize-touched-modules.md) —
+and do not treat them as precedent.
 
-This does **not** mean flattening helper modules. `<domain>/<side>.rs` as the main file with
-`<domain>/<side>/foo.rs` helpers underneath is canonical Rust and stays; only the *test* file
-placement is what this rule governs.
+This does **not** mean flattening helper modules: `<domain>/<side>.rs` with
+`<domain>/<side>/foo.rs` helpers underneath stays. Only test-file placement is governed here.
 
-When sweeping ten or more existing inline blocks at once, `sed`-based extraction beats
-Read + Write + Edit per file.
+When sweeping ten or more inline blocks at once, `sed`-based extraction beats per-file
+Read + Write + Edit.
 
 ## Precedents
 
-- #657 — the bulk extraction sweep that established the `sed` recipe.
-- #726 — moved the last inline block (`from_str_tests` in `src/messages.rs`) out, and corrected
+- #657 — bulk extraction sweep; established the `sed` recipe.
+- #726 — moved the last inline block (`from_str_tests` out of `src/messages.rs`) and corrected
   this node's "fully applied" claim: the `<dir>/tests.rs` residue had gone unnoticed.
-- #1042 — flattened the 14 directories that held only a `tests.rs` (plus `mod.rs`) to
-  `foo.rs` + `foo_tests.rs`, and renamed `market_data/tests.rs` to `mod_tests.rs`.
+- #1042 — flattened the directories holding only `tests.rs` (plus `mod.rs`) to `foo.rs` +
+  `foo_tests.rs`; renamed `market_data/tests.rs` to `mod_tests.rs`.

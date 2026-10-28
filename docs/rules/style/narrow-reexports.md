@@ -24,32 +24,28 @@ pub(crate) use decoders::{
 };
 ```
 
-`pub(crate) mod decoders;` would instead hand every `pub(crate)` item inside `decoders` — and
-every one added to it later — to the whole crate.
+`pub(crate) mod decoders;` would hand every `pub(crate)` item inside it, including ones added
+later, to the whole crate. Domain `decoders` / `encoders` modules are `pub(super)`; only `proto/`'s
+are crate-wide. Check with `grep -rn '^pub(crate) mod \(decoders\|encoders\)' src`.
 
 ## Why
 
-Widening is the cheapest fix for a visibility error and the one that compounds. The next item
-added to the module inherits the widened reach silently, so the module's surface grows without
-any diff that looks like an API change. A `pub(crate) use` list is the opposite: adding a name
-to it is a visible line in review.
+Widening is the cheapest fix for a visibility error and the one that compounds: the next item
+added inherits the wider reach with no diff that looks like an API change. Adding a name to a
+`pub(crate) use` list is a visible line in review.
 
-Cross-domain reads are the common trigger. `connection/common.rs` needs five order decoders and
-one account decoder to classify handshake-time messages; both domains expose exactly those and
-keep `decoders` at `pub(super)`. Nothing else in `orders::common::decoders` is reachable from
-`connection/`.
+Cross-domain reads are the usual trigger. `connection/common.rs` needs five order decoders and one
+account decoder to classify handshake-time messages; each domain re-exports exactly those.
 
-This is the same instinct as [restrict after callers](../workflow/restrict-after-callers.md)
-read forwards: narrow surfaces are cheap to keep and expensive to reclaim. Narrowing an
-already-`pub` item is the expensive direction — it surfaces `private_interfaces` and
-`dead_code` warnings from surfaces you did not expect to be involved.
+Same instinct as [restrict after callers](../workflow/restrict-after-callers.md): narrow surfaces
+are cheap to keep and expensive to reclaim. Narrowing an already-wide item surfaces
+`private_interfaces` and `dead_code` warnings from places you did not expect.
 
 ## Precedents
 
-- #1080 — the audit that restored it: `orders::common::decoders` had drifted back to
-  `pub(crate)` (#1031). Seven other domains' `decoders`/`encoders` were crate-wide with no
-  outside consumer; realtime, accounts and orders `encoders` had a few, now named re-exports. Check with `grep -rn '^pub(crate) mod \(decoders\|encoders\)' src`; only `proto/`
-  should print.
-- #581 — the cost of the other direction. Narrowing `ResponseMessage` from `pub` to
-  `pub(crate)` was planned as transparent and surfaced ten warnings across `Error` variants,
-  trait impls, and now-uncalled methods.
+- #1080 — `orders::common::decoders` had drifted back to `pub(crate)` (#1031); seven other
+  domains' `decoders`/`encoders` were crate-wide with no outside consumer. Restored `pub(super)`,
+  with named re-exports for the few outside users (realtime, accounts, orders).
+- #581 — the other direction's cost: narrowing `ResponseMessage` from `pub` to `pub(crate)` was
+  planned as transparent and surfaced ten warnings across `Error` variants, trait impls, and
+  now-uncalled methods.

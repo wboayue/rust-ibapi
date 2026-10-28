@@ -40,7 +40,7 @@ macro_rules! impl_proto_payload {
 }
 
 // Left: the generated `prost` type. Right: the wire message it arrives under.
-// Most read as the same name twice; the three that do not are real — TWS
+// Most read as the same name twice; the four that do not are real — TWS
 // abbreviates the message where the `.proto` file spells it out.
 impl_proto_payload! {
     ConfigResponse => ConfigResponse,

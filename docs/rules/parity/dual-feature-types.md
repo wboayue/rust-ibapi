@@ -14,65 +14,61 @@ precedents: ["#512", "#526", "#823", "#916", "#957", "#958"]
 memory: [feedback_raw_identifier_async_path, feedback_plan_cfg_receiver_types]
 ---
 
-A public type with distinct sync/async impls — different receivers, different async-ness —
-follows the `NoticeStream` pattern in `src/subscriptions/notice_stream.rs`:
+A public type with distinct sync/async impls (different receivers, different async-ness) follows
+the `NoticeStream` pattern:
 
-1. Two submodules in one file: `pub mod sync_impl` and `pub mod async_impl`.
-2. A top-level alias that **prefers async** when both features are on:
+1. Two submodules in one file, `pub mod sync_impl` and `pub mod async_impl`
+   (`src/subscriptions/notice_stream.rs`).
+2. A top-level alias that **prefers async** when both features are on (`subscriptions/mod.rs`):
    ```rust
    #[cfg(feature = "async")]
    pub use notice_stream::async_impl::NoticeStream;
    #[cfg(all(feature = "sync", not(feature = "async")))]
    pub use notice_stream::sync_impl::NoticeStream;
    ```
-3. The sync version also re-exported at `client::blocking::*`, so a both-features build can
-   still name it.
+3. The sync version re-exported at `client::blocking::*`, so a both-features build can still name
+   it.
 
-Trait method return types and `Client::*` signatures must spell out the full per-feature path
+Trait method return types and `Client::*` signatures spell out the full per-feature path
 (`crate::subscriptions::notice_stream::async_impl::NoticeStream`), not the alias.
 
 ## Why
 
-Naive same-name sibling structs gated `#[cfg(feature = "sync")]` / `#[cfg(feature = "async")]`
-compile fine in each single-feature build and then collide under `--all-features`. The alias
-indirection is what lets both types exist at once while one name stays canonical, so
-`cargo check --all-features` is the check that matters here — the `all-features` leg of the
-[feature matrix](feature-matrix.md).
+Same-name sibling structs gated `#[cfg(feature = "sync")]` / `#[cfg(feature = "async")]` compile
+in each single-feature build and collide under `--all-features`. The alias lets both exist while
+one name stays canonical, so `cargo check --all-features` is the check that matters (the
+`all-features` leg of the [feature matrix](feature-matrix.md)).
 
-`async` is a Rust keyword, so any path crossing that module needs the raw identifier:
-`crate::subscriptions::r#async::Subscription`. Plain `async::` is a parse error, not a
-resolution error — the compiler message points at syntax and reads as unrelated.
+`async` is a keyword, so paths through that module need the raw identifier:
+`crate::subscriptions::r#async::Subscription`. Plain `async::` is a parse error whose message
+reads as unrelated.
 
 Two `#[cfg]`-gated impl blocks on **different receiver types** coexist legally; they are not
-mutually exclusive alternatives. Plans that assume otherwise call for needless
-feature-splitting, so state the receiver types explicitly when scoping this work.
+mutually exclusive. Plans that assume otherwise call for needless feature-splitting, so state the
+receiver types explicitly when scoping.
 
-`Subscription` predates the convention: same dual-export idea, but flat
-`subscriptions/sync.rs` + `subscriptions/async.rs` files instead of `sync_impl` / `async_impl`
-submodules. Don't copy that file layout for new types. Its two halves agree on the generic
-shape — both are `Subscription<T: StreamDecoder<T>>`
-dispatching statically on `T`, both carry `#[allow(private_bounds)]` because `StreamDecoder` is
-`pub(crate)`. A divergence in the *impl* of a dual-feature type reads as deliberate long after
-it stopped being so, so bring the halves together rather than documenting the gap.
+`Subscription` predates the convention: flat `subscriptions/sync.rs` + `subscriptions/async.rs`
+instead of submodules. Don't copy that layout. Both halves share one shape,
+`Subscription<T: StreamDecoder<T>>` dispatching statically on `T` with `#[allow(private_bounds)]`
+(`StreamDecoder` is `pub(crate)`). A divergence in a dual-feature type's impl reads as deliberate
+long after it stopped being so: bring the halves together rather than documenting the gap.
 
-One divergence is deliberate: after `cancel()`, both halves yield `Err(Error::Cancelled)` and
-end, but the blocking side first yields what was already queued, while every async clone stops
-at its next poll through a shared flag, following the async `TickSubscription` precedent (#894,
-#916). Don't "fix" either side to match the other.
+One divergence is deliberate: after `cancel()` both halves yield `Err(Error::Cancelled)` and end,
+but the blocking side first yields what was already queued, while every async clone stops at its
+next poll through a shared flag (#894, #916). Don't "fix" either side to match.
 
 ## Precedents
 
-- #512 — introduced the global `NoticeStream` for unrouted IB notices, establishing the
-  per-feature submodule split.
-- #526 — unified the notice API on `Client::builder()`, which is where the async-preferring
-  alias and the `client::blocking::*` mirror settled into their current shape.
-- #823 — closed the last structural divergence between the two `Subscription` halves. The async
-  one had kept a type-erased decoder closure and a `PreDecoded` arm for a `pub fn new(receiver)`
-  nothing in the crate called; that arm forced `message_bus: Option<_>` and left `Clone` with a
-  `panic!`. Binding the struct on `T: StreamDecoder<T>` like the sync one deleted both:
-  `git diff --shortstat 29013b4c f2f2fa51` reads 11 files, +422 −689. The dead constructor was
-  public, so it still cost a migration-guide section to remove.
-- #957 — `AccountSummarySnapshots` exists in both halves; the blocking one is named via
-  `client::blocking`, the top-level name follows the async-wins rule.
+- #512 — global `NoticeStream` for unrouted notices; established the per-feature submodule split.
+- #526 — unified the notice API on `Client::builder()`; the async-preferring alias and
+  `client::blocking::*` mirror settled into their current shape.
+- #823 — closed the last structural divergence between the `Subscription` halves: the async one's
+  type-erased decoder and `PreDecoded` arm (for an uncalled `pub fn new(receiver)`) forced
+  `message_bus: Option<_>` and a `panic!` in `Clone`. Binding on `T: StreamDecoder<T>` deleted
+  both (+422 −689). The dead constructor was public, so removing it still cost a migration-guide
+  section.
+- #916 — cancel always ends the subscription; the queued-vs-immediate split above.
+- #957 — `AccountSummarySnapshots` in both halves: blocking named via `client::blocking`,
+  top-level name async.
 - #958 — extended the `client::blocking` mirror to `TickSubscription` (+ its four iterators) and
-  `DisplayGroupSubscription`; the latter had no public blocking path in a both-features build.
+  `DisplayGroupSubscription`, which had no blocking path in a both-features build.

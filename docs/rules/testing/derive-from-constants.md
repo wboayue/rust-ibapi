@@ -14,8 +14,8 @@ memory: []
 ---
 
 When a test asserts against a version-gated API — `Features::*`, `server_versions::*`,
-`IncomingMessages::*` — bind the constant once and derive every assertion from its fields.
-Never hardcode the wire value.
+`IncomingMessages::*` — bind the constant once and derive every assertion from it. Never
+hardcode the wire value.
 
 ```rust
 let feature = Features::CONFIG;
@@ -23,22 +23,19 @@ assert_eq!(*required, feature.min_version);   // not `219`
 assert_eq!(name, feature.name);               // not `"configuration"`
 ```
 
-Boundary cases then document themselves: `feature.min_version - 1` and `feature.min_version`.
-For `Display` assertions, build the expected string with `format!()` against the same fields —
-that still validates ordering and literal punctuation while parameterizing the values.
+Boundaries are `feature.min_version - 1` and `feature.min_version`. For `Display` assertions,
+build the expected string with `format!()` over the same fields — it still checks ordering and
+punctuation.
 
 ## Why
 
-A hardcoded number decays silently. When IBKR bumps a `MIN_SERVER_VER_*`, the constant moves
-and the test keeps passing — it is still syntactically valid, it just no longer asserts what
-its name claims. There is no failure to notice, which is what makes this worse than a broken
-test.
-
-`ProtocolFeature` carries exactly two fields, `name` and `min_version`, so every assertion a
-version test needs is reachable from the bound constant. `src/protocol_tests.rs` is the
-worked example, including the `format!()`-built `Display` assertion.
+A hardcoded number decays silently: when a `MIN_SERVER_VER_*` moves, the constant moves and
+the test still passes while no longer asserting what its name claims. `ProtocolFeature` has
+exactly two fields, `name` and `min_version`, so everything a version test needs is reachable
+from the bound constant. `src/protocol_tests.rs` is the worked example, including the
+`format!()`-built `Display` assertion.
 
 ## Precedents
 
-- #540 — /simplify caught three hardcoded sites; the same PR is where
-  [`ProtocolFeature::new` turned out to read 0% coverage](coverage-floor.md).
+- #540 — /simplify caught three hardcoded sites; same PR found
+  [`ProtocolFeature::new` reading 0% coverage](coverage-floor.md).

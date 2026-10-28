@@ -16,62 +16,7 @@ memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 
 Every domain decoder reads its payload with `message.proto()`, which takes the bytes from
 `require_proto()` and decodes them through `DecodeProto::decode_proto` (prost's error becomes
-`Error::ProtobufDecode`). There is no text branch and no format dispatch — `decode_proto_or_text`
-was retired with the floor ratchet.
-
-**Decoding takes `&ResponseMessage`, never `&mut`.** Reading `raw_bytes` and handing it to `prost`
-consumes nothing. `next_int` / `next_string` still exist and still need `&mut` (`next_double` is
-`#[cfg(test)]`), but the handshake (`connection/common.rs`) is their only production caller —
-it reads the server version and time off a frame that predates any decoder. A new `&mut ResponseMessage` in a decode path means either a
-text decoder, which the floor ratchet retired, or a signature copied from one.
-
-**`RESPONSE_MESSAGE_IDS` must list every type the `decode` match handles.** It is the skip
-filter: all three drivers drop anything not listed there *before* calling `decode`, because
-shared channels carry several types. A `decode` arm for an unlisted type is dead code. The third
-driver is `market_data/historical/common/tick.rs::classify`, over `TickDecoder`, which declares
-the same const and filters with the same `is_undeclared` helper — a tick type simply declares
-one entry (#738).
-
-**Every `decode` needs a backstop, and it is what makes the gate below able to read it.** End a
-multi-type `impl StreamDecoder<T>::decode` match with
-`_ => Err(Error::unexpected_response(message))`. A decoder consuming exactly one type has no
-match to hang that on, so `message.expect_type(IncomingMessages::X)?` is its backstop and is
-*not* redundant with the const — that is the form the scanner, both wsh, and all three
-`TickDecoder` impls take. Either way it is a backstop for the two lists disagreeing, not a
-control-flow signal: it terminates the subscription, loudly. Never `Error::NotImplemented` or
-`Error::Simple(...)`.
-
-**Both drift directions are gated, for both traits**, by `response_message_ids_match_decode_arms`
-(`src/subscriptions/response_message_ids_tests.rs`). It probes every decoder with a minimal
-text-framed message of every `IncomingMessages` discriminant and requires the two lists to
-agree exactly: `UnexpectedResponse` means "no arm" (nothing else reaches the backstop),
-anything else means an arm exists — `Ok`, `EndOfStream`, or the `UnexpectedWireFormat` that
-`proto()` raises on text framing. Declared-but-unhandled would also fail loudly at
-runtime via the backstop; handled-but-undeclared would not, which is why the test exists.
-
-That reading is exactly why a missing backstop is not a style question. A `decode` that dives
-straight into `proto()` answers `UnexpectedWireFormat` to *every* probe, so the gate
-reads it as claiming an arm for every discriminant it scans and can say nothing about it.
-
-**The const stays a slice even for single-type decoders, and the narrow stays a
-hardcoded literal.** Both look like duplication and neither is. Collapsing to
-`const MESSAGE_TYPE` with a derived `RESPONSE_MESSAGE_IDS = &[Self::MESSAGE_TYPE]` compiles, but
-`StreamDecoder`'s multi-type impls cannot use it, so one filter (`is_undeclared`) would read two
-declaration forms. And deriving the narrow from `Self::RESPONSE_MESSAGE_IDS` makes the gate
-circular — `handled` would be computed from the same const as `declared`, so every declaration
-would agree with itself, including a wrong one. A cross-check needs two independent statements.
-
-Its companion `decoder_roster_is_complete` counts `impl StreamDecoder` and `impl TickDecoder`
-blocks under `src/` against the hand-listed roster — per trait, so adding one while deleting the
-other cannot net out — and fails when a new decoder goes unregistered.
-
-**Never declare `IncomingMessages::Error` or `Shutdown`, and never write a `decode` arm for
-them.** `determine_routing` classifies both before any allow-list, so an error reaches the
-subscription as `RoutedItem::Error`/`Notice` and a shutdown ends the dispatcher loop — neither
-ever arrives as the `RoutedItem::Response` that `decode` consumes. The same holds for one-shot
-requests, which read through `RoutedItem::into_legacy`: an error becomes `Some(Err(_))` and the
-processor never runs. Sixteen decoders declared `Error` anyway; the check above names the
-mistake specifically.
+`Error::ProtobufDecode`). No text branch, no format dispatch.
 
 ```rust
 pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result<NewsBulletin, Error> {
@@ -79,78 +24,95 @@ pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result
 }
 ```
 
+**Decoding takes `&ResponseMessage`, never `&mut`.** `next_int` / `next_string` still need `&mut`
+(`next_double` is `#[cfg(test)]`), but their only production caller is the handshake
+(`connection/common.rs`), which reads a frame that predates any decoder. A new `&mut` in a decode
+path is a text decoder or a signature copied from one.
+
+**`RESPONSE_MESSAGE_IDS` must list every type the `decode` match handles.** It is the skip
+filter: all three drivers (`StreamDecoder` sync and async, and
+`market_data/historical/common/tick.rs::classify` for `TickDecoder`) drop anything not listed,
+via `is_undeclared`, *before* calling `decode`. An arm for an unlisted type is dead code. The
+const stays a slice even for single-type decoders.
+
+**Every `decode` needs a backstop.** A multi-type match ends with
+`_ => Err(Error::unexpected_response(message))`. A single-type decoder has no match, so
+`message.expect_type(IncomingMessages::X)?` is its backstop — not redundant with the const (the
+scanner, `WshEventData`, and the three `TickDecoder` impls take this form). Hardcode that literal;
+don't derive it from `Self::RESPONSE_MESSAGE_IDS`, or the gate below compares the const with
+itself. The backstop terminates the subscription loudly. Never `Error::NotImplemented` or
+`Error::Simple(...)`.
+
+**Never declare `IncomingMessages::Error` or `Shutdown`, and never write an arm for them.**
+`determine_routing` classifies both before any allow-list: an error reaches the subscription as
+`RoutedItem::Error`/`Notice`, a shutdown ends the dispatcher loop. One-shots read through
+`RoutedItem::into_legacy`, where an error becomes `Some(Err(_))` and the processor never runs.
+
+## The gates
+
+`response_message_ids_match_decode_arms` (`src/subscriptions/response_message_ids_tests.rs`)
+probes every decoder with a minimal text-framed message of every `IncomingMessages` discriminant
+and requires declared and handled to agree exactly, for both traits: `UnexpectedResponse` means
+"no arm"; anything else (`Ok`, `EndOfStream`, or `UnexpectedWireFormat` from `proto()` on text
+framing) means an arm exists. It also rejects declaring a dispatcher-intercepted type. Handled
+but undeclared would otherwise be silent at runtime.
+
+That reading is why a missing backstop is not a style question: a `decode` that dives straight
+into `proto()` answers `UnexpectedWireFormat` to every probe and reads as handling everything.
+
+`decoder_roster_is_complete` counts `impl StreamDecoder` and `impl TickDecoder` blocks under
+`src/` against the hand-listed roster, per trait, and fails on an unregistered decoder.
+
 ## Why
 
-`process_decode_result` (`src/subscriptions/common.rs`) used to map `UnexpectedResponse` to
-`ProcessingResult::Skip`, which made an error variant carry dispatch semantics. That is the
-defect behind both #508 (a subscription died on one unrecognised message) and #731 (a
-mis-framed fixture vanished): the same variant is returned to users as a genuine error by ~20
-one-shot call sites, so any decoder that reused it silently inherited "drop this". #732 moved
-the decision to the declared list, where it is data rather than an error code.
+Skip used to be keyed on an error variant: `UnexpectedResponse` meant "drop this", while ~20
+one-shot sites returned the same variant to users as a genuine error. That is the defect behind
+#508 (a subscription died on one unrecognized message) and #731 (a mis-framed fixture vanished).
+#732 moved the decision to the declared list, where it is data rather than an error code.
 
-`proto()` (through `require_proto()`) returns `Error::UnexpectedWireFormat`, distinct from
-`UnexpectedResponse` because the two failures look alike and are not:
+The two errors look alike and are not:
 
 | Call site | Meaning |
 |---|---|
 | `_ => Err(Error::unexpected_response(message))` | declared but unhandled — a bug in this impl |
-| `message.proto()?` | handled, but the framing is unreadable |
+| `message.proto()?` → `UnexpectedWireFormat` | handled, but the framing is unreadable |
 
-Both terminate. Neither is skipped. A mis-framed fixture therefore fails its test rather than
-leaving it green with the post-`next_data()` assertions unrun — see
-[fixture builders](../testing/fixture-builders.md). At
+Both terminate; neither is skipped. A mis-framed fixture fails its test instead of staying green
+with its assertions unrun ([fixture builders](../testing/fixture-builders.md)). At
 `server_versions::PROTOBUF_REST_MESSAGES_3` every message with a proto decoder arrives
 proto-framed, so `UnexpectedWireFormat` in production means the gateway broke protocol.
+`ResponseMessage::peek_int` returns the same variant for the mirror case (proto framing at a
+text-field accessor).
 
-`ResponseMessage::peek_int` is the mirror image — proto framing at a text-field accessor —
-and returns the same variant. A framing mismatch is never skippable in either direction.
-
-`Error::UnexpectedResponse` carries a `String`, not a `ResponseMessage` — the constructor
-`Error::unexpected_response(&message)` formats it, because `ResponseMessage` became
-`pub(crate)` and could no longer sit in a public enum payload.
+`Error::UnexpectedResponse` carries a `String`, built by `Error::unexpected_response(&message)`,
+because `ResponseMessage` is `pub(crate)` and cannot sit in a public enum payload.
 
 ## Related surfaces
 
-This is one of three places the proto framing must be respected. When fixing one, audit the
-other two:
+Proto framing must be respected in three places; when fixing one, audit the others:
 
 1. Decoders — this node.
 2. `ResponseMessage` accessors — [proto-aware accessors](proto-aware-accessors.md).
-3. The `From<&ResponseMessage> for Notice` / `From<ResponseMessage> for Error` conversions,
-   which read `raw_bytes` first and fall back to text fields only for legacy fixtures.
+3. Error frames — `routing::decode_error_envelope`, behind the dispatcher's `DecodedError` and
+   `From<&ResponseMessage> for Notice`. Proto-only; absent or undecodable bytes yield an empty
+   code-0 notice.
 
 ## Precedents
 
-- #508 — the original bug: an unknown message type terminated the subscription instead of
-  being skipped.
+- #508 — an unknown message type terminated the subscription instead of being skipped.
 - #731 — split the framing failure out of the skip path so the fixture trap fails loudly.
-- #732 — retired skip-by-error-variant entirely; `RESPONSE_MESSAGE_IDS` is now the filter and
-  the const lost its default so every impl must declare one.
-- #733 — gated both drift directions; the roster is counted against the tree.
-- #734 — audited all 78 declared entries under the const's new meaning. Sixteen declared
-  `IncomingMessages::Error`, which the dispatcher intercepts; those and their `decode` arms are
-  gone, along with the guard exemption that had been keeping them legal.
-- #735 — same removal on the one-shot side, and `MessageBusStub` now classifies error frames
-  so the input those arms handled can no longer be constructed. Surfaced a real bug behind one
-  of them: blocking `matching_symbols` discarded routed errors and returned `Ok(vec![])`.
-- #738 — extended the const to `TickDecoder` so all three drivers share one skip filter, and
-  moved one-shot narrowing to `request_helpers::expect_proto` at the call site (gated separately
-  by `test_expect_proto_sites_match_the_roster`). **A counter-example too:** the same PR first
-  deleted the `expect_type` from the two single-type `StreamDecoder::decode` impls as a "third
-  copy of the same fact", and `response_message_ids_match_decode_arms` caught it within the
-  hour. The narrow is the single-arm form of the backstop, not a duplicate of the const. It also
-  showed the const's rename to `TickDecoder` bought the name without the gate.
-- #740 — narrowed `StreamDecoder::decode` from `&mut ResponseMessage` to `&ResponseMessage`. The
-  `&mut` had been threaded through 29 impls and ~25 decoder functions since the text era and no
-  production decoder mutated: every one took the message mutably and immediately called
-  `require_proto()`, which takes `&self`. The library compiled in all three feature configs on the
-  signature change alone. Command that finds a real cursor user:
-  `grep -rn "\.next_int()\|\.next_string()\|\.next_double()" --include=*.rs src/ | grep -v _tests`
-  → two hits, both in `connection/common.rs`.
-- #739 — closed that gap, and the ordering is the lesson. The gate could not simply be pointed at
-  `TickDecoder`: with no backstop in the three impls, every probe reached `require_proto()` and
-  the decoders read as handling everything. Adding `expect_type` first is what made them legible,
-  which is the same fact #738 learned from the other direction — it deleted two backstops as
-  redundant, this one had to add three before a gate could exist. Confirmed against the tree: the
-  over-declaration #738 used as its proof (`TickBidAsk` declaring `UserInfo`) passed all 1364 sync
-  tests before, and now fails by name.
+- #732 — retired skip-by-error-variant; `RESPONSE_MESSAGE_IDS` became the filter, with no default.
+- #733 — gated both drift directions; roster counted against the tree.
+- #734 — audited all 78 declared entries; removed sixteen `IncomingMessages::Error` declarations
+  and their arms, plus the guard exemption that kept them legal.
+- #735 — same removal on the one-shot side; surfaced blocking `matching_symbols` discarding
+  routed errors and returning `Ok(vec![])`.
+- #738 — extended the const to `TickDecoder` (one shared skip filter). Counter-example: it first
+  deleted the `expect_type` from two single-type `StreamDecoder` impls as duplication, and the
+  gate caught it within the hour.
+- #739 — gated `TickDecoder`, which first required adding `expect_type` backstops to all three
+  impls; without them every probe read as handled. The over-declaration #738 cited (`TickBidAsk`
+  declaring `UserInfo`) passed before and fails by name after.
+- #740 — narrowed `decode` from `&mut` to `&ResponseMessage` across 29 impls; no production
+  decoder mutated. Find real cursor users with
+  `grep -rn "\.next_int()\|\.next_string()\|\.next_double()" --include=*.rs src/ | grep -v "tests\.rs"` (only `connection/common.rs`).
