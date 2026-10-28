@@ -137,7 +137,7 @@ from outside the numbered set: `wire/one-shot-narrowing` (#738/#749) and
 
 The regression check on trigger phrasing: re-run after a round of node edits, or whenever a
 node's `triggers` are rewritten. Give each probe to a fresh subagent with no knowledge of the
-graph. **Last run 2026-08-06: 3/3 pass** — every one opened its node as its first read rather
+graph. **Last run 2026-10-27: 3/3 pass** — every one opened its node as its first read rather
 than answering from the `AGENTS.md` index line.
 
 1. *"I'm adding a `contract_id()` accessor to `ResponseMessage` — what do I need to know?"*
