@@ -32,51 +32,44 @@ while let Some(item) = sub.next().await {
 }
 ```
 
-**Never write `(&mut sub).filter_data().next().await`.** The re-borrow cast reintroduces the
-API being removed under a different name.
+**Never write `(&mut sub).filter_data().next().await`.**
 
 ## Why
 
-`filter_data` takes `self`, so the cast exists only to dodge the move — it is a workaround
-wearing the shape of an idiom, and it spreads by copy-paste into every new example.
+`filter_data` takes `self`; the cast exists only to dodge the move, and it spreads by copy-paste
+into every new example.
 
-Switching a call site from cast to consume form makes the original binding immutable, so drop
-its `mut`. Consuming an immutable binding is legal, but the leftover `mut` fires `unused_mut`,
-which CI treats as an error under `-D warnings`.
+Switching a call site to consume form leaves the original binding's `mut` unused, which fires
+`unused_mut`, an error under CI's `-D warnings`. Drop it.
 
-Through a `Deref` wrapper such as `DisplayGroupSubscription`, `sub.next().await` works
-unchanged. The `&mut *sub` reborrow is only needed for `filter_data` adapters reached through
-`Deref`.
+Through a `Deref` wrapper such as `DisplayGroupSubscription`, `sub.next().await` works unchanged;
+the `&mut *sub` reborrow is only needed to reach `filter_data` through `Deref`.
 
-Two tests legitimately call `filter_data` because the notice-filter contract *is* what they
-assert — `filter_data_stream_drops_notices` and
-`routed_item_notice_skipped_then_response_delivered`. Both use consume form, not the cast.
+Tests that assert the notice-filter contract (`filter_data_stream_drops_notices`,
+`routed_item_notice_skipped_then_response_delivered`) call `filter_data` in consume form too.
 
-Related trap: the default `IntoIterator` on the sync side yields `SubscriptionItem`, not `T`,
-and `iter_data().flatten()` silently discards `Err` items because `Result` is itself
-`IntoIterator`. Match explicitly in anything a user will copy.
+Sync-side trap: the default `IntoIterator` yields `SubscriptionItem`, not `T`, and
+`iter_data().flatten()` silently discards `Err` items because `Result` is itself `IntoIterator`.
+Match explicitly in anything a user will copy.
 
 ## Inside a Client method, ask whether it consumes `Err`
 
-The same trap in library code is worse, because the caller has no way to see it. A method that
-collects a subscription with `while let Some(Ok(item))` or `if let Ok(item)` turns a routed
-`RoutedItem::Error` into a normal loop exit and returns an empty `Vec` — so a rejection from
-TWS is indistinguishable from "nothing matched". Blocking `matching_symbols` shipped that shape
-while its async twin had `Some(Err(e)) => return Err(e)`; `OrderBuilder::analyze` had it on both
-sides, on the one API where rejection is a routine outcome.
+Worse in library code, because the caller cannot see it. Collecting with
+`while let Some(Ok(item))` or `if let Ok(item)` turns a routed `RoutedItem::Error` into a normal
+loop exit and returns an empty `Vec`, so a TWS rejection looks like "nothing matched". Blocking
+`matching_symbols` shipped that while its async twin returned the `Err`; `OrderBuilder::analyze`
+had it on both sides, on the one API where rejection is routine.
 
-**No shared layer answers this.** The dispatcher's job ends at producing the `Err`; whether it
-reaches the caller is decided once per public entry point, so it is a per-method review question
-and a per-method test — see
-[exercise production code](../testing/exercise-production-code.md).
+**No shared layer answers this.** The dispatcher produces the `Err`; whether it reaches the caller
+is decided per public entry point, so it is a per-method review question and a per-method test.
+See [exercise production code](../testing/exercise-production-code.md).
 
 ## Precedents
 
-- #550 — `impl Stream for async Subscription<T>`; its `/simplify` pass (commit `3b708a7`)
-  removed the re-borrow casts and named the reason.
+- #550 — `impl Stream for async Subscription<T>`; its `/simplify` pass removed the re-borrow
+  casts and named the reason.
 - #598 — canonicalized sync stream iteration on `iter_data()` plus an explicit `Result` match
-  across the examples.
-- #735 — swept every `Some(Ok(..))` consumption site after finding two that dropped routed
-  errors; every other site already handled `Some(Err(e))`.
-- #1081 — finished #598's sweep in the sync doc examples, where `for x in &sub` had survived:
-  thirteen sites moved to `iter_data()` with an explicit `Err` arm.
+  across examples.
+- #735 — swept `Some(Ok(..))` consumption sites after finding two that dropped routed errors.
+- #1081 — finished #598's sweep in sync doc examples, where `for x in &sub` had survived: thirteen
+  sites moved to `iter_data()` with an explicit `Err` arm.

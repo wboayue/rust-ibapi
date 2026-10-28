@@ -16,7 +16,7 @@ memory: [project_protobuf_only, feedback_request_id_index_registration]
 ---
 
 A one-shot request reads one frame off a **shared** channel, so it must check that the frame is
-the one it asked for. Do that with `request_helpers::expect_proto`, never with a bare decoder:
+the one it asked for. Do that with `request_helpers::expect_proto`, never a bare decoder:
 
 ```rust
 request_helpers::blocking::one_shot_by_request_id(
@@ -26,119 +26,85 @@ request_helpers::blocking::one_shot_by_request_id(
 )
 ```
 
-The expected message type is not written here. It is `ProtoPayload::MESSAGE_ID` on the payload
-the decoder accepts — `decode_user_info_proto(p: proto::UserInfo)` — so naming the decoder names
-the frame. A one-shot API's decoder therefore takes the *decoded* `prost` type, not `&[u8]`;
-give the payload an `impl ProtoPayload` (`src/proto/payload.rs`) if it lacks one, which
-`expect_proto` will demand anyway since it cannot infer `MESSAGE_ID` otherwise.
+The expected message type is not written here: it is `ProtoPayload::MESSAGE_ID` on the payload
+the decoder accepts (`decode_user_info_proto(p: proto::UserInfo)`), so naming the decoder names
+the frame. A one-shot decoder therefore takes the decoded `prost` type, not `&[u8]`; give the
+payload an `impl ProtoPayload` (`src/proto/payload.rs`) if it lacks one — `expect_proto` won't
+compile without it.
 
-**A one-shot TWS can cancel goes through `one_shot_cancelling::<K>`** instead, where `K` is a
-`CancellableOneShot`: the payload type (so the frame), its decoder and its cancel encoder. The
-request is read through a typed subscription, so one dropped before its answer (a dropped
-future, a timeout, a local error) is cancelled at TWS rather than left running against pacing;
-the answer and a TWS error each end the request, so neither cancels (#1107). Check C#
-`EClient.cs` for a `cancel*` method when adding a one-shot: head timestamp, histogram,
+**A one-shot TWS can cancel goes through `one_shot_cancelling::<K>`**, where `K` is a
+`CancellableOneShot` naming the payload type, its decoder and its cancel encoder. The request is
+read through a typed subscription, so one dropped before its answer (dropped future, timeout,
+local error) is cancelled at TWS; the answer or a TWS error ends the request without a cancel.
+When adding a one-shot, check C# `EClient.cs` for a `cancel*` method: head timestamp, histogram,
 historical schedule, option price, implied volatility and both WSH requests have one.
 
 **Every one-shot helper retries.** `one_shot_by_request_id` for a request-id request,
-`one_shot_shared` (or `one_shot_shared_matching`, below) for a shared channel. None takes a
-`ProtocolFeature`. The handshake requires server version 213, so most one-shots need no check;
-one gated above that floor does it on the line above, as `config` does with
-`check_version(server_version, Features::CONFIG)?` (#978).
+`one_shot_shared` (or `one_shot_shared_matching`) for a shared channel. None takes a
+`ProtocolFeature`: the handshake requires server version 213, so most one-shots need no check; one
+gated above the floor checks inline first, as `config` does with
+`check_version(self.server_version(), Features::CONFIG)?` (#978). `fold_one_shot` is private to
+`request_helpers` so a non-retrying hand-rolled one-shot is unreachable from a domain module.
 
-No helper takes an `on_none` either: a closed stream is `Error::UnexpectedEndOfStream`.
-The ten sites where "TWS sent nothing" is a legitimate empty answer chain
-`.or_else(empty_on_end_of_stream)`.
+**No helper takes an `on_none`**: a closed stream is `Error::UnexpectedEndOfStream`. Where "TWS
+sent nothing" is a legitimate empty answer, chain `.or_else(empty_on_end_of_stream)`.
 
-A shared one-shot waits at most `ONE_SHOT_TIMEOUT` for its frame and then fails with
-`Error::Timeout`: the frame carries no request id, so nothing else would end the wait. A
-request-id one-shot waits without a limit. `ClientBuilder::one_shot_timeout` replaces both
-bounds. The helpers take the deadline once, outside `retry_on_connection_reset`, so it bounds
-the whole call; a helper that reads more than once (the historical-data bars, then its window)
-takes it from `one_shot_deadline` and passes it to every `next_frame`. Each attempt calls
-`check_deadline` before it sends, so a reconnect that outlasts the deadline sends nothing. Every
-live subscription of a type receives every frame of that type, so a shared one-shot whose
-frames can belong to a concurrent caller goes through `one_shot_shared_matching`, whose
-processor answers `Ok(None)` for another caller's frame and reads on. `request_fa` (one
-`ReceiveFA` type for every dataset) and `market_rule` (one `MarketRule` type for every rule
-id) use it.
+**Deadlines.** A shared one-shot waits at most `ONE_SHOT_TIMEOUT`, then fails with
+`Error::Timeout` (the frame carries no request id, so nothing else ends the wait). A request-id
+one-shot waits without a limit. `ClientBuilder::one_shot_timeout` replaces both bounds. The
+deadline is taken once, outside `retry_on_connection_reset`, so it bounds the whole call; each
+attempt calls `check_deadline` before sending, so a reconnect that outlasts it sends nothing. A
+helper that reads more than once (historical-data bars, then its window) takes the deadline from
+`one_shot_deadline` and passes it to every `next_frame`.
 
-A one-shot that does not retry is a bug, not a choice. `fold_one_shot` is private to
-`request_helpers` so that hand-rolling one is not reachable from a domain module.
+**Concurrent callers.** Every live subscription of a type receives every frame of that type, so a
+shared one-shot whose frames can belong to another caller uses `one_shot_shared_matching`: its
+processor answers `Ok(None)` for a foreign frame and reads on. `request_fa` (one `ReceiveFA` type
+for every dataset) and `market_rule` (one `MarketRule` type for every rule id) use it.
 
-Do not reach for `expect_proto` inside `impl StreamDecoder::decode`; see
+Don't use `expect_proto` inside `impl StreamDecoder::decode`; see
 [proto-only decoding](proto-only-decoding.md) for what that surface owes instead.
 
 ## Why
 
-Narrowing used to be opt-in. Each domain hand-wrote a `decode_*_message` wrapper doing
-`expect_type(..)?` before its real decoder, and 26 of the 50 `expect_proto` sites had no wrapper
-at all — they decoded whatever arrived on the channel. The follow-up that scoped #738 put that
-number at four; the real one was six times larger, which is the usual shape of a
-completeness claim nobody ran a command for.
+Narrowing used to be opt-in: each domain hand-wrote a `decode_*_message` wrapper doing
+`expect_type(..)?`, and 26 of 50 sites had none — they decoded whatever arrived. The follow-up
+scoping #738 estimated four; nobody had run a command for the claim. The failure is quiet: a
+foreign proto decoded as the wrong `prost` type usually yields *something* (field numbers overlap),
+so the caller gets a plausible struct of wrong values.
 
-The consequence is quiet. A foreign proto handed to the wrong `prost` type usually decodes to
-*something* — field numbers overlap across messages — so the caller gets a plausible struct full
-of wrong values rather than an error.
+Where the `(message type, decoder)` pair lives is the point. #738 put both at the call site,
+which made narrowing structural but left the two arguments unrelated to the compiler, so a
+mispairing built and ran; catching it took a hand-listed roster and a source-scraping test. #749
+moved the type onto the payload, where it is a property rather than an argument. A wrong
+`MESSAGE_ID` in an impl is still possible; the per-API round-trip tests catch it with `expected
+FamilyCodes, got .. kind: UserInfo` instead of asserting on mis-decoded bytes.
 
-**The pair moved twice, and where it landed is the point.** #738 put it at the call site as
-`expect_proto(IncomingMessages::UserInfo, decode_user_info_proto)`, which made narrowing
-structural — a site could not name a payload decoder without naming a frame — but left the two
-arguments unrelated to the compiler, so a mispairing built and ran. Catching that took a
-hand-listed roster and a source-scraping test, and the pair was spelled twice per API since sync
-and async each carry a call site. #749 moved it onto the payload type, where it is a property
-rather than an argument: 25 `impl ProtoPayload` declarations replaced 50 call-site
-literals plus the roster.
+`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)`, not another helper
+parameter, keeping the helper signatures at three and four arguments.
 
-That is not the same as "the type system enforces it". A wrong `MESSAGE_ID` in an impl is still
-possible; it is caught by the per-API round-trip tests, which now fail with `expected
-FamilyCodes, got .. kind: UserInfo` rather than decoding one message's bytes into another's type
-and asserting on the result.
-
-`expect_proto` is a combinator returning `impl Fn(&ResponseMessage)` rather than another
-parameter on the two one-shot helpers, keeping their signatures at three and four arguments.
-
-## Why every one-shot retries
-
-`retry_on_connection_reset` fires only on `Error::ConnectionReset` and gives up after three
-attempts. Every one-shot here is a read — encode, send, read one frame — so replaying it after
-the gateway drops the connection costs nothing and loses no server-side state. There is no
-one-shot for which the answer differs, which is why the helper no longer offers the choice.
-
-It used to. A third helper, `one_shot_request`, was the only one taking a `ProtocolFeature`, so
-the four version-gated shared-channel one-shots (`market_rule`, `family_codes`, sync and async)
-picked it and silently gave up retry — while `market_depth_exchanges`, equally version-gated,
-called `check_version` inline and kept it. **The distinction was never about retry.** #741
-deleted the helper and moved its four sites to the inline form, so the two survivors differ only
-in whether the request carries an id.
-
-The general shape: when two helpers differ on two axes and callers only care about one, the
-axis they are not choosing gets chosen for them.
+**Why every one-shot retries:** `retry_on_connection_reset` fires only on
+`Error::ConnectionReset`, up to `DEFAULT_MAX_RETRIES` (3). Every one-shot is a read, so replaying
+it after a dropped connection costs nothing and loses no server-side state. The removed
+`one_shot_request` was the only helper taking a `ProtocolFeature`, so version-gated sites picked
+it and silently lost retry — the distinction was never about retry. When two helpers differ on two
+axes and callers only care about one, the other axis gets chosen for them.
 
 ## Precedents
 
-- #736 — collapsed seven `decode_*_message` dispatchers onto `ResponseMessage::expect_type`.
-  Right direction, but it left narrowing as a per-domain wrapper, so the sites without one
-  stayed unnarrowed and invisible.
-- #738 — moved the pair to the call site, deleted 30 wrapper functions, and swept the last
-  unnarrowed site (`next_valid_order_id`, on the shared `RequestIds` channel). The gate came
-  second, after a review mutated three sites and found only incidental round-trip tests failed;
-  a roster test then failed the same mutation by name.
-- #740 — narrowed `StreamDecoder::decode` to `&ResponseMessage`, which is what let the four
-  option-computation sites stop hand-rolling `send_raw` + fold. Their decoder wanted `&mut`, and
-  the retrying helper's processor bound is `Fn(&ResponseMessage)`; the `&mut` turned out to be
-  vestigial rather than a real constraint.
-- #741 — deleted `one_shot_request` and `fold_one_shot_mut`; every one-shot retries and no
-  hand-rolled folds remain. Mechanism above.
-- #745 — dropped `on_none`. 44 of 54 sites passed the same closure and the other 10 passed one
-  empty vector spelled two ways, which is the tell that nobody was choosing.
-- #1107 — the seven one-shots with an IB cancel moved to `one_shot_cancelling`; until then a
-  dropped or timed-out request kept running at TWS. Live: each is answered by exactly one
-  frame, so the answer is a snapshot end. A frame of another type is now skipped, not reported
-  as `UnexpectedResponse`, as the typed subscription filters on `RESPONSE_MESSAGE_IDS`.
-- #749 — `ProtoPayload` moved the pair onto the payload; the roster and its scraping test are
-  deleted. The plan that proposed this keyed the trait on the **decoded** type, which cannot
-  work: `server_time`, `server_time_millis`, and `head_timestamp` all return `OffsetDateTime`,
-  so one type would have needed three `MESSAGE_ID`s. Keying on the `prost` payload has no
-  collisions — a counter-example worth keeping, since the version that fails is the one that
-  reads more natural.
+- #736 — collapsed seven `decode_*_message` dispatchers onto `ResponseMessage::expect_type`, but
+  left narrowing per-domain, so sites without a wrapper stayed unnarrowed.
+- #738 — moved the pair to the call site, deleted 30 wrappers, narrowed the last site
+  (`next_valid_order_id` on the shared `RequestIds` channel).
+- #740 — `StreamDecoder::decode` took `&ResponseMessage`, letting the four option-computation
+  sites drop hand-rolled `send_raw` + fold for the retrying helper.
+- #741 — deleted `one_shot_request` and `fold_one_shot_mut`; every one-shot retries.
+- #745 — dropped `on_none`: 44 of 54 sites passed the same closure, the other 10 one empty vector
+  spelled two ways.
+- #749 — `ProtoPayload` moved the pair onto the payload; roster and scraping test deleted. Keying
+  on the decoded type fails (`server_time`, `server_time_millis`, `head_timestamp` all return
+  `OffsetDateTime`); keying on the `prost` payload has no collisions.
+- #1107 — the seven one-shots with an IB cancel moved to `one_shot_cancelling`; before, a dropped
+  or timed-out request kept running at TWS. Live: each is answered by exactly one frame. A frame of
+  another type is now skipped by the typed subscription's `RESPONSE_MESSAGE_IDS` filter rather
+  than reported as `UnexpectedResponse`.

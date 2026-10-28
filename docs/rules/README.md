@@ -5,10 +5,9 @@ the detail lives here so it loads only when the work actually calls for it.
 
 ## Why this shape
 
-Each rule used to be two documents fused together — a directive and an evidence trail. The
-directive is what you need at the moment of writing code; the evidence is what you need when
-deciding whether the directive still applies. Splitting them lets the index stay short
-enough to keep in context permanently while the reasoning stays available on demand.
+A rule is a directive (needed while writing code) plus an evidence trail (needed when deciding
+whether the directive still applies). Splitting them keeps the index short enough for permanent
+context while the reasoning stays available on demand.
 
 ## When a convention changes
 
@@ -17,12 +16,10 @@ alongside it — are in **[Maintaining the rule graph](../../AGENTS.md#maintaini
 because they have to fire without opening this file. This page carries the mechanics they refer
 to: the node format below, `triggers` phrasing, `status`, links, and the validator.
 
-The reason those obligations are worth their space in permanent context: nothing here is
-compile-checked, so a node that no longer matches `src/` is indistinguishable from one that
-does until someone reads both. That is how five errors accumulated across rules 15–20 before
-the first audit found them, and every cluster audited since has had the same class — names
-decay quietly, and completeness claims ("fully applied", "zero remaining", "every `pub fn`")
-decay faster than names.
+They live in permanent context because nothing here is compile-checked: a node that no longer
+matches `src/` reads exactly like one that does. Every audit so far has found the same decay —
+names go stale quietly, and completeness claims ("fully applied", "zero remaining", "every
+`pub fn`") go stale faster.
 
 ## Node format
 

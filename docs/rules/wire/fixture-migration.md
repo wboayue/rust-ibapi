@@ -12,40 +12,33 @@ precedents: ["#529", "#531", "#532", "#534", "#543"]
 memory: [project_protobuf_only, project_tickefp_unobserved]
 ---
 
-**Concluded.** The per-family text-cleanup arc finished when the connection floor reached
-`PROTOBUF_REST_MESSAGES_3` (213). No text decoders remain in production. This node is kept
-for the procedure, which applies again if IBKR ships a new gated family.
+**Concluded** when the connection floor reached `PROTOBUF_REST_MESSAGES_3` (213); no text
+decoders remain in production. Kept for the procedure, should IBKR ship a new gated family.
 
 After deleting a text branch from a domain decoder, find every `MessageBusStub` fixture still
-feeding text-framed responses for that message type — `text_response(...)`
-in `<domain>/{sync,async}_tests.rs` — and convert each to
-`proto_response(IncomingMessages::Foo, builder.encode_proto())`.
+feeding text-framed responses for that type — `text_response(...)` in
+`<domain>/{sync,async}_tests.rs` and in test tables' `ordered_responses` — and convert each to
+`proto_response(IncomingMessages::Foo, builder.encode_proto())`. Prerequisite: a
+`ResponseProtoEncoder::encode_proto()` impl on the builder.
 
-Prerequisite: a `ResponseProtoEncoder::encode_proto()` impl on the builder.
+## Why the sweep couldn't be skipped
 
-## Why the sweep can't be skipped
-
-Silent skip-classification means a missed conversion shows up as a **passing test whose
-assertions never run**, not as a failure. Verify with sync, async, and all-features sweeps —
-there is no other signal.
-
-## Table-driven fixtures
-
-Test-case tables carry `ordered_responses: Vec<ResponseMessage>`. Use `proto_response(...)`
-for migrated types and `text_response(...)` only for types with no proto decoder.
+During the arc, decoders skip-classified unreadable frames, so a missed conversion showed up as a
+**passing test whose assertions never ran**; only sync, async and all-features sweeps caught it.
+Since #731/#732 a text-framed arrival at a proto decoder raises `Error::UnexpectedWireFormat` and
+fails the test (see [proto-only decoding](proto-only-decoding.md)), so a future sweep fails loudly.
 
 ## TickEFP
 
-The `TickTypes::EFP` public API was removed in v3.0 along with its decoder and tests. The
-`IncomingMessages::TickEFP = 47` variant stays so the `From<i32>` arm remains exhaustive:
-incoming message id 47 maps to a known variant that no decoder claims, and the dispatcher
-catch-all skip-classifies it. Revisit only if IBKR ships `TickEFP.proto` plus a
-`MIN_SERVER_VER_*TICK_EFP*` gate.
+`TickTypes::EFP` was removed in v3.0 with its decoder and tests. `IncomingMessages::TickEFP = 47`
+stays so `From<i32>` maps id 47 to a known variant; no decoder claims it, so it lands on a shared
+channel nobody subscribes to and the dispatcher reports it as an unroutable frame. Revisit only if
+IBKR ships `TickEFP.proto` plus a `MIN_SERVER_VER_*TICK_EFP*` gate.
 
 ## Precedents
 
 - #529, #531, #532 — per-family text-branch deletions.
-- #534 — field-minimal builder for a deeply-nested proto.
+- #534 — field-minimal builder for a deeply nested proto.
 - #543 — /simplify caught fixture helpers in the wrong module.
 
 The builder conventions from this arc remain active — see

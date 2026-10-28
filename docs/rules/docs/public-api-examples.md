@@ -9,45 +9,39 @@ triggers:
   - a reviewer calls an example redundant with the builder's
 symbols: [Examples, no_run]
 related: [doc-parity-audit, param-budget, user-docs-sync]
-precedents: ["#657", "#659"]
+precedents: ["#657", "#659", "#751"]
 memory: [feedback_doc_example_user_trace]
 ---
 
 Every `pub fn`, `pub` constructor, and public builder entry point gets a `# Examples` heading
-followed by a runnable example — `no_run` is the norm, `ignore` is acceptable — showing the
-canonical happy-path call.
+(plural, even for one) followed by a runnable example — `no_run` is the norm, `ignore`
+acceptable — showing the canonical happy-path call. A bare fenced block still compiles under
+`cargo test --doc`, but docs.rs renders no "Examples" section for it.
 
-The heading is part of it. A bare fenced block still compiles under `cargo test --doc`, but
-docs.rs renders no "Examples" section for it, and the file stops matching its siblings.
-Spell it `# Examples`, plural, even when there is one.
+Exempt: field getters and trivial `is_*` predicates.
 
-Exempt: struct field getters and trivial `is_*` predicates. An example on those is noise.
-
-**Not exempt:** a builder entry point whose terminal action already has one. `client.foo(&c)`
-and `.subscribe()` are different surfaces — the entry point teaches which builder you are in,
-the terminal teaches what comes back.
+**Not exempt:** a builder entry point whose terminal already has one. `client.foo(&c)` and
+`.subscribe()` are different surfaces — the entry point teaches which builder you are in, the
+terminal what comes back.
 
 ## Why
 
-The example is a contract in three directions at once. It teaches the idiom, it is compiled by
-`cargo test --doc` so a signature change that breaks callers breaks the build, and it is the
-first thing a user sees on docs.rs.
+The example teaches the idiom, is compiled by `cargo test --doc` (so a breaking signature change
+breaks the build), and is the first thing a user sees on docs.rs.
 
-Write it from what the user *observes*, not from what compiles. `drop(subscription)` and a
-`Ok(_) => {}` catch-all are the canary anti-patterns — both compile, neither shows anything.
-An example that subscribes should print or match on what arrives.
-
-Doc-examples are also a parity surface: match the sync counterpart of the *same method* rather
-than the other examples in the same file. See [doc parity audit](doc-parity-audit.md).
+Write it from what the user *observes*. `drop(subscription)` and an `Ok(_) => {}` catch-all are
+the canary anti-patterns — both compile, neither shows anything. An example that subscribes
+should print or match on what arrives. Pair it with the same method's sync/async counterpart;
+see [doc parity audit](doc-parity-audit.md).
 
 ## Coverage today
 
-#751 closed the backfill: re-counted then as 143 of 154 `impl Client` methods with
-`# Examples`, the other eleven being trivial client accessors that are exempt. A new method
-ships with its example. The singular `# Example` heading that crept in afterward was renamed
-throughout; `grep -rnE '^\s*//[/!] # Example\s*$' src | grep -v _tests.rs` should print
-nothing. The `orders::order_builder` free functions each carry a runnable example too.
+Since #751 every `impl Client` method carries one except the exempt accessors (`client_id`,
+`next_order_id`, `connection_time`, `time_zone`); so does every `orders::order_builder` free
+function. A new method ships with its example. The singular `# Example` heading should not
+reappear: `grep -rnE '^\s*//[/!] # Example\s*$' src | grep -v _tests.rs` prints nothing.
 
 ## Precedents
 
-- #657 / #659 — the sweep that brought the async side up to the sync side's example coverage.
+- #657 / #659 — brought the async side up to the sync side's example coverage.
+- #751 — closed the backfill on the last eight `Client` methods.

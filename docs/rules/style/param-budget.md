@@ -4,81 +4,68 @@ title: Three parameters is the budget; a fourth needs a builder or a grouping st
 cluster: style
 status: active
 triggers:
-  - writing a function that takes four or more parameters
+  - writing a public function that takes four or more parameters
   - deciding whether a signature should become a builder
   - adding #[allow(clippy::too_many_arguments)]
   - a public method takes several Option arguments
 symbols: [too_many_arguments]
 related: [domain-module-layout, macros-last-resort, doc-parity-audit]
-precedents: ["#549", "#573", "#660", "#752", "#792", "#1079"]
+precedents: ["#549", "#573", "#660", "#752", "#792", "#901", "#1079"]
 memory: [feedback_rule19_builder_fed_helpers_exception, feedback_magic_none_split_to_builder]
 ---
 
-Three parameters is the budget for the **public API** — anything rustdoc shows. The receiver
-does not count — `fn foo(&self, a, b, c)` is at the limit, `fn foo(&self, a, b, c, d)` is over
-it. Everything else (`pub(crate)`, `pub(in …)`, private) is out of scope and needs no
-annotation at four to seven arguments.
+Three parameters is the budget for the **public API** (anything rustdoc shows). The receiver
+does not count: `fn foo(&self, a, b, c)` is at the limit. `pub(crate)`, `pub(in …)` and private
+functions are out of scope and need no annotation at four to seven arguments.
 
-Over the budget, pick by what the arguments *are*:
+Over budget, pick by what the arguments *are*:
 
-- **Any argument optional or defaultable** → fluent builder. This is the case the rule exists
-  for: it spares callers from `foo(id, None, None, None, None)`.
-- **All arguments required, no reasonable default** → group the related ones into a struct —
-  a `DateRange { start, end }` for the `start_time` / `end_time` pairs would be the obvious
-  first one, though no such type exists yet — or keep the flat signature with a comment
-  saying why.
-  `client.foo(a, b, c, d, e)` is no worse than `client.foo(a).b(b).c(c).d(d).e(e).run()`; a
-  mechanical builder conversion buys nothing.
+- **Any argument optional or defaultable** → fluent builder. This is what the rule exists for:
+  sparing callers `foo(id, None, None, None, None)`.
+- **All required, no reasonable default** → group related ones into a struct (no `DateRange`
+  for `start_time` / `end_time` pairs exists yet; it would be the obvious first), or keep the
+  flat signature with a comment saying why. `client.foo(a, b, c, d, e)` is no worse than
+  `client.foo(a).b(b).c(c).d(d).e(e).run()`.
 
-Internal functions are exempt because the budget protects callers, and every caller of a
-`pub(crate)` fn is in the tree: reshaping one never breaks a user. Most are seams between a
-public builder's finaliser and the wire encoder, where the typed surface already exists; the
-rest are transport and request plumbing. At eight or more arguments clippy forces
-`#[allow(clippy::too_many_arguments)]`; add a one-line reason, as the four sites in
-`market_data/historical/` do.
+Internal functions are exempt because every caller is in the tree, so reshaping one never breaks
+a user. Most are seams between a public builder's finalizer and the wire encoder. At eight or
+more arguments clippy forces `#[allow(clippy::too_many_arguments)]`; add a one-line reason, as the
+sites in `market_data/historical/` do.
 
 ## Why
 
-Positional arguments of the same type are the failure mode: `(id, start, end, limit)` swaps
-silently, and `(id, None, None, None, None)` tells a reader nothing about what was defaulted.
-Named setters make both cases loud.
+Same-typed positional arguments swap silently (`(id, start, end, limit)`), and
+`(id, None, None, None, None)` tells a reader nothing. Named setters make both loud.
 
-**Clippy does not enforce this.** `clippy::too_many_arguments` has a default threshold of 7, so
-it only fires at eight or more — more than twice the budget. Every `#[allow]` in the tree is
-therefore at 8+ args, and a 4- to 7-arg signature passes CI silently. This is a review-time
-rule with no gate behind it.
+**Clippy does not enforce this.** `too_many_arguments` defaults to 7, so it fires only at eight;
+a 4- to 7-arg public signature passes CI. This is review-time only.
 
-An `Option`-heavy public signature is usually two problems at once. Before building a setter
-for an `Option<T>` argument, check whether the `Option` should exist at all — if the wire
-allows `None` but every real caller passes `Some(x)`, drop it. When a magic-`None` API does get
-split, `foo(Option<T>)` → `foo(T)` + `foo_default()` → builder is the planned three-step path;
-the split is a waypoint, not the destination. Both sub-rules live in
-[doc parity audit](../docs/doc-parity-audit.md).
+An `Option`-heavy public signature is often two problems. Before adding a setter for an
+`Option<T>`, check whether the `Option` should exist: if every real caller passes `Some(x)`, drop
+it. A magic-`None` split, `foo(Option<T>)` → `foo(T)` + `foo_default()` → builder, is a waypoint,
+not the destination. Both live in [doc parity audit](../docs/doc-parity-audit.md).
 
-The public sites over budget are all-required and kept flat with a reason: `historical_news`
-(five arguments, #901), `Contract::option` (superseded by `Contract::call()` / `put()`), and the
+Public signatures over budget are all-required and kept flat with a reason: `historical_news`
+(five arguments), `Contract::option` (superseded by `Contract::call()` / `put()`), and the
 client-less `orders::order_builder` free functions (module doc explains).
 
 ## Precedents
 
-- #1079 — scoped the budget to the public API. An inventory found ~60 internal 4–7-arg
-  functions; annotating each would have been churn with no caller to protect.
-- #901 — free functions whose same-typed prices came in a different order from the fluent
-  method of the same name (`stop_limit(.., limit, stop)` vs `.stop_limit(stop, limit)`) were
-  removed in favor of `Order::builder()`, and #660's `PeggedToBenchmark` folded into it. Fix
-  an API split by finishing the one builder, not by adding a builder or struct per function.
-  Where named fields are the whole point and no builder fits, a plain struct argument
-  (`BracketPrices`, `Adjustment`) does it.
-- #549 — the order-construction sweep, which is what a fluent builder buys at the call site
-  (`.buy(100).limit(150.0).submit()`), and where builder enum coverage has to be audited
-  against the underlying enum.
-- #573 — a signature reshape that dropped `Option<WhatToShow>` to `WhatToShow` after checking
-  the wire, the C# client, and every caller. Removing an argument beats wrapping it.
-- #752 — `wsh_event_data_by_contract` / `_by_filter`: one required argument plus two to four
-  `Option`s that every caller passed as `None`, converted to builders with one setter each.
-- #792 — `option_chain(symbol, exchange, security_type, contract_id)`: four required-looking
-  arguments where `exchange` documented `""` as a default. The audit had filed it as
-  `Option<Exchange>`, not a builder; a live probe before the change showed the field is
-  TWS's `futFopExchange` (any named exchange returns an empty chain for a stock) and that
-  `contract_id = 0`, which two examples passed, is a hard rejection. Probe the "meaningful
-  default" before deciding its shape — the probe, not the signature, was the interesting part.
+- #1079 — scoped the budget to the public API; annotating the internal 4–7-arg functions would
+  have been churn with no caller to protect.
+- #901 — removed free functions whose same-typed prices were ordered differently from the fluent
+  method of the same name (`stop_limit(.., limit, stop)` vs `.stop_limit(stop, limit)`) in favor
+  of `Order::builder()`. Fix an API split by finishing one builder, not adding one per function.
+  Where named fields are the point and no builder fits, a plain struct argument (`BracketPrices`,
+  `Adjustment`) does it.
+- #660 — `pegged_to_benchmark` free function → `PeggedToBenchmark` builder, later folded into
+  `Order::builder()` by #901.
+- #549 — order construction converged on the fluent builder (`.buy(100).limit(150.0).submit()`);
+  see [builder enum coverage](builder-enum-coverage.md).
+- #573 — dropped `Option<WhatToShow>` to `WhatToShow` after checking the wire, the C# client,
+  and every caller. Removing an argument beats wrapping it.
+- #752 — `wsh_event_data_by_contract` / `_by_filter`: one required argument plus `Option`s every
+  caller passed as `None`, converted to builders.
+- #792 — `option_chain(symbol, exchange, security_type, contract_id)` → builder. A live probe
+  showed `exchange` is TWS's `futFopExchange` (a named exchange returns an empty chain for a
+  stock) and `contract_id = 0` is rejected. Probe the "meaningful default" before choosing a shape.

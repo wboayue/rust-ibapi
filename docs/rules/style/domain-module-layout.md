@@ -11,59 +11,47 @@ triggers:
   - splitting a builder's sync and async impl blocks
 symbols: [Client, common, proto]
 related: [narrow-reexports, sibling-test-files, dual-feature-types]
-precedents: ["#657", "#1080", "#1078"]
+precedents: ["#657", "#729", "#1078", "#1080"]
 memory: [project_domain_module_pattern, project_main_flat_helpers_nested_pattern]
 ---
 
 A domain owns its client surface. Its `impl Client` blocks live in `<domain>/sync.rs` and
-`<domain>/async.rs` — not in `client/sync.rs` or `client/async.rs`, which hold only
-cross-cutting client mechanics (connect, ids, server version, disconnect).
+`<domain>/async.rs`, not in `client/sync.rs` / `client/async.rs`, which hold only cross-cutting
+mechanics (connect, ids, server version, disconnect).
 
 - Shared sync/async logic goes under `<domain>/common/`.
-- Protobuf decoders and encoders go in `<domain>/common/{decoders,encoders}.rs`, including the
-  sub-message converters (`decode_order`, `encode_order`) a domain's frame codecs share;
-  converters used by more than one domain go in `src/proto/{decoders,encoders}.rs`.
+- Protobuf decoders and encoders go in `<domain>/common/{decoders,encoders}.rs`, including
+  sub-message converters a domain's frame codecs share (`decode_order`, `encode_order`).
+  Converters used by more than one domain go in `src/proto/{decoders,encoders}.rs`.
 - Public types go in `<domain>/mod.rs`, ungated by feature flags.
-- Prefer the flat `<domain>/sync.rs` over `<domain>/sync/mod.rs` — the project minimizes
-  `mod.rs` files.
-- Builder per-feature code: a builder generic over the client (`FooBuilder<'a, C>`) puts
+- Prefer flat `<domain>/sync.rs` over `<domain>/sync/mod.rs`.
+- Builder per-feature code: a builder generic over the client (`FooBuilder<'a, C>`) keeps its
   `#[cfg(feature)] impl` blocks in its own file. A builder with distinct per-feature types
-  (`ClientBuilder`, `NoticeStream`) wraps each side in an inline `sync_impl` / `async_impl`
-  module. A builder that owns its own directory (`orders/builder`, `config/builder`) may
-  move those into sibling `sync_impl.rs` / `async_impl.rs` files.
-- Inline per-feature submodules elsewhere (e.g. `common/request_helpers.rs`,
-  `common/retry.rs`) are named `sync_impl` / `async_impl`.
+  (`ClientBuilder`, `NoticeStream`) wraps each side in inline `sync_impl` / `async_impl` modules.
+  A builder with its own directory (`orders/builder`, `config/builder`) may use sibling
+  `sync_impl.rs` / `async_impl.rs` files.
+- Other inline per-feature submodules (`common/request_helpers.rs`, `common/retry.rs`) are also
+  named `sync_impl` / `async_impl`.
 
-Flat applies to the *main* file, not to everything beneath it. `<domain>/<side>.rs` with
-`<domain>/<side>/foo.rs` helpers underneath is canonical Rust and stays. Tests are governed
-separately by [sibling test files](../testing/sibling-test-files.md).
+Flat applies to the main file only: `<domain>/<side>.rs` with helpers in `<domain>/<side>/foo.rs`
+is fine. Tests follow [sibling test files](../testing/sibling-test-files.md).
+`docs/architecture.md` and `docs/extending-api.md` have the directory diagram and a worked example.
 
 ## Why
 
-Every domain method is feature-gated twice over — once for `sync`, once for `async`. Keeping
-the pair in `<domain>/sync.rs` + `<domain>/async.rs` puts the two implementations of one API
-next to each other, so parity drift is visible in a two-file diff rather than spread across
-`client/`. It also keeps `client/` from growing into the file that every domain PR touches.
-
-Ten domains follow this today — `accounts`, `config`, `contracts`, `display_groups`,
-`market_data/historical`, `market_data/realtime`, `news`, `orders`, `scanner`, `wsh` — which
-with `client`'s own mechanics makes eleven `impl Client` sites in the tree.
-`docs/architecture.md` and `docs/extending-api.md` carry the directory diagram and a worked
-example of adding a module.
+Every domain method exists twice, once per feature. Keeping the pair in `<domain>/sync.rs` +
+`<domain>/async.rs` puts both implementations of one API side by side, so parity drift shows in a
+two-file diff, and keeps `client/` from becoming the file every domain PR touches.
 
 ## Precedents
 
-- #657 — the sweep that established the flat layout and drew the line at helper modules: main
-  file flat, helpers may nest.
-- #729 — closed the `client/` drift: `Client::order` and `Client::market_data` moved out of
-  `client/sync.rs` and `client/async.rs` into `orders/{sync,async}.rs` and
-  `market_data/realtime/{sync,async}.rs`, next to the sibling entry points (`realtime_bars`,
-  `tick_by_tick`, `market_depth`) they had diverged from. `client/` now holds only
-  cross-cutting mechanics.
-- #1080 — moved `Client::submit_oca_orders` out of `orders/builder/{sync,async}_impl.rs` into
-  `orders/{sync,async}.rs` beside `submit_order`: a client method in a helper file is drift even
-  inside the right domain.
-- #1078 — moved the single-domain converters out of `src/proto/`: the orders sub-message
-  codecs (#1085), then `decode_contract_and_details` and `encode_subscription_params`. A private
-  helper moved with its caller only when no other domain used it — `decode_soft_dollar_tier`
-  (accounts) and `encode_contract_with_order` (wrapped by the shared `encode_contract`) stayed.
+- #657 — established the flat layout; main file flat, helpers may nest.
+- #729 — moved `Client::order` and `Client::market_data` out of `client/` into
+  `orders/{sync,async}.rs` and `market_data/realtime/{sync,async}.rs`, next to the sibling entry
+  points they had diverged from.
+- #1080 — moved `Client::submit_oca_orders` from `orders/builder/{sync,async}_impl.rs` to
+  `orders/{sync,async}.rs`: a client method in a helper file is drift even inside the right domain.
+- #1078 — moved single-domain converters out of `src/proto/` (orders sub-message codecs in #1085,
+  then `decode_contract_and_details`, `encode_subscription_params`). Helpers with a second user
+  stayed: `decode_soft_dollar_tier` (accounts too), `encode_contract_with_order` (wrapped by the
+  shared `encode_contract`).

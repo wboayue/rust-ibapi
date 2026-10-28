@@ -4,9 +4,9 @@ This file provides guidance to coding agents when working with code in this repo
 
 ## Quick Start
 
-The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API with both synchronous and asynchronous support.
+rust-ibapi is an unofficial Rust client for the IBKR TWS API, with async and blocking clients.
 
-**Important:** The async client is enabled by default. You can opt into the blocking client with `--features sync`, and the two features may be combined:
+The async client is on by default; features are additive:
 - `cargo build` (default features) exposes the async client as `client::Client`
 - `cargo build --no-default-features --features sync` enables only the blocking client
 - `cargo build --no-default-features --features "sync async"` enables both; the blocking API lives under `client::blocking::Client`
@@ -32,22 +32,20 @@ The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API
 - [**Extending the API**](docs/extending-api.md) - Adding new TWS API functionality
 - [**Blocked Issues**](docs/block-issues.md) - Work waiting on a gateway capture or paper-account setup
 
-## Version 3.0 Philosophy
+## Versioning and branches
 
-Version 3.0 is a breaking release. Fix API inconsistencies even when it means breaking changes — consistent naming, idiomatic Rust patterns, and a clean public API take priority over backward compatibility.
+- **`main`** — 5.x, the only maintained branch. 5.x minors stay non-breaking; a breaking
+  change (consistent naming, idiomatic API, cleanup) is queued for 6.0 — ask before making
+  one. `docs/migration-5.0.md` is frozen; 6.0 work opens `docs/migration-6.0.md`.
+- **`v2-stable`** — frozen. Touch it only to backport a specific named bug on explicit request.
 
-## Branches
-
-- **`main`** — 3.x development and releases. **This is the only actively maintained branch.**
-- **`v2-stable`** — 2.x maintenance, frozen. Only touch it when a **specific bug** must be backported there, and only when explicitly asked.
-
-Default all work — features and fixes — to `main` alone. Do **not** open v2-stable PRs by default; only backport a specific named bug on explicit request. Changes to either branch go through pull requests.
+All changes go through pull requests.
 
 ## Rule index
 
 Detail lives in [`docs/rules/`](docs/rules/README.md), one directive per file. Follow the
 link when the situation matches — the node carries the mechanics, the bug class, and the
-precedents. Every rule now lives in a node; nothing is inline.
+precedents.
 
 ### Wire protocol — protobuf-only at `server_versions::PROTOBUF_REST_MESSAGES_3` (213)
 
@@ -129,17 +127,14 @@ precedents. Every rule now lives in a node; nothing is inline.
 - **Opening a PR that changes public behavior** →
   [changelog entry](docs/rules/docs/changelog-entry.md) — same PR, under `## [Unreleased]`
 - **Removing or renaming anything public** →
-  [user docs sync](docs/rules/docs/user-docs-sync.md) — `README.md` and `docs/migration-5.0.md`
-  ship with the change; their fenced Rust snippets are compiled by nothing
+  [user docs sync](docs/rules/docs/user-docs-sync.md) — `README.md` and the next major's
+  migration guide ship with the change; their fenced Rust snippets are compiled by nothing
 - **Cutting a release or drafting release notes** → the `/release` skill
   ([`.claude/skills/release`](.claude/skills/release/SKILL.md))
 - **Establishing, changing, or retiring a project convention** →
   [maintaining the rule graph](#maintaining-the-rule-graph), below
 
-Rule numbers are retired. All 27 are nodes now, addressed by name; a "rule N" citation found in
-an old comment, plan, or memory has to be resolved against the `CLAUDE.md` of its own date, not
-against this file — the numbering shifted at least once while it was in use. The mapping as of
-the final numbered revision is in
+Rule numbers are retired; resolve an old "rule N" citation via
 [retired rule numbers](docs/rules/README.md#retired-rule-numbers).
 
 ## Maintaining the rule graph
@@ -197,6 +192,7 @@ just test
 # Examples are a caller surface `just test` never compiles
 cargo build --examples
 cargo build --examples --no-default-features --features sync
+cargo build --examples --all-features
 ```
 
 Situational — run when the change touches the matching surface:
@@ -206,6 +202,8 @@ Situational — run when the change touches the matching surface:
 # other gate skips them. See docs/rules/workflow/integration-crate-builds.md.
 cargo build -p ibapi-integration-sync  --tests
 cargo build -p ibapi-integration-async --tests
+cargo clippy -p ibapi-integration-sync  --tests -- -D warnings
+cargo clippy -p ibapi-integration-async --tests -- -D warnings
 
 # AGENTS.md or docs/rules/ — validates the rule graph and its index
 just rules-check
@@ -239,10 +237,14 @@ IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --example <example_name>
 
 ## Git Commit Guidelines
 
-- DO NOT include "Generated with Claude Code" or similar attribution in commit messages
-- Keep commit messages focused on the technical changes and their purpose
-- Choose the merge strategy by what the branch holds:
-  - **Merge commit** (`gh pr merge N --merge`) for stacked PRs (a squashed parent leaves the child with duplicate commits) and for multi-commit branches whose commits form one change (revert with `-m 1`, bisect with `--first-parent` as a unit); every commit must build
-  - **Rebase** (`gh pr merge N --rebase`) for multi-commit branches of independent small changes (no commit depends on another), with no PR stacked on top (rebase rewrites SHAs, so a child would carry duplicates); linear history, no merge bubble
-  - **Squash** (`gh pr merge N --squash`) for single-commit PRs (no merge bubble), fork PRs, and branches carrying fixup, review-response or merge-from-main commits; pass `--body-file` summarizing the final design when the branch holds an abandoned approach
+- No "Generated with Claude Code" or similar attribution in commits or PRs
+- Messages describe the technical change and its purpose
+- Merge strategy follows what the branch holds:
+  - **`--merge`** — stacked PRs (a squashed parent leaves the child with duplicate commits) and
+    multi-commit branches forming one change; every commit must build
+  - **`--rebase`** — multi-commit branches of independent small changes, nothing stacked on top
+    (rebase rewrites SHAs)
+  - **`--squash`** — single-commit PRs, fork PRs, and branches carrying fixup, review-response or
+    merge-from-main commits; pass `--body-file` summarizing the final design when the branch
+    holds an abandoned approach
 
