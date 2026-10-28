@@ -20,17 +20,17 @@ message arrives proto-framed: `fields` holds only the message id and the payload
 `raw_bytes`. Text-field-index reads (`peek_int`) are a test-fixture fallback only.
 
 Don't decode the whole proto struct to read one field. Define a minimal `prost::Message`
-envelope (alongside the existing ones in `src/messages.rs`) and let prost length-skip the rest: `ProtoIdEnvelope` (`int32 @ tag 1`) covers most
-messages, `ExecutionDetailsMinimal` shows the nested case. A full `OpenOrder` or
-`ExecutionDetails` decode costs roughly twenty String allocations, and the dispatcher calls these accessors
-on every inbound frame.
+envelope beside the existing ones in `src/messages.rs` and let prost length-skip the rest:
+`ProtoIdEnvelope` (`int32 @ tag 1`) covers most messages, `ExecutionDetailsMinimal` shows the
+nested case. A full `OpenOrder` or `ExecutionDetails` decode costs roughly twenty String
+allocations, and the dispatcher calls these accessors on every inbound frame.
 
 **Check the tag per message type.** `request_id` and `order_id` sit at tag 1 wherever they
 appear, so one envelope serves them. `contract_id` would not: the `Contract` sub-message is at
 tag 2 for `ContractData` / `OpenOrder` / `ExecutionDetails` / `Position`, tag 1 for
 `PortfolioValue` / `CompletedOrder`, tag 3 for `PositionMulti`. Such an accessor needs
-`match self.message_type()` and one envelope per tag position; read the tags off the generated structs in
-`src/proto/protobuf.rs`.
+`match self.message_type()` and one envelope per tag position; read the tags off the generated
+structs in `src/proto/protobuf.rs`.
 
 **Adding a public API on a proto inbound message type requires an entry in
 `text_request_id_field` (`src/messages.rs`)** if the type correlates to a request.
