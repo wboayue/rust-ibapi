@@ -11,11 +11,11 @@ use crate::subscriptions::{StreamDecoder, SubscriptionItem};
 
 /// Stream item types that are safe to resubscribe after a reconnect.
 ///
-/// Sealed: implemented only for streaming market data, account, position, PnL,
-/// scanner, news bulletin and display group subscriptions. Order types are
-/// excluded (a resubscribe would place, cancel or exercise again), and so are
-/// requests that end on their own (contract details, option chains, historical
-/// bars without `keep_up_to_date`).
+/// Sealed. The accepted streams, and what each repeats after a resubscribe, are
+/// listed on `Client::resubscribing`. Order types are excluded (a resubscribe
+/// would place, cancel or exercise again), and so are requests that end on their
+/// own (contract details, option chains). Display groups are left out: their
+/// `DisplayGroupSubscription` wrapper isn't a `Subscription`.
 #[allow(private_bounds)]
 pub trait Resubscribable: StreamDecoder<Self> + Sized {}
 
@@ -42,7 +42,6 @@ resubscribable!(
     crate::accounts::PnLSingle,
     Vec<crate::scanner::ScannerData>,
     crate::news::NewsBulletin,
-    crate::display_groups::DisplayGroupUpdate,
 );
 
 /// Where the loop is. Shared by the sync iterator and the async stream.
@@ -118,7 +117,7 @@ mod sync_impl {
                 // Done unless an arm puts a live state back.
                 match std::mem::replace(&mut self.state, State::Done) {
                     State::Done => return None,
-                    State::Opening { gap } => match (self.open)().into() {
+                    State::Opening { gap } => match Opened::from((self.open)()) {
                         Opened::Subscribed(subscription) => {
                             self.state = State::Reading(subscription);
                             if gap {
@@ -179,7 +178,7 @@ mod async_impl {
             loop {
                 match state {
                     State::Done => return None,
-                    State::Opening { gap } => match open().await.into() {
+                    State::Opening { gap } => match Opened::from(open().await) {
                         Opened::Subscribed(subscription) => {
                             state = State::Reading(subscription);
                             if gap {
@@ -190,6 +189,7 @@ mod async_impl {
                             if let Err(e) = client.wait_connected().await {
                                 return Some((Err(e), (State::Done, open)));
                             }
+                            // `state` is still `Opening { gap }`: the match only copied `gap`.
                         }
                         Opened::Failed(e) => return Some((Err(e), (State::Done, open))),
                     },

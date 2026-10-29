@@ -329,7 +329,6 @@ impl Client {
     /// | historical bars with `keep_up_to_date` | the initial bars again (duplicates) |
     /// | account, position, PnL, account summary | the initial snapshot again |
     /// | scanner | a fresh scan |
-    /// | display groups | the current group again |
     ///
     /// # Examples
     ///

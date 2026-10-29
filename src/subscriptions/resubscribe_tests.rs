@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::sync::Arc;
 
-use crate::common::test_utils::helpers::proto_response;
+use crate::common::test_utils::helpers::{proto_error_response, proto_response, TEST_REQ_ID_FIRST};
 use crate::contracts::Contract;
 use crate::market_data::realtime::Bar;
 use crate::messages::{IncomingMessages, TRANSPORT_RECONNECT_CODE};
@@ -21,6 +21,8 @@ struct Case {
     resets: usize,
     open_fails: &'static [OpenFailure],
     reconnect_fails: bool,
+    /// TWS error code sent on the first request after its bars.
+    stream_error: Option<i32>,
     expected: &'static [&'static str],
     open_calls: usize,
 }
@@ -31,6 +33,7 @@ const CASES: &[Case] = &[
         resets: 0,
         open_fails: &[],
         reconnect_fails: false,
+        stream_error: None,
         expected: &["bar", "bar"],
         open_calls: 1,
     },
@@ -39,6 +42,7 @@ const CASES: &[Case] = &[
         resets: 1,
         open_fails: &[],
         reconnect_fails: false,
+        stream_error: None,
         expected: &["gap", "bar", "bar"],
         open_calls: 2,
     },
@@ -47,6 +51,7 @@ const CASES: &[Case] = &[
         resets: 1,
         open_fails: &[(1, || Error::ConnectionReset)],
         reconnect_fails: false,
+        stream_error: None,
         expected: &["gap", "bar", "bar"],
         open_calls: 3,
     },
@@ -55,6 +60,7 @@ const CASES: &[Case] = &[
         resets: 0,
         open_fails: &[(0, || Error::ConnectionReset)],
         reconnect_fails: false,
+        stream_error: None,
         expected: &["bar", "bar"],
         open_calls: 2,
     },
@@ -63,6 +69,7 @@ const CASES: &[Case] = &[
         resets: 0,
         open_fails: &[(0, || Error::AlreadySubscribed)],
         reconnect_fails: false,
+        stream_error: None,
         expected: &["AlreadySubscribed"],
         open_calls: 1,
     },
@@ -71,14 +78,37 @@ const CASES: &[Case] = &[
         resets: 1,
         open_fails: &[],
         reconnect_fails: true,
+        stream_error: None,
         expected: &["ConnectionFailed"],
+        open_calls: 1,
+    },
+    Case {
+        name: "reconnect gave up while reopening: its error ends the stream",
+        resets: 0,
+        open_fails: &[(0, || Error::ConnectionReset)],
+        reconnect_fails: true,
+        stream_error: None,
+        expected: &["ConnectionFailed"],
+        open_calls: 1,
+    },
+    Case {
+        name: "other stream error ends the stream, no resubscribe",
+        resets: 0,
+        open_fails: &[],
+        reconnect_fails: false,
+        stream_error: Some(420),
+        expected: &["bar", "bar", "error 420"],
         open_calls: 1,
     },
 ];
 
 fn bus(case: &Case) -> Arc<MessageBusStub> {
     let bar = |time| proto_response(IncomingMessages::RealTimeBars, realtime_bar_tick().time(time).encode_proto());
-    let mut stub = MessageBusStub::with_ordered_responses(vec![bar(1678323335), bar(1678323340)]).with_connection_resets(case.resets);
+    let mut responses = vec![bar(1678323335), bar(1678323340)];
+    if let Some(code) = case.stream_error {
+        responses.push(proto_error_response(TEST_REQ_ID_FIRST, code, "Invalid Real-time Query"));
+    }
+    let mut stub = MessageBusStub::with_ordered_responses(responses).with_connection_resets(case.resets);
     if case.reconnect_fails {
         stub = stub.with_failed_reconnect();
     }
@@ -95,6 +125,7 @@ fn label(item: Result<SubscriptionItem<Bar>, Error>) -> String {
         Ok(SubscriptionItem::Data(_)) => "bar".into(),
         Ok(SubscriptionItem::Notice(n)) if n.code == TRANSPORT_RECONNECT_CODE => "gap".into(),
         Ok(SubscriptionItem::Notice(n)) => format!("notice {n}"),
+        Err(Error::Notice(n)) => format!("error {}", n.code),
         Err(e) => format!("{e:?}"),
     }
 }

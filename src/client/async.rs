@@ -324,7 +324,8 @@ impl Client {
     /// | historical bars with `keep_up_to_date` | the initial bars again (duplicates) |
     /// | account, position, PnL, account summary | the initial snapshot again |
     /// | scanner | a fresh scan |
-    /// | display groups | the current group again |
+    ///
+    /// The stream isn't `Unpin`: pin it (`std::pin::pin!` or `Box::pin`) before calling `next`.
     ///
     /// # Examples
     ///
