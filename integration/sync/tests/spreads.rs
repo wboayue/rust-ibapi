@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use ibapi::client::blocking::Client;
-use ibapi::contracts::{ButterflyLegs, Contract, IronCondorLegs, OptionRight, SecurityType, SpreadBuilder};
+use ibapi::contracts::{ButterflyLegs, CollarLegs, Contract, IronCondorLegs, OptionRight, SecurityType, SpreadBuilder};
 use ibapi_integration_sync::connect;
 use ibapi_test::{yyyymmdd_from_now, ClientId};
 
@@ -29,13 +29,15 @@ fn strikes(client: &Client, expiry: &str, right: OptionRight) -> BTreeMap<Strike
         .collect()
 }
 
-/// The two nearest expirations at least two weeks out, so neither expires mid-run.
-fn expiries(client: &Client) -> (String, String) {
+/// The stock's contract id and its two nearest expirations at least two weeks out, so neither
+/// expires mid-run.
+fn underlying_and_expiries(client: &Client) -> (i32, String, String) {
     let stock = client
         .contract_details(&Contract::stock(SYMBOL).build())
         .expect("stock contract details failed");
+    let stock_id = stock[0].contract.contract_id;
     let chains = client
-        .option_chain(SYMBOL, SecurityType::Stock, stock[0].contract.contract_id)
+        .option_chain(SYMBOL, SecurityType::Stock, stock_id)
         .subscribe()
         .expect("option_chain failed")
         .collect_to_end_within(Duration::from_secs(30))
@@ -46,7 +48,7 @@ fn expiries(client: &Client) -> (String, String) {
     let mut later: Vec<&String> = chain.expirations.iter().filter(|e| **e >= cutoff).collect();
     later.sort();
     assert!(later.len() >= 2, "need two expirations after {cutoff}: {later:?}");
-    (later[0].clone(), later[1].clone())
+    (stock_id, later[0].clone(), later[1].clone())
 }
 
 /// Five consecutive strikes listed in every map, around the middle, and a limit price inside
@@ -66,12 +68,13 @@ fn spread_presets_accepted_by_what_if() {
     let client_id = ClientId::get();
     let client = connect(&client_id);
 
-    let (near, far) = expiries(&client);
+    let (stock, near, far) = underlying_and_expiries(&client);
     let puts = strikes(&client, &near, OptionRight::Put);
     let calls = strikes(&client, &near, OptionRight::Call);
     let far_calls = strikes(&client, &far, OptionRight::Call);
     let (k, price) = strike_window(&[&calls, &puts, &far_calls]);
 
+    const SHARES: i32 = 100;
     let spread = || Contract::spread().symbol(SYMBOL);
     let cases: Vec<(&str, SpreadBuilder, f64)> = vec![
         ("vertical", spread().vertical(calls[&k[2]], calls[&k[3]]), price),
@@ -99,6 +102,18 @@ fn spread_presets_accepted_by_what_if() {
                 long_call: calls[&k[4]].into(),
             }),
             -price,
+        ),
+        // Payoff runs from the put's floor to the call's cap (× shares), so a price at the
+        // middle strike sits inside it wherever spot is.
+        (
+            "collar",
+            spread().collar(CollarLegs {
+                stock: stock.into(),
+                put: puts[&k[1]].into(),
+                call: calls[&k[3]].into(),
+                shares_per_contract: SHARES,
+            }),
+            f64::from(SHARES) * k[2] as f64 / 100.0,
         ),
     ];
 

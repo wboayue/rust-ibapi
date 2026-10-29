@@ -657,6 +657,39 @@ impl SpreadBuilder {
         self.vertical(legs.long_put, legs.short_put).vertical(legs.long_call, legs.short_call)
     }
 
+    /// Collar: buy the stock, buy a put below it as a floor, sell a call above it as a cap.
+    ///
+    /// Legs are added as buy stock (ratio `shares_per_contract`), buy put, sell call. Buy the
+    /// combo to open. The limit price is per combo, a debit of about
+    /// `shares_per_contract × spot + put − call`; TWS rejects a price at or below the put's
+    /// floor (riskless) or at or above the call's cap (guaranteed to lose) with 201.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{CollarLegs, Contract};
+    ///
+    /// let collar = Contract::spread()
+    ///     .symbol("AAPL")
+    ///     .collar(CollarLegs {
+    ///         stock: 265598.into(),
+    ///         put: 100.into(),
+    ///         call: 101.into(),
+    ///         shares_per_contract: 100,
+    ///     })
+    ///     .build()?;
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn collar(self, legs: CollarLegs) -> Self {
+        self.add_leg(legs.stock, LegAction::Buy)
+            .ratio(legs.shares_per_contract)
+            .done()
+            .add_leg(legs.put, LegAction::Buy)
+            .done()
+            .add_leg(legs.call, LegAction::Sell)
+            .done()
+    }
+
     /// Set the combo's symbol. TWS requires it to place the combo and rejects one without it
     /// with 321.
     ///
@@ -743,6 +776,22 @@ pub struct IronCondorLegs {
     pub short_call: ContractId,
     /// Highest-strike call, bought.
     pub long_call: ContractId,
+}
+
+/// Legs of a [`SpreadBuilder::collar`], by contract id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CollarLegs {
+    /// The underlying stock, bought.
+    pub stock: ContractId,
+    /// Put below the stock price, bought.
+    pub put: ContractId,
+    /// Call above the stock price, sold.
+    pub call: ContractId,
+    /// Shares one option contract delivers: the stock leg's ratio. Usually 100 for US equity
+    /// options, but not for adjusted or mini options; read the option's
+    /// `ContractDetails.contract.multiplier`. A wrong value still places, as a mis-hedged
+    /// position rather than a collar.
+    pub shares_per_contract: i32,
 }
 
 /// Builder for individual spread legs
