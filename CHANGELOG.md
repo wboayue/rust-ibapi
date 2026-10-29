@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `contracts::SpreadBuilder` presets `straddle(call, put)`, `strangle(call, put)`, `butterfly(ButterflyLegs)` and `iron_condor(IronCondorLegs)`. Butterfly and iron condor take their legs as named fields, so swapping two ids no longer compiles silently into a different strategy, the reason the positional `iron_condor` was removed in 5.0 (#1123).
+
 ## [5.4.0] - 2026-10-27
 
 ### Added

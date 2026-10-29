@@ -44,7 +44,10 @@ pub use crate::Error;
 pub use crate::{ConnectivityStatus, Notice, NoticeCategory};
 
 // Contract types
-pub use crate::contracts::{BondIdentifier, ContractMonth, Currency, Cusip, Exchange, ExpirationDate, Isin, LegAction, OptionRight, Strike, Symbol};
+pub use crate::contracts::{
+    BondIdentifier, ButterflyLegs, ContractMonth, Currency, Cusip, Exchange, ExpirationDate, IronCondorLegs, Isin, LegAction, OptionRight, Strike,
+    Symbol,
+};
 pub use crate::contracts::{Contract, OptionChainBuilder, SecurityType};
 
 // Market data types - historical

@@ -557,21 +557,99 @@ impl SpreadBuilder {
 
     /// Vertical spread: buy the long leg, sell the short leg.
     ///
-    /// Chain two verticals for a four-leg strategy. An iron condor is a put vertical plus a
-    /// call vertical, each long the wing and short the body:
+    /// For an iron condor, use [`iron_condor`](Self::iron_condor).
     ///
     /// ```
     /// use ibapi::contracts::Contract;
     ///
-    /// let (long_put, short_put, short_call, long_call) = (100, 105, 110, 115);
-    /// let iron_condor = Contract::spread()
-    ///     .vertical(long_put, short_put)
-    ///     .vertical(long_call, short_call)
-    ///     .build()?;
+    /// let (long_call, short_call) = (100, 105);
+    /// let bull_call = Contract::spread().vertical(long_call, short_call).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn vertical(self, long_id: impl Into<ContractId>, short_id: impl Into<ContractId>) -> Self {
         self.add_leg(long_id, LegAction::Buy).done().add_leg(short_id, LegAction::Sell).done()
+    }
+
+    /// Long straddle: buy a call and a put with the same strike and expiry.
+    ///
+    /// Buy the combo to open.
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let (call, put) = (100, 101);
+    /// let straddle = Contract::spread().straddle(call, put).build()?;
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn straddle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> Self {
+        self.add_leg(call_id, LegAction::Buy).done().add_leg(put_id, LegAction::Buy).done()
+    }
+
+    /// Long strangle: buy an out-of-the-money call and put with the same expiry and different
+    /// strikes.
+    ///
+    /// Buy the combo to open. The legs are those of [`straddle`](Self::straddle); only the
+    /// strikes differ.
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let (call, put) = (110, 90);
+    /// let strangle = Contract::spread().strangle(call, put).build()?;
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn strangle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> Self {
+        self.straddle(call_id, put_id)
+    }
+
+    /// Long butterfly: buy 1 lower, sell 2 middle, buy 1 upper.
+    ///
+    /// All legs share right and expiry. Buy the combo to open. The legs are named fields, so a
+    /// wing cannot be swapped with the body by argument order.
+    ///
+    /// ```
+    /// use ibapi::contracts::{ButterflyLegs, Contract};
+    ///
+    /// let butterfly = Contract::spread()
+    ///     .butterfly(ButterflyLegs {
+    ///         lower: 100.into(),
+    ///         middle: 105.into(),
+    ///         upper: 110.into(),
+    ///     })
+    ///     .build()?;
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn butterfly(self, legs: ButterflyLegs) -> Self {
+        self.add_leg(legs.lower, LegAction::Buy)
+            .done()
+            .add_leg(legs.middle, LegAction::Sell)
+            .ratio(2)
+            .done()
+            .add_leg(legs.upper, LegAction::Buy)
+            .done()
+    }
+
+    /// Iron condor: a put vertical plus a call vertical, each long the wing and short the body.
+    ///
+    /// Legs are added as buy long put, sell short put, buy long call, sell short call. Buy the
+    /// combo to open. The legs are named fields because four ids in a fixed order compile when
+    /// swapped and build a different strategy.
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, IronCondorLegs};
+    ///
+    /// let iron_condor = Contract::spread()
+    ///     .iron_condor(IronCondorLegs {
+    ///         long_put: 100.into(),
+    ///         short_put: 105.into(),
+    ///         short_call: 110.into(),
+    ///         long_call: 115.into(),
+    ///     })
+    ///     .build()?;
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn iron_condor(self, legs: IronCondorLegs) -> Self {
+        self.vertical(legs.long_put, legs.short_put).vertical(legs.long_call, legs.short_call)
     }
 
     /// Override the spread currency, useful for non-USD underlyings.
@@ -612,6 +690,30 @@ impl SpreadBuilder {
             ..Default::default()
         })
     }
+}
+
+/// Legs of a [`SpreadBuilder::butterfly`], by option contract id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ButterflyLegs {
+    /// Lower-strike wing, bought.
+    pub lower: ContractId,
+    /// Middle strike, sold twice.
+    pub middle: ContractId,
+    /// Upper-strike wing, bought.
+    pub upper: ContractId,
+}
+
+/// Legs of a [`SpreadBuilder::iron_condor`], by option contract id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IronCondorLegs {
+    /// Lowest-strike put, bought.
+    pub long_put: ContractId,
+    /// Higher-strike put, sold.
+    pub short_put: ContractId,
+    /// Lower-strike call, sold.
+    pub short_call: ContractId,
+    /// Highest-strike call, bought.
+    pub long_call: ContractId,
 }
 
 /// Builder for individual spread legs

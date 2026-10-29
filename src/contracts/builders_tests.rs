@@ -366,26 +366,64 @@ fn default_implementations() {
     assert_eq!(spread.exchange.as_str(), "SMART");
 }
 
-#[test]
-fn iron_condor_via_verticals() {
-    let (long_put, short_put, short_call, long_call) = (100, 105, 110, 115);
-    let spread = Contract::spread()
-        .vertical(long_put, short_put)
-        .vertical(long_call, short_call)
-        .build()
-        .expect("Failed to build iron condor");
+/// `(contract_id, action, ratio)` per combo leg, in order.
+type Legs = Vec<(i32, LegAction, i32)>;
 
-    assert_eq!(spread.security_type, SecurityType::Spread);
-    let legs: Vec<_> = spread.combo_legs.iter().map(|l| (l.contract_id, l.action, l.ratio)).collect();
-    assert_eq!(
-        legs,
-        vec![
-            (long_put, LegAction::Buy, 1),
-            (short_put, LegAction::Sell, 1),
-            (long_call, LegAction::Buy, 1),
-            (short_call, LegAction::Sell, 1),
-        ]
-    );
+fn leg_tuples(spread: &Contract) -> Legs {
+    spread.combo_legs.iter().map(|l| (l.contract_id, l.action, l.ratio)).collect()
+}
+
+#[test]
+fn spread_presets_set_legs() {
+    type Preset = fn(SpreadBuilder) -> SpreadBuilder;
+    let cases: [(&str, Preset, Legs); 4] = [
+        (
+            "straddle",
+            |s| s.straddle(100, 101),
+            vec![(100, LegAction::Buy, 1), (101, LegAction::Buy, 1)],
+        ),
+        (
+            "strangle",
+            |s| s.strangle(110, 90),
+            vec![(110, LegAction::Buy, 1), (90, LegAction::Buy, 1)],
+        ),
+        (
+            "butterfly",
+            |s| {
+                s.butterfly(ButterflyLegs {
+                    lower: 100.into(),
+                    middle: 105.into(),
+                    upper: 110.into(),
+                })
+            },
+            vec![(100, LegAction::Buy, 1), (105, LegAction::Sell, 2), (110, LegAction::Buy, 1)],
+        ),
+        (
+            "iron_condor",
+            |s| {
+                s.iron_condor(IronCondorLegs {
+                    long_put: 100.into(),
+                    short_put: 105.into(),
+                    short_call: 110.into(),
+                    long_call: 115.into(),
+                })
+            },
+            // Long call before short call: the leg order of two chained `vertical`s,
+            // not the struct's field order.
+            vec![
+                (100, LegAction::Buy, 1),
+                (105, LegAction::Sell, 1),
+                (115, LegAction::Buy, 1),
+                (110, LegAction::Sell, 1),
+            ],
+        ),
+    ];
+
+    for (name, preset, expected) in cases {
+        let spread = preset(Contract::spread()).build().unwrap();
+        assert_eq!(spread.security_type, SecurityType::Spread, "{name}");
+        assert_eq!(leg_tuples(&spread), expected, "{name}");
+    }
 }
 
 #[test]
@@ -397,11 +435,13 @@ fn spread_builder_accepts_contract_id() {
         .long_calendar(ContractId(33333), 44444)
         .add_leg(ContractId(55555), LegAction::Buy)
         .done()
+        .straddle(ContractId(66666), 77777)
+        .strangle(ContractId(88888), 99999)
         .build()
         .unwrap();
 
     let ids: Vec<i32> = spread.combo_legs.iter().map(|l| l.contract_id).collect();
-    assert_eq!(ids, vec![11111, 22222, 33333, 44444, 55555]);
+    assert_eq!(ids, vec![11111, 22222, 33333, 44444, 55555, 66666, 77777, 88888, 99999]);
 }
 
 #[test]
