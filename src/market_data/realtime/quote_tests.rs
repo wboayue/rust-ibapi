@@ -21,76 +21,75 @@ fn greeks(field: TickType, delta: f64) -> OptionComputation {
     }
 }
 
-#[test]
-fn price_ticks_fill_fields() {
-    let quote = Quote::from_ticks(&[
-        price(TickType::Bid, 1.0),
-        price(TickType::Ask, 2.0),
-        price(TickType::Last, 3.0),
-        price(TickType::Open, 4.0),
-        price(TickType::High, 5.0),
-        price(TickType::Low, 6.0),
-        price(TickType::Close, 7.0),
-    ]);
+type Field<T> = fn(&Quote) -> Option<T>;
 
-    assert_eq!(quote.bid, Some(1.0));
-    assert_eq!(quote.ask, Some(2.0));
-    assert_eq!(quote.last, Some(3.0));
-    assert_eq!(quote.open, Some(4.0));
-    assert_eq!(quote.high, Some(5.0));
-    assert_eq!(quote.low, Some(6.0));
-    assert_eq!(quote.close, Some(7.0));
+/// (real-time tick, delayed tick, field it fills)
+const PRICE_FIELDS: &[(TickType, TickType, Field<f64>)] = &[
+    (TickType::Bid, TickType::DelayedBid, |q| q.bid),
+    (TickType::Ask, TickType::DelayedAsk, |q| q.ask),
+    (TickType::Last, TickType::DelayedLast, |q| q.last),
+    (TickType::Open, TickType::DelayedOpen, |q| q.open),
+    (TickType::High, TickType::DelayedHigh, |q| q.high),
+    (TickType::Low, TickType::DelayedLow, |q| q.low),
+    (TickType::Close, TickType::DelayedClose, |q| q.close),
+];
+
+const SIZE_FIELDS: &[(TickType, TickType, Field<f64>)] = &[
+    (TickType::BidSize, TickType::DelayedBidSize, |q| q.bid_size),
+    (TickType::AskSize, TickType::DelayedAskSize, |q| q.ask_size),
+    (TickType::LastSize, TickType::DelayedLastSize, |q| q.last_size),
+    (TickType::Volume, TickType::DelayedVolume, |q| q.volume),
+];
+
+const GREEKS_FIELDS: &[(TickType, TickType, Field<OptionComputation>)] = &[
+    (TickType::BidOption, TickType::DelayedBidOption, |q| q.bid_greeks.clone()),
+    (TickType::AskOption, TickType::DelayedAskOption, |q| q.ask_greeks.clone()),
+    (TickType::LastOption, TickType::DelayedLastOption, |q| q.last_greeks.clone()),
+    (TickType::ModelOption, TickType::DelayedModelOption, |q| q.model_greeks.clone()),
+];
+
+#[test]
+fn price_ticks_fill_their_field() {
+    for &(realtime, delayed, field) in PRICE_FIELDS {
+        for tick_type in [realtime, delayed] {
+            let quote = Quote::from_ticks(&[price(tick_type, 1.5)]);
+            assert_eq!(field(&quote), Some(1.5), "{tick_type:?}");
+        }
+    }
 }
 
 #[test]
-fn delayed_price_ticks_fill_realtime_fields() {
-    let quote = Quote::from_ticks(&[
-        price(TickType::DelayedBid, 1.0),
-        price(TickType::DelayedAsk, 2.0),
-        price(TickType::DelayedLast, 3.0),
-        price(TickType::DelayedOpen, 4.0),
-        price(TickType::DelayedHigh, 5.0),
-        price(TickType::DelayedLow, 6.0),
-        price(TickType::DelayedClose, 7.0),
-    ]);
-
-    assert_eq!(quote.bid, Some(1.0));
-    assert_eq!(quote.ask, Some(2.0));
-    assert_eq!(quote.last, Some(3.0));
-    assert_eq!(quote.open, Some(4.0));
-    assert_eq!(quote.high, Some(5.0));
-    assert_eq!(quote.low, Some(6.0));
-    assert_eq!(quote.close, Some(7.0));
+fn size_ticks_fill_their_field() {
+    for &(realtime, delayed, field) in SIZE_FIELDS {
+        for tick_type in [realtime, delayed] {
+            let quote = Quote::from_ticks(&[size(tick_type, 300.0)]);
+            assert_eq!(field(&quote), Some(300.0), "{tick_type:?}");
+        }
+    }
 }
 
 #[test]
-fn size_ticks_fill_fields() {
-    let quote = Quote::from_ticks(&[
-        size(TickType::BidSize, 10.0),
-        size(TickType::AskSize, 20.0),
-        size(TickType::LastSize, 30.0),
-        size(TickType::Volume, 40.0),
-    ]);
-
-    assert_eq!(quote.bid_size, Some(10.0));
-    assert_eq!(quote.ask_size, Some(20.0));
-    assert_eq!(quote.last_size, Some(30.0));
-    assert_eq!(quote.volume, Some(40.0));
+fn option_computations_route_by_field() {
+    for &(realtime, delayed, field) in GREEKS_FIELDS {
+        for tick_type in [realtime, delayed] {
+            let quote = Quote::from_ticks(&[TickTypes::OptionComputation(greeks(tick_type, 0.4))]);
+            assert_eq!(field(&quote), Some(greeks(tick_type, 0.4)), "{tick_type:?}");
+        }
+    }
 }
 
+/// Each tick fills only its own field.
 #[test]
-fn delayed_size_ticks_fill_realtime_fields() {
-    let quote = Quote::from_ticks(&[
-        size(TickType::DelayedBidSize, 10.0),
-        size(TickType::DelayedAskSize, 20.0),
-        size(TickType::DelayedLastSize, 30.0),
-        size(TickType::DelayedVolume, 40.0),
-    ]);
+fn one_tick_fills_one_field() {
+    let quote = Quote::from_ticks(&[price(TickType::Bid, 1.5)]);
 
-    assert_eq!(quote.bid_size, Some(10.0));
-    assert_eq!(quote.ask_size, Some(20.0));
-    assert_eq!(quote.last_size, Some(30.0));
-    assert_eq!(quote.volume, Some(40.0));
+    assert_eq!(
+        quote,
+        Quote {
+            bid: Some(1.5),
+            ..Quote::default()
+        }
+    );
 }
 
 #[test]
@@ -114,36 +113,6 @@ fn price_size_sets_price_and_size() {
     assert_eq!(quote.ask_size, Some(300.0));
     assert_eq!(quote.bid, None);
     assert_eq!(quote.bid_size, None);
-}
-
-#[test]
-fn option_computations_route_by_field() {
-    let quote = Quote::from_ticks(&[
-        TickTypes::OptionComputation(greeks(TickType::BidOption, 0.1)),
-        TickTypes::OptionComputation(greeks(TickType::AskOption, 0.2)),
-        TickTypes::OptionComputation(greeks(TickType::LastOption, 0.3)),
-        TickTypes::OptionComputation(greeks(TickType::ModelOption, 0.4)),
-    ]);
-
-    assert_eq!(quote.bid_greeks, Some(greeks(TickType::BidOption, 0.1)));
-    assert_eq!(quote.ask_greeks, Some(greeks(TickType::AskOption, 0.2)));
-    assert_eq!(quote.last_greeks, Some(greeks(TickType::LastOption, 0.3)));
-    assert_eq!(quote.model_greeks, Some(greeks(TickType::ModelOption, 0.4)));
-}
-
-#[test]
-fn delayed_option_computations_route_by_field() {
-    let quote = Quote::from_ticks(&[
-        TickTypes::OptionComputation(greeks(TickType::DelayedBidOption, 0.1)),
-        TickTypes::OptionComputation(greeks(TickType::DelayedAskOption, 0.2)),
-        TickTypes::OptionComputation(greeks(TickType::DelayedLastOption, 0.3)),
-        TickTypes::OptionComputation(greeks(TickType::DelayedModelOption, 0.4)),
-    ]);
-
-    assert_eq!(quote.bid_greeks, Some(greeks(TickType::DelayedBidOption, 0.1)));
-    assert_eq!(quote.ask_greeks, Some(greeks(TickType::DelayedAskOption, 0.2)));
-    assert_eq!(quote.last_greeks, Some(greeks(TickType::DelayedLastOption, 0.3)));
-    assert_eq!(quote.model_greeks, Some(greeks(TickType::DelayedModelOption, 0.4)));
 }
 
 #[test]

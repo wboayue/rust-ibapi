@@ -19,6 +19,9 @@ use crate::market_data::MarketDataType;
 ///
 /// Values are stored as TWS sends them: TWS may report a missing bid or ask as `-1.0` rather
 /// than omitting it.
+///
+/// The struct is `#[non_exhaustive]` so fields can be added; outside this crate, build one with
+/// [`Quote::default`] plus [`apply`](Self::apply), or with [`from_ticks`](Self::from_ticks).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, PartialEq)]
 #[non_exhaustive]
@@ -92,21 +95,18 @@ impl Quote {
     ///
     /// ```no_run
     /// # #[cfg(feature = "async")]
-    /// # {
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
     /// use ibapi::prelude::*;
     ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let contract = Contract::stock("AAPL").build();
+    /// let contract = Contract::stock("AAPL").build();
     ///
-    ///     let mut ticks = client.market_data(&contract).subscribe().await.expect("subscription failed").filter_data();
-    ///     let mut quote = Quote::default();
-    ///     while let Some(tick) = ticks.next().await {
-    ///         quote.apply(&tick.expect("market data error"));
-    ///         println!("bid {:?} ask {:?}", quote.bid, quote.ask);
-    ///     }
+    /// let mut ticks = client.market_data(&contract).subscribe().await?.filter_data();
+    /// let mut quote = Quote::default();
+    /// while let Some(tick) = ticks.next().await {
+    ///     quote.apply(&tick?);
+    ///     println!("bid {:?} ask {:?}", quote.bid, quote.ask);
     /// }
+    /// # Ok(())
     /// # }
     /// ```
     pub fn apply(&mut self, tick: &TickTypes) {
@@ -117,11 +117,7 @@ impl Quote {
                 self.set_price(tick.price_tick_type, tick.price);
                 self.set_size(tick.size_tick_type, tick.size);
             }
-            TickTypes::OptionComputation(computation) => {
-                if let Some(slot) = self.greeks_slot(computation.field) {
-                    *slot = Some(computation.clone());
-                }
-            }
+            TickTypes::OptionComputation(computation) => self.set_greeks(computation),
             TickTypes::MarketDataType(market_data_type) => self.market_data_type = Some(*market_data_type),
             TickTypes::String(_) | TickTypes::Generic(_) | TickTypes::SnapshotEnd | TickTypes::RequestParameters(_) => {}
         }
@@ -152,14 +148,15 @@ impl Quote {
         *slot = Some(size);
     }
 
-    fn greeks_slot(&mut self, field: TickType) -> Option<&mut Option<OptionComputation>> {
-        match field {
-            TickType::BidOption | TickType::DelayedBidOption => Some(&mut self.bid_greeks),
-            TickType::AskOption | TickType::DelayedAskOption => Some(&mut self.ask_greeks),
-            TickType::LastOption | TickType::DelayedLastOption => Some(&mut self.last_greeks),
-            TickType::ModelOption | TickType::DelayedModelOption => Some(&mut self.model_greeks),
-            _ => None,
-        }
+    fn set_greeks(&mut self, computation: &OptionComputation) {
+        let slot = match computation.field {
+            TickType::BidOption | TickType::DelayedBidOption => &mut self.bid_greeks,
+            TickType::AskOption | TickType::DelayedAskOption => &mut self.ask_greeks,
+            TickType::LastOption | TickType::DelayedLastOption => &mut self.last_greeks,
+            TickType::ModelOption | TickType::DelayedModelOption => &mut self.model_greeks,
+            _ => return,
+        };
+        *slot = Some(computation.clone());
     }
 }
 
