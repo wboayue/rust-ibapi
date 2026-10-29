@@ -273,7 +273,7 @@ The bond builder automatically:
 Complex multi-leg strategies with type-safe leg construction.
 
 ```rust
-use ibapi::contracts::{Contract, LegAction};
+use ibapi::contracts::{ButterflyLegs, Contract, IronCondorLegs, LegAction};
 
 // Vertical spread
 let vertical = Contract::spread()
@@ -285,22 +285,36 @@ let calendar = Contract::spread()
     .long_calendar(20001, 20002)  // Near and far contract IDs
     .build()?;
 
-// Iron condor: a put vertical plus a call vertical
-let iron_condor = Contract::spread()
-    .vertical(10001, 10002)  // Long put, short put
-    .vertical(10004, 10003)  // Long call, short call
+// Straddle (same strike) and strangle (different strikes): buy a call and a put
+let straddle = Contract::spread()
+    .straddle(40001, 40002)  // Call and put contract IDs
     .build()?;
 
-// Custom butterfly spread
+// Butterfly: buy 1 lower, sell 2 middle, buy 1 upper
 let butterfly = Contract::spread()
-    .add_leg(30001, LegAction::Buy)   // Buy 1 lower strike
-        .ratio(1)
+    .butterfly(ButterflyLegs {
+        lower: 30001.into(),
+        middle: 30002.into(),
+        upper: 30003.into(),
+    })
+    .build()?;
+
+// Iron condor: a put vertical plus a call vertical, legs named
+let iron_condor = Contract::spread()
+    .iron_condor(IronCondorLegs {
+        long_put: 10001.into(),
+        short_put: 10002.into(),
+        short_call: 10003.into(),
+        long_call: 10004.into(),
+    })
+    .build()?;
+
+// Custom ratio spread: buy 1, sell 2
+let ratio_spread = Contract::spread()
+    .add_leg(50001, LegAction::Buy)
         .done()
-    .add_leg(30002, LegAction::Sell)  // Sell 2 middle strike
+    .add_leg(50002, LegAction::Sell)
         .ratio(2)
-        .done()
-    .add_leg(30003, LegAction::Buy)   // Buy 1 higher strike
-        .ratio(1)
         .done()
     .build()?;
 ```

@@ -10,7 +10,7 @@ triggers:
   - a public method takes several Option arguments
 symbols: [too_many_arguments]
 related: [domain-module-layout, macros-last-resort, doc-parity-audit]
-precedents: ["#549", "#573", "#660", "#752", "#792", "#901", "#1079"]
+precedents: ["#549", "#573", "#660", "#752", "#792", "#901", "#1079", "#1123"]
 memory: [feedback_rule19_builder_fed_helpers_exception, feedback_magic_none_split_to_builder]
 ---
 
@@ -58,6 +58,10 @@ client-less `orders::order_builder` free functions (module doc explains).
   of `Order::builder()`. Fix an API split by finishing one builder, not adding one per function.
   Where named fields are the point and no builder fits, a plain struct argument (`BracketPrices`,
   `Adjustment`) does it.
+- #1123 — `SpreadBuilder::butterfly(ButterflyLegs)` / `iron_condor(IronCondorLegs)`: the
+  struct form brought back the 4-id `iron_condor` that #901 removed for silent swaps. Same-typed
+  ids whose order changes the strategy get named fields even at three (butterfly is in budget);
+  a symmetric pair (`straddle(call, put)`, both bought) stays positional.
 - #660 — `pegged_to_benchmark` free function → `PeggedToBenchmark` builder, later folded into
   `Order::builder()` by #901.
 - #549 — order construction converged on the fluent builder (`.buy(100).limit(150.0).submit()`);
