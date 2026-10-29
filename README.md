@@ -310,7 +310,7 @@ fn main() {
 
 #### One-Shot Snapshot
 
-For a single snapshot rather than a streaming subscription, `snapshot_once(timeout)` requests snapshot mode, collects the ticks until the snapshot completes (or the timeout elapses), and returns them as a `Vec<TickTypes>` — no hand-written collect loop.
+For a single snapshot rather than a streaming subscription, `snapshot_once(timeout)` requests snapshot mode, collects the ticks until the snapshot completes (or the timeout elapses), and returns them as a `Vec<TickTypes>` — no hand-written collect loop. `Quote::from_ticks` folds them into one value (bid, ask, last, sizes, volume, greeks); on a streaming subscription, `quote.apply(&tick)` keeps a `Quote` current.
 
 ```rust
 use ibapi::client::blocking::Client;
@@ -326,9 +326,8 @@ fn main() {
         .snapshot_once(Duration::from_secs(5))
         .expect("snapshot request failed!");
 
-    for tick in ticks {
-        println!("tick: {tick:?}");
-    }
+    let quote = Quote::from_ticks(&ticks);
+    println!("bid {:?} ask {:?} last {:?}", quote.bid, quote.ask, quote.last);
 }
 ```
 

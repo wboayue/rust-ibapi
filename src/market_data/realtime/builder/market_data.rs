@@ -158,7 +158,8 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     ///
     /// Forces [`snapshot`](Self::snapshot) mode, subscribes, and collects every
     /// tick until the snapshot completes (or `timeout` elapses), returning the
-    /// accumulated [`TickTypes`] for the caller to map into a domain struct.
+    /// accumulated [`TickTypes`]; fold them with
+    /// [`Quote::from_ticks`](crate::market_data::realtime::Quote::from_ticks).
     /// This replaces the hand-written collect-with-timeout loop. See
     /// [`Subscription::collect_for`](crate::subscriptions::sync::Subscription::collect_for)
     /// for the underlying terminal and its stop conditions.
@@ -168,13 +169,15 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::Quote;
     /// use std::time::Duration;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("AAPL").build();
     ///
     /// let ticks = client.market_data(&contract).snapshot_once(Duration::from_secs(5)).expect("snapshot failed");
-    /// println!("collected {} ticks", ticks.len());
+    /// let quote = Quote::from_ticks(&ticks);
+    /// println!("bid {:?} ask {:?} last {:?}", quote.bid, quote.ask, quote.last);
     /// ```
     pub fn snapshot_once(mut self, timeout: Duration) -> Result<Vec<TickTypes>, Error> {
         self.snapshot = true;
@@ -222,7 +225,8 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     ///
     /// Forces [`snapshot`](Self::snapshot) mode, subscribes, and collects every
     /// tick until the snapshot completes (or `timeout` elapses), returning the
-    /// accumulated [`TickTypes`] for the caller to map into a domain struct.
+    /// accumulated [`TickTypes`]; fold them with
+    /// [`Quote::from_ticks`](crate::market_data::realtime::Quote::from_ticks).
     /// This replaces the hand-written collect-with-timeout loop. See
     /// [`Subscription::collect_for`](crate::subscriptions::Subscription::collect_for)
     /// for the underlying terminal and its stop conditions.
@@ -239,7 +243,8 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     ///     let contract = Contract::stock("AAPL").build();
     ///
     ///     let ticks = client.market_data(&contract).snapshot_once(Duration::from_secs(5)).await.expect("snapshot failed");
-    ///     println!("collected {} ticks", ticks.len());
+    ///     let quote = Quote::from_ticks(&ticks);
+    ///     println!("bid {:?} ask {:?} last {:?}", quote.bid, quote.ask, quote.last);
     /// }
     /// ```
     pub async fn snapshot_once(mut self, timeout: Duration) -> Result<Vec<TickTypes>, Error> {

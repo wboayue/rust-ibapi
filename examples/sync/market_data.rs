@@ -10,6 +10,7 @@
 
 use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
+use std::time::Duration;
 
 fn main() {
     env_logger::init();
@@ -98,30 +99,12 @@ fn example_streaming_with_tick_types(client: &Client, contract: &Contract) {
 fn example_snapshot(client: &Client, contract: &Contract) {
     println!("Example 2: One-time snapshot\n");
 
-    let snapshot_subscription = client.market_data(contract).snapshot().subscribe().expect("Failed to request snapshot");
-
-    for tick in snapshot_subscription.iter_data() {
-        let tick = match tick {
-            Ok(tick) => tick,
-            Err(e) => {
-                eprintln!("error: {e}");
-                break;
-            }
-        };
-        match tick {
-            TickTypes::Price(price) => {
-                println!("Snapshot Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
-            }
-            TickTypes::Size(size) => {
-                println!("Snapshot Size - Type: {:?}, Value: {:.0}", size.tick_type, size.size);
-            }
-            TickTypes::SnapshotEnd => {
-                println!("\nSnapshot completed!");
-                break;
-            }
-            _ => {}
-        }
-    }
+    let ticks = client
+        .market_data(contract)
+        .snapshot_once(Duration::from_secs(5))
+        .expect("Failed to request snapshot");
+    let quote = Quote::from_ticks(&ticks);
+    println!("Snapshot ({} ticks): {quote:#?}", ticks.len());
 }
 
 fn example_builder_chaining(client: &Client, contract: &Contract) {
