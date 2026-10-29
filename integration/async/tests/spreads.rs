@@ -9,12 +9,17 @@ use ibapi::contracts::{ButterflyLegs, Contract, IronCondorLegs, OptionRight, Sec
 use ibapi::Client;
 use ibapi_integration_async::connect;
 use ibapi_test::{yyyymmdd_from_now, ClientId};
-use serial_test::serial;
 
 const SYMBOL: &str = "AAPL";
 
+/// Strike in integer cents, so it can be a map key.
+type StrikeCents = i64;
+
 /// Strike → contract id for one expiry and right. Strike 0 asks TWS for every strike.
-async fn strikes(client: &Client, expiry: &str, right: OptionRight) -> BTreeMap<i64, i32> {
+///
+/// Assumes one trading class per strike (true for AAPL); a second class would silently replace
+/// the first in the map.
+async fn strikes(client: &Client, expiry: &str, right: OptionRight) -> BTreeMap<StrikeCents, i32> {
     let details = client
         .contract_details(&Contract::option(SYMBOL, expiry, 0.0, right))
         .await
@@ -44,11 +49,23 @@ async fn expiries(client: &Client) -> (String, String) {
     let cutoff = yyyymmdd_from_now(14);
     let mut later: Vec<&String> = chain.expirations.iter().filter(|e| **e >= cutoff).collect();
     later.sort();
+    assert!(later.len() >= 2, "need two expirations after {cutoff}: {later:?}");
     (later[0].clone(), later[1].clone())
 }
 
+/// Five consecutive strikes listed in every map, around the middle, and a limit price inside
+/// every preset's max payoff, so TWS's riskless / guaranteed-to-lose check (201) passes.
+fn strike_window(maps: &[&BTreeMap<StrikeCents, i32>]) -> (Vec<StrikeCents>, f64) {
+    let common: Vec<StrikeCents> = maps[0].keys().filter(|k| maps.iter().all(|m| m.contains_key(k))).copied().collect();
+    assert!(common.len() >= 5, "too few shared strikes: {common:?}");
+    let mid = common.len() / 2;
+    let window = common[mid - 2..=mid + 2].to_vec();
+    // Smallest gap: strike spacing can change inside the window (2.5 near the money, 5 further out).
+    let width = window.windows(2).map(|w| w[1] - w[0]).min().unwrap() as f64 / 100.0;
+    (window, (width / 2.0).min(1.0))
+}
+
 #[tokio::test]
-#[serial(orders)]
 async fn spread_presets_accepted_by_what_if() {
     let client_id = ClientId::get();
     let client = connect(&client_id).await;
@@ -57,24 +74,14 @@ async fn spread_presets_accepted_by_what_if() {
     let puts = strikes(&client, &near, OptionRight::Put).await;
     let calls = strikes(&client, &near, OptionRight::Call).await;
     let far_calls = strikes(&client, &far, OptionRight::Call).await;
-
-    // Five consecutive strikes listed for near puts, near calls and far calls, around the middle.
-    let common: Vec<i64> = calls
-        .keys()
-        .filter(|k| puts.contains_key(k) && far_calls.contains_key(k))
-        .copied()
-        .collect();
-    assert!(common.len() >= 5, "too few shared strikes: {common:?}");
-    let mid = common.len() / 2;
-    let k = &common[mid - 2..=mid + 2];
-    let width = (k[1] - k[0]).min(k[4] - k[3]) as f64 / 100.0;
-    // Inside every structure's max payoff, so TWS's riskless / guaranteed-to-lose check (201) passes.
-    let price = (width / 2.0).min(1.0);
+    let (k, price) = strike_window(&[&calls, &puts, &far_calls]);
 
     let spread = || Contract::spread().symbol(SYMBOL);
     let cases: Vec<(&str, SpreadBuilder, f64)> = vec![
         ("vertical", spread().vertical(calls[&k[2]], calls[&k[3]]), price),
         ("long_calendar", spread().long_calendar(calls[&k[2]], far_calls[&k[2]]), price),
+        // Buys the near leg, sells the dearer far one: a credit, bought at a negative price.
+        ("short_calendar", spread().short_calendar(calls[&k[2]], far_calls[&k[2]]), -price),
         ("straddle", spread().straddle(calls[&k[2]], puts[&k[2]]), price),
         ("strangle", spread().strangle(calls[&k[3]], puts[&k[1]]), price),
         (
@@ -109,7 +116,8 @@ async fn spread_presets_accepted_by_what_if() {
     }
     assert!(
         failures.is_empty(),
-        "what-if rejected (expiries {near}/{far}, strikes {k:?}):\n{}",
+        "what-if rejected (expiries {near}/{far}, strikes {:?}):\n{}",
+        k.iter().map(|c| *c as f64 / 100.0).collect::<Vec<_>>(),
         failures.join("\n")
     );
 }
