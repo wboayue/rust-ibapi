@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Client::resubscribing(open)` (sync and async) streams a subscription across transport reconnects: on a lost connection it waits for the reconnect, calls `open` again, and yields a `TRANSPORT_RECONNECT_CODE` notice before the new subscription's first item. It accepts only `subscriptions::Resubscribable` item types (market data, account, position, PnL, scanner, news bulletins), so an order request can't be re-sent. `examples/sync/stream_retry.rs` uses it, with a new async twin (#1122).
 - `contracts::SpreadBuilder::collar(CollarLegs)` (also in the prelude): buy stock, buy put, sell call. `shares_per_contract` sets the stock leg's ratio and has no default, because a wrong deliverable places silently as a mis-hedged position (#1129).
 - `contracts::SpreadBuilder::symbol(..)`. TWS rejects a combo without a symbol (321), and the builder had no way to set one, so a built combo had to be patched by hand before placing (#1128).
 - `contracts::SpreadBuilder` presets `straddle(call, put)`, `strangle(call, put)`, `butterfly(ButterflyLegs)` and `iron_condor(IronCondorLegs)`. Butterfly and iron condor take their legs as named fields, so swapping two ids no longer compiles silently into a different strategy, the reason the positional `iron_condor` was removed in 5.0 (#1123).

@@ -1,5 +1,7 @@
 //! Stream Retry example
 //!
+//! Streams realtime bars across reconnects with `Client::resubscribing`.
+//!
 //! # Usage
 //!
 //! ```bash
@@ -9,6 +11,8 @@
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::TradingHours;
+use ibapi::subscriptions::SubscriptionItem;
+use ibapi::TRANSPORT_RECONNECT_CODE;
 
 fn main() {
     env_logger::init();
@@ -18,38 +22,18 @@ fn main() {
 
     let contract = Contract::stock("AAPL").build();
 
-    'retry: loop {
-        // Waits out a reconnect in progress; fails only once the client gave
-        // up (ConnectionFailed) or was shut down (Shutdown).
-        if let Err(e) = client.wait_connected() {
-            eprintln!("connection gone: {e}");
-            return;
-        }
+    // Resubscribes after each reconnect; ends on any other error, or once the
+    // client gave up reconnecting (ConnectionFailed) or was shut down (Shutdown).
+    let bars = client.resubscribing(|| client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe());
 
-        let subscription = match client.realtime_bars(&contract).trading_hours(TradingHours::Extended).subscribe() {
-            Ok(subscription) => subscription,
-            // Dropped again before the request went out: wait again.
-            Err(e) if e.is_connection_lost() => continue,
-            Err(e) => {
-                eprintln!("realtime bars request failed: {e}");
-                return;
+    for item in bars {
+        match item {
+            Ok(SubscriptionItem::Data(bar)) => println!("bar: {bar:?}"),
+            Ok(SubscriptionItem::Notice(notice)) if notice.code == TRANSPORT_RECONNECT_CODE => {
+                eprintln!("Resubscribed after a reconnect; bars from the outage are missing.")
             }
-        };
-
-        for bar in subscription.iter_data() {
-            match bar {
-                Ok(bar) => println!("bar: {bar:?}"),
-                Err(e) if e.is_connection_lost() => {
-                    eprintln!("Connection lost. Resubscribing after the reconnect...");
-                    continue 'retry;
-                }
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    return;
-                }
-            }
+            Ok(SubscriptionItem::Notice(notice)) => eprintln!("notice: {notice}"),
+            Err(e) => eprintln!("stream ended: {e}"),
         }
-
-        return;
     }
 }

@@ -225,6 +225,11 @@ path = "examples/async/realtime_bars.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_stream_retry"
+path = "examples/async/stream_retry.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_tick_by_tick"
 path = "examples/async/tick_by_tick.rs"
 required-features = ["async"]

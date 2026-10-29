@@ -302,6 +302,73 @@ impl Client {
         self.message_bus.wait_connected()
     }
 
+    /// Streams items from the subscription `open` returns, resubscribing after
+    /// each transport reconnect: the packaged form of the
+    /// [`Error::is_connection_lost`] → [`wait_connected`](Self::wait_connected) → resubscribe loop.
+    ///
+    /// Yields the same `Result<SubscriptionItem<T>, Error>` items as the subscription. When the
+    /// connection drops, it drops the dead subscription, waits for the reconnect, calls `open`
+    /// again, and yields a [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice)
+    /// with code [`TRANSPORT_RECONNECT_CODE`](crate::TRANSPORT_RECONNECT_CODE) before
+    /// the new subscription's first item. Data from the outage is missing. A first `open` that
+    /// fails with a lost connection is retried too, without a notice.
+    ///
+    /// It ends after yielding any other error, the error `wait_connected` returns when the
+    /// reconnect gave up, or when the subscription itself ends (a snapshot that finished).
+    ///
+    /// [`filter_data`](crate::subscriptions::SubscriptionItemIterExt::filter_data) drops notices, gap included; match the
+    /// items to see it.
+    ///
+    /// `T` must be [`Resubscribable`](crate::subscriptions::Resubscribable): order streams are not,
+    /// so a resubscribe can't place or cancel again. After a resubscribe the caller sees:
+    ///
+    /// | Stream | After the gap notice |
+    /// |---|---|
+    /// | market data, realtime bars, tick-by-tick, news bulletins | new data only |
+    /// | market depth | the book rebuilt from scratch: reset yours on the notice |
+    /// | historical bars with `keep_up_to_date` | the initial bars again (duplicates) |
+    /// | account, position, PnL, account summary | the initial snapshot again |
+    /// | scanner | a fresh scan |
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::TRANSPORT_RECONNECT_CODE;
+    /// use ibapi::prelude::*;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// for item in client.resubscribing(|| client.realtime_bars(&contract).subscribe()) {
+    ///     match item {
+    ///         Ok(SubscriptionItem::Data(bar)) => println!("{bar:?}"),
+    ///         Ok(SubscriptionItem::Notice(n)) if n.code == TRANSPORT_RECONNECT_CODE => println!("gap: {n}"),
+    ///         Ok(SubscriptionItem::Notice(n)) => println!("notice: {n}"),
+    ///         Err(e) => panic!("stream ended: {e}"),
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// Order streams don't compile:
+    ///
+    /// ```compile_fail,E0277
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::Order;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let (contract, order) = (Contract::stock("AAPL").build(), Order::default());
+    /// let _ = client.resubscribing(|| client.place_order(1, &contract, &order));
+    /// ```
+    pub fn resubscribing<T, F>(&self, open: F) -> crate::subscriptions::Resubscribing<'_, T, F>
+    where
+        T: crate::subscriptions::Resubscribable,
+        F: FnMut() -> Result<crate::subscriptions::sync::Subscription<T>, Error>,
+    {
+        crate::subscriptions::Resubscribing::new(self, open)
+    }
+
     /// Cleanly shuts down the message bus.
     ///
     /// All outstanding [`Subscription`](crate::subscriptions::Subscription)s see their channels
