@@ -68,6 +68,7 @@ fn main() {
 
     // Spread contract
     let spread = Contract::spread()
+        .symbol("AAPL")
         .long_calendar(12345, 67890) // Near and far contract IDs
         .build()
         .expect("Valid spread");
@@ -75,6 +76,7 @@ fn main() {
 
     // Custom spread with individual legs
     let custom_spread = Contract::spread()
+        .symbol("AAPL")
         .add_leg(11111, LegAction::Buy)
         .ratio(2)
         .done()
