@@ -67,6 +67,8 @@ pub(crate) struct MessageBusStub {
     keep_open: AtomicBool,
     /// How long `wait_connected` takes. See [`MessageBusStub::with_reconnect_delay`].
     reconnect_delay: Duration,
+    /// `wait_connected` reports the reconnect gave up. See [`MessageBusStub::with_failed_reconnect`].
+    reconnect_fails: bool,
     #[cfg(feature = "sync")]
     open_sync_senders: Mutex<Vec<channel::Sender<RoutedItem>>>,
     #[cfg(feature = "async")]
@@ -102,6 +104,7 @@ impl Default for MessageBusStub {
             status_senders: Mutex::default(),
             keep_open: AtomicBool::new(false),
             reconnect_delay: Duration::ZERO,
+            reconnect_fails: false,
             #[cfg(feature = "sync")]
             open_sync_senders: Mutex::default(),
             #[cfg(feature = "async")]
@@ -164,6 +167,22 @@ impl MessageBusStub {
     pub fn with_reconnect_delay(mut self, delay: Duration) -> Self {
         self.reconnect_delay = delay;
         self
+    }
+
+    /// Make each `wait_connected` fail with [`Error::ConnectionFailed`], as it
+    /// does once the reconnect gave up.
+    pub fn with_failed_reconnect(mut self) -> Self {
+        self.reconnect_fails = true;
+        self
+    }
+
+    /// What `wait_connected` returns once its delay has passed.
+    fn reconnect_outcome(&self) -> Result<(), Error> {
+        if self.reconnect_fails {
+            Err(Error::ConnectionFailed)
+        } else {
+            Ok(())
+        }
     }
 
     pub fn request_messages(&self) -> Vec<Vec<u8>> {
@@ -338,7 +357,7 @@ impl MessageBus for MessageBusStub {
         if !self.reconnect_delay.is_zero() {
             std::thread::sleep(self.reconnect_delay);
         }
-        Ok(())
+        self.reconnect_outcome()
     }
 
     fn is_connected(&self) -> bool {
@@ -493,7 +512,7 @@ impl AsyncMessageBus for MessageBusStub {
         if !self.reconnect_delay.is_zero() {
             tokio::time::sleep(self.reconnect_delay).await;
         }
-        Ok(())
+        self.reconnect_outcome()
     }
 
     fn is_connected(&self) -> bool {

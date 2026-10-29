@@ -49,8 +49,15 @@ pub mod sync;
 pub mod r#async;
 
 pub(crate) mod notice_stream;
+
+mod resubscribe;
 #[cfg(feature = "sync")]
 pub use notice_stream::sync_impl::NoticeStreamIter;
+#[cfg(feature = "async")]
+pub(crate) use resubscribe::resubscribing;
+pub use resubscribe::Resubscribable;
+#[cfg(feature = "sync")]
+pub use resubscribe::Resubscribing;
 
 // Top-level `NoticeStream` mirrors the `Subscription` policy: prefer the async
 // implementation when both features are enabled. The sync version is also

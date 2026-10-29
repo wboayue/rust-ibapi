@@ -518,6 +518,24 @@ for result in subscription {
 }
 ```
 
+`client.resubscribing(open)` packages that loop for streams: it waits out the reconnect, calls
+`open` again, and yields a `TRANSPORT_RECONNECT_CODE` notice before the new subscription's first
+item. Data from the outage is missing; depth books, `keep_up_to_date` bars and account snapshots
+start over. Order streams are rejected at compile time. `filter_data` drops the gap notice, so match
+the items to see it.
+
+```rust
+for item in client.resubscribing(|| client.realtime_bars(&contract).subscribe()) {
+    match item {
+        Ok(SubscriptionItem::Data(bar)) => process(bar),
+        Ok(SubscriptionItem::Notice(n)) if n.code == TRANSPORT_RECONNECT_CODE => mark_gap(),
+        Ok(SubscriptionItem::Notice(n)) => log::info!("{n}"),
+        // Any other error, or the reconnect gave up
+        Err(e) => return Err(e),
+    }
+}
+```
+
 ### Order Update Stream Across Reconnects
 
 `order_update_stream()` survives the client's automatic reconnects — the same
