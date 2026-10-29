@@ -5,7 +5,7 @@
 //! Real-time methods are inherent methods on `ibapi::Client` — call
 //! `client.realtime_bars(...)`, `client.tick_by_tick(...)`,
 //! `client.market_depth(...)`, etc. The public types (`Bar`, `BidAsk`,
-//! `MidPoint`, `Trade`, `TickTypes`, `MarketDataBuilder`, `RealtimeBarsBuilder`,
+//! `MidPoint`, `Trade`, `TickTypes`, `Quote`, `MarketDataBuilder`, `RealtimeBarsBuilder`,
 //! `TickByTickBuilder`, `MarketDepthBuilder`, etc.) live at
 //! `ibapi::market_data::realtime::*` and via `ibapi::prelude::*`.
 //!
@@ -29,6 +29,9 @@ mod builder;
 pub use builder::{MarketDataBuilder, MarketDepthBuilder, RealtimeBarsBuilder, TickByTickBuilder};
 
 pub mod generic_tick;
+
+mod quote;
+pub use quote::Quote;
 
 // Feature-specific implementations
 #[doc(hidden)]

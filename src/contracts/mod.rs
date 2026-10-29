@@ -831,7 +831,7 @@ impl ToField for Vec<TagValue> {
 ///
 /// A value is `None` when TWS has not computed it yet.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct OptionComputation {
     /// Specifies the type of option computation.
     pub field: TickType,

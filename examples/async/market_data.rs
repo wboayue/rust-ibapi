@@ -11,6 +11,7 @@
 //! ```
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use ibapi::prelude::*;
 
@@ -105,24 +106,9 @@ async fn example_streaming_with_tick_types(client: &Arc<Client>, contract: &Cont
 async fn example_snapshot(client: &Arc<Client>, contract: &Contract) -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 2: One-time snapshot\n");
 
-    let snapshot_subscription = client.market_data(contract).snapshot().subscribe().await?;
-
-    let mut snapshot_subscription = snapshot_subscription.filter_data();
-    while let Some(result) = snapshot_subscription.next().await {
-        match result? {
-            TickTypes::Price(price) => {
-                println!("Snapshot Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
-            }
-            TickTypes::Size(size) => {
-                println!("Snapshot Size - Type: {:?}, Value: {:.0}", size.tick_type, size.size);
-            }
-            TickTypes::SnapshotEnd => {
-                println!("\nSnapshot completed!");
-                break;
-            }
-            _ => {}
-        }
-    }
+    let ticks = client.market_data(contract).snapshot_once(Duration::from_secs(5)).await?;
+    let quote = Quote::from_ticks(&ticks);
+    println!("Snapshot ({} ticks): {quote:#?}", ticks.len());
     Ok(())
 }
 

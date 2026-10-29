@@ -58,7 +58,7 @@ pub use crate::market_data::historical::{
 
 // Market data types - realtime
 pub use crate::market_data::realtime::{
-    MarketDataBuilder, MarketDepthBuilder, RealtimeBarsBuilder, TickByTickBuilder, TickTypes, WhatToShow as RealtimeWhatToShow,
+    MarketDataBuilder, MarketDepthBuilder, Quote, RealtimeBarsBuilder, TickByTickBuilder, TickTypes, WhatToShow as RealtimeWhatToShow,
 };
 pub use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 
