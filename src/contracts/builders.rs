@@ -661,8 +661,7 @@ impl SpreadBuilder {
     ///
     /// Legs are added as buy stock (ratio `shares_per_contract`), buy put, sell call. Buy the
     /// combo to open. The limit price is per combo, a debit of about
-    /// `shares_per_contract × spot + put − call`; TWS rejects a price at or below the put's
-    /// floor (riskless) or at or above the call's cap (guaranteed to lose) with 201.
+    /// `shares_per_contract × spot + put − call`.
     ///
     /// # Examples
     ///
@@ -787,10 +786,11 @@ pub struct CollarLegs {
     pub put: ContractId,
     /// Call above the stock price, sold.
     pub call: ContractId,
-    /// Shares one option contract delivers: the stock leg's ratio. Usually 100 for US equity
-    /// options, but not for adjusted or mini options; read the option's
-    /// `ContractDetails.contract.multiplier`. A wrong value still places, as a mis-hedged
-    /// position rather than a collar.
+    /// Shares one option contract delivers: the stock leg's ratio. Usually 100, and for
+    /// split-adjusted options usually the option's `multiplier` (see
+    /// [`ContractDetails`](crate::contracts::ContractDetails)). After a merger or spin-off the
+    /// deliverable can differ from both, so check it before collaring an adjusted option. A
+    /// wrong value still places, as a mis-hedged position rather than a collar.
     pub shares_per_contract: i32,
 }
 

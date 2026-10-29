@@ -323,7 +323,7 @@ let collar = Contract::spread()
         stock: 265598.into(),
         put: 10005.into(),
         call: 10006.into(),
-        shares_per_contract: 100,  // shares per option contract
+        shares_per_contract: 100,  // the option's deliverable; not always 100
     })
     .build()?;
 

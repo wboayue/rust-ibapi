@@ -15,6 +15,10 @@ const SYMBOL: &str = "AAPL";
 /// Strike in integer cents, so it can be a map key.
 type StrikeCents = i64;
 
+fn dollars(strike: StrikeCents) -> f64 {
+    strike as f64 / 100.0
+}
+
 /// Strike → contract id for one expiry and right. Strike 0 asks TWS for every strike.
 ///
 /// Assumes one trading class per strike (true for AAPL); a second class would silently replace
@@ -56,14 +60,14 @@ async fn underlying_and_expiries(client: &Client) -> (i32, String, String) {
 }
 
 /// Five consecutive strikes listed in every map, around the middle, and a limit price inside
-/// every preset's max payoff, so TWS's riskless / guaranteed-to-lose check (201) passes.
+/// the max payoff of every option-only preset, so TWS's riskless / guaranteed-to-lose check (201) passes.
 fn strike_window(maps: &[&BTreeMap<StrikeCents, i32>]) -> (Vec<StrikeCents>, f64) {
     let common: Vec<StrikeCents> = maps[0].keys().filter(|k| maps.iter().all(|m| m.contains_key(k))).copied().collect();
     assert!(common.len() >= 5, "too few shared strikes: {common:?}");
     let mid = common.len() / 2;
     let window = common[mid - 2..=mid + 2].to_vec();
     // Smallest gap: strike spacing can change inside the window (2.5 near the money, 5 further out).
-    let width = window.windows(2).map(|w| w[1] - w[0]).min().unwrap() as f64 / 100.0;
+    let width = dollars(window.windows(2).map(|w| w[1] - w[0]).min().unwrap());
     (window, (width / 2.0).min(1.0))
 }
 
@@ -107,8 +111,8 @@ async fn spread_presets_accepted_by_what_if() {
             }),
             -price,
         ),
-        // Payoff runs from the put's floor to the call's cap (× shares), so a price at the
-        // middle strike sits inside it wherever spot is.
+        // A price inside the payoff, put floor to call cap (× shares), wherever spot is. TWS
+        // doesn't enforce that range for a stock + option combo (live: accepted outside it).
         (
             "collar",
             spread().collar(CollarLegs {
@@ -117,7 +121,7 @@ async fn spread_presets_accepted_by_what_if() {
                 call: calls[&k[3]].into(),
                 shares_per_contract: SHARES,
             }),
-            f64::from(SHARES) * k[2] as f64 / 100.0,
+            f64::from(SHARES) * dollars(k[2]),
         ),
     ];
 
@@ -132,7 +136,7 @@ async fn spread_presets_accepted_by_what_if() {
     assert!(
         failures.is_empty(),
         "what-if rejected (expiries {near}/{far}, strikes {:?}):\n{}",
-        k.iter().map(|c| *c as f64 / 100.0).collect::<Vec<_>>(),
+        k.iter().copied().map(dollars).collect::<Vec<_>>(),
         failures.join("\n")
     );
 }
