@@ -599,7 +599,7 @@ impl SpreadBuilder {
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn strangle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> Self {
-        self.add_leg(call_id, LegAction::Buy).done().add_leg(put_id, LegAction::Buy).done()
+        self.straddle(call_id, put_id)
     }
 
     /// Long butterfly: buy 1 lower, sell 2 middle, buy 1 upper.
