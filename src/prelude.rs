@@ -45,8 +45,8 @@ pub use crate::{ConnectivityStatus, Notice, NoticeCategory};
 
 // Contract types
 pub use crate::contracts::{
-    BondIdentifier, ButterflyLegs, ContractMonth, Currency, Cusip, Exchange, ExpirationDate, IronCondorLegs, Isin, LegAction, OptionRight, Strike,
-    Symbol,
+    BondIdentifier, ButterflyLegs, CollarLegs, ContractMonth, Currency, Cusip, Exchange, ExpirationDate, IronCondorLegs, Isin, LegAction,
+    OptionRight, Strike, Symbol,
 };
 pub use crate::contracts::{Contract, OptionChainBuilder, SecurityType};
 

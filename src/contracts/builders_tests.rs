@@ -396,7 +396,7 @@ fn leg_tuples(spread: &Contract) -> Legs {
 #[test]
 fn spread_presets_set_legs() {
     type Preset = fn(SpreadBuilder) -> SpreadBuilder;
-    let cases: [(&str, Preset, Legs); 4] = [
+    let cases: [(&str, Preset, Legs); 6] = [
         (
             "straddle",
             |s| s.straddle(100, 101),
@@ -436,6 +436,31 @@ fn spread_presets_set_legs() {
                 (115, LegAction::Buy, 1),
                 (110, LegAction::Sell, 1),
             ],
+        ),
+        (
+            "collar",
+            |s| {
+                s.collar(CollarLegs {
+                    stock: 265598.into(),
+                    put: 100.into(),
+                    call: 101.into(),
+                    shares_per_contract: 100,
+                })
+            },
+            vec![(265598, LegAction::Buy, 100), (100, LegAction::Buy, 1), (101, LegAction::Sell, 1)],
+        ),
+        // A non-100 deliverable flows through to the stock leg's ratio.
+        (
+            "collar_mini",
+            |s| {
+                s.collar(CollarLegs {
+                    stock: 76792991.into(),
+                    put: 200.into(),
+                    call: 201.into(),
+                    shares_per_contract: 10,
+                })
+            },
+            vec![(76792991, LegAction::Buy, 10), (200, LegAction::Buy, 1), (201, LegAction::Sell, 1)],
         ),
     ];
 

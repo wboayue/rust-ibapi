@@ -275,7 +275,7 @@ Complex multi-leg strategies with type-safe leg construction.
 Set the combo's symbol with `.symbol(..)`, usually the underlying: TWS rejects a combo without one (error 321).
 
 ```rust
-use ibapi::contracts::{ButterflyLegs, Contract, IronCondorLegs, LegAction};
+use ibapi::contracts::{ButterflyLegs, CollarLegs, Contract, IronCondorLegs, LegAction};
 
 // Vertical spread
 let vertical = Contract::spread()
@@ -313,6 +313,17 @@ let iron_condor = Contract::spread()
         short_put: 10002.into(),
         short_call: 10003.into(),
         long_call: 10004.into(),
+    })
+    .build()?;
+
+// Collar: buy the stock, buy a put floor, sell a call cap
+let collar = Contract::spread()
+    .symbol("AAPL")
+    .collar(CollarLegs {
+        stock: 265598.into(),
+        put: 10005.into(),
+        call: 10006.into(),
+        shares_per_contract: 100,  // the option's deliverable; not always 100
     })
     .build()?;
 

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `contracts::SpreadBuilder::collar(CollarLegs)` (also in the prelude): buy stock, buy put, sell call. `shares_per_contract` sets the stock leg's ratio and has no default, because a wrong deliverable places silently as a mis-hedged position (#1129).
 - `contracts::SpreadBuilder::symbol(..)`. TWS rejects a combo without a symbol (321), and the builder had no way to set one, so a built combo had to be patched by hand before placing (#1128).
 - `contracts::SpreadBuilder` presets `straddle(call, put)`, `strangle(call, put)`, `butterfly(ButterflyLegs)` and `iron_condor(IronCondorLegs)`. Butterfly and iron condor take their legs as named fields, so swapping two ids no longer compiles silently into a different strategy, the reason the positional `iron_condor` was removed in 5.0 (#1123).
 - `market_data::realtime::Quote` (also in the prelude): folds market data ticks into the latest bid/ask/last/open/high/low/close, sizes, volume, market data type and bid/ask/last/model greeks. `Quote::from_ticks(&snapshot_once(timeout)?)` for a snapshot, `quote.apply(&tick)` for a stream; delayed ticks fill the same fields (#1121).
