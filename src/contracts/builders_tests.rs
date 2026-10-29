@@ -293,6 +293,26 @@ fn spread_builder_custom_legs() {
     assert_eq!(spread.combo_legs[2].ratio, 1);
 }
 
+/// TWS rejects a combo without a symbol (321); the builder carries it onto the contract
+/// whether set before or after the legs (#1128).
+#[test]
+fn spread_builder_sets_symbol() {
+    let before = Contract::spread().symbol("AAPL").vertical(100, 105).build().unwrap();
+    let after = Contract::spread().vertical(100, 105).symbol("AAPL").build().unwrap();
+
+    assert_eq!(before.symbol, Symbol::from("AAPL"));
+    assert_eq!(after.symbol, Symbol::from("AAPL"));
+    assert_eq!(before.combo_legs.len(), after.combo_legs.len());
+}
+
+/// Optional in 5.x: unset builds with an empty symbol.
+#[test]
+fn spread_builder_symbol_defaults_empty() {
+    let spread = Contract::spread().vertical(100, 105).build().unwrap();
+
+    assert_eq!(spread.symbol, Symbol::default());
+}
+
 #[test]
 fn spread_builder_empty_fails() {
     let err = Contract::spread().build().unwrap_err();

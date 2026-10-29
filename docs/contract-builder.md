@@ -272,26 +272,32 @@ The bond builder automatically:
 
 Complex multi-leg strategies with type-safe leg construction.
 
+Set the combo's symbol with `.symbol(..)`, usually the underlying: TWS rejects a combo without one (error 321).
+
 ```rust
 use ibapi::contracts::{ButterflyLegs, Contract, IronCondorLegs, LegAction};
 
 // Vertical spread
 let vertical = Contract::spread()
+    .symbol("AAPL")
     .vertical(11111, 22222)  // Long and short contract IDs
     .build()?;
 
 // Long calendar: sell the near expiry, buy the far one (same strike and right)
 let calendar = Contract::spread()
+    .symbol("AAPL")
     .long_calendar(20001, 20002)  // Near and far contract IDs
     .build()?;
 
 // Straddle (same strike) and strangle (different strikes): buy a call and a put
 let straddle = Contract::spread()
+    .symbol("AAPL")
     .straddle(40001, 40002)  // Call and put contract IDs
     .build()?;
 
 // Butterfly: buy 1 lower, sell 2 middle, buy 1 upper
 let butterfly = Contract::spread()
+    .symbol("AAPL")
     .butterfly(ButterflyLegs {
         lower: 30001.into(),
         middle: 30002.into(),
@@ -301,6 +307,7 @@ let butterfly = Contract::spread()
 
 // Iron condor: a put vertical plus a call vertical, legs named
 let iron_condor = Contract::spread()
+    .symbol("AAPL")
     .iron_condor(IronCondorLegs {
         long_put: 10001.into(),
         short_put: 10002.into(),
@@ -311,6 +318,7 @@ let iron_condor = Contract::spread()
 
 // Custom ratio spread: buy 1, sell 2
 let ratio_spread = Contract::spread()
+    .symbol("AAPL")
     .add_leg(50001, LegAction::Buy)
         .done()
     .add_leg(50002, LegAction::Sell)

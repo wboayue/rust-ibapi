@@ -497,6 +497,7 @@ impl CryptoBuilder {
 #[must_use = "SpreadBuilder does nothing until you call .build()"]
 pub struct SpreadBuilder {
     legs: Vec<Leg>,
+    symbol: Symbol,
     currency: Currency,
     exchange: Exchange,
 }
@@ -515,6 +516,7 @@ impl SpreadBuilder {
     pub fn new() -> Self {
         SpreadBuilder {
             legs: Vec::new(),
+            symbol: Symbol::default(),
             currency: "USD".into(),
             exchange: "SMART".into(),
         }
@@ -563,7 +565,7 @@ impl SpreadBuilder {
     /// use ibapi::contracts::Contract;
     ///
     /// let (long_call, short_call) = (100, 105);
-    /// let bull_call = Contract::spread().vertical(long_call, short_call).build()?;
+    /// let bull_call = Contract::spread().symbol("AAPL").vertical(long_call, short_call).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn vertical(self, long_id: impl Into<ContractId>, short_id: impl Into<ContractId>) -> Self {
@@ -578,7 +580,7 @@ impl SpreadBuilder {
     /// use ibapi::contracts::Contract;
     ///
     /// let (call, put) = (100, 101);
-    /// let straddle = Contract::spread().straddle(call, put).build()?;
+    /// let straddle = Contract::spread().symbol("AAPL").straddle(call, put).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn straddle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> Self {
@@ -595,7 +597,7 @@ impl SpreadBuilder {
     /// use ibapi::contracts::Contract;
     ///
     /// let (call, put) = (110, 90);
-    /// let strangle = Contract::spread().strangle(call, put).build()?;
+    /// let strangle = Contract::spread().symbol("AAPL").strangle(call, put).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn strangle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> Self {
@@ -611,6 +613,7 @@ impl SpreadBuilder {
     /// use ibapi::contracts::{ButterflyLegs, Contract};
     ///
     /// let butterfly = Contract::spread()
+    ///     .symbol("AAPL")
     ///     .butterfly(ButterflyLegs {
     ///         lower: 100.into(),
     ///         middle: 105.into(),
@@ -639,6 +642,7 @@ impl SpreadBuilder {
     /// use ibapi::contracts::{Contract, IronCondorLegs};
     ///
     /// let iron_condor = Contract::spread()
+    ///     .symbol("AAPL")
     ///     .iron_condor(IronCondorLegs {
     ///         long_put: 100.into(),
     ///         short_put: 105.into(),
@@ -650,6 +654,27 @@ impl SpreadBuilder {
     /// ```
     pub fn iron_condor(self, legs: IronCondorLegs) -> Self {
         self.vertical(legs.long_put, legs.short_put).vertical(legs.long_call, legs.short_call)
+    }
+
+    /// Set the combo's symbol. TWS requires it to place the combo and rejects one without it
+    /// with 321.
+    ///
+    /// Usually the underlying. For a combo across underlyings, TWS's samples join them with a
+    /// comma (`"IBKR,MCD"`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let (long_call, short_call) = (100, 105);
+    /// let bull_call = Contract::spread().symbol("AAPL").vertical(long_call, short_call).build()?;
+    /// assert_eq!(bull_call.symbol.to_string(), "AAPL");
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn symbol(mut self, symbol: impl Into<Symbol>) -> Self {
+        self.symbol = symbol.into();
+        self
     }
 
     /// Override the spread currency, useful for non-USD underlyings.
@@ -665,6 +690,8 @@ impl SpreadBuilder {
     }
 
     /// Finalize the spread contract, returning an error if no legs were added.
+    ///
+    /// A combo built without [`symbol`](Self::symbol) builds, but TWS rejects it with 321.
     pub fn build(self) -> Result<Contract, Error> {
         if self.legs.is_empty() {
             return Err(Error::InvalidArgument("Spread must have at least one leg".into()));
@@ -683,6 +710,7 @@ impl SpreadBuilder {
             .collect();
 
         Ok(Contract {
+            symbol: self.symbol,
             security_type: SecurityType::Spread,
             currency: self.currency,
             exchange: self.exchange,

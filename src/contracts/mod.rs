@@ -452,6 +452,7 @@ impl Contract {
     /// use ibapi::contracts::{Contract, LegAction};
     ///
     /// let spread = Contract::spread()
+    ///     .symbol("AAPL")
     ///     .long_calendar(12345, 67890)
     ///     .build();
     /// ```
