@@ -632,8 +632,9 @@ impl SpreadBuilder {
     /// Iron condor: a put vertical plus a call vertical, each long the wing and short the body.
     ///
     /// Legs are added as buy long put, sell short put, buy long call, sell short call. Buy the
-    /// combo to open. The legs are named fields because four ids in a fixed order compile when
-    /// swapped and build a different strategy.
+    /// combo to open: it opens for a credit, so the limit price is negative. TWS rejects a
+    /// positive price with 201 ("Guaranteed-to-Lose"). The legs are named fields because four
+    /// ids in a fixed order compile when swapped and build a different strategy.
     ///
     /// ```
     /// use ibapi::contracts::{Contract, IronCondorLegs};
