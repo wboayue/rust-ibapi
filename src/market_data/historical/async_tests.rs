@@ -340,50 +340,58 @@ async fn historical_data_error_response() {
     assert_eq!(historical_requests_and_cancels(&message_bus).await, (1, 0));
 }
 
-/// TWS sends 2188 on the error callback and then delivers the bars: the account
-/// may not stream the up-to-the-second tail, but the historical data itself is
-/// served. Classified as an error it would end the request before
-/// `HistoricalData` arrived, and the caller would see no bars at all.
+/// Error-callback notices TWS sends ahead of the bars they don't stop.
+const PRE_DATA_NOTICES: [(i32, &str); 2] = [
+    (2188, "Up-to-the-second historical data requires additional subscription for the API."),
+    (165, HMDS_CONNECTED_MESSAGE),
+];
+
+/// The 165 text seen live on a historical request when the HMDS farm connected (#1136).
+const HMDS_CONNECTED_MESSAGE: &str = "Historical Market Data Service query message:HMDS server connection was successful.";
+
+/// TWS sends these on the error callback and then delivers the bars: 2188 (the
+/// account may not stream the up-to-the-second tail, but the historical data
+/// itself is served) and 165 "HMDS server connection was successful" (the farm
+/// connected on demand, #1136). Classified as an error either would end the
+/// request before `HistoricalData` arrived, and the caller would see no bars.
 #[tokio::test]
-async fn historical_data_up_to_the_second_advisory_is_skipped() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-        proto_error_response(
-            9000,
-            2188,
-            "Up-to-the-second historical data requires additional subscription for the API.",
-        ),
-        proto_response(
-            IncomingMessages::HistoricalData,
-            historical_data_response()
-                .bar(
-                    historical_data_daily_bar("20230315")
-                        .ohlc(185.75, 186.25, 185.50, 186.00)
-                        .volume(1500.0)
-                        .wap(185.85)
-                        .count(150),
-                )
-                .encode_proto(),
-        ),
-        proto_response(
-            IncomingMessages::HistoricalDataEnd,
-            historical_data_end_response()
-                .start_date_str("20230315 09:30:00 UTC")
-                .end_date_str("20230315 16:00:00 UTC")
-                .encode_proto(),
-        ),
-    ]));
+async fn historical_data_notice_before_bars_is_skipped() {
+    for (code, message) in PRE_DATA_NOTICES {
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+            proto_error_response(9000, code, message),
+            proto_response(
+                IncomingMessages::HistoricalData,
+                historical_data_response()
+                    .bar(
+                        historical_data_daily_bar("20230315")
+                            .ohlc(185.75, 186.25, 185.50, 186.00)
+                            .volume(1500.0)
+                            .wap(185.85)
+                            .count(150),
+                    )
+                    .encode_proto(),
+            ),
+            proto_response(
+                IncomingMessages::HistoricalDataEnd,
+                historical_data_end_response()
+                    .start_date_str("20230315 09:30:00 UTC")
+                    .end_date_str("20230315 16:00:00 UTC")
+                    .encode_proto(),
+            ),
+        ]));
 
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
+        let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
 
-    let result = client
-        .historical_data(&test_contract(), BarSize::Day)
-        .duration(Duration::days(1))
-        .ending(datetime!(2023-03-15 16:00:00 UTC))
-        .fetch()
-        .await;
+        let result = client
+            .historical_data(&test_contract(), BarSize::Day)
+            .duration(Duration::days(1))
+            .ending(datetime!(2023-03-15 16:00:00 UTC))
+            .fetch()
+            .await;
 
-    let data = result.expect("advisory 2188 must not abort the request");
-    assert_eq!(data.bars.len(), 1, "bars sent after the advisory should be returned");
+        let data = result.unwrap_or_else(|e| panic!("{code} must not abort the request: {e:?}"));
+        assert_eq!(data.bars.len(), 1, "bars sent after {code} should be returned");
+    }
 }
 
 #[tokio::test]
@@ -796,6 +804,37 @@ async fn historical_data_streaming_error_response() {
         panic!("error should arrive as Some(Err(_))");
     };
     assert_tws_error_message(err, 162, "No market data permissions");
+}
+
+/// 165 "HMDS server connection was successful" ahead of the bars is a notice:
+/// the stream yields it and keeps going (#1136).
+#[tokio::test]
+async fn historical_data_streaming_hmds_connected_notice_then_data() {
+    let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![
+        proto_error_response(9000, 165, HMDS_CONNECTED_MESSAGE),
+        proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(historical_data_bar(1_678_886_400).ohlc(185.50, 186.00, 185.25, 185.75))
+                .encode_proto(),
+        ),
+    ]);
+
+    let mut subscription = client
+        .historical_data(&Contract::stock("SPY").build(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .stream()
+        .await
+        .expect("streaming request should succeed");
+
+    let Some(Ok(SubscriptionItem::Notice(notice))) = subscription.next().await else {
+        panic!("165 should arrive as a notice");
+    };
+    assert_eq!((notice.code, notice.message.as_str()), (165, HMDS_CONNECTED_MESSAGE));
+    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data)))) = subscription.next().await else {
+        panic!("bars should follow the notice");
+    };
+    assert_eq!(data.bars.len(), 1);
 }
 
 #[tokio::test]

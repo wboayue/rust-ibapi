@@ -132,6 +132,29 @@ fn notice_classifies_order_message_warning_from_text() {
     assert!(rejection.is_error());
 }
 
+/// TWS binds 165 "HMDS server connection was successful" to a historical
+/// request when the farm connects on demand; the data follows (#1136). Other
+/// 165 texts stay errors.
+#[test]
+fn notice_classifies_hmds_connected_as_warning() {
+    let connected = helpers::test_notice(
+        HMDS_QUERY_MESSAGE_CODE,
+        "Historical Market Data Service query message:HMDS server connection was successful.",
+    );
+    assert!(connected.is_warning());
+    assert_eq!(connected.category(), NoticeCategory::Warning);
+    assert!(connected.is_informational());
+
+    for message in [
+        "Historical Market Data Service query message:no items retrieved",
+        "Different query failure",
+    ] {
+        let notice = helpers::test_notice(HMDS_QUERY_MESSAGE_CODE, message);
+        assert!(!notice.is_warning(), "{message:?}");
+        assert_eq!(notice.category(), NoticeCategory::Error, "{message:?}");
+    }
+}
+
 #[test]
 fn notice_is_system_message() {
     // System message codes: 1100, 1101, 1102, 1300

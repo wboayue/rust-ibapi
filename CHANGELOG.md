@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `market_data::realtime::Quote` (also in the prelude): folds market data ticks into the latest bid/ask/last/open/high/low/close, sizes, volume, market data type and bid/ask/last/model greeks. `Quote::from_ticks(&snapshot_once(timeout)?)` for a snapshot, `quote.apply(&tick)` for a stream; delayed ticks fill the same fields (#1121).
 - `OptionComputation` derives `Clone` and `PartialEq`; `TickType` derives `Clone` and `Copy` (#1121).
 
+### Fixed
+
+- Code 165 "HMDS server connection was successful", which TWS binds to a historical request when the HMDS farm connects on demand, no longer ends the request as an error. It's now a `NoticeCategory::Warning`: a stream yields it as a notice and keeps going, and a one-shot fetch skips it and returns the bars that follow. Other 165 texts are unchanged (#1136).
+
 ## [5.4.0] - 2026-10-27
 
 ### Added

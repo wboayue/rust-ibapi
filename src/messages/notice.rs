@@ -44,10 +44,16 @@ pub const ORDER_MESSAGE_CODE: i32 = 399;
 /// depth subscription yields it as [`MarketDepths::Reset`](crate::market_data::realtime::MarketDepths::Reset).
 pub(crate) const MARKET_DEPTH_RESET_CODE: i32 = 317;
 
-/// "Historical Market Data Service query message". Classified `Error`, but a
-/// scanner subscription keeps its "no items retrieved" form nonterminal; see
+/// "Historical Market Data Service query message". Classified `Error`, except
+/// the [`HMDS_CONNECTED_TEXT`] form, which is a `Warning`; a scanner
+/// subscription also keeps its "no items retrieved" form nonterminal. See
 /// [`classify`].
 pub(crate) const HMDS_QUERY_MESSAGE_CODE: i32 = 165;
+
+/// Text of the [`HMDS_QUERY_MESSAGE_CODE`] frame TWS sends, bound to a
+/// historical request, when the HMDS farm connects on demand. The data follows
+/// it, so it is a warning, not a failed query (#1136).
+pub(crate) const HMDS_CONNECTED_TEXT: &str = "HMDS server connection was successful";
 
 /// "No security definition has been found for the request".
 pub(crate) const NO_SECURITY_DEFINITION_CODE: i32 = 200;
@@ -72,10 +78,14 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2199;
 /// notices (e.g. "Warning: Approaching max rate of 50 messages per second"),
 /// and the absent field decodes to 0. An error frame that fails proto decode
 /// falls back to the same default, so code 0 never carries a hard error.
+///
+/// Code 165 is a warning only in its [`HMDS_CONNECTED_TEXT`] form; its other
+/// texts can be real query failures.
 pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
     code == 0
         || WARNING_CODE_RANGE.contains(&code)
         || (code == ORDER_MESSAGE_CODE && message.lines().any(|line| line.trim_start().starts_with("Warning:")))
+        || (code == HMDS_QUERY_MESSAGE_CODE && message.contains(HMDS_CONNECTED_TEXT))
 }
 
 /// Classify a raw error frame into a disjoint [`NoticeCategory`].
@@ -89,8 +99,9 @@ pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
 /// lets a subscription deliver a request-bound `Error` notice as
 /// `SubscriptionItem::Notice` instead of ending. The notice keeps its `Error`
 /// category. Only the scanner uses it, for [`HMDS_QUERY_MESSAGE_CODE`] "no items
-/// retrieved" (#886); making 165 informational here would also reach one-shot
-/// requests, which would wait for an answer that never comes.
+/// retrieved" (#886); making that form informational here would also reach
+/// one-shot requests, which would wait for an answer that never comes. The
+/// [`HMDS_CONNECTED_TEXT`] form is a `Warning` here instead: the data follows it.
 pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
     if code == ORDER_CANCELLED_CODE {
         NoticeCategory::Cancellation
@@ -480,7 +491,8 @@ pub enum NoticeCategory {
     /// Order cancellation confirmation (exact code 202).
     Cancellation,
     /// Informational warning ([`WARNING_CODE_RANGE`], code 399 with a `Warning:`
-    /// line, or code 0 — a code-less frame).
+    /// line, code 165 "HMDS server connection was successful", or code 0 — a
+    /// code-less frame).
     Warning,
     /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
     SystemMessage,
