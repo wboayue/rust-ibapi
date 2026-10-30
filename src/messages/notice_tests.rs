@@ -1,5 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers;
+use crate::market_data::historical::common::test_tables::HMDS_CONNECTED_MESSAGE;
 
 #[test]
 fn notice() {
@@ -137,10 +138,7 @@ fn notice_classifies_order_message_warning_from_text() {
 /// 165 texts stay errors.
 #[test]
 fn notice_classifies_hmds_connected_as_warning() {
-    let connected = helpers::test_notice(
-        HMDS_QUERY_MESSAGE_CODE,
-        "Historical Market Data Service query message:HMDS server connection was successful.",
-    );
+    let connected = helpers::test_notice(HMDS_QUERY_MESSAGE_CODE, HMDS_CONNECTED_MESSAGE);
     assert!(connected.is_warning());
     assert_eq!(connected.category(), NoticeCategory::Warning);
     assert!(connected.is_informational());
@@ -540,6 +538,15 @@ fn log_level_follows_category() {
     let order_warning = Notice::synthesized(ORDER_MESSAGE_CODE, "Order Message:\nWarning: outside RTH".into());
     assert_eq!(order_warning.log_level(), log::Level::Warn);
     assert_eq!(Notice::synthesized(ORDER_MESSAGE_CODE, "rejected".into()).log_level(), log::Level::Error);
+    // 165 grades by its text too: HMDS connected is info, any other 165 an error.
+    assert_eq!(
+        Notice::synthesized(HMDS_QUERY_MESSAGE_CODE, HMDS_CONNECTED_MESSAGE.into()).log_level(),
+        log::Level::Info
+    );
+    assert_eq!(
+        Notice::synthesized(HMDS_QUERY_MESSAGE_CODE, "no items retrieved".into()).log_level(),
+        log::Level::Error
+    );
     // Connectivity lost, socket reset, request errors (316, 354), order
     // rejections (200, 201) and errors: error.
     for code in [

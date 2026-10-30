@@ -7,10 +7,11 @@ use crate::common::test_utils::helpers::{
     TEST_REQ_ID_FIRST,
 };
 use crate::contracts::Contract;
+use crate::market_data::historical::common::test_tables::{HMDS_CONNECTED_MESSAGE, PRE_DATA_NOTICES};
 use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint, ToDuration};
 use crate::market_data::{IgnoreSize, TradingHours};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{IncomingMessages, OutgoingMessages, HMDS_QUERY_MESSAGE_CODE};
 use crate::protocol::{Features, ProtocolFeature};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -487,15 +488,6 @@ fn historical_data_error_response() {
     assert!(result.is_err(), "Expected error due to error response from server");
 }
 
-/// Error-callback notices TWS sends ahead of the bars they don't stop.
-const PRE_DATA_NOTICES: [(i32, &str); 2] = [
-    (2188, "Up-to-the-second historical data requires additional subscription for the API."),
-    (165, HMDS_CONNECTED_MESSAGE),
-];
-
-/// The 165 text seen live on a historical request when the HMDS farm connected (#1136).
-const HMDS_CONNECTED_MESSAGE: &str = "Historical Market Data Service query message:HMDS server connection was successful.";
-
 /// TWS sends these on the error callback and then delivers the bars: 2188 (the
 /// account may not stream the up-to-the-second tail, but the historical data
 /// itself is served) and 165 "HMDS server connection was successful" (the farm
@@ -905,7 +897,7 @@ fn historical_data_streaming_error_response() {
 #[test]
 fn historical_data_streaming_hmds_connected_notice_then_data() {
     let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
-        proto_error_response(9000, 165, HMDS_CONNECTED_MESSAGE),
+        proto_error_response(9000, HMDS_QUERY_MESSAGE_CODE, HMDS_CONNECTED_MESSAGE),
         proto_response(
             IncomingMessages::HistoricalData,
             historical_data_response()
@@ -923,7 +915,7 @@ fn historical_data_streaming_hmds_connected_notice_then_data() {
     let Some(Ok(SubscriptionItem::Notice(notice))) = subscription.next() else {
         panic!("165 should arrive as a notice");
     };
-    assert_eq!((notice.code, notice.message.as_str()), (165, HMDS_CONNECTED_MESSAGE));
+    assert_eq!((notice.code, notice.message.as_str()), (HMDS_QUERY_MESSAGE_CODE, HMDS_CONNECTED_MESSAGE));
     let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data)))) = subscription.next() else {
         panic!("bars should follow the notice");
     };

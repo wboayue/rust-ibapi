@@ -805,10 +805,11 @@ impl Notice {
     /// sits in.
     ///
     /// Informational categories log at `warn` (the caller may want to act:
-    /// a fallback engaged, a book must be cleared), with two exceptions at `info`:
-    /// the cancellation confirmation, and data-farm notices that need no action.
-    /// A farm that is OK, `Inactive` ("…available upon demand") or `Connecting` is
-    /// routine on nearly every connect; only `Broken` warns.
+    /// a fallback engaged, a book must be cleared), with three exceptions at
+    /// `info`: the cancellation confirmation, data-farm notices that need no
+    /// action, and 165 "HMDS server connection was successful". A farm that is
+    /// OK, `Inactive` ("…available upon demand") or `Connecting` is routine on
+    /// nearly every connect; only `Broken` warns.
     /// System connectivity codes are graded by how much they matter: 1102
     /// (restored, data maintained) → info; 1101 (restored, data lost —
     /// resubscribe required) → warn; 1100 (connectivity lost) and 1300 (socket
@@ -825,6 +826,8 @@ impl Notice {
             {
                 Level::Info
             }
+            // A 165 classifies as Warning only in its HMDS-connected form.
+            NoticeCategory::Warning if self.code == HMDS_QUERY_MESSAGE_CODE => Level::Info,
             NoticeCategory::Warning | NoticeCategory::DataAdvisory => Level::Warn,
             NoticeCategory::SystemMessage => match self.code {
                 CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE => Level::Info,

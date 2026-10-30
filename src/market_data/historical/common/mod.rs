@@ -2,6 +2,9 @@ pub(super) mod decoders;
 pub(super) mod encoders;
 pub(crate) mod tick;
 
+#[cfg(test)]
+pub(crate) mod test_tables;
+
 use time::OffsetDateTime;
 
 use crate::market_data::historical::WhatToShow;
