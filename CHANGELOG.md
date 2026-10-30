@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-10-30
+
 ### Added
 
 - `Client::resubscribing(open)` (sync and async) streams a subscription across transport reconnects: on a lost connection it waits for the reconnect, calls `open` again, and yields a `TRANSPORT_RECONNECT_CODE` notice before the new subscription's first item. It accepts only `subscriptions::Resubscribable` item types (market data, account, position, PnL, scanner, news bulletins), so an order request can't be re-sent. `examples/sync/stream_retry.rs` uses it, with a new async twin (#1122).
@@ -479,7 +481,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.4.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.5.0...HEAD
+[5.5.0]: https://github.com/wboayue/rust-ibapi/compare/v5.4.0...v5.5.0
 [5.4.0]: https://github.com/wboayue/rust-ibapi/compare/v5.3.0...v5.4.0
 [5.3.0]: https://github.com/wboayue/rust-ibapi/compare/v5.2.0...v5.3.0
 [5.2.0]: https://github.com/wboayue/rust-ibapi/compare/v5.1.0...v5.2.0
