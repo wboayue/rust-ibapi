@@ -113,6 +113,9 @@ precedents.
   `pub(crate)`** → [restrict after callers](docs/rules/workflow/restrict-after-callers.md)
 - **A clippy lint fires locally but not in CI, or you are upgrading Rust** →
   [pinned toolchain](docs/rules/workflow/pinned-toolchain.md)
+- **Typing a field, constraining a value, or documenting a default from what TWS sends** →
+  the `/live-probe` skill ([`.claude/skills/live-probe`](.claude/skills/live-probe/SKILL.md)) —
+  docs and C# samples have been stale; the paper gateway decides
 - **Planning a change, or deferring a follow-up past the PR** →
   [plans and issues](docs/rules/workflow/plans-and-issues.md) — `plans/` is untracked
   scratch for the change at hand; open work goes in GitHub issues, cited as `#N`
