@@ -131,3 +131,7 @@ just integration          # all integration tests
 just integration-sync     # sync only
 just integration-async    # async only
 ```
+
+A run that hangs or prints nothing: check the
+[maintenance windows](troubleshooting.md#gateway-maintenance-windows) first. Agents: the
+`/live-probe` skill's hang triage (`.claude/skills/live-probe/SKILL.md` §3) covers the rest.
