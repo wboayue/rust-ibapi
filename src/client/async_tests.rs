@@ -49,6 +49,14 @@ async fn decoder_context_is_constructable() {
 }
 
 #[tokio::test]
+async fn notice_stream_subscribes_to_the_bus() {
+    let client = stubbed_client();
+
+    // The stub bus hands out an already-closed stream.
+    assert!(client.notice_stream().next().await.is_none());
+}
+
+#[tokio::test]
 async fn send_helpers_round_trip_through_bus() {
     let bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(bus.clone(), SERVER_VERSION);

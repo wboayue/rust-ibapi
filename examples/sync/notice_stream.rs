@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100)?;
     println!("connected; server version {}", client.server_version());
 
-    let stream = client.notice_stream()?;
+    let stream = client.notice_stream();
     println!("listening for global notices (Ctrl+C to exit)...");
 
     for notice in stream.iter() {
