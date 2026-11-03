@@ -30,6 +30,7 @@ The async client is on by default; features are additive:
 - [**Testing Patterns**](docs/testing-patterns.md) - Test fixture stratification: `MessageBusStub` / `MemoryStream` / handshake-replay listener
 - [**Integration Tests**](docs/integration-tests.md) - Writing tests against a live gateway
 - [**Extending the API**](docs/extending-api.md) - Adding new TWS API functionality
+- [**Wire Facts**](docs/wire-facts/README.md) - Live-verified TWS behavior: what the gateway sends, accepts and rejects
 - [**Blocked Issues**](docs/block-issues.md) - Work waiting on a gateway capture or paper-account setup
 
 ## Versioning and branches

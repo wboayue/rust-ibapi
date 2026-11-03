@@ -11,7 +11,7 @@ triggers:
 symbols: [REQUEST_ID_FLOOR, RequestId, OrderId, WireId, WireId::classify, OrderId::checked, verify_order_ids, Client::mint_request_id]
 related: [proto-aware-accessors]
 precedents: ["#789", "#1069"]
-memory: [project_issue_audit_788_790, reference_tws_request_id_range]
+memory: [project_issue_audit_788_790]
 ---
 
 An error frame carries one integer for both requests and orders, so the two id domains must
@@ -47,7 +47,7 @@ same value in the frames meant for them; keep order ids small. A sub-floor id is
 The floor is 1,500,000,000: order ids span the account's lifetime (`nextValidId` persists across
 sessions) plus caller numbering schemes, so they get the larger share; request ids span one
 process. TWS echoes every id except `i32::MAX` and `i32::MIN` on error frames, so the allocator
-stops at `REQUEST_ID_CEILING` (`i32::MAX - 1`).
+stops at `REQUEST_ID_CEILING` (`i32::MAX - 1`) ([wire facts](../../wire-facts/protocol.md#request-id-range)).
 
 **Public id types are not typed beyond `OrderId` parameters** (decided for 5.0). Order methods
 take `impl Into<OrderId>`, but `next_order_id()`, `next_valid_order_id()`, the `order_id` fields

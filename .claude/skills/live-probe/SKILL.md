@@ -72,16 +72,19 @@ Write the finding as you get it, with: date + time ET, session (RTH / off / over
 weekend), paper, server version, instrument, request, observed frames and error codes, and
 what it settles vs. what the docs/C# claimed. Note what was **not** probed.
 
-- **Issue-scoped check** → `plans/live-checks.md` under `## #N <title>`, ticked `- [x]` with
-  the line above. Never a GitHub issue.
-- **Durable wire fact** (a field's presence, units, accepted values, error code) → agent
-  memory as a `reference_<topic>_wire` entry, indexed in `MEMORY.md`.
+- **Durable wire fact** (a field's presence, units, accepted values, error code) →
+  `docs/wire-facts/<domain>.md`, in the format its [README](../../../docs/wire-facts/README.md)
+  sets. Ships in the PR the fact informs; a probe that only settles a question gets its own
+  small docs PR. Rewrite an entry a new probe supersedes.
+- **Changes how a caller uses an API** → also the item's rustdoc, with a `live: <date>` note.
+- **Still needs market hours** → `plans/live-checks.md` under `## #N <title>`, `- [ ]`; tick
+  `- [x]` with the line above when run, and move the result to `docs/wire-facts/`. Never a
+  GitHub issue.
 - **Confirms or contradicts a rule node** → append to its `precedents:`.
-- **Changes code or docs** (typed enum, doc correction, `required_*`) → cite the probe in the
-  PR body; don't commit probe code.
+- Don't commit probe code; cite the probe in the PR body.
 
 ## 5. Clean up
 
 Delete temp `#[ignore]` / diagnostic tests from the tree before the PR (investigation
 artifacts, not suite). Cancel open orders and flatten positions the probe created. Scratchpad
-crates can stay; memory entries should name them as session-scoped ("rebuild if gone").
+crates can stay, but never cite their paths in `docs/`: they are session-scoped.
