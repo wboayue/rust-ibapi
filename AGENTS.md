@@ -82,7 +82,8 @@ precedents.
 ### Testing
 
 - **Adding a `pub` / `pub(crate)` fn, or checking coverage before opening a PR** →
-  [coverage floor](docs/rules/testing/coverage-floor.md)
+  [coverage floor](docs/rules/testing/coverage-floor.md); measuring or raising it is the `/coverage`
+  skill ([`.claude/skills/coverage`](.claude/skills/coverage/SKILL.md))
 - **Reviewing a new test, or asserting on captured request bytes** →
   [exercise production code](docs/rules/testing/exercise-production-code.md)
 - **Building a response test fixture** → [fixture builders](docs/rules/testing/fixture-builders.md)

@@ -38,8 +38,9 @@ Two results that are not coverage numbers:
 A percentage means nothing without its baseline: before claiming a module regressed, measure
 main too (`src/proto/decoders.rs` once read 85% on a branch against 41.7% on main).
 
-For a single module, a `--no-report` run plus `jq` over the JSON report takes seconds;
-`just cover` renders everything.
+For a single module, a `--no-report` run plus `jq` over the JSON report takes about a minute;
+`just cover` renders everything. The loop, the baseline step and the tactics for the last gap
+are in the `/coverage` skill ([`.claude/skills/coverage`](../../../.claude/skills/coverage/SKILL.md)).
 
 ## Precedents
 
