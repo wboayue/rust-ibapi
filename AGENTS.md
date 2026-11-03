@@ -105,11 +105,10 @@ precedents.
 
 ### Workflow
 
-- **About to commit or open a PR** → [pre-PR checks](docs/rules/workflow/pre-pr-checks.md) —
-  the integration crate builds are the one local-only gate; CI covers the rest
-- **Opening, merging, or unstacking a PR** → the `/ship` skill
-  ([`.claude/skills/ship`](.claude/skills/ship/SKILL.md)): gates for the diff, CI quirks, merge
-  strategy, stacked and fork PRs
+- **About to commit, open, or merge a PR** → [pre-PR checks](docs/rules/workflow/pre-pr-checks.md) —
+  the integration crate builds are the one local-only gate; CI covers the rest. The full flow
+  through merge (stacked and fork PRs, CI quirks, merge strategy) is the `/ship` skill
+  ([`.claude/skills/ship`](.claude/skills/ship/SKILL.md))
 - **Touching `Subscription`, a proto encoder/decoder, or any public API shape** →
   [integration crate builds](docs/rules/workflow/integration-crate-builds.md) — those crates are
   outside `default-members`, so every automated gate skips them

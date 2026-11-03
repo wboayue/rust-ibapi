@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Validates the docs/rules/ knowledge graph and its index in AGENTS.md.
+# Validates the docs/rules/ knowledge graph, its index in AGENTS.md, and the links in
+# docs/wire-facts/ and .claude/skills/.
 #
 #   1. every markdown link in AGENTS.md, docs/rules/**, docs/wire-facts/** and
 #      .claude/skills/** resolves to a real file

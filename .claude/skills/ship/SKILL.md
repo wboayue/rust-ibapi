@@ -38,7 +38,7 @@ git diff --name-only origin/main...HEAD
 | A new `pub` / `pub(crate)` fn | test + [coverage floor](../../../docs/rules/testing/coverage-floor.md); `pub fn` also needs a [doc example](../../../docs/rules/docs/public-api-examples.md) |
 | Behavior a user would notice | [changelog entry](../../../docs/rules/docs/changelog-entry.md) under `## [Unreleased]`, same PR |
 | Removed or renamed public item | [user docs sync](../../../docs/rules/docs/user-docs-sync.md); `grep -rn <old name> README.md docs/ examples/` |
-| Deleted or renamed any symbol | `grep -rn <symbol> docs/rules/ docs/wire-facts/` |
+| Deleted or renamed any symbol | `grep -rn <symbol> docs/rules/ docs/wire-facts/ .claude/skills/` |
 | A breaking change | stop and ask: it queues for the next major |
 
 Docs-only diffs (`*.md`, skills) skip the cargo gates but not `rules-check`.
@@ -81,19 +81,21 @@ gh pr checks <N> --watch --interval 30
 
 ## 6. Merge
 
-Ask first unless told to merge. State the strategy and why.
+Ask first unless told to merge. State the strategy and why. Take the first row that matches:
 
 | Branch holds | Command |
 |---|---|
+| A child PR stacked on it | `gh pr merge <N> --merge` (see Stacks) |
 | One commit | `gh pr merge <N> --squash` |
-| Several commits forming one change, each builds; or a PR with a child stacked on it | `gh pr merge <N> --merge` |
+| Several commits forming one change, each builds | `gh pr merge <N> --merge` |
 | Several independent small commits, nothing stacked on top | `gh pr merge <N> --rebase` |
 | Fixup / review-response / merge-from-main commits, or a fork PR | `gh pr merge <N> --squash` |
 | …and an abandoned approach among the commits | `--squash --body-file $S/body.md` describing only the final design (the default body concatenates every commit) |
 
 **Stacks**, in this order:
 1. `gh pr edit <child> --base main` while the child is open. Merging the parent first deletes
-   its branch, and GitHub closes the child for good: it can't be reopened or retargeted.
+   its branch, which can close the child for good: it then can't be reopened or retargeted
+   (#723 was lost this way and reopened as #724).
 2. Merge the parent with `--merge` (a squashed parent leaves the child with duplicate commits).
 3. Push to the child to start its CI (§5), wait for green, merge it.
 
