@@ -107,6 +107,9 @@ precedents.
 
 - **About to commit or open a PR** → [pre-PR checks](docs/rules/workflow/pre-pr-checks.md) —
   the integration crate builds are the one local-only gate; CI covers the rest
+- **Opening, merging, or unstacking a PR** → the `/ship` skill
+  ([`.claude/skills/ship`](.claude/skills/ship/SKILL.md)): gates for the diff, CI quirks, merge
+  strategy, stacked and fork PRs
 - **Touching `Subscription`, a proto encoder/decoder, or any public API shape** →
   [integration crate builds](docs/rules/workflow/integration-crate-builds.md) — those crates are
   outside `default-members`, so every automated gate skips them
@@ -242,12 +245,5 @@ IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --example <example_name>
 
 - No "Generated with Claude Code" or similar attribution in commits or PRs
 - Messages describe the technical change and its purpose
-- Merge strategy follows what the branch holds:
-  - **`--merge`** — stacked PRs (a squashed parent leaves the child with duplicate commits) and
-    multi-commit branches forming one change; every commit must build
-  - **`--rebase`** — multi-commit branches of independent small changes, nothing stacked on top
-    (rebase rewrites SHAs)
-  - **`--squash`** — single-commit PRs, fork PRs, and branches carrying fixup, review-response or
-    merge-from-main commits; pass `--body-file` summarizing the final design when the branch
-    holds an abandoned approach
-
+- Merge strategy follows what the branch holds; the table and the stacked-PR order are in the
+  `/ship` skill ([`.claude/skills/ship`](.claude/skills/ship/SKILL.md))
