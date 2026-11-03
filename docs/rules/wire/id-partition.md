@@ -11,7 +11,7 @@ triggers:
 symbols: [REQUEST_ID_FLOOR, RequestId, OrderId, WireId, WireId::classify, OrderId::checked, verify_order_ids, Client::mint_request_id]
 related: [proto-aware-accessors]
 precedents: ["#789", "#1069"]
-memory: [project_issue_audit_788_790]
+memory: []
 ---
 
 An error frame carries one integer for both requests and orders, so the two id domains must

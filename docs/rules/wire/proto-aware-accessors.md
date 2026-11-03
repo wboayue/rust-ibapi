@@ -11,7 +11,7 @@ triggers:
 symbols: [ResponseMessage, peek_int, request_id, order_id, client_id, execution_id, routes_by_request_id, text_request_id_field, debug_assert_request_id_routable, first_unroutable_by_request_id]
 related: [proto-only-decoding, coverage-floor]
 precedents: ["#519", "#647", "#730", "#734"]
-memory: [feedback_request_id_index_registration, feedback_sync_protobuf_routing, project_protobuf_only]
+memory: [feedback_sync_protobuf_routing, project_protobuf_only]
 ---
 
 Any `&self` accessor on `ResponseMessage` (`request_id`, `order_id`, `client_id`,

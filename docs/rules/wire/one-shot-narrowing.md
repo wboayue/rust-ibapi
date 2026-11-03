@@ -12,7 +12,7 @@ triggers:
 symbols: [expect_proto, ProtoPayload, one_shot_shared, one_shot_shared_matching, ONE_SHOT_TIMEOUT, one_shot_deadline, check_deadline, next_frame, one_shot_by_request_id, one_shot_cancelling, CancellableOneShot, fold_one_shot, empty_on_end_of_stream, expect_type, retry_on_connection_reset]
 related: [proto-only-decoding, proto-aware-accessors, fixture-builders]
 precedents: ["#736", "#738", "#740", "#741", "#745", "#749", "#1107"]
-memory: [project_protobuf_only, feedback_request_id_index_registration]
+memory: [project_protobuf_only]
 ---
 
 A one-shot request reads one frame off a **shared** channel, so it must check that the frame is
