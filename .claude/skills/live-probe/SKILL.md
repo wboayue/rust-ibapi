@@ -84,18 +84,20 @@ In this order — each has been misdiagnosed as a gateway problem:
 
 ## 4. Record
 
-Write the finding as you get it, with: date + time ET, session (RTH / off / overnight /
-weekend), paper, server version, instrument, request, observed frames and error codes, and
-what it settles vs. what the docs/C# claimed. Note what was **not** probed.
+Write the finding as you get it, in the [entry format](../../../docs/wire-facts/README.md#entry-format)
+(date, session, server version, what was **not** probed).
 
+- **Durable wire fact** (a field's presence, units, accepted values, error code) →
+  `docs/wire-facts/<domain>.md`. Ships in the PR the fact informs; a probe no PR acts on yet
+  gets its own small docs PR. Rewrite an entry a new probe supersedes (keep the old result as
+  one line).
+- **Changes how a caller uses an API** → also the item's rustdoc, with a `live: <date>` note.
 - **Check waiting on market hours** → `plans/live-checks.md` under `## #N <title>`: `- [ ]`
-  while pending, ticked `- [x]` with the line above when run. Not a GitHub issue
+  while pending, ticked `- [x]` with the line above when run; then move the result to
+  `docs/wire-facts/`. Not a GitHub issue
   ([plans and issues](../../../docs/rules/workflow/plans-and-issues.md)).
-- **Changes code or docs** (typed enum, doc correction, `required_*`) → the finding goes in
-  that PR's body, and in the item's rustdoc when it changes how a caller uses the API.
-- **Settles a question no PR acts on yet** → a GitHub issue carrying the finding.
 - **Confirms or contradicts a rule node** → append to its `precedents:`.
-- Don't commit probe code.
+- Don't commit probe code; cite the probe in the PR body.
 
 ## 5. Clean up
 
