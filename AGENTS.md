@@ -65,7 +65,9 @@ precedents.
 ### Code structure and style
 
 - **Adding a client method, or creating a domain module** →
-  [domain module layout](docs/rules/style/domain-module-layout.md)
+  [domain module layout](docs/rules/style/domain-module-layout.md); porting a request or field
+  from the C# client end to end is the `/add-tws-feature` skill
+  ([`.claude/skills/add-tws-feature`](.claude/skills/add-tws-feature/SKILL.md))
 - **Writing a public function that takes four or more parameters** →
   [param budget](docs/rules/style/param-budget.md) — clippy's `too_many_arguments` only fires
   at eight, so nothing gates this

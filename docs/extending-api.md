@@ -123,6 +123,9 @@ pub struct MyData {
 
 ## Adding New API Functionality
 
+Agents: the `/add-tws-feature` skill (`.claude/skills/add-tws-feature/SKILL.md`) wraps these
+steps with the C# reading, registration checklist and verification order.
+
 ### Step 1: Define Public Types and API Interface
 
 Define data types in the module's `mod.rs` file - these should be available regardless of feature flags. The API is exposed as `impl Client` methods in the domain module's `sync.rs` / `async.rs` files (not in `client/sync.rs` or `client/async.rs`).
