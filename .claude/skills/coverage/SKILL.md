@@ -25,14 +25,19 @@ stable toolchain. Two version couplings break it:
 
 ## 2. Baseline
 
-A percentage means nothing without main's number for the same file. Measure main first, in a
-detached worktree so your branch stays untouched:
+A percentage means nothing without main's number for the same file.
 
-```bash
-git worktree add --detach $S/cov-main origin/main
-```
+- **Quick**: Coveralls has main's per-file numbers
+  (https://coveralls.io/github/wboayue/rust-ibapi, measured as in §3's CI recipe).
+- **Like for like**: run §3 on main in a detached worktree so your branch stays untouched.
+  A fresh worktree is a cold build, several minutes.
 
-Run §3 there, note the file's numbers, then `git worktree remove $S/cov-main`.
+  ```bash
+  git worktree add --detach $S/cov-main origin/main
+  # run §3 there, note the numbers
+  git worktree remove $S/cov-main
+  ```
+
 (`src/proto/decoders.rs` once read 85% on a branch, which looked low until main read 41.7%.)
 
 ## 3. Per-file loop
@@ -52,6 +57,18 @@ cargo +nightly llvm-cov report --json | jq -r --arg f "$F" '.data[0].files[]
 
 # which lines are uncovered
 cargo +nightly llvm-cov report --summary-only --show-missing-lines | grep "$F"
+```
+
+**Feature-gated code.** `--all-features` never compiles `#[cfg(not(feature = "async"))]` /
+`not(feature = "sync")` blocks, so they read as absent, not uncovered. CI (Coveralls) merges a
+sync-only and an async-only run instead; use that when the file has such blocks, or to match
+Coveralls:
+
+```bash
+cargo +nightly llvm-cov clean --workspace
+cargo +nightly llvm-cov --no-report --doctests --no-default-features --features sync
+cargo +nightly llvm-cov --no-report --doctests --no-default-features --features async
+# then the same report commands
 ```
 
 For the line-by-line view, `cargo +nightly llvm-cov report --html --output-dir $S/cov` and
