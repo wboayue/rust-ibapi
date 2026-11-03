@@ -21,6 +21,7 @@ mod sync_tests {
     use crate::common::test_utils::helpers::{assert_request, request_message_count};
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
+    use crate::market_data::TradingHours;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
@@ -76,6 +77,30 @@ mod sync_tests {
                 .use_rth(true),
         );
     }
+
+    #[test]
+    fn extended_hours_clears_use_rth() {
+        let (client, bus) = client_with_schedule();
+        let contract = Contract::stock("AAPL").build();
+
+        client
+            .historical_schedules(&contract, 7.days())
+            .trading_hours(TradingHours::Extended)
+            .fetch()
+            .expect("fetch failed");
+
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .contract(&contract)
+                .end_date(None)
+                .duration(Duration::days(7))
+                .bar_size(BarSize::Day)
+                .what_to_show(WhatToShow::Schedule)
+                .use_rth(false),
+        );
+    }
 }
 
 #[cfg(feature = "async")]
@@ -88,6 +113,7 @@ mod async_tests {
     use crate::common::test_utils::helpers::assert_request;
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
+    use crate::market_data::TradingHours;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
@@ -141,6 +167,31 @@ mod async_tests {
                 .bar_size(BarSize::Day)
                 .what_to_show(WhatToShow::Schedule)
                 .use_rth(true),
+        );
+    }
+
+    #[tokio::test]
+    async fn extended_hours_clears_use_rth() {
+        let (client, bus) = client_with_schedule();
+        let contract = Contract::stock("AAPL").build();
+
+        client
+            .historical_schedules(&contract, 7.days())
+            .trading_hours(TradingHours::Extended)
+            .fetch()
+            .await
+            .expect("fetch failed");
+
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .contract(&contract)
+                .end_date(None)
+                .duration(Duration::days(7))
+                .bar_size(BarSize::Day)
+                .what_to_show(WhatToShow::Schedule)
+                .use_rth(false),
         );
     }
 }

@@ -114,7 +114,10 @@ impl Client {
 
     /// Build a request for [`Schedule`] data over the given duration.
     ///
-    /// Defaults to anchoring at the current time. Use [`HistoricalScheduleBuilder::ending`](super::HistoricalScheduleBuilder::ending)
+    /// Defaults to regular trading hours, anchored at the current time. Use
+    /// [`HistoricalScheduleBuilder::trading_hours`](super::HistoricalScheduleBuilder::trading_hours)
+    /// to include extended-hours sessions, and
+    /// [`HistoricalScheduleBuilder::ending`](super::HistoricalScheduleBuilder::ending)
     /// to anchor at a specific end date.
     ///
     /// # Arguments
@@ -125,6 +128,7 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::prelude::*;
+    /// use ibapi::market_data::TradingHours;
     /// use time::macros::datetime;
     ///
     /// #[tokio::main]
@@ -143,6 +147,14 @@ impl Client {
     ///     let schedule = client
     ///         .historical_schedules(&contract, 30.days())
     ///         .ending(datetime!(2023-04-15 0:00 UTC))
+    ///         .fetch()
+    ///         .await
+    ///         .expect("historical schedule request failed");
+    ///
+    ///     // Extended-hours sessions:
+    ///     let schedule = client
+    ///         .historical_schedules(&contract, 30.days())
+    ///         .trading_hours(TradingHours::Extended)
     ///         .fetch()
     ///         .await
     ///         .expect("historical schedule request failed");
@@ -377,9 +389,19 @@ pub(crate) async fn historical_schedule(
     contract: &Contract,
     end_date: Option<OffsetDateTime>,
     duration: Duration,
+    trading_hours: TradingHours,
 ) -> Result<Schedule, Error> {
     request_helpers::one_shot_cancelling::<ScheduleRequest>(client, |request_id| {
-        encoders::encode_request_historical_data(request_id, contract, end_date, duration, BarSize::Day, WhatToShow::Schedule, true, false)
+        encoders::encode_request_historical_data(
+            request_id,
+            contract,
+            end_date,
+            duration,
+            BarSize::Day,
+            WhatToShow::Schedule,
+            trading_hours.use_rth(),
+            false,
+        )
     })
     .await
 }

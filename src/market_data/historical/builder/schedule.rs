@@ -2,6 +2,7 @@ use time::OffsetDateTime;
 
 use crate::contracts::Contract;
 use crate::market_data::historical::{Duration, Schedule};
+use crate::market_data::TradingHours;
 use crate::Error;
 
 #[cfg(test)]
@@ -15,6 +16,7 @@ pub struct HistoricalScheduleBuilder<'a, C> {
     contract: &'a Contract,
     duration: Duration,
     ending: Option<OffsetDateTime>,
+    trading_hours: TradingHours,
 }
 
 impl<'a, C> HistoricalScheduleBuilder<'a, C> {
@@ -24,12 +26,23 @@ impl<'a, C> HistoricalScheduleBuilder<'a, C> {
             contract,
             duration,
             ending: None,
+            trading_hours: TradingHours::Regular,
         }
     }
 
     /// Anchor the schedule to a specific end date (defaults to now).
     pub fn ending(mut self, end_date: OffsetDateTime) -> Self {
         self.ending = Some(end_date);
+        self
+    }
+
+    /// Include extended-hours sessions (defaults to [`TradingHours::Regular`]).
+    ///
+    /// The flag selects the sessions IBKR returns: `Regular` asks for regular
+    /// trading hours only, `Extended` for the full product session (for
+    /// example, a futures product's 17:00–16:00 session).
+    pub fn trading_hours(mut self, trading_hours: TradingHours) -> Self {
+        self.trading_hours = trading_hours;
         self
     }
 }
@@ -44,6 +57,7 @@ impl<'a> HistoricalScheduleBuilder<'a, crate::client::sync::Client> {
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::historical::ToDuration;
+    /// use ibapi::market_data::TradingHours;
     /// use time::macros::datetime;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -56,9 +70,10 @@ impl<'a> HistoricalScheduleBuilder<'a, crate::client::sync::Client> {
     ///     .fetch()
     ///     .expect("historical schedule request failed");
     ///
-    /// // Ending now (no `.ending()`):
+    /// // Extended-hours sessions, ending now:
     /// let schedule = client
     ///     .historical_schedules(&contract, 30.days())
+    ///     .trading_hours(TradingHours::Extended)
     ///     .fetch()
     ///     .expect("historical schedule request failed");
     ///
@@ -67,7 +82,7 @@ impl<'a> HistoricalScheduleBuilder<'a, crate::client::sync::Client> {
     /// }
     /// ```
     pub fn fetch(self) -> Result<Schedule, Error> {
-        crate::market_data::historical::sync::historical_schedule(self.client, self.contract, self.ending, self.duration)
+        crate::market_data::historical::sync::historical_schedule(self.client, self.contract, self.ending, self.duration, self.trading_hours)
     }
 }
 
@@ -79,6 +94,7 @@ impl<'a> HistoricalScheduleBuilder<'a, crate::client::r#async::Client> {
     ///
     /// ```no_run
     /// use ibapi::prelude::*;
+    /// use ibapi::market_data::TradingHours;
     /// use time::macros::datetime;
     ///
     /// #[tokio::main]
@@ -94,12 +110,20 @@ impl<'a> HistoricalScheduleBuilder<'a, crate::client::r#async::Client> {
     ///         .await
     ///         .expect("historical schedule request failed");
     ///
+    ///     // Extended-hours sessions, ending now:
+    ///     let schedule = client
+    ///         .historical_schedules(&contract, 30.days())
+    ///         .trading_hours(TradingHours::Extended)
+    ///         .fetch()
+    ///         .await
+    ///         .expect("historical schedule request failed");
+    ///
     ///     for session in &schedule.sessions {
     ///         println!("{session:?}");
     ///     }
     /// }
     /// ```
     pub async fn fetch(self) -> Result<Schedule, Error> {
-        crate::market_data::historical::r#async::historical_schedule(self.client, self.contract, self.ending, self.duration).await
+        crate::market_data::historical::r#async::historical_schedule(self.client, self.contract, self.ending, self.duration, self.trading_hours).await
     }
 }
