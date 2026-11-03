@@ -16,7 +16,8 @@ memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
 values** — grep captured-wire fixtures and check the C# reference at
 `/Users/wboayue/projects/tws-api/source/csharpclient/client/`. Field-name resemblance to a known
-vocabulary is misleading.
+vocabulary is misleading. If fixtures and C# disagree or are silent, probe the paper gateway with
+the `/live-probe` skill ([`.claude/skills/live-probe`](../../../.claude/skills/live-probe/SKILL.md)).
 
 Once verified: strict enum, `Display` round-trips to the IB wire string, `FromStr` returns
 `Result<_, Error>`. For shape-identical enums, `impl_wire_enum!` (`src/macros.rs`) generates

@@ -12,23 +12,39 @@ VOL units, `what_if_type` semantics); the paper gateway is the authority.
 
 State the question as one falsifiable sentence before writing code: `$ARGUMENTS`.
 
+## 0. Cheaper checks first
+
+A probe costs a gateway session and often a market-hours wait. Try these first:
+
+- Grep the captured-wire fixtures in `src/**/*tests.rs` for the field; real TWS values appear
+  there as assertions.
+- Read the C# reference (`EDecoder.cs` for inbound fields, `EClient.cs` / `EClientUtils` for
+  what's sent, `Order.cs` / `Contract.cs` for types). See
+  [wire enum typing](../../../docs/rules/wire/enum-typing.md).
+
+Probe when those disagree, are silent, or the question is about what TWS *accepts* (rejection
+codes, defaults for absent fields, units). Neither source answers those.
+
 ## 1. Preflight
+
+`$S` below is your scratchpad directory.
 
 ```bash
 TZ=America/New_York date '+%a %H:%M ET'
-lsof -nP -iTCP:4002 -sTCP:LISTEN     # expect java; ssh = tunnel, remote may be down
+lsof -nP -iTCP -sTCP:LISTEN | grep -E ':(4002|7497) '   # expect java; ssh = tunnel, remote may be down
 ```
 
-- **Reset windows** — gateway accepts TCP but ignores the handshake:
-  daily 00:15–01:45 ET (Sun–Fri), weekend Fri 23:00 – Sat 03:00 ET. Wait; don't debug.
+- **Reset windows**: the gateway accepts TCP but ignores the handshake. Daily 00:15–01:45 ET
+  (Sun–Fri), weekend Fri 23:00 – Sat 03:00 ET; other regions in
+  [troubleshooting](../../../docs/troubleshooting.md#gateway-maintenance-windows). Wait; don't debug.
 - **Market session** decides what you can observe: RTH 09:30–16:00 ET for fills, live
   ticks, PnL. What-if, contract details, option chains and order acceptance work off-hours;
   overnight books are live, so "off-hours" is not "no quote". If the question needs RTH and
   it isn't, add a `- [ ]` line to `plans/live-checks.md` and stop.
 - **Paper only.** Port 4002 (Gateway) or 7497 (TWS). In the probe, assert
   `managed_accounts()` ids start with `D` before sending anything that mutates state.
-- **Client id**: pick a high id no other session uses (integration tests use the
-  `ibapi_test::ClientId` pool). A 326 "client id already in use" means a clash.
+- **Client id**: pick one outside 200–399 (the integration tests' `ibapi_test::ClientId`
+  pool) that no other session uses. A 326 "client id already in use" means a clash.
 - Log `client.server_version()` — every finding is tagged with it.
 
 ## 2. Probe shape
@@ -72,16 +88,17 @@ Write the finding as you get it, with: date + time ET, session (RTH / off / over
 weekend), paper, server version, instrument, request, observed frames and error codes, and
 what it settles vs. what the docs/C# claimed. Note what was **not** probed.
 
-- **Issue-scoped check** → `plans/live-checks.md` under `## #N <title>`, ticked `- [x]` with
-  the line above. Never a GitHub issue.
-- **Durable wire fact** (a field's presence, units, accepted values, error code) → agent
-  memory as a `reference_<topic>_wire` entry, indexed in `MEMORY.md`.
+- **Check waiting on market hours** → `plans/live-checks.md` under `## #N <title>`: `- [ ]`
+  while pending, ticked `- [x]` with the line above when run. Not a GitHub issue
+  ([plans and issues](../../../docs/rules/workflow/plans-and-issues.md)).
+- **Changes code or docs** (typed enum, doc correction, `required_*`) → the finding goes in
+  that PR's body, and in the item's rustdoc when it changes how a caller uses the API.
+- **Settles a question no PR acts on yet** → a GitHub issue carrying the finding.
 - **Confirms or contradicts a rule node** → append to its `precedents:`.
-- **Changes code or docs** (typed enum, doc correction, `required_*`) → cite the probe in the
-  PR body; don't commit probe code.
+- Don't commit probe code.
 
 ## 5. Clean up
 
 Delete temp `#[ignore]` / diagnostic tests from the tree before the PR (investigation
 artifacts, not suite). Cancel open orders and flatten positions the probe created. Scratchpad
-crates can stay; memory entries should name them as session-scoped ("rebuild if gone").
+crates can stay, but never cite their paths in the repo: they are session-scoped.
