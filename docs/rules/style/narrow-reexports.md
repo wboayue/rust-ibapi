@@ -10,7 +10,7 @@ triggers:
 symbols: [pub(crate), pub(super)]
 related: [domain-module-layout, restrict-after-callers]
 precedents: ["#581", "#1080"]
-memory: [project_domain_module_pattern]
+memory: []
 ---
 
 When one module needs a handful of items from another, re-export exactly those names at the

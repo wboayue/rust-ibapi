@@ -10,7 +10,7 @@ triggers:
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders]
 precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070"]
-memory: [feedback_verify_wire_before_typing, feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
+memory: [feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated

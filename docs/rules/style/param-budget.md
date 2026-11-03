@@ -11,7 +11,7 @@ triggers:
 symbols: [too_many_arguments]
 related: [domain-module-layout, macros-last-resort, doc-parity-audit]
 precedents: ["#549", "#573", "#660", "#752", "#792", "#901", "#1079", "#1123"]
-memory: [feedback_rule19_builder_fed_helpers_exception, feedback_magic_none_split_to_builder]
+memory: [feedback_magic_none_split_to_builder]
 ---
 
 Three parameters is the budget for the **public API** (anything rustdoc shows). The receiver

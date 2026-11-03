@@ -10,7 +10,7 @@ triggers:
 symbols: [cargo-fmt, cargo-clippy, RUSTDOCFLAGS, just-test, just-rules-check]
 related: [feature-matrix, integration-crate-builds, coverage-floor, pinned-toolchain]
 precedents: ["#724", "#725"]
-memory: [feedback_ci_clippy_flags, feedback_rustdoc_link_check, feedback_self_review]
+memory: [feedback_ci_clippy_flags, feedback_rustdoc_link_check]
 ---
 
 Before opening a PR, run every gate — formatter, then clippy, rustdoc, and examples in all three

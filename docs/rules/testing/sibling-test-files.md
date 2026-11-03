@@ -10,7 +10,7 @@ triggers:
 symbols: [cfg(test), path-attribute]
 related: [coverage-floor, exercise-production-code, modernize-touched-modules]
 precedents: ["#657", "#726", "#1042"]
-memory: [feedback_sed_inline_test_extraction, project_main_flat_helpers_nested_pattern]
+memory: [feedback_sed_inline_test_extraction]
 ---
 
 Never write an inline `#[cfg(test)] mod tests { ... }` block in an implementation file. Tests

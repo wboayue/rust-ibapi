@@ -9,7 +9,7 @@ triggers:
 symbols: [text_response, proto_response, encode_proto, ordered_responses]
 related: [fixture-builders, floor-ratchet-splits, proto-only-decoding]
 precedents: ["#529", "#531", "#532", "#534", "#543"]
-memory: [project_protobuf_only, project_tickefp_unobserved]
+memory: [project_protobuf_only]
 ---
 
 **Concluded** when the connection floor reached `PROTOBUF_REST_MESSAGES_3` (213); no text

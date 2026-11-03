@@ -12,7 +12,7 @@ triggers:
 symbols: [Client, common, proto]
 related: [narrow-reexports, sibling-test-files, dual-feature-types]
 precedents: ["#657", "#729", "#1078", "#1080"]
-memory: [project_domain_module_pattern, project_main_flat_helpers_nested_pattern]
+memory: []
 ---
 
 A domain owns its client surface. Its `impl Client` blocks live in `<domain>/sync.rs` and
