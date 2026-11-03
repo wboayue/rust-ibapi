@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `HistoricalDataBuilder::format_date` (sync and async) and the `DateFormat` enum: request `formatDate=1` text timestamps with `DateFormat::Text`, instead of the fixed `formatDate=2` epoch seconds. A production client asks for `formatDate=1` on index closes, and the request shape was unreachable. Text timestamps decode in their named zone (`YYYYMMDD HH:mm:ss <zone>`) or in UTC for the gateway's zone-less `YYYYMMDD-HH:mm:ss` format; a space-separated wall clock without a zone is rejected rather than assumed UTC (#TBD).
+
 ## [5.5.0] - 2026-10-30
 
 ### Added

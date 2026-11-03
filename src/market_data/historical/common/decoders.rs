@@ -68,20 +68,19 @@ fn parse_yyyymmdd(text: &str) -> Result<Date, Error> {
     Ok(Date::parse(text, format_description!("[year][month][day]"))?)
 }
 
-/// Parses the two wire-verified renderings `HistoricalDataEnd` carries in its
-/// `start_date_str` / `end_date_str`. The gateway's "Send instrument-specific
-/// attributes ... in" setting picks the rendering:
+/// Parses the text timestamp renderings IBKR uses for `HistoricalDataEnd` and
+/// for `formatDate=1` bars. The gateway's Historical Date Format setting picks
+/// the rendering:
 ///
-/// - instrument timezone (default): `YYYYMMDD HH:MM:SS <zone>`, a wall clock in the
-///   named zone. The zone name may contain spaces (`China Standard Time`), so
-///   everything after the time is the zone.
-/// - UTC format: `YYYYMMDD-HH:MM:SS`, zone-less, the UTC shape documented since
-///   TWS 10.17. Captured from a 10.50 gateway in #808.
+/// - operator or instrument timezone: `YYYYMMDD HH:MM:SS <zone>`, a wall clock
+///   in the named zone. The zone name may contain spaces (`China Standard
+///   Time`), so everything after the time is the zone.
+/// - UTC format: `YYYYMMDD-HH:MM:SS`, zone-less, the documented UTC shape.
 ///
-/// Anything else is rejected loudly rather than guessed at: a zone-less wall clock
-/// resolved in the wrong zone is a silently wrong instant. Candidate shapes seen on
-/// other messages or older APIs are tracked in #904.
-fn parse_historical_data_end_timestamp(text: &str) -> Result<OffsetDateTime, Error> {
+/// Anything else is rejected loudly rather than guessed at: a zone-less wall
+/// clock resolved in the wrong zone is a silently wrong instant. Candidate
+/// shapes seen on other messages or older APIs are tracked in #904.
+pub(crate) fn parse_zoned_timestamp(text: &str) -> Result<OffsetDateTime, Error> {
     let text = text.trim();
     if let Ok(utc) = PrimitiveDateTime::parse(text, DASHED_DATE_TIME) {
         return Ok(utc.assume_utc());
@@ -190,8 +189,8 @@ pub(crate) fn decode_historical_ticks_bid_ask_proto(msg: crate::proto::Historica
 }
 
 pub(crate) fn decode_historical_data_end_proto(p: crate::proto::HistoricalDataEnd) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
-    let start = parse_historical_data_end_timestamp(p.start_date_str.as_deref().unwrap_or(""))?;
-    let end = parse_historical_data_end_timestamp(p.end_date_str.as_deref().unwrap_or(""))?;
+    let start = parse_zoned_timestamp(p.start_date_str.as_deref().unwrap_or(""))?;
+    let end = parse_zoned_timestamp(p.end_date_str.as_deref().unwrap_or(""))?;
     Ok((start, end))
 }
 

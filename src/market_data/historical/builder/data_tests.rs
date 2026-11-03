@@ -2,7 +2,9 @@ use crate::common::test_utils::helpers::proto_response;
 use crate::market_data::historical::{BarTimestamp, HistoricalData};
 use crate::messages::IncomingMessages;
 use crate::messages::ResponseMessage;
-use crate::testdata::builders::market_data::{historical_data_bar, historical_data_end_response, historical_data_response, HistoricalDataBarFields};
+use crate::testdata::builders::market_data::{
+    historical_data_bar, historical_data_daily_bar, historical_data_end_response, historical_data_response, HistoricalDataBarFields,
+};
 use crate::testdata::builders::ResponseProtoEncoder;
 use time::macros::datetime;
 use time::OffsetDateTime;
@@ -26,6 +28,13 @@ fn response_pair(bars: Vec<HistoricalDataBarFields>) -> Vec<ResponseMessage> {
                 .encode_proto(),
         ),
     ]
+}
+
+/// A `formatDate=1` response: the bar's timestamp arrives as text in a named zone.
+fn text_timestamp_response_pair() -> Vec<ResponseMessage> {
+    response_pair(vec![
+        historical_data_daily_bar("20230415 10:00:00 US/Eastern").ohlc(185.50, 186.00, 185.25, 185.75)
+    ])
 }
 
 // Issue #835: IBKR counts durations in trading time, so `.between` over-fetches
@@ -78,11 +87,11 @@ mod sync_tests {
     use std::sync::Arc;
     use time::macros::datetime;
 
-    use super::historical_data_response_pair;
+    use super::{historical_data_response_pair, text_timestamp_response_pair};
     use crate::client::blocking::Client;
     use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client_with_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
-    use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
+    use crate::market_data::historical::{BarSize, BarTimestamp, DateFormat, Duration, ToDuration, WhatToShow};
     use crate::market_data::TradingHours;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
@@ -146,6 +155,35 @@ mod sync_tests {
                 .bar_size(BarSize::Hour)
                 .what_to_show(WhatToShow::MidPoint)
                 .use_rth(false),
+        );
+    }
+
+    #[test]
+    fn format_date_text_with_zone_is_sent_and_decoded() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(text_timestamp_response_pair()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .format_date(DateFormat::Text)
+            .fetch()
+            .expect("fetch should succeed");
+
+        assert_eq!(data.bars[0].date, BarTimestamp::DateTime(datetime!(2023-04-15 14:00:00 UTC)));
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .end_date(None)
+                .duration(Duration::days(1))
+                .bar_size(BarSize::Hour)
+                .what_to_show(WhatToShow::Trades)
+                .use_rth(true)
+                .format_date(1),
         );
     }
 
@@ -272,11 +310,11 @@ mod async_tests {
     use std::sync::Arc;
     use time::macros::datetime;
 
-    use super::historical_data_response_pair;
+    use super::{historical_data_response_pair, text_timestamp_response_pair};
     use crate::client::r#async::Client;
     use crate::common::test_utils::helpers::{assert_request, create_test_client_with_version, TEST_REQ_ID_FIRST};
     use crate::contracts::Contract;
-    use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
+    use crate::market_data::historical::{BarSize, BarTimestamp, DateFormat, Duration, ToDuration, WhatToShow};
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
@@ -311,6 +349,36 @@ mod async_tests {
                 .bar_size(BarSize::Hour)
                 .what_to_show(WhatToShow::Trades)
                 .use_rth(true),
+        );
+    }
+
+    #[tokio::test]
+    async fn format_date_text_with_zone_is_sent_and_decoded() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(text_timestamp_response_pair()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .format_date(DateFormat::Text)
+            .fetch()
+            .await
+            .expect("fetch should succeed");
+
+        assert_eq!(data.bars[0].date, BarTimestamp::DateTime(datetime!(2023-04-15 14:00:00 UTC)));
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .end_date(None)
+                .duration(Duration::days(1))
+                .bar_size(BarSize::Hour)
+                .what_to_show(WhatToShow::Trades)
+                .use_rth(true)
+                .format_date(1),
         );
     }
 

@@ -177,9 +177,54 @@ fn bar_timestamp_from_str_datetime() {
 }
 
 #[test]
+fn bar_timestamp_from_str_text_datetime_with_zone() {
+    let expected = BarTimestamp::DateTime(time::macros::datetime!(2023-04-15 14:00:00 UTC));
+    for text in [
+        "20230415 10:00:00 US/Eastern",
+        "20230415 10:00:00 America/New_York",
+        "20230415 10:00:00 Eastern Standard Time",
+    ] {
+        let ts: BarTimestamp = text.parse().unwrap();
+        assert_eq!(ts, expected, "text timestamp {text:?}");
+    }
+    let utc: BarTimestamp = "20230415 10:00:00 UTC".parse().unwrap();
+    assert_eq!(utc, BarTimestamp::DateTime(time::macros::datetime!(2023-04-15 10:00:00 UTC)));
+}
+
+#[test]
+fn bar_timestamp_from_str_utc_text_datetime() {
+    let ts: BarTimestamp = "20230415-10:00:00".parse().unwrap();
+    assert_eq!(ts, BarTimestamp::DateTime(time::macros::datetime!(2023-04-15 10:00:00 UTC)));
+}
+
+#[test]
+fn bar_timestamp_from_str_text_without_zone_is_rejected() {
+    for text in ["20230415 10:00:00", "20230415  10:00:00"] {
+        assert!(text.parse::<BarTimestamp>().is_err(), "zone-less text timestamp {text:?} was accepted");
+    }
+}
+
+#[test]
+fn bar_timestamp_from_str_text_dst_boundary() {
+    // 01:30 occurs twice when US/Eastern falls back; the earlier (EDT) instant wins.
+    let ambiguous: BarTimestamp = "20261101 01:30:00 US/Eastern".parse().unwrap();
+    assert_eq!(ambiguous, BarTimestamp::DateTime(time::macros::datetime!(2026-11-01 05:30:00 UTC)));
+    // 02:30 does not exist when US/Eastern springs forward; it is pushed to 03:30 EDT.
+    let gap: BarTimestamp = "20260308 02:30:00 US/Eastern".parse().unwrap();
+    assert_eq!(gap, BarTimestamp::DateTime(time::macros::datetime!(2026-03-08 07:30:00 UTC)));
+}
+
+#[test]
+fn date_format_uses_the_ib_wire_values() {
+    assert_eq!(DateFormat::Text.as_i32(), 1);
+    assert_eq!(DateFormat::UnixTimestamp.as_i32(), 2);
+}
+
+#[test]
 fn bar_timestamp_from_str_invalid() {
     assert!("not-a-date".parse::<BarTimestamp>().is_err());
     assert!("".parse::<BarTimestamp>().is_err());
+    assert!("20230415 10:00".parse::<BarTimestamp>().is_err());
 }
 
 #[test]

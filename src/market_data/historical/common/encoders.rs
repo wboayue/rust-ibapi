@@ -5,7 +5,7 @@ use crate::contracts::Contract;
 use crate::Error;
 use crate::ToField;
 
-use crate::market_data::historical::{BarSize, Duration, WhatToShow};
+use crate::market_data::historical::{BarSize, DateFormat, Duration, WhatToShow};
 
 const DATE_FORMAT: i32 = 2; // 1 for yyyyMMdd HH:mm:ss, 2 for system time format in seconds.
 const END_DATE_FORMAT: &[FormatItem] = format_description!("[year][month][day] [hour]:[minute]:[second]");
@@ -57,6 +57,7 @@ pub(crate) fn encode_request_historical_data(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     use_rth: bool,
+    format_date: DateFormat,
     keep_up_to_date: bool,
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
@@ -71,7 +72,7 @@ pub(crate) fn encode_request_historical_data(
         bar_size_setting: Some(bar_size.to_field()),
         what_to_show: Some(what_to_show.to_field()),
         use_rth: some_bool(use_rth),
-        format_date: Some(DATE_FORMAT),
+        format_date: Some(format_date.as_i32()),
         keep_up_to_date: some_bool(keep_up_to_date),
         chart_options: Default::default(),
     };

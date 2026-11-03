@@ -16,7 +16,7 @@ links from commits, PRs and code comments still lead somewhere.
 **Unblocked by:** a raw capture (`IBAPI_RAW_CAPTURE_DIR`) of a `HistoricalDataEnd` timestamp in a
 shape below, with the gateway version and API date/time setting that produced it.
 
-`parse_historical_data_end_timestamp` (`src/market_data/historical/common/decoders.rs`) accepts exactly the shapes captured on a 213+ gateway. #808 first proposed six; review narrowed it to two, because a zone-less wall clock resolved in a guessed zone is a silently wrong instant, while an unknown shape is a loud decode error that a capture can fix.
+`parse_zoned_timestamp` (`src/market_data/historical/common/decoders.rs`) accepts the two text shapes captured on a 213+ gateway for `HistoricalDataEnd`; `BarTimestamp::from_str` reuses the same parser for `formatDate=1` bars. #808 first proposed six; review narrowed it to two, because a zone-less wall clock resolved in a guessed zone is a silently wrong instant, while an unknown shape is a loud decode error that a capture can fix.
 
 ### Verified (accepted)
 
@@ -40,7 +40,7 @@ Promote one only with a capture (`IBAPI_RAW_CAPTURE_DIR`), recording the gateway
 
 - If a dashed-date shape is verified, fold `news::common::decoders::try_parse_time_as_utc` and this parser into one helper under `common::timezone` (review item 6 on #808).
 - `parse_schedule_date_time` shares `DASHED_DATE_TIME` with the UTC rendering; keep that single constant if the format list grows.
-- `YYYYMMDD HH:MM:SS <zone>` splitter (from #859): `parse_connection_time` (`src/connection/common.rs`, soft on an unknown zone) and `parse_historical_data_end_timestamp` (hard on every failure) both split with `splitn(3, ' ')`. Error policies differ, so a shared helper could only return the parts (date, time, zone text). Land it when a third parser of this rendering appears.
+- `YYYYMMDD HH:MM:SS <zone>` splitter (from #859): `parse_connection_time` (`src/connection/common.rs`, soft on an unknown zone) and `parse_zoned_timestamp` (hard on every failure) both split with `splitn(3, ' ')`. Error policies differ, so a shared helper could only return the parts (date, time, zone text). `BarTimestamp::from_str` now reuses `parse_zoned_timestamp` for `formatDate=1` bars, so the third caller did not need a new splitter.
 
 ## Preset attached orders: child lifecycle (#905)
 

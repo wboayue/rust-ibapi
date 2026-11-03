@@ -262,14 +262,14 @@ fn decode_historical_data_end_rejected_renderings() {
         "20260101-09:30",
     ];
     for rendering in parse_errors {
-        let err = super::parse_historical_data_end_timestamp(rendering).unwrap_err();
+        let err = super::parse_zoned_timestamp(rendering).unwrap_err();
         assert!(
             matches!(err, Error::Parse(..) | Error::ParseTime(_)),
             "rendering: {rendering:?} -> {err:?}"
         );
     }
 
-    let err = super::parse_historical_data_end_timestamp("20260101 09:30:00 Bogus Standard Time").unwrap_err();
+    let err = super::parse_zoned_timestamp("20260101 09:30:00 Bogus Standard Time").unwrap_err();
     assert!(
         matches!(err, Error::UnsupportedTimeZone(ref name) if name == "Bogus Standard Time"),
         "{err:?}"
@@ -609,7 +609,7 @@ fn window_edge_in_dst_fold_or_gap_decodes() {
     assert_eq!(end, datetime!(2026-08-29 08:33:35 UTC));
 
     // A gap reading is pushed forward, not rejected — rejecting it discarded the bars.
-    let gap = super::parse_historical_data_end_timestamp("20260308 02:30:00 US/Eastern").expect("gap resolves");
+    let gap = super::parse_zoned_timestamp("20260308 02:30:00 US/Eastern").expect("gap resolves");
     assert_eq!(gap, datetime!(2026-03-08 07:30:00 UTC));
 
     let tz = time_tz::timezones::get_by_name("US/Eastern").expect("tz");

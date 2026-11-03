@@ -22,8 +22,8 @@ use crate::{Client, Error};
 use super::common::tick::{classify, TickAction};
 use super::common::{self, encoders};
 use super::{
-    BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, Schedule,
-    ScheduleRequest, TickDecoder, WhatToShow,
+    BarSize, DateFormat, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame,
+    Schedule, ScheduleRequest, TickDecoder, WhatToShow,
 };
 use crate::market_data::TradingHours;
 
@@ -273,6 +273,9 @@ impl Client {
     }
 }
 
+// The typed builder is the public surface; flat args here are the deliberate
+// seam between it and the wire encoder.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn historical_data(
     client: &Client,
     contract: &Contract,
@@ -281,6 +284,7 @@ pub(crate) async fn historical_data(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
+    format_date: DateFormat,
 ) -> Result<HistoricalData, Error> {
     common::validate_historical_data(end_date, what_to_show)?;
     // One deadline for both reads and every resend.
@@ -297,6 +301,7 @@ pub(crate) async fn historical_data(
             bar_size,
             what_to_show,
             trading_hours.use_rth(),
+            format_date,
             false,
         )?;
 
@@ -316,6 +321,9 @@ pub(crate) async fn historical_data(
     .await
 }
 
+// The typed builder is the public surface; flat args here are the deliberate
+// seam between it and the wire encoder.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn historical_data_stream(
     client: &Client,
     contract: &Contract,
@@ -323,6 +331,7 @@ pub(crate) async fn historical_data_stream(
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
+    format_date: DateFormat,
     buffer_limit: Option<usize>,
 ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
     let builder = client.request();
@@ -334,6 +343,7 @@ pub(crate) async fn historical_data_stream(
         bar_size,
         what_to_show,
         trading_hours.use_rth(),
+        format_date,
         true, // keep_up_to_date — the whole point of .stream()
     )?;
 
@@ -379,7 +389,17 @@ pub(crate) async fn historical_schedule(
     duration: Duration,
 ) -> Result<Schedule, Error> {
     request_helpers::one_shot_cancelling::<ScheduleRequest>(client, |request_id| {
-        encoders::encode_request_historical_data(request_id, contract, end_date, duration, BarSize::Day, WhatToShow::Schedule, true, false)
+        encoders::encode_request_historical_data(
+            request_id,
+            contract,
+            end_date,
+            duration,
+            BarSize::Day,
+            WhatToShow::Schedule,
+            true,
+            DateFormat::UnixTimestamp,
+            false,
+        )
     })
     .await
 }

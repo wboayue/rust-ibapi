@@ -84,6 +84,7 @@ pub struct HistoricalDataRequestBuilder {
     pub bar_size: BarSize,
     pub what_to_show: HistoricalWhatToShow,
     pub use_rth: bool,
+    pub format_date: i32,
     pub keep_up_to_date: bool,
 }
 
@@ -97,6 +98,7 @@ impl Default for HistoricalDataRequestBuilder {
             bar_size: BarSize::Day,
             what_to_show: HistoricalWhatToShow::Trades,
             use_rth: false,
+            format_date: DATE_FORMAT,
             keep_up_to_date: false,
         }
     }
@@ -131,6 +133,10 @@ impl HistoricalDataRequestBuilder {
         self.use_rth = v;
         self
     }
+    pub fn format_date(mut self, v: i32) -> Self {
+        self.format_date = v;
+        self
+    }
     pub fn keep_up_to_date(mut self, v: bool) -> Self {
         self.keep_up_to_date = v;
         self
@@ -151,7 +157,7 @@ impl RequestEncoder for HistoricalDataRequestBuilder {
             bar_size_setting: Some(self.bar_size.to_field()),
             what_to_show: Some(self.what_to_show.to_field()),
             use_rth: some_bool(self.use_rth),
-            format_date: Some(DATE_FORMAT),
+            format_date: Some(self.format_date),
             keep_up_to_date: some_bool(self.keep_up_to_date),
             chart_options: Default::default(),
         }

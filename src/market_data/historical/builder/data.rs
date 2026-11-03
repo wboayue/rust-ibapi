@@ -1,7 +1,7 @@
 use time::OffsetDateTime;
 
 use crate::contracts::Contract;
-use crate::market_data::historical::{BarSize, BarTimestamp, Duration, HistoricalBarUpdate, HistoricalData, WhatToShow};
+use crate::market_data::historical::{BarSize, BarTimestamp, DateFormat, Duration, HistoricalBarUpdate, HistoricalData, WhatToShow};
 use crate::market_data::TradingHours;
 use crate::Error;
 
@@ -21,6 +21,7 @@ pub struct HistoricalDataBuilder<'a, C> {
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
+    format_date: DateFormat,
     duration: Option<Duration>,
     ending: Option<OffsetDateTime>,
     between: Option<(OffsetDateTime, OffsetDateTime)>,
@@ -35,6 +36,7 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
             bar_size,
             what_to_show: WhatToShow::Trades,
             trading_hours: TradingHours::Regular,
+            format_date: DateFormat::UnixTimestamp,
             duration: None,
             ending: None,
             between: None,
@@ -51,6 +53,17 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     /// Override regular- vs extended-hours (defaults to [`TradingHours::Regular`]).
     pub fn trading_hours(mut self, trading_hours: TradingHours) -> Self {
         self.trading_hours = trading_hours;
+        self
+    }
+
+    /// Override the timestamp format (defaults to [`DateFormat::UnixTimestamp`]).
+    ///
+    /// [`DateFormat::Text`] asks IBKR for `formatDate=1`; the bars' timestamps
+    /// then arrive as text in the gateway's Historical Date Format. They decode
+    /// to [`BarTimestamp::DateTime`] in the named zone, or in UTC for the
+    /// zone-less UTC format.
+    pub fn format_date(mut self, format_date: DateFormat) -> Self {
+        self.format_date = format_date;
         self
     }
 
@@ -279,7 +292,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::historical::{BarSize, ToDuration};
+    /// use ibapi::market_data::historical::{BarSize, DateFormat, ToDuration};
     /// use time::macros::datetime;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -298,6 +311,14 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     ///     .between(datetime!(2023-04-08 0:00 UTC), datetime!(2023-04-15 0:00 UTC))
     ///     .fetch()
     ///     .expect("historical data request failed");
+    ///
+    /// // Index closes, as text timestamps:
+    /// let bars = client
+    ///     .historical_data(&contract, BarSize::Day)
+    ///     .duration(2.days())
+    ///     .format_date(DateFormat::Text)
+    ///     .fetch()
+    ///     .expect("historical data request failed");
     /// # let _ = bars;
     /// ```
     pub fn fetch(self) -> Result<HistoricalData, Error> {
@@ -310,6 +331,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
             self.bar_size,
             self.what_to_show,
             self.trading_hours,
+            self.format_date,
         )?;
         Ok(trim_to_range(data, self.between))
     }
@@ -347,6 +369,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
             self.bar_size,
             self.what_to_show,
             self.trading_hours,
+            self.format_date,
             self.buffer_limit,
         )
     }
@@ -398,6 +421,15 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     ///         .fetch()
     ///         .await
     ///         .expect("historical data request failed");
+    ///
+    ///     // Index closes, as text timestamps:
+    ///     let bars = client
+    ///         .historical_data(&contract, HistoricalBarSize::Day)
+    ///         .duration(2.days())
+    ///         .format_date(DateFormat::Text)
+    ///         .fetch()
+    ///         .await
+    ///         .expect("historical data request failed");
     ///     let _ = bars;
     /// }
     /// ```
@@ -411,6 +443,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
             self.bar_size,
             self.what_to_show,
             self.trading_hours,
+            self.format_date,
         )
         .await?;
         Ok(trim_to_range(data, self.between))
@@ -450,6 +483,7 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
             self.bar_size,
             self.what_to_show,
             self.trading_hours,
+            self.format_date,
             self.buffer_limit,
         )
         .await

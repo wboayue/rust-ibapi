@@ -63,9 +63,13 @@ pub enum HistoricalParseError {
 /// Timestamp of a historical bar.
 ///
 /// Daily (and longer) bars carry only a calendar date (`YYYYMMDD` on the
-/// wire); intraday bars carry a full UTC datetime (unix seconds on the wire).
-/// `BarTimestamp` preserves that distinction instead of coercing daily bars to
-/// midnight UTC.
+/// wire); intraday bars carry a full datetime, as Unix seconds with
+/// `formatDate=2` or as text with `formatDate=1`. The text form names its
+/// zone (`YYYYMMDD HH:mm:ss <zone>`); the gateway's UTC format is the
+/// zone-less `YYYYMMDD-HH:mm:ss`. A space-separated wall clock without a
+/// zone is rejected, never assumed to be UTC.
+/// `BarTimestamp` preserves the daily/intraday distinction instead of
+/// coercing daily bars to midnight UTC.
 ///
 /// # Examples
 ///
@@ -129,10 +133,13 @@ impl FromStr for BarTimestamp {
             let d = Date::parse(s, fmt).map_err(|e| Error::parse_field(s, e.to_string()))?;
             return Ok(Self::Date(d));
         }
-        let secs: i64 = s.parse().map_err(|e: std::num::ParseIntError| Error::parse_field(s, e.to_string()))?;
-        OffsetDateTime::from_unix_timestamp(secs)
-            .map(Self::DateTime)
-            .map_err(|e| Error::parse_field(s, e.to_string()))
+        if s.bytes().all(|b| b.is_ascii_digit()) {
+            let secs: i64 = s.parse().map_err(|e: std::num::ParseIntError| Error::parse_field(s, e.to_string()))?;
+            return OffsetDateTime::from_unix_timestamp(secs)
+                .map(Self::DateTime)
+                .map_err(|e| Error::parse_field(s, e.to_string()));
+        }
+        common::decoders::parse_zoned_timestamp(s).map(Self::DateTime)
     }
 }
 
@@ -298,6 +305,38 @@ impl FromStr for BarSize {
 impl ToField for BarSize {
     fn to_field(&self) -> String {
         self.to_string()
+    }
+}
+
+/// The `formatDate` a historical-data request asks IBKR to use for bar timestamps.
+///
+/// IBKR accepts two values. `formatDate=2` returns intraday bar timestamps as
+/// Unix epoch seconds. `formatDate=1` returns them as text in the gateway's
+/// Historical Date Format setting: operator or instrument timezone
+/// (`YYYYMMDD HH:mm:ss <zone>`), or UTC (`YYYYMMDD-HH:mm:ss`). Daily and longer
+/// bars carry `YYYYMMDD` either way.
+///
+/// The request defaults to [`UnixTimestamp`](Self::UnixTimestamp), the format
+/// every other request in this crate uses.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DateFormat {
+    /// `formatDate=2`: intraday bars carry Unix epoch seconds.
+    #[default]
+    UnixTimestamp,
+    /// `formatDate=1`: intraday bars carry text in the gateway's configured
+    /// Historical Date Format, with a zone suffix unless the gateway is set to
+    /// the zone-less UTC format.
+    Text,
+}
+
+impl DateFormat {
+    /// The `formatDate` value sent to IBKR.
+    pub fn as_i32(self) -> i32 {
+        match self {
+            Self::Text => 1,
+            Self::UnixTimestamp => 2,
+        }
     }
 }
 

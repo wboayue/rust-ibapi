@@ -52,7 +52,7 @@ pub use crate::contracts::{Contract, OptionChainBuilder, SecurityType};
 
 // Market data types - historical
 pub use crate::market_data::historical::{
-    BarSize as HistoricalBarSize, HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder, ToDuration,
+    BarSize as HistoricalBarSize, DateFormat, HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder, ToDuration,
     WhatToShow as HistoricalWhatToShow,
 };
 
