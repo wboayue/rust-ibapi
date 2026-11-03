@@ -84,14 +84,13 @@ In this order — each has been misdiagnosed as a gateway problem:
 
 ## 4. Record
 
-Write the finding as you get it, with: date + time ET, session (RTH / off / overnight /
-weekend), paper, server version, instrument, request, observed frames and error codes, and
-what it settles vs. what the docs/C# claimed. Note what was **not** probed.
+Write the finding as you get it, in the [entry format](../../../docs/wire-facts/README.md#entry-format)
+(date, session, server version, what was **not** probed).
 
 - **Durable wire fact** (a field's presence, units, accepted values, error code) →
-  `docs/wire-facts/<domain>.md`, in the format its [README](../../../docs/wire-facts/README.md)
-  sets. Ships in the PR the fact informs; a probe no PR acts on yet gets its own small docs
-  PR. Rewrite an entry a new probe supersedes.
+  `docs/wire-facts/<domain>.md`. Ships in the PR the fact informs; a probe no PR acts on yet
+  gets its own small docs PR. Rewrite an entry a new probe supersedes (keep the old result as
+  one line).
 - **Changes how a caller uses an API** → also the item's rustdoc, with a `live: <date>` note.
 - **Check waiting on market hours** → `plans/live-checks.md` under `## #N <title>`: `- [ ]`
   while pending, ticked `- [x]` with the line above when run; then move the result to

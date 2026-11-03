@@ -26,7 +26,3 @@ Contract details and option chains. Format: [README](README.md).
   returns an empty chain, silently.
 - `contract_id` is required; "0 for underlying" was wrong.
 - **Not probed:** a real FOP underlying (e.g. ES on CME).
-
-### `conditions_include_overnight` / `settlement_method`
-
-*Not yet verified live; #1045 (gate 226).* See `plans/live-checks.md`.

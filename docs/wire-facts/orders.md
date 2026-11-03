@@ -72,7 +72,7 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 *Live 2026-10-27 RTH, paper Gateway, server 226, SPY 20261030 calls; #1112.*
 
 - BUY VOL 0.1 Annual on C770 (SPY ~768) → TWS-derived limit 0.01. A 10% vol would price ~2.12,
-  so 0.1 means 0.1%.
+  which implies 0.1 means 0.1%.
 - Contrast `calculate_option_price`, which takes a fraction: [market-data](market-data.md#option-computation-volatility-is-a-fraction).
 
 ### Combo (BAG) orders

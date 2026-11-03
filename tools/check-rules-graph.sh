@@ -2,8 +2,8 @@
 #
 # Validates the docs/rules/ knowledge graph and its index in AGENTS.md.
 #
-#   1. every markdown link in AGENTS.md and docs/rules/** resolves
-#      to a real file
+#   1. every markdown link in AGENTS.md, docs/rules/** and docs/wire-facts/**
+#      resolves to a real file
 #   2. every node's frontmatter `id` matches its filename stem
 #   3. every `related:` id names an existing node
 #   4. AGENTS.md contains no `@`-imports (they would inline every node into
@@ -21,6 +21,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 RULES_DIR="docs/rules"
+WIRE_FACTS_DIR="docs/wire-facts"
 INDEX="AGENTS.md"
 ERRORS="$(mktemp)"
 trap 'rm -f "$ERRORS"' EXIT
@@ -68,7 +69,7 @@ done
 
 # --- 1. markdown links resolve ----------------------------------------------
 
-for file in $INDEX $(nodes) "$RULES_DIR/README.md"; do
+for file in $INDEX $(nodes) "$RULES_DIR/README.md" $(find "$WIRE_FACTS_DIR" -name '*.md' | sort); do
     dir="$(dirname "$file")"
     grep -o '](\([^) ]*\))' "$file" 2>/dev/null | sed 's/^](//; s/)$//' | while read -r link; do
         case "$link" in

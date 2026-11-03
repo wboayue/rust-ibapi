@@ -33,6 +33,8 @@ Rules:
 - A fact that changes how a caller uses an API also goes in that item's rustdoc. This file
   keeps the evidence; rustdoc keeps the instruction.
 - Superseded by a later probe: rewrite the entry, keep the old result as one line under it.
-- Checks still waiting on market hours live in `plans/live-checks.md` (untracked), not here.
+- Only observed results go here. A check still waiting on market hours is not an entry.
+- Rule nodes and rustdoc cite an entry by its heading anchor, e.g.
+  `docs/wire-facts/protocol.md#request-id-range`.
 
 How to run a probe: the `/live-probe` skill ([`.claude/skills/live-probe`](../../.claude/skills/live-probe/SKILL.md)).

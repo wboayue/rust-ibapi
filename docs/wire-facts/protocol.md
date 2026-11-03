@@ -30,7 +30,9 @@ Connection, request ids, cancels and end markers. Format: [README](README.md).
 
 *Live 2026-10-26, paper Gateway; #1094, #1097, #1096.*
 
-TWS reply to a cancel sent after the request already failed:
+TWS reply to a cancel sent after the request already failed. Observed while every type still
+sent the safety-net cancel; types whose code is verified here now skip it, so the reply no
+longer occurs for them.
 
 | Request | Terminal error | Cancel reply |
 |---|---|---|

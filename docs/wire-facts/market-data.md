@@ -13,8 +13,7 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
   1–4 per 20–60s). Nothing outside RTH.
 - `614` → accepted, but no tick 98/99 in 60s SPY / 45s QQQ during RTH, no error.
 - `623` → nothing in RTH (expected: frozen value, after close).
-- **Not probed:** 623 → tick 97 after close with Frozen; 614 over a longer window. Tracked in
-  `plans/live-checks.md`.
+- **Not probed:** 623 → tick 97 after close with Frozen; 614 over a longer window (#946).
 
 ### Option computation volatility is a fraction
 
