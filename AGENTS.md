@@ -54,6 +54,8 @@ precedents.
 - **Adding a `ResponseMessage` accessor, or a public API on a proto inbound message type** →
   [proto-aware accessors](docs/rules/wire/proto-aware-accessors.md)
 - **Typing a `String` field as an enum** → [wire enum typing](docs/rules/wire/enum-typing.md)
+- **Fixtures and C# don't settle what TWS sends or accepts** (a rejection code, an absent-field
+  default, units) → the `/live-probe` skill ([`.claude/skills/live-probe`](.claude/skills/live-probe/SKILL.md))
 - **Accepting an order id, minting a request id, or routing by an inbound id** →
   [id partition](docs/rules/wire/id-partition.md)
 - **Adding a one-shot client method, or passing a processor to a `one_shot_*` helper** →
@@ -114,9 +116,6 @@ precedents.
   `pub(crate)`** → [restrict after callers](docs/rules/workflow/restrict-after-callers.md)
 - **A clippy lint fires locally but not in CI, or you are upgrading Rust** →
   [pinned toolchain](docs/rules/workflow/pinned-toolchain.md)
-- **Typing a field, constraining a value, or documenting a default from what TWS sends** →
-  the `/live-probe` skill ([`.claude/skills/live-probe`](.claude/skills/live-probe/SKILL.md)) —
-  docs and C# samples have been stale; the paper gateway decides
 - **Planning a change, or deferring a follow-up past the PR** →
   [plans and issues](docs/rules/workflow/plans-and-issues.md) — `plans/` is untracked
   scratch for the change at hand; open work goes in GitHub issues, cited as `#N`
