@@ -36,15 +36,21 @@ encodes a `map<string,string>`.
 ## 2. Gate and proto
 
 - **Gate ≤ 213** (`server_versions::PROTOBUF_REST_MESSAGES_3`, the handshake floor): no check.
-- **Gate > 213**: add the constant to `src/server_versions.rs`, a `ProtocolFeature` on
-  `Features` (`src/protocol.rs`), and `check_version(self.server_version(), Features::FOO)?`
-  before sending. Tests derive the boundary from the constant
+- **Gate > 213 on a request**: add the constant to `src/server_versions.rs`, a
+  `ProtocolFeature` on `Features` (`src/protocol.rs`), and
+  `check_version(self.server_version(), Features::FOO)?` before sending.
+- **Gate > 213 on a field**: check only when the caller sets it, beside its siblings. Order
+  fields: a local `ProtocolFeature` in `orders/common/verify.rs`
+  (`if order.conditions_include_overnight { check_version(..)? }`).
+- Either way, tests derive the boundary from the constant
   ([derive from constants](../../../docs/rules/testing/derive-from-constants.md)).
 - **Gate > advertised max** (`max_version` in `src/connection/common.rs`): raise it. TWS then
   starts sending every field gated between the old and new max, so check each against our
   decoders in the same PR (#1045 raised it to 226).
 - **Proto missing from `src/proto/protobuf.rs`**: `just proto` regenerates it from IBKR's
-  repo. Commit the regenerated file on its own so the feature diff stays reviewable.
+  latest protos, so it can carry unrelated upstream changes. Read the regenerated diff: a
+  changed or removed field elsewhere is its own change. Commit the regeneration on its own so
+  the feature diff stays reviewable.
 
 ## 3. Classify the shape
 

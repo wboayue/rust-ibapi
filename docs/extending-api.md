@@ -289,6 +289,9 @@ Add examples showing the API usage to the examples folder:
 - Sync examples: `examples/sync/my_feature.rs`
 - Async examples: `examples/async/my_feature.rs`
 
+Register each in `Cargo.toml` as an `[[example]]` with `required-features` (`["sync"]` or
+`["async"]`); copy an existing entry for the naming.
+
 Ensure examples are well-documented and demonstrate proper usage patterns.
 
 ## Common Utilities
