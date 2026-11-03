@@ -11,7 +11,7 @@ triggers:
 symbols: [ProtocolFeature::new, cargo-llvm-cov, just-cover]
 related: [exercise-production-code, clock-seams, fixture-builders]
 precedents: ["#540", "#554"]
-memory: [reference_llvm_cov_toolchain_pairing, feedback_llvm_cov_targeted_workflow, feedback_const_fn_coverage_gotcha, reference_llvm_cov_lines_metric, feedback_coverage_mop_up_tactics]
+memory: []
 ---
 
 Every new `pub` / `pub(crate)` function gets a unit test. Check this as a final step before
