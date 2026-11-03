@@ -18,7 +18,7 @@ stable toolchain. Two version couplings break it:
 | Symptom | Cause | Fix |
 |---|---|---|
 | `rustc …-nightly is not supported by the following packages` | Nightly older than a dependency's MSRV (often after a Dependabot bump) | `rustup update nightly` |
-| **0% for every file** while tests pass; or `raw profile version mismatch` | `cargo-llvm-cov` older than nightly | `cargo install cargo-llvm-cov --locked`, then `rm -f target/llvm-cov-target/*.profraw` |
+| **0% for every file** while tests pass; or `raw profile version mismatch` | `cargo-llvm-cov` older than nightly | `cargo install cargo-llvm-cov --locked`, then `cargo +nightly llvm-cov clean --profraw-only` |
 
 0% everywhere is never a real result. Cross-check with stable
 `cargo llvm-cov --lib --all-features` (undercounts doc-tests, but sane).
@@ -45,6 +45,9 @@ A percentage means nothing without main's number for the same file.
 `just cover` instruments everything and opens a browser. For one file:
 
 ```bash
+# profiles pile up across --no-report runs; start each iteration clean
+cargo +nightly llvm-cov clean --profraw-only
+
 # instrument + test, no report (~1 min with a warm build cache)
 cargo +nightly llvm-cov --all-features --doctests --no-report --quiet
 
@@ -74,8 +77,9 @@ cargo +nightly llvm-cov --no-report --doctests --no-default-features --features 
 For the line-by-line view, `cargo +nightly llvm-cov report --html --output-dir $S/cov` and
 open `$S/cov/html/coverage/<absolute path>.html`; red lines carry `uncovered-line`.
 
-Re-run the first command after each batch of tests; the report commands (~15s) reuse its
-profile.
+Without the clean step, each run adds to the last: a deleted test still counts, and switching
+between the two recipes mixes configurations. After each batch of tests, re-run the clean and
+instrument steps of whichever recipe you used; the report commands (~15s) read what they left.
 
 ## 4. Read the numbers
 
