@@ -47,6 +47,16 @@ fn setters_map_to_the_request() {
             with_time,
         ),
         (
+            "customer_account",
+            builder(&contract).exercise(1).customer_account("a1b2c"),
+            base.clone().customer_account("a1b2c"),
+        ),
+        (
+            "professional_customer",
+            builder(&contract).exercise(1).professional_customer(),
+            base.clone().professional_customer(true),
+        ),
+        (
             "last action wins",
             builder(&contract).exercise(1).lapse(1),
             base.clone().exercise_action(ExerciseAction::Lapse),
