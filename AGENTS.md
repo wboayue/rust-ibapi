@@ -105,8 +105,10 @@ precedents.
 
 ### Workflow
 
-- **About to commit or open a PR** → [pre-PR checks](docs/rules/workflow/pre-pr-checks.md) —
-  the integration crate builds are the one local-only gate; CI covers the rest
+- **About to commit, open, or merge a PR** → [pre-PR checks](docs/rules/workflow/pre-pr-checks.md) —
+  the integration crate builds are the one local-only gate; CI covers the rest. The full flow
+  through merge (stacked and fork PRs, CI quirks, merge strategy) is the `/ship` skill
+  ([`.claude/skills/ship`](.claude/skills/ship/SKILL.md))
 - **Touching `Subscription`, a proto encoder/decoder, or any public API shape** →
   [integration crate builds](docs/rules/workflow/integration-crate-builds.md) — those crates are
   outside `default-members`, so every automated gate skips them
@@ -242,12 +244,5 @@ IBAPI_RAW_CAPTURE_DIR=/tmp/tws-raw cargo run --example <example_name>
 
 - No "Generated with Claude Code" or similar attribution in commits or PRs
 - Messages describe the technical change and its purpose
-- Merge strategy follows what the branch holds:
-  - **`--merge`** — stacked PRs (a squashed parent leaves the child with duplicate commits) and
-    multi-commit branches forming one change; every commit must build
-  - **`--rebase`** — multi-commit branches of independent small changes, nothing stacked on top
-    (rebase rewrites SHAs)
-  - **`--squash`** — single-commit PRs, fork PRs, and branches carrying fixup, review-response or
-    merge-from-main commits; pass `--body-file` summarizing the final design when the branch
-    holds an abandoned approach
-
+- Merge strategy follows what the branch holds; the table and the stacked-PR order are in the
+  `/ship` skill ([`.claude/skills/ship`](.claude/skills/ship/SKILL.md))
