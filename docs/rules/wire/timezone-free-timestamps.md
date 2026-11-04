@@ -9,7 +9,7 @@ triggers:
   - reaching for find_timezone, resolve_local, time_tz, or a zone name lookup
   - assuming the gateway's, TWS login's, or host's time zone
   - formatting an OffsetDateTime for an outbound request
-symbols: [find_timezone, resolve_local, parse_connection_time, parse_historical_data_end_timestamp, parse_schedule_date_time, ToField, OffsetDateTime, formatDate]
+symbols: [find_timezone, resolve_local, parse_connection_time, parse_historical_data_end_timestamp, parse_schedule_date_time, try_parse_time_as_utc, ToField, OffsetDateTime, formatDate]
 related: [enum-typing, proto-only-decoding]
 precedents: ["#808", "#904", "#1148"]
 memory: []
@@ -25,9 +25,9 @@ host zone. Use a form that's the same everywhere, or hand the text to the caller
   `orders/common/encoders.rs`). A zone the caller names for TWS to apply (an algo's
   `active_time_tz`) passes through as their string. The crate doesn't interpret it.
 - **Inbound, prefer a zone-free wire form:** Unix seconds (`formatDate=2`), a bare date
-  (`YYYYMMDD` → `Date`), or an explicit-UTC rendering (`YYYYMMDD-HH:MM:SS`, or a fixed format
-  documented as UTC, like `news::common::decoders::try_parse_time_as_utc`). Parse it with one
-  `format_description!`, not a list of guesses.
+  (`YYYYMMDD` → `Date`), or a rendering that is UTC by definition (`YYYYMMDD-HH:MM:SS`, the
+  gateway's UTC format). Parse it with one `format_description!`, not a list of guesses. A
+  zone-less text is UTC only if a doc or a live capture says so (`docs/wire-facts/`).
 - **Inbound, only zoned or local text available:** pass it through as a `String` field. Don't
   resolve it. Leave the zone to the caller, who knows their gateway setup.
 - **Don't add request options that switch TWS to a zone-dependent rendering.** `formatDate=1`
@@ -46,6 +46,9 @@ alternative. Don't extend them, don't copy them, and don't route a new field thr
   rather than being guessed (#904).
 - `parse_schedule_date_time`: historical schedule sessions, resolved in the schedule's own
   `time_zone`.
+- `news::common::decoders::try_parse_time_as_utc`: historical news `time`. It *assumes* the
+  zone-less `YYYY-MM-DD HH:MM:SS.s` text is UTC, with no doc or capture behind that, and
+  silently falls back to the Unix epoch when parsing fails.
 
 A new decoder that seems to need one of these is a design question. Raise it before writing
 the code.
