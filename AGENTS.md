@@ -123,8 +123,8 @@ precedents.
 - **Touching `Subscription`, a proto encoder/decoder, or any public API shape** →
   [integration crate builds](docs/rules/workflow/integration-crate-builds.md) — those crates are
   outside `default-members`, so every automated gate skips them
-- **Editing a module that still carries old idioms** →
-  [modernize touched modules](docs/rules/workflow/modernize-touched-modules.md)
+- **Editing a module that still carries old idioms, or a feature needs a shared helper's
+  signature changed** → [modernize touched modules](docs/rules/workflow/modernize-touched-modules.md)
 - **Adding `#[non_exhaustive]` / `#[must_use]`, removing a `pub` field, or narrowing to
   `pub(crate)`** → [restrict after callers](docs/rules/workflow/restrict-after-callers.md)
 - **A clippy lint fires locally but not in CI, or you are upgrading Rust** →
@@ -145,6 +145,9 @@ precedents.
 - **Removing or renaming anything public** →
   [user docs sync](docs/rules/docs/user-docs-sync.md) — `README.md` and the next major's
   migration guide ship with the change; their fenced Rust snippets are compiled by nothing
+- **A multi-PR arc concludes** (floor reached, major version, sweep finished) →
+  [end-of-arc sweep](docs/rules/docs/user-docs-sync.md#at-the-end-of-an-arc) — one docs-only PR
+  over `AGENTS.md`, `docs/rules/`, `README.md` and `docs/`
 - **Cutting a release or drafting release notes** → the `/release` skill
   ([`.claude/skills/release`](.claude/skills/release/SKILL.md))
 - **Establishing, changing, or retiring a project convention** →
@@ -158,7 +161,8 @@ Rule numbers are retired; resolve an old "rule N" citation via
 Nodes ship in the PR that makes their claim true, not afterwards. Mechanics — frontmatter,
 trigger phrasing, clusters, `status` — are in the [rules README](docs/rules/README.md). These
 have to fire without opening it, because **`just rules-check` validates structure only** (links,
-ids, `related`, no `@`-imports, no `file.rs:NNN`) and cannot tell whether a node is still true.
+ids, `related`, no `@`-imports, no `file.rs:NNN`, no `memory:`) and cannot tell whether a node
+is still true.
 
 - **Establishing, changing, or retiring a convention** → it gets a node and one index line
   above, or it is not a convention. Changed: rewrite the directive, extend `precedents`.

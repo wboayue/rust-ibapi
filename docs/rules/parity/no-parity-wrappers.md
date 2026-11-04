@@ -10,7 +10,6 @@ triggers:
 symbols: [BroadcastSender, broadcast::Sender, filter_data, FilterData, FilterDataStream, deliver_to_order_or_request, NoticeBroadcaster]
 related: [dual-feature-types, subscription-consumer-idiom]
 precedents: ["#512", "#872"]
-memory: []
 ---
 
 Don't wrap a `tokio::sync::broadcast::Sender` / `mpsc` / similar in a struct just so the async

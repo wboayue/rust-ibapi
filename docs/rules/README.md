@@ -35,7 +35,6 @@ triggers:                          # situations, not topics — see below
 symbols: [ResponseMessage, peek_int, text_request_id_field]
 related: [proto-only-decoding]     # ids of other nodes, not paths
 precedents: ["#519", "#647"]       # PR numbers
-memory: [feedback_request_id_index_registration]
 ---
 
 The directive. Three to five lines, imperative, no history.
@@ -65,8 +64,10 @@ when a future change could reopen the arc.
 - Node-to-node links use ordinary relative markdown links so they resolve for a human
   reading on GitHub. No `[[wikilinks]]`.
 - `related` holds ids; the validator resolves them.
-- `memory` names files in the maintainer's private memory directory. It is **not** validated
-  — that directory lives outside the repo and is user-specific.
+- **No private notes.** A node never cites an agent's memory files or a `plans/` file as
+  evidence: only one machine can resolve the reference, so it is dead for every other reader and
+  no gate can check it. Evidence that matters goes into `## Why` or `## Precedents`. Links run
+  the other way: private notes may cite node ids. The validator rejects a `memory:` key.
 
 ### ⚠️ `AGENTS.md` must never `@`-import these files
 
@@ -81,8 +82,8 @@ just rules-check
 ```
 
 Checks that every markdown link resolves, every `id` matches its filename, every `related`
-id names a real node, that `AGENTS.md` contains no `@`-imports, and that no node cites a
-`file.rs:NNN` line number.
+id names a real node, that `AGENTS.md` contains no `@`-imports, that no node cites a
+`file.rs:NNN` line number, and that no node carries a `memory:` key.
 
 Link resolution covers `AGENTS.md` and `docs/rules/**`. `plans/` is untracked and out of
 scope; see [plans and issues](workflow/plans-and-issues.md).

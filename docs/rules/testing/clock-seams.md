@@ -11,7 +11,6 @@ triggers:
 symbols: [next_friday_from, third_friday_from, front_from, next_quarter_from, OffsetDateTime, date-macro]
 related: [coverage-floor]
 precedents: ["#554"]
-memory: [feedback_coverage_mop_up_tactics]
 ---
 
 Keep the public method a one-line wrapper that reads the clock and delegates to a private

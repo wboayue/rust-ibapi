@@ -12,7 +12,6 @@ triggers:
 symbols: [plans/, .gitignore, docs/block-issues.md]
 related: [pre-pr-checks]
 precedents: ["#889", "#890", "#908", "#1139", "#1140"]
-memory: [feedback_plans_in_todos]
 ---
 
 `plans/` is git-ignored. Use it for the plan of the change you are about to implement; once the

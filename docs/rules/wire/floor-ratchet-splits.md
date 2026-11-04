@@ -9,7 +9,6 @@ triggers:
 symbols: [require_protobuf_support, PROTOBUF_REST_MESSAGES_3, server_versions]
 related: [fixture-migration, proto-only-decoding]
 precedents: ["#527", "#529", "#530", "#531"]
-memory: [project_protobuf_only, feedback_end_of_arc_doc_audit]
 ---
 
 **Concluded** at floor `server_versions::PROTOBUF_REST_MESSAGES_3` (213). Kept in case IBKR ships
@@ -32,6 +31,14 @@ skipped range already has a proto decoder. Verify against a per-family inventory
 Cite the floor as `server_versions::PROTOBUF_REST_MESSAGES_3` (213), not a bare number.
 `server_versions::PROTOBUF` (201) is a different, lower constant and easy to reach for by mistake.
 
+When the arc concluded, #656 swept `CLAUDE.md`, `README.md` and `docs/` in one pass: rules still
+named deleted helpers (`decode_proto_or_text`, `proto_or_text_int`), and README and
+`docs/quick-start.md` snippets used APIs replaced several PRs earlier. Each PR's docs grep had
+covered only what it touched. A future arc ends the same way; see
+[user docs sync](../docs/user-docs-sync.md).
+
 ## Precedents
 
 - #527 → #529, #530 → #531 — the bump-then-cleanup pairs.
+- #632 — the last ratchet, 210 → 213. The full PR map is in #645.
+- #656 — the end-of-arc docs sweep.

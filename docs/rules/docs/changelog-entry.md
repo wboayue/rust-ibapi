@@ -9,7 +9,6 @@ triggers:
 symbols: [CHANGELOG.md, Unreleased]
 related: [user-docs-sync, restrict-after-callers]
 precedents: ["#677", "#681", "#716"]
-memory: []
 ---
 
 Root `CHANGELOG.md` follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) and
