@@ -42,3 +42,18 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
   ticks normally.
 - C# has no `TickEFPEventProtoBuf` handler, no `TickEFP.proto`, no version constant: EFP is
   text-only by design. Reintroduce only if those appear upstream.
+
+### Historical schedule honors useRTH
+
+*Live 2026-11-03 off-hours, paper, server 226; #1147.*
+
+- `reqHistoricalData` with `whatToShow=SCHEDULE`, 5 days, `useRTH=1` vs `useRTH=0`:
+  - AAPL (STK): RTH 09:30–16:00 ET; extended 04:00–20:00 ET. Five sessions each.
+  - ES (FUT, CME, next quarter): RTH 08:30–16:00 CT; extended 17:00 (prior day) – 16:00 CT.
+- Extended futures sessions are keyed by trade date: the session dated 11-02 starts Sunday
+  11-01 17:00. The window also shifts forward one trade date (the session underway counts),
+  so `reference` differs from the start date and the RTH and extended lists are not
+  index-aligned.
+- Settles that the flag changes the result; the C# client passes it through unchanged.
+- **Not probed:** holidays / early closes, non-US exchanges, `TradingHours` on other
+  security types (options, FX, crypto).

@@ -21,6 +21,7 @@ mod sync_tests {
     use crate::common::test_utils::helpers::{assert_request, request_message_count};
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
+    use crate::market_data::TradingHours;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
@@ -76,6 +77,35 @@ mod sync_tests {
                 .use_rth(true),
         );
     }
+
+    #[test]
+    fn trading_hours_sets_use_rth() {
+        for (name, trading_hours, use_rth) in [
+            ("explicit Regular", TradingHours::Regular, true),
+            ("Extended", TradingHours::Extended, false),
+        ] {
+            let (client, bus) = client_with_schedule();
+            let contract = Contract::stock("AAPL").build();
+
+            client
+                .historical_schedules(&contract, 7.days())
+                .trading_hours(trading_hours)
+                .fetch()
+                .unwrap_or_else(|e| panic!("{name}: fetch failed: {e}"));
+
+            assert_request(
+                &bus,
+                0,
+                &historical_data_request()
+                    .contract(&contract)
+                    .end_date(None)
+                    .duration(Duration::days(7))
+                    .bar_size(BarSize::Day)
+                    .what_to_show(WhatToShow::Schedule)
+                    .use_rth(use_rth),
+            );
+        }
+    }
 }
 
 #[cfg(feature = "async")]
@@ -88,6 +118,7 @@ mod async_tests {
     use crate::common::test_utils::helpers::assert_request;
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
+    use crate::market_data::TradingHours;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
@@ -142,5 +173,35 @@ mod async_tests {
                 .what_to_show(WhatToShow::Schedule)
                 .use_rth(true),
         );
+    }
+
+    #[tokio::test]
+    async fn trading_hours_sets_use_rth() {
+        for (name, trading_hours, use_rth) in [
+            ("explicit Regular", TradingHours::Regular, true),
+            ("Extended", TradingHours::Extended, false),
+        ] {
+            let (client, bus) = client_with_schedule();
+            let contract = Contract::stock("AAPL").build();
+
+            client
+                .historical_schedules(&contract, 7.days())
+                .trading_hours(trading_hours)
+                .fetch()
+                .await
+                .unwrap_or_else(|e| panic!("{name}: fetch failed: {e}"));
+
+            assert_request(
+                &bus,
+                0,
+                &historical_data_request()
+                    .contract(&contract)
+                    .end_date(None)
+                    .duration(Duration::days(7))
+                    .bar_size(BarSize::Day)
+                    .what_to_show(WhatToShow::Schedule)
+                    .use_rth(use_rth),
+            );
+        }
     }
 }
