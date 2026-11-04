@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- `ibapi::protocol` is crate-private. Its 53 constants deprecated in 5.1 (at or below the server version 213 connection floor, so a check always passed) are deleted, along with `is_supported` and `include_if_supported`, which nothing called. The three remaining gates (`CANCEL_CONTRACT_DATA`, `CONFIG`, `UPDATE_CONFIG`) are checked by the requests themselves, which return `Error::ServerVersion` from a server too old for them. See `docs/migration-6.0.md` §1 (#990).
+- `ibapi::protocol` is crate-private. Its 53 constants deprecated in 5.1 (at or below the server version 213 connection floor, so a check always passed) are deleted, along with `is_supported` and `include_if_supported`, which nothing called. The three remaining gates (`CANCEL_CONTRACT_DATA`, `CONFIG`, `UPDATE_CONFIG`) are checked by the requests themselves, which return `Error::ServerVersion` from a server too old for them. See `docs/migration-6.0.md` §1 (#990, #1157).
 
 ## [5.6.0] - 2026-11-03
 
