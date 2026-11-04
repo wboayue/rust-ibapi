@@ -18,7 +18,7 @@ fn main() {
     env_logger::init();
 
     let matches = Command::new("historical_schedules")
-        .about("Get the last 7 days of trading schedules for the given stock")
+        .about("Get 7 days of trading schedules ending 2023-04-15 for the given stock")
         .arg(arg!(<STOCK_SYMBOL>).required(true))
         .arg(arg!(--extended "Include extended-hours sessions"))
         .arg(arg!(--connection_string <VALUE>).default_value("127.0.0.1:4002"))
@@ -26,11 +26,7 @@ fn main() {
 
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let stock_symbol = matches.get_one::<String>("STOCK_SYMBOL").expect("stock symbol is required");
-    let trading_hours = if matches.get_flag("extended") {
-        TradingHours::Extended
-    } else {
-        TradingHours::Regular
-    };
+    let trading_hours = TradingHours::from_use_rth(!matches.get_flag("extended"));
 
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
