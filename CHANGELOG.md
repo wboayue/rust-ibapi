@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
 
+### Changed
+
+- `ComboLegOpenClose` and `MarketDataType` keep a code they do not model as `Unknown(i32)`, and gain `From<T> for i32`; `value as i32` no longer compiles. A combo leg TWS reported with open/close code `4` or higher was re-sent as `3`. `ToField for ComboLegOpenClose` is removed. See `docs/migration-6.0.md` §1 (#1071).
+- `From<i32> for ArticleType` is removed: it read any unknown code as `Text`. See `docs/migration-6.0.md` §2 (#1071).
+
 ## [5.6.0] - 2026-11-03
 
 ### Added

@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071"]
 memory: [feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
@@ -71,9 +71,9 @@ because `value as i32` no longer compiles with a payload variant. `Unknown(i32)`
 derived serde. There is no closed `TryFrom<i32>` form for streaming paths.
 
 **A one-shot integer field decodes closed.** `ArticleType` (`news_article`, #1070) maps the table
-in a private decoder fn and returns `Error::Parse` for any other code. Its public `From<i32>` still
-coerces until a major release (#1071); an existing `From<i32>` also blocks `TryFrom<i32>` through
-the blanket impl.
+in a private decoder fn and returns `Error::Parse` for any other code. Its coercing public
+`From<i32>` was removed in 6.0 (#1071); an existing `From<i32>` also blocks `TryFrom<i32>` through
+the blanket impl, so a closed enum gets neither.
 
 **The wire code lives in the `From` impls, not a discriminant.** No `#[repr(i32)]`, no `Foo = 0`:
 with a payload variant nothing reads the discriminant, so it is decoration a reader takes for the
@@ -104,7 +104,7 @@ exists.
 ## Precedents
 
 Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §30;
-`docs/migration-4.0.md` §2, §9, §13–§15; `docs/migration-5.0.md` §1, §7. Consult it rather than
+`docs/migration-4.0.md` §2, §9, §13–§15; `docs/migration-5.0.md` §1, §7; `docs/migration-6.0.md` §1–§2. Consult it rather than
 re-deriving which fields were converted.
 
 - #518 — established the pattern (`OrderStatus.status` → `OrderStatusKind`).

@@ -133,7 +133,7 @@ pub(crate) fn encode_request_market_data_type(market_data_type: MarketDataType) 
     use crate::messages::encode_protobuf_message;
     use prost::Message;
     let request = crate::proto::MarketDataTypeRequest {
-        market_data_type: Some(market_data_type as i32),
+        market_data_type: Some(i32::from(market_data_type)),
     };
     Ok(encode_protobuf_message(
         OutgoingMessages::RequestMarketDataType as i32,

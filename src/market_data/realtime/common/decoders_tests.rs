@@ -567,12 +567,12 @@ mod market_data_type_tests {
         };
         assert_eq!(decode_market_data_type_proto(proto_msg).unwrap(), MarketDataType::Delayed);
 
-        // Forward-compat: out-of-range int → Unknown (no error).
+        // Forward-compat: an out-of-table code keeps its value (no error).
         let proto_msg = crate::proto::MarketDataType {
             req_id: Some(9000),
             market_data_type: Some(99),
         };
-        assert_eq!(decode_market_data_type_proto(proto_msg).unwrap(), MarketDataType::Unknown);
+        assert_eq!(decode_market_data_type_proto(proto_msg).unwrap(), MarketDataType::Unknown(99));
     }
 
     #[test]
