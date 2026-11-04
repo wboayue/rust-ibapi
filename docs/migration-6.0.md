@@ -66,3 +66,22 @@ if let MarketDataType::Unknown(code) = market_data_type { /* ... */ }
 ### 3. `From<i32> for ArticleType` is removed
 
 It mapped any unknown code to `ArticleType::Text`, so a binary article type TWS added later would have read as text. `news_article` has not used it since 5.4.0: its decoder rejects an unknown code with `Error::Parse`. Nothing else in the crate called it. Match on the two variants directly; there is no replacement conversion.
+
+### 5. `Contract::spread` takes the combo symbol
+
+TWS rejects a combo without a symbol with error 321. In 5.x the symbol was an optional
+`.symbol(..)` setter, so a combo built without it compiled, built, and failed only when the order
+was placed. The symbol is now the argument to `Contract::spread`:
+
+- **`Contract::spread(symbol)` and `SpreadBuilder::new(symbol)`** take it up front.
+- **`SpreadBuilder::symbol(..)` and `impl Default for SpreadBuilder` are removed.**
+- **`build()` returns `Error::InvalidArgument` for an empty symbol**, as it already does for a
+  spread with no legs.
+
+```rust,ignore
+// 5.x
+let spread = Contract::spread().symbol("AAPL").vertical(long_call, short_call).build()?;
+
+// 6.0
+let spread = Contract::spread("AAPL").vertical(long_call, short_call).build()?;
+```

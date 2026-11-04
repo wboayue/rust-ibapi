@@ -79,7 +79,7 @@ fn spread_presets_accepted_by_what_if() {
     let (k, price) = strike_window(&[&calls, &puts, &far_calls]);
 
     const SHARES: i32 = 100;
-    let spread = || Contract::spread().symbol(SYMBOL);
+    let spread = || Contract::spread(SYMBOL);
     let cases: Vec<(&str, SpreadBuilder, f64)> = vec![
         ("vertical", spread().vertical(calls[&k[2]], calls[&k[3]]), price),
         ("long_calendar", spread().long_calendar(calls[&k[2]], far_calls[&k[2]]), price),

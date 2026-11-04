@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `ComboLegOpenClose` and `MarketDataType` keep a code they do not model as `Unknown(i32)`, and gain `From<T> for i32`; `value as i32` no longer compiles. A combo leg TWS reported with open/close code `4` or higher was re-sent as `3`. `ToField for ComboLegOpenClose` is removed. See `docs/migration-6.0.md` §2 (#1071).
+- `Contract::spread(symbol)` takes the combo symbol, which TWS requires (error 321 without it); `SpreadBuilder::new` takes it too. `SpreadBuilder::symbol(..)` and `Default for SpreadBuilder` are removed, and `build()` rejects an empty symbol with `Error::InvalidArgument`. See `docs/migration-6.0.md` §5 (#1131).
 
 ### Removed
 

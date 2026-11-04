@@ -272,32 +272,28 @@ The bond builder automatically:
 
 Complex multi-leg strategies with type-safe leg construction.
 
-Set the combo's symbol with `.symbol(..)`, usually the underlying: TWS rejects a combo without one (error 321).
+`Contract::spread` takes the combo's symbol, usually the underlying: TWS rejects a combo without one (error 321), so `build()` rejects an empty symbol.
 
 ```rust
 use ibapi::contracts::{ButterflyLegs, CollarLegs, Contract, IronCondorLegs, LegAction};
 
 // Vertical spread
-let vertical = Contract::spread()
-    .symbol("AAPL")
+let vertical = Contract::spread("AAPL")
     .vertical(11111, 22222)  // Long and short contract IDs
     .build()?;
 
 // Long calendar: sell the near expiry, buy the far one (same strike and right)
-let calendar = Contract::spread()
-    .symbol("AAPL")
+let calendar = Contract::spread("AAPL")
     .long_calendar(20001, 20002)  // Near and far contract IDs
     .build()?;
 
 // Straddle (same strike) and strangle (different strikes): buy a call and a put
-let straddle = Contract::spread()
-    .symbol("AAPL")
+let straddle = Contract::spread("AAPL")
     .straddle(40001, 40002)  // Call and put contract IDs
     .build()?;
 
 // Butterfly: buy 1 lower, sell 2 middle, buy 1 upper
-let butterfly = Contract::spread()
-    .symbol("AAPL")
+let butterfly = Contract::spread("AAPL")
     .butterfly(ButterflyLegs {
         lower: 30001.into(),
         middle: 30002.into(),
@@ -306,8 +302,7 @@ let butterfly = Contract::spread()
     .build()?;
 
 // Iron condor: a put vertical plus a call vertical, legs named
-let iron_condor = Contract::spread()
-    .symbol("AAPL")
+let iron_condor = Contract::spread("AAPL")
     .iron_condor(IronCondorLegs {
         long_put: 10001.into(),
         short_put: 10002.into(),
@@ -317,8 +312,7 @@ let iron_condor = Contract::spread()
     .build()?;
 
 // Collar: buy the stock, buy a put floor, sell a call cap
-let collar = Contract::spread()
-    .symbol("AAPL")
+let collar = Contract::spread("AAPL")
     .collar(CollarLegs {
         stock: 265598.into(),
         put: 10005.into(),
@@ -328,8 +322,7 @@ let collar = Contract::spread()
     .build()?;
 
 // Custom ratio spread: buy 1, sell 2
-let ratio_spread = Contract::spread()
-    .symbol("AAPL")
+let ratio_spread = Contract::spread("AAPL")
     .add_leg(50001, LegAction::Buy)
         .done()
     .add_leg(50002, LegAction::Sell)
@@ -433,7 +426,7 @@ let result = Strike::new(-10.0);
 assert!(result.is_err());  // Negative strikes are invalid
 
 // Spread validation
-let empty_spread = Contract::spread().build();
+let empty_spread = Contract::spread("AAPL").build();
 assert!(empty_spread.is_err());  // Spreads need at least one leg
 
 // Option validation happens at compile time
