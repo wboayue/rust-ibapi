@@ -135,7 +135,7 @@ fn encode_combo_leg(leg: &contracts::ComboLeg, per_leg_price: Option<f64>) -> pr
         ratio: some_i32_ne(leg.ratio, 0),
         action: Some(leg.action.to_string()),
         exchange: some_str(&leg.exchange),
-        open_close: some_i32_ne(leg.open_close as i32, 0),
+        open_close: some_i32_ne(i32::from(leg.open_close), 0),
         short_sales_slot: some_i32_ne(leg.short_sale_slot, 0),
         designated_location: some_str(&leg.designated_location),
         exempt_code: some_i32_ne(leg.exempt_code, 0),

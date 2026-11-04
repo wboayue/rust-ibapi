@@ -70,17 +70,29 @@ pub enum SmartDepth {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarketDataType {
-    /// Sentinel for values not recognized by this client (forward compatibility).
-    /// Decode-only in spirit — encoding sends `0`, which TWS will reject.
-    Unknown = 0,
-    /// Live market data
-    Realtime = 1,
-    /// Frozen market data (for when market is closed)
-    Frozen = 2,
-    /// Delayed market data (usually 15-20 minutes)
-    Delayed = 3,
-    /// Delayed frozen market data
-    DelayedFrozen = 4,
+    /// Live market data. Wire code `1`.
+    Realtime,
+    /// Frozen market data (for when market is closed). Wire code `2`.
+    Frozen,
+    /// Delayed market data (usually 15-20 minutes). Wire code `3`.
+    Delayed,
+    /// Delayed frozen market data. Wire code `4`.
+    DelayedFrozen,
+    /// Market data type code not modeled by this version of the API, carried as received.
+    /// An absent type decodes as `Unknown(0)`. Sent as-is by `switch_market_data_type`.
+    Unknown(i32),
+}
+
+impl From<MarketDataType> for i32 {
+    fn from(value: MarketDataType) -> i32 {
+        match value {
+            MarketDataType::Realtime => 1,
+            MarketDataType::Frozen => 2,
+            MarketDataType::Delayed => 3,
+            MarketDataType::DelayedFrozen => 4,
+            MarketDataType::Unknown(code) => code,
+        }
+    }
 }
 
 impl From<i32> for MarketDataType {
@@ -90,7 +102,7 @@ impl From<i32> for MarketDataType {
             2 => Self::Frozen,
             3 => Self::Delayed,
             4 => Self::DelayedFrozen,
-            _ => Self::Unknown,
+            code => Self::Unknown(code),
         }
     }
 }

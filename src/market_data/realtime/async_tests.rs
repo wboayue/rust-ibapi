@@ -28,7 +28,7 @@ async fn switch_market_data_type() {
 
     assert_eq!(request_message_count(&message_bus), 1);
     let expected = crate::proto::MarketDataTypeRequest {
-        market_data_type: Some(MarketDataType::Delayed as i32),
+        market_data_type: Some(i32::from(MarketDataType::Delayed)),
     };
     assert_request_proto(&message_bus, 0, OutgoingMessages::RequestMarketDataType, &expected);
 }

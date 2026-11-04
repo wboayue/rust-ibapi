@@ -551,30 +551,36 @@ pub struct ComboLeg {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 /// OpenClose specifies whether an order is an open or closing order.
 pub enum ComboLegOpenClose {
-    /// 0 - Same as the parent security. This is the only option for retail customers.
+    /// Same as the parent security. This is the only option for retail customers. Wire code `0`.
     #[default]
-    Same = 0,
-    /// 1 - Open. This value is only valid for institutional customers.
-    Open = 1,
-    /// 2 - Close. This value is only valid for institutional customers.
-    Close = 2,
-    /// 3 - Unknown.
-    Unknown = 3,
+    Same,
+    /// Open. This value is only valid for institutional customers. Wire code `1`.
+    Open,
+    /// Close. This value is only valid for institutional customers. Wire code `2`.
+    Close,
+    /// Any other code, including IB's own "unknown" position (`3`), carried as received and
+    /// sent back unchanged.
+    Unknown(i32),
 }
 
-impl ToField for ComboLegOpenClose {
-    fn to_field(&self) -> String {
-        (*self as u8).to_string()
+impl From<ComboLegOpenClose> for i32 {
+    fn from(value: ComboLegOpenClose) -> i32 {
+        match value {
+            ComboLegOpenClose::Same => 0,
+            ComboLegOpenClose::Open => 1,
+            ComboLegOpenClose::Close => 2,
+            ComboLegOpenClose::Unknown(code) => code,
+        }
     }
 }
 
 impl From<i32> for ComboLegOpenClose {
-    fn from(val: i32) -> Self {
-        match val {
+    fn from(value: i32) -> Self {
+        match value {
             0 => Self::Same,
             1 => Self::Open,
             2 => Self::Close,
-            _ => Self::Unknown,
+            code => Self::Unknown(code),
         }
     }
 }
