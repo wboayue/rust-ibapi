@@ -64,8 +64,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             );
                         }
                         OrderUpdate::OrderBound(binding) => println!("Order binding: {binding:?}"),
-                        OrderUpdate::CommissionReport(report) => {
-                            println!("[Monitor] Commission: ${} for execution {}", report.commission, report.execution_id);
+                        OrderUpdate::CommissionAndFeesReport(report) => {
+                            println!(
+                                "[Monitor] Commission: ${} for execution {}",
+                                report.commission_and_fees, report.execution_id
+                            );
                         }
                     }
                 }

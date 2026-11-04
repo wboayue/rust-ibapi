@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `ComboLegOpenClose` and `MarketDataType` keep a code they do not model as `Unknown(i32)`, and gain `From<T> for i32`; `value as i32` no longer compiles. A combo leg TWS reported with open/close code `4` or higher was re-sent as `3`. `ToField for ComboLegOpenClose` is removed. See `docs/migration-6.0.md` §2 (#1071).
+- `orders::CommissionReport` is renamed `CommissionAndFeesReport`, after IBKR's rename to commissions and fees. Its `commission` field is now `commission_and_fees`; the `PlaceOrder`, `OrderUpdate` and `Executions` variants are now `CommissionAndFeesReport`; `IncomingMessages::CommissionsReport` is `CommissionsAndFeesReport`; and `OrderState`'s `commission`, `minimum_commission`, `maximum_commission` and `commission_currency` are `commission_and_fees`, `min_commission_and_fees`, `max_commission_and_fees` and `commission_and_fees_currency`. No alias is kept. See `docs/migration-6.0.md` §4 (#1120, #1159).
 
 ### Removed
 

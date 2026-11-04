@@ -106,7 +106,7 @@ pub enum IncomingMessages {
     /// Market data type acknowledgment.
     MarketDataType = 58,
     /// Commissions report payload.
-    CommissionsReport = 59,
+    CommissionsAndFeesReport = 59,
     /// Position update.
     Position = 61,
     /// End marker for position updates.
@@ -249,7 +249,7 @@ impl From<i32> for IncomingMessages {
             56 => IncomingMessages::DeltaNeutralValidation,
             57 => IncomingMessages::TickSnapshotEnd,
             58 => IncomingMessages::MarketDataType,
-            59 => IncomingMessages::CommissionsReport,
+            59 => IncomingMessages::CommissionsAndFeesReport,
             61 => IncomingMessages::Position,
             62 => IncomingMessages::PositionEnd,
             63 => IncomingMessages::AccountSummary,
@@ -1147,7 +1147,7 @@ impl ResponseMessage {
     /// Try to extract the execution id from the message.
     ///
     /// `ExecutionData` nests `exec_id` under `execution.exec_id`;
-    /// `CommissionsReport` carries it at the top level. Both arrive
+    /// `CommissionsAndFeesReport` carries it at the top level. Both arrive
     /// proto-framed.
     pub fn execution_id(&self) -> Option<String> {
         let raw = self.raw_bytes()?;
@@ -1156,7 +1156,7 @@ impl ResponseMessage {
                 let p: ExecutionDetailsMinimal = prost::Message::decode(raw).ok()?;
                 p.execution.and_then(|e| e.exec_id)
             }
-            IncomingMessages::CommissionsReport => {
+            IncomingMessages::CommissionsAndFeesReport => {
                 let p: crate::proto::CommissionAndFeesReport = prost::Message::decode(raw).ok()?;
                 p.exec_id
             }

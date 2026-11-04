@@ -170,9 +170,9 @@ impl Client {
     /// Covers the current day (since midnight) by default; set
     /// [`ExecutionFilter::last_n_days`] or [`ExecutionFilter::specific_dates`]
     /// to reach earlier days.
-    /// Along with the [`crate::orders::ExecutionData`], the [`crate::orders::CommissionReport`] will also be returned.
+    /// Along with the [`crate::orders::ExecutionData`], the [`crate::orders::CommissionAndFeesReport`] will also be returned.
     /// Join a commission to its execution by `execution_id` (see the
-    /// [`CommissionReport`](crate::orders::CommissionReport) docs) — the commission follows its execution.
+    /// [`CommissionAndFeesReport`](crate::orders::CommissionAndFeesReport) docs) — the commission follows its execution.
     /// When requesting executions, a filter can be specified to receive only a subset of them
     ///
     /// # Arguments
@@ -331,7 +331,7 @@ impl Client {
     ///         }
     ///         PlaceOrder::OpenOrder(open_order) => println!("open order: {open_order:?}"),
     ///         PlaceOrder::ExecutionData(execution) => println!("execution: {execution:?}"),
-    ///         PlaceOrder::CommissionReport(report) => println!("commission report: {report:?}"),
+    ///         PlaceOrder::CommissionAndFeesReport(report) => println!("commission report: {report:?}"),
     ///    }
     /// }
     /// # Ok::<(), ibapi::Error>(())
@@ -392,7 +392,7 @@ impl Client {
     ///     match event? {
     ///         OrderUpdate::OrderStatus(status) => println!("Order Status: {status:?}"),
     ///         OrderUpdate::ExecutionData(exec) => println!("Execution: {exec:?}"),
-    ///         OrderUpdate::CommissionReport(report) => println!("Commission: {report:?}"),
+    ///         OrderUpdate::CommissionAndFeesReport(report) => println!("Commission: {report:?}"),
     ///         OrderUpdate::OrderBound(binding) => println!("Order binding: {binding:?}"),
     ///         _ => {}
     ///     }
@@ -474,7 +474,7 @@ impl Client {
     /// - `OrderStatus`: Current status of an order (filled amount, average price, etc.)
     /// - `OpenOrder`: Complete order details including contract and order parameters
     /// - `ExecutionData`: Details about individual trade executions
-    /// - `CommissionReport`: Commission information for executed trades
+    /// - `CommissionAndFeesReport`: Commission information for executed trades
     ///
     /// Order-bound TWS errors and warnings (e.g. rejections, code 399 order
     /// messages) arrive as [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem),
@@ -521,10 +521,10 @@ impl Client {
     /// This stream provides updates for all orders, not just a specific order.
     /// To track a specific order, filter the updates by order ID.
     ///
-    /// To pair a [`CommissionReport`](crate::orders::CommissionReport) with the
+    /// To pair a [`CommissionAndFeesReport`](crate::orders::CommissionAndFeesReport) with the
     /// [`ExecutionData`](crate::orders::ExecutionData) it belongs to, join on
     /// `execution_id` — the commission follows its execution and shares that key. See
-    /// the [`CommissionReport`](crate::orders::CommissionReport) docs for the idiom.
+    /// the [`CommissionAndFeesReport`](crate::orders::CommissionAndFeesReport) docs for the idiom.
     ///
     /// # Gaps and recovery
     ///

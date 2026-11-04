@@ -123,7 +123,7 @@ fn decode_order_status_proto_rejects_empty_status() {
 }
 
 #[test]
-fn decode_commission_report_proto_works() {
+fn decode_commission_and_fees_report_proto_works() {
     let proto_msg = crate::proto::CommissionAndFeesReport {
         exec_id: Some("exec123".into()),
         commission_and_fees: Some(1.25),
@@ -133,9 +133,9 @@ fn decode_commission_report_proto_works() {
         yield_redemption_date: Some("20260101".into()),
     };
 
-    let result = decode_commission_report_proto(proto_msg).unwrap();
+    let result = decode_commission_and_fees_report_proto(proto_msg).unwrap();
     assert_eq!(result.execution_id, "exec123");
-    assert_eq!(result.commission, 1.25);
+    assert_eq!(result.commission_and_fees, 1.25);
     assert_eq!(result.currency, "USD");
     assert_eq!(result.realized_pnl, Some(500.0));
     assert_eq!(result.yields, None); // f64::MAX filtered out
@@ -289,21 +289,21 @@ fn decode_order_status_proto_via_builder() {
 }
 
 #[test]
-fn decode_commission_report_proto_via_builder() {
-    use crate::testdata::builders::orders::commission_report;
+fn decode_commission_and_fees_report_proto_via_builder() {
+    use crate::testdata::builders::orders::commission_and_fees_report;
     use crate::testdata::builders::ResponseProtoEncoder;
 
-    let p = commission_report()
+    let p = commission_and_fees_report()
         .execution_id("exec123")
-        .commission(1.25)
+        .commission_and_fees(1.25)
         .currency("USD")
         .realized_pnl(Some(500.0))
         .yields(Some(f64::MAX))
         .to_proto();
 
-    let result = super::decode_commission_report_proto(p).unwrap();
+    let result = super::decode_commission_and_fees_report_proto(p).unwrap();
     assert_eq!(result.execution_id, "exec123");
-    assert_eq!(result.commission, 1.25);
+    assert_eq!(result.commission_and_fees, 1.25);
     assert_eq!(result.currency, "USD");
     assert_eq!(result.realized_pnl, Some(500.0));
     assert_eq!(result.yields, None); // f64::MAX is the IBKR sentinel for "unset"
@@ -365,11 +365,11 @@ fn decode_execution_data_rejects_text_framing() {
 }
 
 #[test]
-fn decode_commission_report_rejects_text_framing() {
+fn decode_commission_and_fees_report_rejects_text_framing() {
     assert_rejects_text_framing(
-        IncomingMessages::CommissionsReport,
+        IncomingMessages::CommissionsAndFeesReport,
         "59\01\0exec001\02.5\0USD\0",
-        decode_commission_report,
+        decode_commission_and_fees_report,
     );
 }
 

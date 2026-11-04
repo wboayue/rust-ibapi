@@ -9,7 +9,7 @@ impl StreamDecoder<PlaceOrder> for PlaceOrder {
         IncomingMessages::OpenOrder,
         IncomingMessages::OrderStatus,
         IncomingMessages::ExecutionData,
-        IncomingMessages::CommissionsReport,
+        IncomingMessages::CommissionsAndFeesReport,
     ];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<PlaceOrder, Error> {
@@ -17,7 +17,9 @@ impl StreamDecoder<PlaceOrder> for PlaceOrder {
             IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(message)?)),
             IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(message)?)),
             IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(message)?)),
-            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(message)?)),
+            IncomingMessages::CommissionsAndFeesReport => {
+                Ok(PlaceOrder::CommissionAndFeesReport(decoders::decode_commission_and_fees_report(message)?))
+            }
             _ => Err(Error::unexpected_response(message)),
         }
     }
@@ -29,7 +31,7 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
         IncomingMessages::OrderBound,
         IncomingMessages::OrderStatus,
         IncomingMessages::ExecutionData,
-        IncomingMessages::CommissionsReport,
+        IncomingMessages::CommissionsAndFeesReport,
     ];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<OrderUpdate, Error> {
@@ -38,7 +40,9 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
             IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(message)?)),
             IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(message)?)),
             IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(message)?)),
-            IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(message)?)),
+            IncomingMessages::CommissionsAndFeesReport => Ok(OrderUpdate::CommissionAndFeesReport(decoders::decode_commission_and_fees_report(
+                message,
+            )?)),
             _ => Err(Error::unexpected_response(message)),
         }
     }
@@ -90,7 +94,7 @@ impl StreamDecoder<Orders> for Orders {
 impl StreamDecoder<Executions> for Executions {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::ExecutionData,
-        IncomingMessages::CommissionsReport,
+        IncomingMessages::CommissionsAndFeesReport,
         IncomingMessages::ExecutionDataEnd,
     ];
     const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::ExecutionDataEnd];
@@ -98,7 +102,9 @@ impl StreamDecoder<Executions> for Executions {
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Executions, Error> {
         match message.message_type() {
             IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(message)?)),
-            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(message)?)),
+            IncomingMessages::CommissionsAndFeesReport => {
+                Ok(Executions::CommissionAndFeesReport(decoders::decode_commission_and_fees_report(message)?))
+            }
             IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
             _ => Err(Error::unexpected_response(message)),
         }

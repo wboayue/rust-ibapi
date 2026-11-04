@@ -73,7 +73,7 @@ fn is_order_message(message_type: IncomingMessages) -> bool {
             | IncomingMessages::CompletedOrdersEnd
             | IncomingMessages::ExecutionData
             | IncomingMessages::ExecutionDataEnd
-            | IncomingMessages::CommissionsReport
+            | IncomingMessages::CommissionsAndFeesReport
     )
 }
 
@@ -189,7 +189,7 @@ pub(crate) fn order_routing_strategy(message_type: IncomingMessages, foreign: bo
         IncomingMessages::ExecutionData => OrderRoutingStrategy::ExecutionData,
         IncomingMessages::ExecutionDataEnd => OrderRoutingStrategy::ExecutionDataEnd,
         IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => OrderRoutingStrategy::OrderAndShared,
-        IncomingMessages::CommissionsReport => OrderRoutingStrategy::ByExecutionId,
+        IncomingMessages::CommissionsAndFeesReport => OrderRoutingStrategy::ByExecutionId,
         IncomingMessages::CompletedOrder | IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => OrderRoutingStrategy::SharedOnly,
         _ => OrderRoutingStrategy::ByOrderId,
     }

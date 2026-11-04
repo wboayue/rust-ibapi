@@ -562,7 +562,7 @@ for notice in notices.iter() {
 
 ### Correlating Commissions with Executions
 
-`CommissionReport` joins to its `ExecutionData` by `execution_id` — the same value
+`CommissionAndFeesReport` joins to its `ExecutionData` by `execution_id` — the same value
 carried on `Execution::execution_id`. TWS sends the execution first and the commission
 shortly after, but order-status and open-order frames can land between them, so index
 commissions by `execution_id` rather than assuming the two are adjacent. Both arrive on
@@ -581,10 +581,10 @@ for update in updates.iter_data() {
             // The execution arrives first: index it by execution_id.
             executions.insert(exec.execution.execution_id.clone(), exec);
         }
-        OrderUpdate::CommissionReport(report) => {
+        OrderUpdate::CommissionAndFeesReport(report) => {
             // The commission follows: join it to the execution it belongs to.
             if let Some(exec) = executions.remove(&report.execution_id) {
-                println!("{} x {} commission {}", exec.execution.shares, exec.contract.symbol, report.commission);
+                println!("{} x {} commission {}", exec.execution.shares, exec.contract.symbol, report.commission_and_fees);
             }
         }
         _ => {}

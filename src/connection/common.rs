@@ -15,7 +15,7 @@ use crate::messages::{
     encode_length, encode_protobuf_message, split_message_id, unknown_message_type_notice, IncomingMessages, Notice, OutgoingMessages,
     ResponseMessage, CLIENT_ID_IN_USE_CODE, HANDSHAKE_DECODE_FAILURE_CODE, HANDSHAKE_UNKNOWN_FRAME_CODE, PROTOBUF_MSG_ID,
 };
-use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
+use crate::orders::{CommissionAndFeesReport, ExecutionData, OrderData, OrderStatus};
 use crate::server_versions;
 use crate::transport::common::NoticeSink;
 
@@ -54,7 +54,7 @@ pub enum StartupMessage {
     Execution(ExecutionData),
     /// Commission and fees report — TWS replays the per-fill commission to
     /// the Master Client ID alongside [`Execution`](Self::Execution).
-    CommissionReport(CommissionReport),
+    CommissionAndFeesReport(CommissionAndFeesReport),
     /// Completed (terminal-state) order — TWS replays the closed-order history
     /// at handshake time when a prior session requested
     /// `reqCompletedOrders`. The contained [`OrderData::order_id`] is the
@@ -81,7 +81,7 @@ impl StartupMessage {
                 AccountUpdate::End => IncomingMessages::AccountDownloadEnd,
             },
             StartupMessage::Execution(_) => IncomingMessages::ExecutionData,
-            StartupMessage::CommissionReport(_) => IncomingMessages::CommissionsReport,
+            StartupMessage::CommissionAndFeesReport(_) => IncomingMessages::CommissionsAndFeesReport,
             StartupMessage::CompletedOrder(_) => IncomingMessages::CompletedOrder,
             StartupMessage::ExecutionDataEnd => IncomingMessages::ExecutionDataEnd,
             StartupMessage::CompletedOrdersEnd => IncomingMessages::CompletedOrdersEnd,
@@ -272,7 +272,9 @@ impl ConnectionProtocol for ConnectionHandler {
 /// [`Client::notice_stream`](crate::Client::notice_stream) can detect them.
 pub(crate) fn dispatch_unsolicited_message(message: &ResponseMessage, ctx: &StartupHandshakeContext<'_>) {
     use crate::accounts::common::decode_account_update_message;
-    use crate::orders::common::{decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status};
+    use crate::orders::common::{
+        decode_commission_and_fees_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status,
+    };
 
     /// Run a typed decoder; fire the callback with the typed payload on
     /// success, or emit a synthesized decode-failure notice on error. The
@@ -317,7 +319,12 @@ pub(crate) fn dispatch_unsolicited_message(message: &ResponseMessage, ctx: &Star
         | IncomingMessages::AccountUpdateTime
         | IncomingMessages::AccountDownloadEnd => dispatch_typed(ctx, kind, || decode_account_update_message(message), StartupMessage::AccountUpdate),
         IncomingMessages::ExecutionData => dispatch_typed(ctx, kind, || decode_execution_data(message), StartupMessage::Execution),
-        IncomingMessages::CommissionsReport => dispatch_typed(ctx, kind, || decode_commission_report(message), StartupMessage::CommissionReport),
+        IncomingMessages::CommissionsAndFeesReport => dispatch_typed(
+            ctx,
+            kind,
+            || decode_commission_and_fees_report(message),
+            StartupMessage::CommissionAndFeesReport,
+        ),
         IncomingMessages::CompletedOrder => dispatch_typed(ctx, kind, || decode_completed_order(message), StartupMessage::CompletedOrder),
         IncomingMessages::ExecutionDataEnd => dispatch_unit(ctx, StartupMessage::ExecutionDataEnd),
         IncomingMessages::CompletedOrdersEnd => dispatch_unit(ctx, StartupMessage::CompletedOrdersEnd),

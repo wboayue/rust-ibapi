@@ -1521,15 +1521,15 @@ async fn execution_data_end_orphan_dropped() {
 }
 
 /// `ByExecutionId`: the prior ExecutionData stores `exec-abc → order_id 7`'s
-/// sender, and the CommissionsReport rides that mapping back to the same sub.
+/// sender, and the CommissionsAndFeesReport rides that mapping back to the same sub.
 #[tokio::test]
-async fn commission_report_routes_via_execution_id_mapping() {
+async fn commission_and_fees_report_routes_via_execution_id_mapping() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
     stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-abc"));
     stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::CommissionsReport as i32,
+        crate::messages::IncomingMessages::CommissionsAndFeesReport as i32,
         &crate::proto::CommissionAndFeesReport {
             exec_id: Some("exec-abc".into()),
             ..Default::default()
@@ -1542,16 +1542,16 @@ async fn commission_report_routes_via_execution_id_mapping() {
     let exec_msg = next_message(&mut sub).await;
     assert_eq!(exec_msg.message_type(), crate::messages::IncomingMessages::ExecutionData);
     let commission = next_message(&mut sub).await;
-    assert_eq!(commission.message_type(), crate::messages::IncomingMessages::CommissionsReport);
+    assert_eq!(commission.message_type(), crate::messages::IncomingMessages::CommissionsAndFeesReport);
 }
 
 #[tokio::test]
-async fn commission_report_without_mapping_dropped() {
+async fn commission_and_fees_report_without_mapping_dropped() {
     let (stream, bus) = make_bus();
     let mut unrelated = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
     stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::CommissionsReport as i32,
+        crate::messages::IncomingMessages::CommissionsAndFeesReport as i32,
         &crate::proto::CommissionAndFeesReport {
             exec_id: Some("exec-not-mapped".into()),
             ..Default::default()
@@ -2741,7 +2741,7 @@ fn foreign_open_order_frame(order_id: i32) -> Vec<u8> {
 
 fn commission_frame(execution_id: &str) -> Vec<u8> {
     binary_proto(
-        IncomingMessages::CommissionsReport as i32,
+        IncomingMessages::CommissionsAndFeesReport as i32,
         &crate::proto::CommissionAndFeesReport {
             exec_id: Some(execution_id.into()),
             ..Default::default()
@@ -2789,7 +2789,10 @@ async fn foreign_execution_answers_requests_only() {
     }
 
     assert_eq!(next_message(&mut request).await.message_type(), IncomingMessages::ExecutionData);
-    assert_eq!(next_message(&mut request).await.message_type(), IncomingMessages::CommissionsReport);
+    assert_eq!(
+        next_message(&mut request).await.message_type(),
+        IncomingMessages::CommissionsAndFeesReport
+    );
     assert!(
         tokio::time::timeout(TICK, request.next()).await.is_err(),
         "request got the unprompted one"

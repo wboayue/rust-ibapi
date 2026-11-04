@@ -48,10 +48,10 @@ impl Client {
     /// `filter_data()` drops them (logging at `warn!` level), so match on
     /// notices explicitly when monitoring fire-and-forget orders for rejection.
     ///
-    /// To pair a [`CommissionReport`] with the
+    /// To pair a [`CommissionAndFeesReport`] with the
     /// [`ExecutionData`] it belongs to, join on
     /// `execution_id` — the commission follows its execution and shares that key. See
-    /// the [`CommissionReport`] docs for the idiom.
+    /// the [`CommissionAndFeesReport`] docs for the idiom.
     ///
     /// # Gaps and recovery
     ///
@@ -170,7 +170,7 @@ impl Client {
     ///         match event? {
     ///             OrderUpdate::OrderStatus(status) => println!("Order Status: {status:?}"),
     ///             OrderUpdate::ExecutionData(exec) => println!("Execution: {exec:?}"),
-    ///             OrderUpdate::CommissionReport(report) => println!("Commission: {report:?}"),
+    ///             OrderUpdate::CommissionAndFeesReport(report) => println!("Commission: {report:?}"),
     ///             OrderUpdate::OrderBound(binding) => println!("Order binding: {binding:?}"),
     ///             _ => {}
     ///         }
@@ -271,7 +271,7 @@ impl Client {
     ///             PlaceOrder::OrderStatus(order_status) => println!("order status: {order_status:?}"),
     ///             PlaceOrder::OpenOrder(open_order) => println!("open order: {open_order:?}"),
     ///             PlaceOrder::ExecutionData(execution) => println!("execution: {execution:?}"),
-    ///             PlaceOrder::CommissionReport(report) => println!("commission report: {report:?}"),
+    ///             PlaceOrder::CommissionAndFeesReport(report) => println!("commission report: {report:?}"),
     ///         }
     ///     }
     ///
@@ -519,9 +519,9 @@ impl Client {
     /// to reach earlier days.
     ///
     /// Both [`ExecutionData`] and
-    /// [`CommissionReport`] are delivered on this
+    /// [`CommissionAndFeesReport`] are delivered on this
     /// stream. Join a commission to its execution by `execution_id`
-    /// (see the [`CommissionReport`] docs) — the commission follows its execution.
+    /// (see the [`CommissionAndFeesReport`] docs) — the commission follows its execution.
     ///
     /// # Examples
     ///

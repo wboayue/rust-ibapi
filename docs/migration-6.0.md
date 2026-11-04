@@ -66,3 +66,37 @@ if let MarketDataType::Unknown(code) = market_data_type { /* ... */ }
 ### 3. `From<i32> for ArticleType` is removed
 
 It mapped any unknown code to `ArticleType::Text`, so a binary article type TWS added later would have read as text. `news_article` has not used it since 5.4.0: its decoder rejects an unknown code with `Error::Parse`. Nothing else in the crate called it. Match on the two variants directly; there is no replacement conversion.
+
+### 4. `CommissionReport` is now `CommissionAndFeesReport`
+
+IBKR renamed commissions to "commissions and fees" (C# `CommissionAndFeesReport`, proto
+`CommissionAndFeesReport`), so the public names follow. The data and the wire are unchanged.
+The renames also cover the what-if commission fields on `OrderState` and the message-type
+variant.
+
+| 5.x | 6.0 |
+|---|---|
+| `orders::CommissionReport` | `orders::CommissionAndFeesReport` |
+| `CommissionReport::commission` | `CommissionAndFeesReport::commission_and_fees` |
+| `PlaceOrder::CommissionReport(..)` | `PlaceOrder::CommissionAndFeesReport(..)` |
+| `OrderUpdate::CommissionReport(..)` | `OrderUpdate::CommissionAndFeesReport(..)` |
+| `Executions::CommissionReport(..)` | `Executions::CommissionAndFeesReport(..)` |
+| `IncomingMessages::CommissionsReport` | `IncomingMessages::CommissionsAndFeesReport` |
+| `OrderState::commission` | `OrderState::commission_and_fees` |
+| `OrderState::minimum_commission` | `OrderState::min_commission_and_fees` |
+| `OrderState::maximum_commission` | `OrderState::max_commission_and_fees` |
+| `OrderState::commission_currency` | `OrderState::commission_and_fees_currency` |
+
+```rust,ignore
+// 5.x
+Ok(OrderUpdate::CommissionReport(report)) => println!("{}", report.commission),
+let cost = order_state.commission;
+
+// 6.0
+Ok(OrderUpdate::CommissionAndFeesReport(report)) => println!("{}", report.commission_and_fees),
+let cost = order_state.commission_and_fees;
+```
+
+There's no deprecated `CommissionReport` alias. A type alias would keep only `use` lines
+compiling, while every match arm and field read changes anyway. Pairing a report with its
+execution by `execution_id` is unchanged.
