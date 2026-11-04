@@ -161,6 +161,23 @@ fn encode_combo_legs_pairs_each_leg_with_its_order_price() {
 }
 
 #[test]
+fn encode_combo_legs_sends_unknown_open_close_code_unchanged() {
+    use crate::contracts::{ComboLeg, ComboLegOpenClose};
+
+    let contract = Contract {
+        combo_legs: vec![ComboLeg {
+            open_close: ComboLegOpenClose::Unknown(7),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let legs = encode_combo_legs(&contract, None);
+
+    assert_eq!(legs[0].open_close, Some(7));
+}
+
+#[test]
 fn encode_combo_legs_is_empty_for_a_plain_contract() {
     assert!(encode_combo_legs(&Contract::default(), Some(&Order::default())).is_empty());
 }

@@ -212,6 +212,16 @@ fn decode_combo_leg_accepts_sshort() {
     assert_eq!(leg.action, LegAction::SellShort);
 }
 
+#[test]
+fn combo_leg_preserves_unknown_open_close_code() {
+    let proto_leg = proto::ComboLeg {
+        open_close: Some(7),
+        ..proto_leg(Some("BUY"))
+    };
+    let leg = decode_combo_leg(&proto_leg).unwrap();
+    assert_eq!(leg.open_close, ComboLegOpenClose::Unknown(7));
+}
+
 // === decode_contract surfaces combo-leg errors ===
 
 #[test]

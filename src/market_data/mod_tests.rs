@@ -18,12 +18,18 @@ fn trading_hours_default() {
 }
 
 #[test]
-fn market_data_type_from_i32() {
-    assert_eq!(MarketDataType::from(1), MarketDataType::Realtime);
-    assert_eq!(MarketDataType::from(2), MarketDataType::Frozen);
-    assert_eq!(MarketDataType::from(3), MarketDataType::Delayed);
-    assert_eq!(MarketDataType::from(4), MarketDataType::DelayedFrozen);
-    assert_eq!(MarketDataType::from(0), MarketDataType::Unknown);
+fn market_data_type_round_trips_every_wire_code() {
+    crate::common::test_utils::wire_enum::check_wire_code_round_trip(
+        &[
+            (MarketDataType::Realtime, 1),
+            (MarketDataType::Frozen, 2),
+            (MarketDataType::Delayed, 3),
+            (MarketDataType::DelayedFrozen, 4),
+            (MarketDataType::Unknown(0), 0),
+            (MarketDataType::Unknown(9), 9),
+        ],
+        MarketDataType::Unknown,
+    );
 }
 
 #[test]

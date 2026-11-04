@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::test_utils::wire_enum::{check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
+use crate::common::test_utils::wire_enum::{check_wire_code_round_trip, check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
 
 #[test]
 fn v2_builders() {
@@ -225,28 +225,23 @@ fn bond_constructor_isin_currency_mapping() {
 }
 
 #[test]
-fn combo_leg_open_close() {
-    // Test From<i32> implementation
-    assert_eq!(ComboLegOpenClose::from(0), ComboLegOpenClose::Same, "0 should be Same");
-    assert_eq!(ComboLegOpenClose::from(1), ComboLegOpenClose::Open, "1 should be Open");
-    assert_eq!(ComboLegOpenClose::from(2), ComboLegOpenClose::Close, "2 should be Close");
-    assert_eq!(ComboLegOpenClose::from(3), ComboLegOpenClose::Unknown, "3 should be Unknown");
-
-    // Test ToField implementation
-    assert_eq!(ComboLegOpenClose::Same.to_field(), "0", "Same should be 0");
-    assert_eq!(ComboLegOpenClose::Open.to_field(), "1", "Open should be 1");
-    assert_eq!(ComboLegOpenClose::Close.to_field(), "2", "Close should be 2");
-    assert_eq!(ComboLegOpenClose::Unknown.to_field(), "3", "Unknown should be 3");
-
-    // Test Default implementation
-    assert_eq!(ComboLegOpenClose::default(), ComboLegOpenClose::Same, "Default should be Same");
+fn combo_leg_open_close_round_trips_every_wire_code() {
+    check_wire_code_round_trip(
+        &[
+            (ComboLegOpenClose::Same, 0),
+            (ComboLegOpenClose::Open, 1),
+            (ComboLegOpenClose::Close, 2),
+            // IB's UNKNOWN_POS: carried as a code, not a variant.
+            (ComboLegOpenClose::Unknown(3), 3),
+            (ComboLegOpenClose::Unknown(7), 7),
+        ],
+        ComboLegOpenClose::Unknown,
+    );
 }
 
 #[test]
-fn combo_leg_open_close_unknown_value() {
-    // Values outside the documented 0..=3 range decode to Unknown rather than panicking
-    assert_eq!(ComboLegOpenClose::from(4), ComboLegOpenClose::Unknown);
-    assert_eq!(ComboLegOpenClose::from(-1), ComboLegOpenClose::Unknown);
+fn combo_leg_open_close_default_is_same() {
+    assert_eq!(ComboLegOpenClose::default(), ComboLegOpenClose::Same);
 }
 
 #[test]
