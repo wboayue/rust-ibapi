@@ -360,3 +360,78 @@ fn schema_derives_work() {
     assert_schema::<SecurityType>();
     assert_schema::<TagValue>();
 }
+
+// === Fund enums: open, unknown values keep their code (#1071) ===
+
+const ALL_FUND_DISTRIBUTION_POLICIES: [(FundDistributionPolicyIndicator, &str); 2] = [
+    (FundDistributionPolicyIndicator::AccumulationFund, "N"),
+    (FundDistributionPolicyIndicator::IncomeFund, "Y"),
+];
+
+#[test]
+fn fund_distribution_policy_indicator_round_trip() {
+    check_wire_enum_round_trip(&ALL_FUND_DISTRIBUTION_POLICIES);
+    check_wire_enum_round_trip(&[
+        (FundDistributionPolicyIndicator::Unknown("X".into()), "X"),
+        (FundDistributionPolicyIndicator::Unknown("n".into()), "n"),
+    ]);
+    check_wire_enum_rejects_unknown::<FundDistributionPolicyIndicator>(&[""]);
+}
+
+#[test]
+fn all_fund_distribution_policies_covers_every_variant() {
+    // No wildcard: a new variant fails to compile here until it joins the table.
+    fn modeled_index(v: &FundDistributionPolicyIndicator) -> Option<usize> {
+        match v {
+            FundDistributionPolicyIndicator::AccumulationFund => Some(0),
+            FundDistributionPolicyIndicator::IncomeFund => Some(1),
+            FundDistributionPolicyIndicator::Unknown(_) => None,
+        }
+    }
+    let mut seen = [false; 2];
+    for (variant, _) in &ALL_FUND_DISTRIBUTION_POLICIES {
+        seen[modeled_index(variant).expect("table holds only modeled variants")] = true;
+    }
+    assert!(seen.iter().all(|&s| s), "ALL_FUND_DISTRIBUTION_POLICIES is missing a variant");
+}
+
+const ALL_FUND_ASSET_TYPES: [(FundAssetType, &str); 8] = [
+    (FundAssetType::Others, "000"),
+    (FundAssetType::MoneyMarket, "001"),
+    (FundAssetType::FixedIncome, "002"),
+    (FundAssetType::MultiAsset, "003"),
+    (FundAssetType::Equity, "004"),
+    (FundAssetType::Sector, "005"),
+    (FundAssetType::Guaranteed, "006"),
+    (FundAssetType::Alternative, "007"),
+];
+
+#[test]
+fn fund_asset_type_round_trip() {
+    check_wire_enum_round_trip(&ALL_FUND_ASSET_TYPES);
+    check_wire_enum_round_trip(&[(FundAssetType::Unknown("008".into()), "008"), (FundAssetType::Unknown("1".into()), "1")]);
+    check_wire_enum_rejects_unknown::<FundAssetType>(&[""]);
+}
+
+#[test]
+fn all_fund_asset_types_covers_every_variant() {
+    // No wildcard: a new variant fails to compile here until it joins the table.
+    fn modeled_index(v: &FundAssetType) -> Option<usize> {
+        match v {
+            FundAssetType::Others => Some(0),
+            FundAssetType::MoneyMarket => Some(1),
+            FundAssetType::FixedIncome => Some(2),
+            FundAssetType::MultiAsset => Some(3),
+            FundAssetType::Equity => Some(4),
+            FundAssetType::Sector => Some(5),
+            FundAssetType::Guaranteed => Some(6),
+            FundAssetType::Alternative => Some(7),
+            FundAssetType::Unknown(_) => None,
+        }
+    }
+    let mut seen = [false; 8];
+    for (variant, _) in &ALL_FUND_ASSET_TYPES {
+        seen[modeled_index(variant).expect("table holds only modeled variants")] = true;
+    }
+    assert!(seen.iter().all(|&s| s), "ALL_FUND_ASSET_TYPES is missing a variant");
+}

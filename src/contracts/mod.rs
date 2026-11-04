@@ -733,78 +733,113 @@ pub struct ContractDetails {
     pub fund_blue_sky_states: String,
     /// Fund blue sky territories.
     pub fund_blue_sky_territories: String,
-    /// Fund distribution policy indicator.
-    pub fund_distribution_policy_indicator: FundDistributionPolicyIndicator,
-    /// Fund asset type.
-    pub fund_asset_type: FundAssetType,
+    /// Fund distribution policy indicator; `None` when not sent.
+    pub fund_distribution_policy_indicator: Option<FundDistributionPolicyIndicator>,
+    /// Fund asset type; `None` when not sent.
+    pub fund_asset_type: Option<FundAssetType>,
 
     /// Ineligibility reasons for the contract.
     pub ineligibility_reasons: Vec<IneligibilityReason>,
 }
 
-/// Fund distribution policy indicator.
+/// Fund distribution policy indicator (`fundDistributionPolicyIndicator`).
+///
+/// No `Default`: [`ContractDetails::fund_distribution_policy_indicator`] is
+/// `None` when TWS sends no value.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum FundDistributionPolicyIndicator {
-    /// No distribution policy specified.
-    #[default]
-    None,
-    /// Accumulation fund.
+    /// Accumulation fund. Wire value `N`.
     AccumulationFund,
-    /// Income fund.
+    /// Income fund. Wire value `Y`.
     IncomeFund,
+    /// Value not modeled by this version of the API, carried as received.
+    Unknown(String),
 }
 
-impl From<&str> for FundDistributionPolicyIndicator {
-    fn from(s: &str) -> Self {
+impl FundDistributionPolicyIndicator {
+    /// Return the IBKR wire string; for [`Unknown`](Self::Unknown), the raw value as received.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::AccumulationFund => "N",
+            Self::IncomeFund => "Y",
+            Self::Unknown(raw) => raw,
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "N" => FundDistributionPolicyIndicator::AccumulationFund,
-            "Y" => FundDistributionPolicyIndicator::IncomeFund,
-            _ => FundDistributionPolicyIndicator::None,
+            "N" => Some(Self::AccumulationFund),
+            "Y" => Some(Self::IncomeFund),
+            _ => None,
         }
     }
 }
 
-/// Fund asset type.
+// Open: decoded on every inbound `ContractDetails`. An unrecognized value must
+// keep its code rather than fail the response or read as unset.
+impl_wire_enum!(FundDistributionPolicyIndicator, fallback Unknown);
+
+/// Fund asset type (`fundAssetType`).
+///
+/// No `Default`: [`ContractDetails::fund_asset_type`] is `None` when TWS sends
+/// no value.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum FundAssetType {
-    /// No asset type specified.
-    #[default]
-    None,
-    /// Other asset types.
+    /// Other asset types. Wire value `000`.
     Others,
-    /// Money market fund.
+    /// Money market fund. Wire value `001`.
     MoneyMarket,
-    /// Fixed income fund.
+    /// Fixed income fund. Wire value `002`.
     FixedIncome,
-    /// Multi-asset fund.
+    /// Multi-asset fund. Wire value `003`.
     MultiAsset,
-    /// Equity fund.
+    /// Equity fund. Wire value `004`.
     Equity,
-    /// Sector fund.
+    /// Sector fund. Wire value `005`.
     Sector,
-    /// Guaranteed fund.
+    /// Guaranteed fund. Wire value `006`.
     Guaranteed,
-    /// Alternative fund.
+    /// Alternative fund. Wire value `007`.
     Alternative,
+    /// Value not modeled by this version of the API, carried as received.
+    Unknown(String),
 }
 
-impl From<&str> for FundAssetType {
-    fn from(s: &str) -> Self {
+impl FundAssetType {
+    /// Return the IBKR wire string; for [`Unknown`](Self::Unknown), the raw value as received.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Others => "000",
+            Self::MoneyMarket => "001",
+            Self::FixedIncome => "002",
+            Self::MultiAsset => "003",
+            Self::Equity => "004",
+            Self::Sector => "005",
+            Self::Guaranteed => "006",
+            Self::Alternative => "007",
+            Self::Unknown(raw) => raw,
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
         match s {
-            "000" => FundAssetType::Others,
-            "001" => FundAssetType::MoneyMarket,
-            "002" => FundAssetType::FixedIncome,
-            "003" => FundAssetType::MultiAsset,
-            "004" => FundAssetType::Equity,
-            "005" => FundAssetType::Sector,
-            "006" => FundAssetType::Guaranteed,
-            "007" => FundAssetType::Alternative,
-            _ => FundAssetType::None,
+            "000" => Some(Self::Others),
+            "001" => Some(Self::MoneyMarket),
+            "002" => Some(Self::FixedIncome),
+            "003" => Some(Self::MultiAsset),
+            "004" => Some(Self::Equity),
+            "005" => Some(Self::Sector),
+            "006" => Some(Self::Guaranteed),
+            "007" => Some(Self::Alternative),
+            _ => None,
         }
     }
 }
+
+// Open: see `FundDistributionPolicyIndicator`.
+impl_wire_enum!(FundAssetType, fallback Unknown);
 
 /// Reason why a contract is ineligible for trading.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

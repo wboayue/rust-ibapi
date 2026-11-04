@@ -1,12 +1,9 @@
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use crate::contracts::{
-    ContractDescription, ContractDetails, FundAssetType, FundDistributionPolicyIndicator, IneligibilityReason, MarketRule, OptionChain,
-    SmartComponent,
-};
+use crate::contracts::{ContractDescription, ContractDetails, IneligibilityReason, MarketRule, OptionChain, SmartComponent};
 use crate::proto;
-use crate::proto::decoders::{decode_contract, parse_decimal_or_zero, parse_optional_decimal, s, tag_values};
+use crate::proto::decoders::{decode_contract, parse_decimal_or_zero, parse_optional, parse_optional_decimal, s, tag_values};
 
 // `TickOptionComputation` (msg 21, gate 206 PROTOBUF_MARKET_DATA) is decoded
 // in `market_data/realtime/common/decoders` and routed here via the narrow
@@ -210,10 +207,8 @@ pub(crate) fn decode_contract_and_details(
         fund_subsequent_minimum_purchase: s(&proto_details.fund_minimum_subsequent_purchase),
         fund_blue_sky_states: s(&proto_details.fund_blue_sky_states),
         fund_blue_sky_territories: s(&proto_details.fund_blue_sky_territories),
-        fund_distribution_policy_indicator: FundDistributionPolicyIndicator::from(
-            proto_details.fund_distribution_policy_indicator.as_deref().unwrap_or(""),
-        ),
-        fund_asset_type: FundAssetType::from(proto_details.fund_asset_type.as_deref().unwrap_or("")),
+        fund_distribution_policy_indicator: parse_optional(proto_details.fund_distribution_policy_indicator.as_deref())?,
+        fund_asset_type: parse_optional(proto_details.fund_asset_type.as_deref())?,
         // bond fields
         cusip: s(&proto_details.cusip),
         ratings: s(&proto_details.ratings),
