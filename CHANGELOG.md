@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.6.0] - 2026-11-03
+
 ### Added
 
 - Blocking `Subscription::is_terminated()`, `TickSubscription::is_terminated()` and `NoticeStream::is_terminated()`: whether the stream has terminated, so a caller polling with `try_next` or `next_timeout` can distinguish between their `None` at the end of the stream and the `None` they return while nothing has arrived yet (#1141).
 - `HistoricalScheduleBuilder::trading_hours` (sync and async): request extended-hours sessions with `TradingHours::Extended`. The schedule request always asked for regular trading hours, so a product's full session (for example, a futures contract's 17:00–16:00 session) was unreachable (#1147).
+
+### Fixed
+
+- `examples/async/historical_schedules.rs` no longer fails on GC futures: it asked for the expired `2025-02` contract and now uses the front month. It and `examples/sync/historical_schedules.rs` (`--extended`) also show extended-hours sessions (#1149).
 
 ## [5.5.0] - 2026-10-30
 
@@ -486,7 +492,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.5.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.6.0...HEAD
+[5.6.0]: https://github.com/wboayue/rust-ibapi/compare/v5.5.0...v5.6.0
 [5.5.0]: https://github.com/wboayue/rust-ibapi/compare/v5.4.0...v5.5.0
 [5.4.0]: https://github.com/wboayue/rust-ibapi/compare/v5.3.0...v5.4.0
 [5.3.0]: https://github.com/wboayue/rust-ibapi/compare/v5.2.0...v5.3.0
