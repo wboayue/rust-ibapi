@@ -15,6 +15,7 @@ macro_rules! tick_types {
         pub enum TickType {
             $(
                 $(#[$meta])*
+                // The leading blank line puts the wire code in its own paragraph.
                 #[doc = concat!("\n\nWire code `", stringify!($code), "`.")]
                 $variant,
             )*
@@ -168,7 +169,7 @@ tick_types! {
     /// Number of shares available for shorting.
     Shortable = 46, "shortable", "Shortable";
     // id 47 (FundamentalRatios) removed: IBKR removed the fundamental-data
-    // feature in TWS 10.47; id 47 now decodes to `Unknown`.
+    // feature in TWS 10.47; id 47 now decodes to `Unknown(47)`.
     /// Real-time consolidated volume message.
     RtVolume = 48, "RTVolume", "RT Volume";
     /// Indicates if trading is halted (0 = not halted, 1 = halted).

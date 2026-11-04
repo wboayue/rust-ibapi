@@ -1,6 +1,7 @@
 use super::*;
 
 use crate::common::test_utils::helpers::{assert_decimal_parse_error, assert_missing_field, assert_rejects_text_framing};
+use crate::contracts::{FundAssetType, FundDistributionPolicyIndicator};
 use crate::messages::IncomingMessages;
 use prost::Message;
 
@@ -351,4 +352,57 @@ fn decode_contract_details_preserves_fractional_size_increment() {
     let decoded = decode_contract_and_details(&stk_contract(), &details).unwrap();
 
     assert_eq!(decoded.size_increment, Some(0.0001));
+}
+
+// === Fund enums: absent is unset, unknown keeps its code (#1071) ===
+
+#[test]
+fn decode_contract_details_fund_enums() {
+    struct Case {
+        name: &'static str,
+        policy: Option<&'static str>,
+        asset: Option<&'static str>,
+        want_policy: Option<FundDistributionPolicyIndicator>,
+        want_asset: Option<FundAssetType>,
+    }
+    let cases = [
+        Case {
+            name: "absent",
+            policy: None,
+            asset: None,
+            want_policy: None,
+            want_asset: None,
+        },
+        Case {
+            name: "empty",
+            policy: Some(""),
+            asset: Some(""),
+            want_policy: None,
+            want_asset: None,
+        },
+        Case {
+            name: "known",
+            policy: Some("Y"),
+            asset: Some("004"),
+            want_policy: Some(FundDistributionPolicyIndicator::IncomeFund),
+            want_asset: Some(FundAssetType::Equity),
+        },
+        Case {
+            name: "unknown",
+            policy: Some("Z"),
+            asset: Some("008"),
+            want_policy: Some(FundDistributionPolicyIndicator::Unknown("Z".into())),
+            want_asset: Some(FundAssetType::Unknown("008".into())),
+        },
+    ];
+    for case in cases {
+        let details = proto::ContractDetails {
+            fund_distribution_policy_indicator: case.policy.map(Into::into),
+            fund_asset_type: case.asset.map(Into::into),
+            ..Default::default()
+        };
+        let decoded = decode_contract_and_details(&stk_contract(), &details).unwrap();
+        assert_eq!(decoded.fund_distribution_policy_indicator, case.want_policy, "{}: policy", case.name);
+        assert_eq!(decoded.fund_asset_type, case.want_asset, "{}: asset", case.name);
+    }
 }

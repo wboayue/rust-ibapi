@@ -56,7 +56,7 @@ fn tick_type_round_trips_every_wire_code() {
             (TickType::CloseEfpComputation, 44),
             (TickType::LastTimestamp, 45),
             (TickType::Shortable, 46),
-            // id 47 (FundamentalRatios) removed in TWS 10.47; now decodes to Unknown.
+            // id 47 (FundamentalRatios) removed in TWS 10.47; now decodes to Unknown(47).
             (TickType::Unknown(47), 47),
             (TickType::RtVolume, 48),
             (TickType::Halted, 49),

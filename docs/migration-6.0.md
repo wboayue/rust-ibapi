@@ -146,3 +146,27 @@ let id = i32::from(tick.tick_type);
 let bid_size = TickType::from_name("bidSize"); // Option<TickType>
 if let TickType::Unknown(id) = tick.tick_type { /* ... */ }
 ```
+
+### 7. Fund enums keep unknown values; their fields are `Option`
+
+`FundAssetType` and `FundDistributionPolicyIndicator` read any value they didn't recognize as
+`None`, so a new code from TWS looked the same as no value. Now:
+
+- **The `None` variant is removed** from both enums, along with their `Default`.
+  `ContractDetails::fund_asset_type` and `fund_distribution_policy_indicator` are `Option<T>`:
+  `None` when TWS sends no value.
+- **An unrecognized value is `Unknown(String)`**, carrying the raw wire string.
+- **`From<&str>` is replaced by `FromStr`** (`"004".parse::<FundAssetType>()`), which rejects
+  only an empty string. `as_str()` and `Display` return the wire value (`"004"`, `"Y"`).
+- **Serde:** `Unknown` serializes in the derived tagged form, `{"Unknown":"008"}`. An unset
+  field is `null`, so JSON saved by 5.x with `"None"` for either field no longer deserializes.
+
+```rust,ignore
+// 5.x
+if details.fund_asset_type == FundAssetType::Equity { /* ... */ }
+if details.fund_asset_type == FundAssetType::None { /* no value */ }
+
+// 6.0
+if details.fund_asset_type == Some(FundAssetType::Equity) { /* ... */ }
+if details.fund_asset_type.is_none() { /* no value */ }
+```
