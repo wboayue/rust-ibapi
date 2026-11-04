@@ -20,7 +20,7 @@ parent rather than widening the module declaration:
 // orders/common/mod.rs
 pub(super) mod decoders;  // the module stays narrow
 pub(crate) use decoders::{
-    decode_commission_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status,
+    decode_commission_and_fees_report, decode_completed_order, decode_execution_data, decode_open_order, decode_order_status,
 };
 ```
 

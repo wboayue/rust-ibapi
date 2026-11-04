@@ -644,7 +644,7 @@ fn non_utf8_handshake_response() {
 #[test]
 fn startup_message_message_type_typed_variants() {
     use crate::accounts::{AccountPortfolioValue, AccountUpdateTime, AccountValue};
-    use crate::orders::{CommissionReport, ExecutionData, OrderData, OrderStatus};
+    use crate::orders::{CommissionAndFeesReport, ExecutionData, OrderData, OrderStatus};
 
     assert_eq!(
         StartupMessage::OpenOrder(OrderData::default()).message_type(),
@@ -676,8 +676,8 @@ fn startup_message_message_type_typed_variants() {
         IncomingMessages::ExecutionData
     );
     assert_eq!(
-        StartupMessage::CommissionReport(CommissionReport::default()).message_type(),
-        IncomingMessages::CommissionsReport
+        StartupMessage::CommissionAndFeesReport(CommissionAndFeesReport::default()).message_type(),
+        IncomingMessages::CommissionsAndFeesReport
     );
     assert_eq!(
         StartupMessage::CompletedOrder(OrderData::default()).message_type(),
@@ -840,22 +840,22 @@ fn dispatch_unsolicited_execution_typed() {
 }
 
 #[test]
-fn dispatch_unsolicited_commission_report_typed() {
-    use crate::testdata::builders::orders::CommissionReportResponse;
+fn dispatch_unsolicited_commission_and_fees_report_typed() {
+    use crate::testdata::builders::orders::CommissionAndFeesReportResponse;
 
-    let builder = CommissionReportResponse::default().commission(2.5).currency("USD");
-    let message = proto_frame(IncomingMessages::CommissionsReport, &builder);
+    let builder = CommissionAndFeesReportResponse::default().commission_and_fees(2.5).currency("USD");
+    let message = proto_frame(IncomingMessages::CommissionsAndFeesReport, &builder);
 
-    let captured: Arc<Mutex<Option<crate::orders::CommissionReport>>> = Arc::new(Mutex::new(None));
+    let captured: Arc<Mutex<Option<crate::orders::CommissionAndFeesReport>>> = Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
     let cb = move |msg: StartupMessage| match msg {
-        StartupMessage::CommissionReport(c) => *captured.lock().unwrap() = Some(c),
-        other => panic!("expected CommissionReport, got {other:?}"),
+        StartupMessage::CommissionAndFeesReport(c) => *captured.lock().unwrap() = Some(c),
+        other => panic!("expected CommissionAndFeesReport, got {other:?}"),
     };
 
     dispatch_unsolicited_message(&message, &startup_ctx(&cb));
     let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
-    assert_eq!(got.commission, 2.5);
+    assert_eq!(got.commission_and_fees, 2.5);
     assert_eq!(got.currency, "USD");
 }
 
@@ -936,7 +936,7 @@ fn dispatch_unsolicited_execution_decode_failure_emits_notice() {
 }
 
 #[test]
-fn dispatch_unsolicited_commission_report_decode_failure_emits_notice() {
+fn dispatch_unsolicited_commission_and_fees_report_decode_failure_emits_notice() {
     let message = ResponseMessage::from("59\01\0EXEC0001.01.01\0");
 
     let cb_fired = Arc::new(Mutex::new(false));
@@ -949,7 +949,7 @@ fn dispatch_unsolicited_commission_report_decode_failure_emits_notice() {
     assert!(!*cb_fired.lock().unwrap(), "callback must not fire on decode failure");
     let notice = sink.last().expect("notice sink should receive decode-failure notice");
     assert_eq!(notice.code, HANDSHAKE_DECODE_FAILURE_CODE);
-    assert!(notice.message.contains("CommissionsReport"));
+    assert!(notice.message.contains("CommissionsAndFeesReport"));
 }
 
 #[test]
@@ -979,7 +979,7 @@ fn dispatch_unsolicited_execution_no_callback_is_noop() {
 }
 
 #[test]
-fn dispatch_unsolicited_commission_report_no_callback_is_noop() {
+fn dispatch_unsolicited_commission_and_fees_report_no_callback_is_noop() {
     let message = ResponseMessage::from("59\01\0EXEC0001.01.01\0");
 
     let sink = CapturingSink::default();

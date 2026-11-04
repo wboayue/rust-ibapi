@@ -111,23 +111,23 @@ impl ResponseProtoEncoder for OrderStatusResponse {
     }
 }
 
-// --- CommissionReport (msg 59) ---
+// --- CommissionAndFeesReport (msg 59) ---
 
 #[derive(Clone, Debug)]
-pub struct CommissionReportResponse {
+pub struct CommissionAndFeesReportResponse {
     pub execution_id: String,
-    pub commission: f64,
+    pub commission_and_fees: f64,
     pub currency: String,
     pub realized_pnl: Option<f64>,
     pub yields: Option<f64>,
     pub yield_redemption_date: String,
 }
 
-impl Default for CommissionReportResponse {
+impl Default for CommissionAndFeesReportResponse {
     fn default() -> Self {
         Self {
             execution_id: TEST_EXEC_ID.to_string(),
-            commission: 1.0,
+            commission_and_fees: 1.0,
             currency: "USD".to_string(),
             realized_pnl: None,
             yields: None,
@@ -136,13 +136,13 @@ impl Default for CommissionReportResponse {
     }
 }
 
-impl CommissionReportResponse {
+impl CommissionAndFeesReportResponse {
     pub fn execution_id(mut self, v: impl Into<String>) -> Self {
         self.execution_id = v.into();
         self
     }
-    pub fn commission(mut self, v: f64) -> Self {
-        self.commission = v;
+    pub fn commission_and_fees(mut self, v: f64) -> Self {
+        self.commission_and_fees = v;
         self
     }
     pub fn currency(mut self, v: impl Into<String>) -> Self {
@@ -159,13 +159,13 @@ impl CommissionReportResponse {
     }
 }
 
-impl ResponseProtoEncoder for CommissionReportResponse {
+impl ResponseProtoEncoder for CommissionAndFeesReportResponse {
     type Proto = proto::CommissionAndFeesReport;
 
     fn to_proto(&self) -> Self::Proto {
         proto::CommissionAndFeesReport {
             exec_id: Some(self.execution_id.clone()),
-            commission_and_fees: Some(self.commission),
+            commission_and_fees: Some(self.commission_and_fees),
             currency: Some(self.currency.clone()),
             realized_pnl: self.realized_pnl,
             bond_yield: self.yields,
@@ -1138,8 +1138,8 @@ pub fn order_status() -> OrderStatusResponse {
     OrderStatusResponse::default()
 }
 
-pub fn commission_report() -> CommissionReportResponse {
-    CommissionReportResponse::default()
+pub fn commission_and_fees_report() -> CommissionAndFeesReportResponse {
+    CommissionAndFeesReportResponse::default()
 }
 
 pub fn order_bound() -> OrderBoundResponse {

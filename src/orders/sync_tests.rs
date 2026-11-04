@@ -11,7 +11,7 @@ use crate::proto;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
-    all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_order, completed_orders_end,
+    all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_and_fees_report, completed_order, completed_orders_end,
     completed_orders_request, execution_data, execution_data_end, executions_request, global_cancel_request, next_valid_id,
     next_valid_order_id_request, open_order, open_order_end, open_orders_request, order_bound, order_status, place_order_request,
 };
@@ -46,7 +46,7 @@ fn place_order() {
                 .encode_proto(),
         ),
         proto_response(IncomingMessages::OpenOrder, open_order().status(OrderStatusKind::Filled).encode_proto()),
-        proto_response(IncomingMessages::CommissionsReport, commission_report().encode_proto()),
+        proto_response(IncomingMessages::CommissionsAndFeesReport, commission_and_fees_report().encode_proto()),
     ]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -125,9 +125,9 @@ fn place_order() {
         "message[5] expected an open order notification"
     );
 
-    if let Some(Ok(PlaceOrder::CommissionReport(report))) = notifications.next_data() {
+    if let Some(Ok(PlaceOrder::CommissionAndFeesReport(report))) = notifications.next_data() {
         assert_eq!(report.execution_id, "00025b46.63f8f39c.01.01", "report.execution_id");
-        assert_eq!(report.commission, 1.0, "report.commission");
+        assert_eq!(report.commission_and_fees, 1.0, "report.commission_and_fees");
         assert_eq!(report.currency, "USD", "report.currency");
     } else {
         assert!(false, "message[6] expected a commission report notification");
@@ -641,7 +641,7 @@ fn order_update_stream() {
             order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_proto(),
         ),
         proto_response(IncomingMessages::ExecutionData, execution_data().encode_proto()),
-        proto_response(IncomingMessages::CommissionsReport, commission_report().encode_proto()),
+        proto_response(IncomingMessages::CommissionsAndFeesReport, commission_and_fees_report().encode_proto()),
     ]));
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -679,9 +679,9 @@ fn order_update_stream() {
         assert!(false, "expected execution data notification");
     }
 
-    if let Some(Ok(OrderUpdate::CommissionReport(report))) = notifications.next_data() {
+    if let Some(Ok(OrderUpdate::CommissionAndFeesReport(report))) = notifications.next_data() {
         assert_eq!(report.execution_id, "00025b46.63f8f39c.01.01", "report.execution_id");
-        assert_eq!(report.commission, 1.0, "report.commission");
+        assert_eq!(report.commission_and_fees, 1.0, "report.commission_and_fees");
         assert_eq!(report.currency, "USD", "report.currency");
     } else {
         assert!(false, "expected commission report notification");

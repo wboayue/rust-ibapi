@@ -54,8 +54,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     );
                 }
                 Ok(OrderUpdate::OrderBound(binding)) => println!("Order binding: {binding:?}"),
-                Ok(OrderUpdate::CommissionReport(r)) => {
-                    println!("[Monitor] commission: ${} for {}", r.commission, r.execution_id);
+                Ok(OrderUpdate::CommissionAndFeesReport(r)) => {
+                    println!("[Monitor] commission: ${} for {}", r.commission_and_fees, r.execution_id);
                 }
                 Err(e) => {
                     eprintln!("[Monitor] error: {e:?}");

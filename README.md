@@ -458,8 +458,8 @@ fn main() {
                              exec.execution.shares, exec.execution.price);
                 }
                 Ok(OrderUpdate::OrderBound(binding)) => println!("Order binding: {binding:?}"),
-                Ok(OrderUpdate::CommissionReport(report)) => {
-                    println!("Commission: ${}", report.commission);
+                Ok(OrderUpdate::CommissionAndFeesReport(report)) => {
+                    println!("Commission: ${}", report.commission_and_fees);
                 }
                 Err(e) => {
                     eprintln!("order update stream error: {e:?}");
@@ -524,8 +524,8 @@ async fn main() {
                              exec.execution.shares, exec.execution.price);
                 }
                 Ok(OrderUpdate::OrderBound(binding)) => println!("Order binding: {binding:?}"),
-                Ok(OrderUpdate::CommissionReport(report)) => {
-                    println!("Commission: ${}", report.commission);
+                Ok(OrderUpdate::CommissionAndFeesReport(report)) => {
+                    println!("Commission: ${}", report.commission_and_fees);
                 }
                 Err(e) => {
                     eprintln!("Error: {:?}", e);
@@ -562,7 +562,7 @@ The order update stream provides real-time notifications for:
 - **OpenOrder**: Order details when opened or modified
 - **ExecutionData**: Fill notifications with price and quantity
 - **OrderBound**: Binding of an API order ID to a TWS permanent ID
-- **CommissionReport**: Commission charges for executions
+- **CommissionAndFeesReport**: Commission charges for executions
 
 Per-order TWS warnings (e.g. quote-throttling codes in the 2100 band scoped to an order) are not delivered through `OrderUpdate`.
 

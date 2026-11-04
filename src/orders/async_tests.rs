@@ -13,9 +13,9 @@ use crate::proto;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
-    cancel_order_request, commission_report, completed_order, completed_orders_end, completed_orders_request, execution_data, execution_data_end,
-    executions_request, global_cancel_request, next_valid_id, next_valid_order_id_request, open_order, open_order_end, open_orders_request,
-    order_bound, order_status, place_order_request,
+    cancel_order_request, commission_and_fees_report, completed_order, completed_orders_end, completed_orders_request, execution_data,
+    execution_data_end, executions_request, global_cancel_request, next_valid_id, next_valid_order_id_request, open_order, open_order_end,
+    open_orders_request, order_bound, order_status, place_order_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::{server_versions, Client};
@@ -70,10 +70,10 @@ async fn place_order() {
                 .encode_proto(),
         ),
         proto_response(
-            IncomingMessages::CommissionsReport,
-            commission_report()
+            IncomingMessages::CommissionsAndFeesReport,
+            commission_and_fees_report()
                 .execution_id("0001f4e5.58bbad52.01.01")
-                .commission(2.25)
+                .commission_and_fees(2.25)
                 .encode_proto(),
         ),
     ]));
@@ -114,11 +114,14 @@ async fn place_order() {
         execution_data
     );
 
-    let commission_report = subscription.next().await;
+    let commission_and_fees_report = subscription.next().await;
     assert!(
-        matches!(commission_report, Some(Ok(SubscriptionItem::Data(PlaceOrder::CommissionReport(_))))),
-        "Expected PlaceOrder::CommissionReport, got {:?}",
-        commission_report
+        matches!(
+            commission_and_fees_report,
+            Some(Ok(SubscriptionItem::Data(PlaceOrder::CommissionAndFeesReport(_))))
+        ),
+        "Expected PlaceOrder::CommissionAndFeesReport, got {:?}",
+        commission_and_fees_report
     );
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -378,10 +381,10 @@ async fn executions() {
                 .encode_proto(),
         ),
         proto_response(
-            IncomingMessages::CommissionsReport,
-            commission_report()
+            IncomingMessages::CommissionsAndFeesReport,
+            commission_and_fees_report()
                 .execution_id("0001f4e5.58bbad52.01.01")
-                .commission(2.25)
+                .commission_and_fees(2.25)
                 .encode_proto(),
         ),
         proto_response(IncomingMessages::ExecutionDataEnd, execution_data_end().encode_proto()),
@@ -406,8 +409,8 @@ async fn executions() {
 
     let commission = subscription.next().await;
     assert!(
-        matches!(commission, Some(Ok(SubscriptionItem::Data(Executions::CommissionReport(_))))),
-        "Expected Executions::CommissionReport, got {:?}",
+        matches!(commission, Some(Ok(SubscriptionItem::Data(Executions::CommissionAndFeesReport(_))))),
+        "Expected Executions::CommissionAndFeesReport, got {:?}",
         commission
     );
 
@@ -559,10 +562,10 @@ async fn order_update_stream() {
                 .encode_proto(),
         ),
         proto_response(
-            IncomingMessages::CommissionsReport,
-            commission_report()
+            IncomingMessages::CommissionsAndFeesReport,
+            commission_and_fees_report()
                 .execution_id("0001f4e5.58bbad52.01.01")
-                .commission(2.25)
+                .commission_and_fees(2.25)
                 .encode_proto(),
         ),
     ]));
@@ -584,7 +587,7 @@ async fn order_update_stream() {
     let Some(Ok(SubscriptionItem::Data(update))) = stream.next().await else {
         panic!("expected Data");
     };
-    assert!(matches!(update, OrderUpdate::CommissionReport(_)));
+    assert!(matches!(update, OrderUpdate::CommissionAndFeesReport(_)));
 }
 
 #[tokio::test]
