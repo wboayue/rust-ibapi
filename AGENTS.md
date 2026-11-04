@@ -55,6 +55,10 @@ precedents.
 - **Adding a `ResponseMessage` accessor, or a public API on a proto inbound message type** →
   [proto-aware accessors](docs/rules/wire/proto-aware-accessors.md)
 - **Typing a `String` field as an enum** → [wire enum typing](docs/rules/wire/enum-typing.md)
+- **Parsing or formatting a date/time, or adding a request option that changes TWS's date
+  rendering** → [timezone-free timestamps](docs/rules/wire/timezone-free-timestamps.md): send
+  UTC in a fixed format and parse zone-free forms (epoch, `YYYYMMDD`, explicit UTC). Pass
+  zoned text through as a `String`, and never resolve a zone or assume one
 - **Fixtures and C# don't settle what TWS sends or accepts** (a rejection code, an absent-field
   default, units) → the `/live-probe` skill ([`.claude/skills/live-probe`](.claude/skills/live-probe/SKILL.md))
 - **Accepting an order id, minting a request id, or routing by an inbound id** →
