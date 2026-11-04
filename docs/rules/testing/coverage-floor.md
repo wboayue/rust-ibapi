@@ -11,7 +11,6 @@ triggers:
 symbols: [ProtocolFeature::new, cargo-llvm-cov, just-cover]
 related: [exercise-production-code, clock-seams, fixture-builders]
 precedents: ["#540", "#554"]
-memory: []
 ---
 
 Every new `pub` / `pub(crate)` function gets a unit test. Check this as a final step before

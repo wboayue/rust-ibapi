@@ -12,7 +12,6 @@ triggers:
 symbols: [Subscription, filter_data, SubscriptionItem, FilterDataStream, DisplayGroupSubscription]
 related: [dual-feature-types, no-parity-wrappers, exercise-production-code]
 precedents: ["#550", "#598", "#735", "#1081"]
-memory: [feedback_stream_adapter_consume_form, feedback_subscription_for_yields_subscription_item, feedback_result_flatten_drops_errors]
 ---
 
 Two forms, chosen by whether the subscription outlives the loop:

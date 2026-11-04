@@ -158,7 +158,8 @@ Rule numbers are retired; resolve an old "rule N" citation via
 Nodes ship in the PR that makes their claim true, not afterwards. Mechanics — frontmatter,
 trigger phrasing, clusters, `status` — are in the [rules README](docs/rules/README.md). These
 have to fire without opening it, because **`just rules-check` validates structure only** (links,
-ids, `related`, no `@`-imports, no `file.rs:NNN`) and cannot tell whether a node is still true.
+ids, `related`, no `@`-imports, no `file.rs:NNN`, no `memory:`) and cannot tell whether a node
+is still true.
 
 - **Establishing, changing, or retiring a convention** → it gets a node and one index line
   above, or it is not a convention. Changed: rewrite the directive, extend `precedents`.

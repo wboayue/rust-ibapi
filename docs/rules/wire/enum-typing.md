@@ -10,7 +10,6 @@ triggers:
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders]
 precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071"]
-memory: [feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -59,7 +58,20 @@ decoder that rejects valid data.
 
 When a new strict decoder rejects an existing test fixture, **don't broaden `FromStr` to accept
 the literal.** Check `/Users/wboayue/projects/tws-api/samples/` first: #559's `right: "?"` was a
-VB sample app's display fallback, never real wire.
+VB sample app's display fallback (`appendNonEmptyString(.., contract.Right, "?")`), never real
+wire. Display helpers and `*_PLACEHOLDER` constants say nothing about the wire; decoder reads
+(`ReadString`, `decodeString`) do. No wire evidence for the literal → fix the fixture.
+
+A live capture is bounded by what it ran against. 512 futures fills carried only `BOT` / `SLD`;
+`SSHORT` / `SLONG` need equity short sales. Session state matters the same way (an empty paper
+session and one with a prior open order surface different messages). Match instrument and
+session to the question before calling a vocabulary complete.
+
+If a decode helper's signature forces a wrapper at the new call site, generalize it (take
+`Option<&str>`, not `&Option<String>`; `&[T]`, not `&Vec<T>`) and migrate its callers in a
+precursor PR that merges first. #558 did that for `parse_required` / `parse_optional` so #559
+could pass a text value without allocating; folding it into #559 would have mixed a refactor
+into a feature diff.
 
 ## Integer-coded enums
 
@@ -111,6 +123,7 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
 
 - #518 — established the pattern (`OrderStatus.status` → `OrderStatusKind`).
 - #556, #558 — the generic `parse_required` / `parse_optional` shape.
+- #558 — precursor: the helpers took `Option<&str>` before their first text-side consumer.
 - #559 — the `right: "?"` fixture-vs-wire lesson.
 - #647 — `FundamentalReportType`: docs listed six values, TWS accepted four (module since removed,
   migration-3.0 §34).

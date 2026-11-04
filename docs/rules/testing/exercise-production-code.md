@@ -12,7 +12,6 @@ triggers:
 symbols: [assert_request, RequestEncoder, decode_proto, MessageBusStub, Client::stubbed]
 related: [fixture-builders, coverage-floor, sibling-test-files]
 precedents: ["#534", "#543", "#734", "#735", "#750"]
-memory: [feedback_examples_expose_test_gaps, feedback_no_speculative_test_infra, feedback_lightest_test_fixture, feedback_unreachable_regression_guards]
 ---
 
 Ask of every new test: **what production code does this traverse?** If none, drop it. A
@@ -59,6 +58,10 @@ of its file usually go with it (#750, then #1054 deleted `src/orders/builder/tes
 
 ## Precedents
 
+- #508 — `market_data_streaming` integration tests asserted `next_timeout(..).is_some()`, which
+  `Some(Err(NotImplemented))` satisfies; `examples/sync/market_data.rs` printed the error at once.
+- #517 — deleted `test_realtime_bars_error_handling` (from #434) with the dead `Error` arms: the
+  dispatcher now classifies error frames before decode, so only the stub could deliver its input.
 - #534 — field-minimal builders driven from what validators actually assert.
 - #543 — /simplify moved positional-arg fixture helpers under `<domain>/common/` into named
   builders.

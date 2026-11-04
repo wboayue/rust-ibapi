@@ -10,7 +10,6 @@ triggers:
 symbols: []
 related: [sibling-test-files, restrict-after-callers]
 precedents: ["#573", "#657"]
-memory: [feedback_sed_inline_test_extraction, feedback_fix_workspace_red_in_scope]
 ---
 
 When you modify a module for a feature or fix, bring the rest of that module up to current

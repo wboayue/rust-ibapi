@@ -11,7 +11,6 @@ triggers:
 symbols: [cfg(feature), no-default-features, just-test, default]
 related: [dual-feature-types, no-parity-wrappers]
 precedents: ["#658", "#671", "#724", "#744"]
-memory: [feedback_ci_clippy_flags, feedback_fix_workspace_red_in_scope]
 ---
 
 Three configurations must compile **and** pass tests when you touch feature-gated code:

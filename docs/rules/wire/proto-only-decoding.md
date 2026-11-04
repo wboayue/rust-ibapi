@@ -11,12 +11,12 @@ triggers:
 symbols: [require_proto, ResponseMessage::proto, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders, one-shot-narrowing]
 precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739", "#740"]
-memory: [project_protobuf_only, feedback_unreachable_regression_guards]
 ---
 
 Every domain decoder reads its payload with `message.proto()`, which takes the bytes from
 `require_proto()` and decodes them through `DecodeProto::decode_proto` (prost's error becomes
-`Error::ProtobufDecode`). No text branch, no format dispatch.
+`Error::ProtobufDecode`). No text branch, no format dispatch. The outbound side matches: every
+request encodes to proto, so never add a text encoding path.
 
 ```rust
 pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result<NewsBulletin, Error> {

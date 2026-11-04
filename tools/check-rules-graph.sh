@@ -12,9 +12,9 @@
 #   5. no node cites a `file.rs:NNN` line number — line refs rot silently the
 #      same way the retired rule numbers did, and nothing recomputes them. Name
 #      the fn, test, or type instead.
-#
-# `memory:` entries are deliberately NOT validated — that directory lives
-# outside the repo and is specific to one maintainer.
+#   6. no node carries a `memory:` key — private memory lives outside the repo,
+#      so every such reference is dead for other readers and unverifiable here.
+#      Put the evidence in the node.
 
 set -uo pipefail
 
@@ -98,6 +98,13 @@ fi
 for file in $(nodes); do
     grep -nE '[A-Za-z0-9_/.-]+\.(rs|sh|toml|md):[0-9]+' "$file" |
         sed "s|^|$file: line-number citation (name the fn or test instead) -> line |" >>"$ERRORS"
+done
+
+# --- 6. no references to private memory -------------------------------------
+
+for file in $(nodes) "$RULES_DIR/README.md"; do
+    sed -n '2,/^---$/p' "$file" | grep -qE "^memory:" &&
+        echo "$file: memory: key references files outside the repo (fold the evidence into the node)" >>"$ERRORS"
 done
 
 # --- report -----------------------------------------------------------------

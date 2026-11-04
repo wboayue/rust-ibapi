@@ -10,7 +10,6 @@ triggers:
 symbols: [Features, ProtocolFeature, server_versions, IncomingMessages, check_version]
 related: [coverage-floor, exercise-production-code]
 precedents: ["#540"]
-memory: []
 ---
 
 When a test asserts against a version-gated API — `Features::*`, `server_versions::*`,

@@ -10,7 +10,6 @@ triggers:
 symbols: [rust-toolchain.toml, dtolnay/rust-toolchain, cargo-llvm-cov]
 related: [pre-pr-checks, coverage-floor]
 precedents: []
-memory: [feedback_ci_clippy_flags, reference_llvm_cov_toolchain_pairing]
 ---
 
 `rust-toolchain.toml` pins each branch to one Rust version — **1.95.0 on `main`, 1.93.0 on

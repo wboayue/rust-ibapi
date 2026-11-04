@@ -11,7 +11,6 @@ triggers:
 symbols: [NoticeStream, sync_impl, async_impl, Subscription, r#async]
 related: [feature-matrix, no-parity-wrappers, subscription-consumer-idiom]
 precedents: ["#512", "#526", "#823", "#916", "#957", "#958"]
-memory: [feedback_raw_identifier_async_path, feedback_plan_cfg_receiver_types]
 ---
 
 A public type with distinct sync/async impls (different receivers, different async-ness) follows

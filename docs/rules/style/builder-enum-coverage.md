@@ -10,7 +10,6 @@ triggers:
 symbols: [OrderBuilder, Action, OrderType, unreachable]
 related: [param-budget, domain-module-layout]
 precedents: ["#549", "#822", "#832", "#833", "#1073", "#1076", "#1082"]
-memory: []
 ---
 
 When a fluent builder exposes an enum through named methods (`.buy()` / `.sell()` for

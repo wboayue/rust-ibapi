@@ -12,7 +12,6 @@ triggers:
 symbols: [ResponseProtoEncoder, encode_proto, proto_response, text_response, MessageBusStub, with_ordered_responses, Error::UnexpectedWireFormat, assert_rejects_text_framing, with_connection_resets]
 related: [proto-only-decoding, fixture-migration, exercise-production-code]
 precedents: ["#534", "#543", "#731", "#735", "#743", "#747"]
-memory: [feedback_test_fixtures_placement, feedback_testdata_builder_no_new, feedback_no_speculative_test_infra, feedback_mirror_production_patterns]
 ---
 
 Response fixtures live in `src/testdata/builders/<domain>.rs` as `ResponseProtoEncoder` impls —

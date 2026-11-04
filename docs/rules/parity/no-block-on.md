@@ -11,7 +11,6 @@ triggers:
 symbols: [block_on, AtomicI32, Ordering, server_version_cache]
 related: [dual-feature-types, no-parity-wrappers]
 precedents: ["#420", "#422"]
-memory: []
 ---
 
 Never call `futures::executor::block_on()` from an async context. It parks a tokio worker thread,

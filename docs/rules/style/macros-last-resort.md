@@ -10,7 +10,6 @@ triggers:
 symbols: [macro_rules, macro_use, macro_export, impl_str_partial_eq, impl_wire_enum]
 related: [param-budget, fixture-builders]
 precedents: ["#548", "#554"]
-memory: [feedback_macro_repeated_trait_impls, feedback_no_speculative_test_infra, feedback_mirror_production_patterns]
 ---
 
 Before writing a `macro_rules!`, ask whether a generic function with a trait bound, a
@@ -60,7 +59,9 @@ The counter-examples to imitate, both from #554:
 
 Challenge it twice: can it fold into an existing macro, and does the surviving macro's body
 actually need to be one? A test-side macro should mirror its production counterpart's naming and
-have a current consumer; see [fixture builders](../testing/fixture-builders.md).
+have a current consumer; see [fixture builders](../testing/fixture-builders.md). A
+`macro_rules!` defined in a parent module before the child's `mod` line is already in scope
+there; a `pub(crate) use name;` re-export adds nothing and trips `unused_imports`.
 
 ## Precedents
 

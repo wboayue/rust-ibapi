@@ -11,7 +11,6 @@ triggers:
 symbols: [README.md, migration-6.0.md]
 related: [changelog-entry, public-api-examples, restrict-after-callers, modernize-touched-modules]
 precedents: ["#549", "#771", "#884"]
-memory: [feedback_md_doc_snippets_rot_silently, feedback_field_removal_breaks_public_contract]
 ---
 
 Treat `README.md` and the **next major's** migration guide as public API: a breaking change
@@ -45,8 +44,23 @@ Then **read each hit**. `cargo test --doc` compiles only `# Examples` blocks in 
 snippet: do the identifiers exist, do the methods chain on those receivers, are the field types
 still spelled that way?
 
+To compile rather than eyeball: copy each block containing `fn main` into `src/bin/*.rs` of a
+scratch crate depending on `ibapi = { path = "<repo>", features = ["sync"] }` (default async
+stays on, which catches sync-style `Client::connect(..)` written against the async prelude
+`Client`), point `CARGO_TARGET_DIR` at the repo's `target/`, and `cargo check --bins`. Most
+fences are import-less fragments; only full programs are worth the check.
+
 When a *field* disappears, widen past rustdoc: a public method deriving its return value from
 the field breaks its contract with no doc mentioning the field — `examples/` and `docs/` show it.
+#576 dropped `connected: AtomicBool` as redundant; `is_connected()` then returned `true` during
+a reconnect, inverting `examples/async/connection_monitoring.rs`, and every test passed.
+
+## At the end of an arc
+
+Per-PR greps catch what each PR touched, not the drift an arc of ten or twenty PRs accumulates.
+When a multi-PR transition concludes (a floor reached, a major version, a typed-enum sweep
+done), sweep `AGENTS.md`, `docs/rules/`, `README.md` and every `docs/*.md` together, as one
+docs-only PR. #656 is the shape.
 
 ## Precedents
 
@@ -54,6 +68,9 @@ the field breaks its contract with no doc mentioning the field — `examples/` a
   `docs/api-patterns.md` (`Order` has no `.condition()`) and `Order { lmt_price: ..., tif:
   "GTC".to_string() }` blocks in `docs/order-types.md` (real fields: `limit_price`,
   `tif: TimeInForce`), wrong for months because nothing compiles them.
+- #576 → #579 → #580 — field removal inverted `is_connected()`; restored, then removed again
+  with examples and docs updated in the same PR.
+- #656 — end-of-arc sweep after the proto-only floor: `CLAUDE.md`, README, six `docs/` files.
 - #771 — 4.0 prep: three unreleased sections had accumulated in the shipped 3.0 guide and three
   breaking changes had changelog entries but no guide section — per-PR sync had targeted the
   wrong file since 3.3.0.

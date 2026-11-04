@@ -11,7 +11,6 @@ triggers:
 symbols: [ResponseMessage, peek_int, request_id, order_id, client_id, execution_id, routes_by_request_id, text_request_id_field, debug_assert_request_id_routable, first_unroutable_by_request_id]
 related: [proto-only-decoding, coverage-floor]
 precedents: ["#519", "#647", "#730", "#734"]
-memory: [feedback_sync_protobuf_routing, project_protobuf_only]
 ---
 
 Any `&self` accessor on `ResponseMessage` (`request_id`, `order_id`, `client_id`,
@@ -53,6 +52,12 @@ where `int @ tag 1` means something else (`MarketRule.market_rule_id`, `OrderBou
 (1 vs 2) used by text-framed test fixtures — populate the right bucket.
 
 `MessageBusStub` tests bypass the dispatcher, so they pass with the registration missing.
+
+**A dispatcher passes on the id it routed by.** `dispatch_message` (`src/transport/sync.rs`)
+matches `RoutingDecision::ByRequestId(id)` and hands `id` to `process_response_with_id`. Letting
+such a message fall to the catch-all `process_response`, which re-reads `message.request_id()`,
+once dropped proto responses in the sync transport: the `account_summary` example hung while
+async worked.
 
 ## The gate
 
