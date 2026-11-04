@@ -40,7 +40,10 @@ impl<'a, C> HistoricalScheduleBuilder<'a, C> {
     ///
     /// The flag selects the sessions IBKR returns: `Regular` asks for regular
     /// trading hours only, `Extended` for the full product session (for
-    /// example, a futures product's 17:00–16:00 session).
+    /// example, a futures product's 17:00–16:00 session). An extended futures
+    /// session is keyed by its trade date, so the one dated Monday starts
+    /// Sunday 17:00 (live: 2026-11-03, see
+    /// `docs/wire-facts/market-data.md#historical-schedule-honors-userth`).
     pub fn trading_hours(mut self, trading_hours: TradingHours) -> Self {
         self.trading_hours = trading_hours;
         self
