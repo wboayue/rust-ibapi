@@ -512,20 +512,15 @@ pub struct Leg {
 }
 
 impl SpreadBuilder {
-    /// Create an empty spread builder ready to accept legs.
-    pub fn new() -> Self {
+    /// Create a spread builder for the combo `symbol`, ready to accept legs. See
+    /// [`Contract::spread`].
+    pub fn new(symbol: impl Into<Symbol>) -> Self {
         SpreadBuilder {
             legs: Vec::new(),
-            symbol: Symbol::default(),
+            symbol: symbol.into(),
             currency: "USD".into(),
             exchange: "SMART".into(),
         }
-    }
-}
-
-impl Default for SpreadBuilder {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -565,7 +560,7 @@ impl SpreadBuilder {
     /// use ibapi::contracts::Contract;
     ///
     /// let (long_call, short_call) = (100, 105);
-    /// let bull_call = Contract::spread().symbol("AAPL").vertical(long_call, short_call).build()?;
+    /// let bull_call = Contract::spread("AAPL").vertical(long_call, short_call).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn vertical(self, long_id: impl Into<ContractId>, short_id: impl Into<ContractId>) -> Self {
@@ -580,7 +575,7 @@ impl SpreadBuilder {
     /// use ibapi::contracts::Contract;
     ///
     /// let (call, put) = (100, 101);
-    /// let straddle = Contract::spread().symbol("AAPL").straddle(call, put).build()?;
+    /// let straddle = Contract::spread("AAPL").straddle(call, put).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn straddle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> Self {
@@ -597,7 +592,7 @@ impl SpreadBuilder {
     /// use ibapi::contracts::Contract;
     ///
     /// let (call, put) = (110, 90);
-    /// let strangle = Contract::spread().symbol("AAPL").strangle(call, put).build()?;
+    /// let strangle = Contract::spread("AAPL").strangle(call, put).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn strangle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> Self {
@@ -612,8 +607,7 @@ impl SpreadBuilder {
     /// ```
     /// use ibapi::contracts::{ButterflyLegs, Contract};
     ///
-    /// let butterfly = Contract::spread()
-    ///     .symbol("AAPL")
+    /// let butterfly = Contract::spread("AAPL")
     ///     .butterfly(ButterflyLegs {
     ///         lower: 100.into(),
     ///         middle: 105.into(),
@@ -642,8 +636,7 @@ impl SpreadBuilder {
     /// ```
     /// use ibapi::contracts::{Contract, IronCondorLegs};
     ///
-    /// let iron_condor = Contract::spread()
-    ///     .symbol("AAPL")
+    /// let iron_condor = Contract::spread("AAPL")
     ///     .iron_condor(IronCondorLegs {
     ///         long_put: 100.into(),
     ///         short_put: 105.into(),
@@ -668,8 +661,7 @@ impl SpreadBuilder {
     /// ```
     /// use ibapi::contracts::{CollarLegs, Contract};
     ///
-    /// let collar = Contract::spread()
-    ///     .symbol("AAPL")
+    /// let collar = Contract::spread("AAPL")
     ///     .collar(CollarLegs {
     ///         stock: 265598.into(),
     ///         put: 100.into(),
@@ -689,27 +681,6 @@ impl SpreadBuilder {
             .done()
     }
 
-    /// Set the combo's symbol. TWS requires it to place the combo and rejects one without it
-    /// with 321.
-    ///
-    /// Usually the underlying. For a combo across underlyings, TWS's samples join them with a
-    /// comma (`"IBKR,MCD"`).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ibapi::contracts::Contract;
-    ///
-    /// let (long_call, short_call) = (100, 105);
-    /// let bull_call = Contract::spread().symbol("AAPL").vertical(long_call, short_call).build()?;
-    /// assert_eq!(bull_call.symbol.to_string(), "AAPL");
-    /// # Ok::<(), ibapi::Error>(())
-    /// ```
-    pub fn symbol(mut self, symbol: impl Into<Symbol>) -> Self {
-        self.symbol = symbol.into();
-        self
-    }
-
     /// Override the spread currency, useful for non-USD underlyings.
     pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
         self.currency = currency.into();
@@ -722,12 +693,14 @@ impl SpreadBuilder {
         self
     }
 
-    /// Finalize the spread contract, returning an error if no legs were added.
-    ///
-    /// A combo built without [`symbol`](Self::symbol) builds, but TWS rejects it with 321.
+    /// Finalize the spread contract, returning an error if no legs were added or the symbol is
+    /// empty (TWS rejects a combo without one with 321).
     pub fn build(self) -> Result<Contract, Error> {
         if self.legs.is_empty() {
             return Err(Error::InvalidArgument("Spread must have at least one leg".into()));
+        }
+        if self.symbol.as_str().is_empty() {
+            return Err(Error::InvalidArgument("Spread requires a symbol".into()));
         }
 
         let combo_legs: Vec<ComboLeg> = self

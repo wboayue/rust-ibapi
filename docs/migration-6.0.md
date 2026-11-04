@@ -100,3 +100,22 @@ let cost = order_state.commission_and_fees;
 There's no deprecated `CommissionReport` alias. A type alias would keep only `use` lines
 compiling, while every match arm and field read changes anyway. Pairing a report with its
 execution by `execution_id` is unchanged.
+
+### 5. `Contract::spread` takes the combo symbol
+
+TWS rejects a combo without a symbol with error 321. In 5.x the symbol was an optional
+`.symbol(..)` setter, so a combo built without it compiled, built, and failed only when the order
+was placed. The symbol is now the argument to `Contract::spread`:
+
+- **`Contract::spread(symbol)` and `SpreadBuilder::new(symbol)`** take it up front.
+- **`SpreadBuilder::symbol(..)` and `impl Default for SpreadBuilder` are removed.**
+- **`build()` returns `Error::InvalidArgument` for an empty symbol**, as it already does for a
+  spread with no legs.
+
+```rust,ignore
+// 5.x
+let spread = Contract::spread().symbol("AAPL").vertical(long_call, short_call).build()?;
+
+// 6.0
+let spread = Contract::spread("AAPL").vertical(long_call, short_call).build()?;
+```

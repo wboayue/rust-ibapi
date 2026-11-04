@@ -216,7 +216,7 @@ fn index_contract() {
 
 #[test]
 fn spread_builder_long_calendar() {
-    let spread = Contract::spread()
+    let spread = Contract::spread("AAPL")
         .long_calendar(12345, 67890)
         .in_currency("USD")
         .on_exchange("SMART")
@@ -237,7 +237,7 @@ fn spread_builder_long_calendar() {
 
 #[test]
 fn spread_builder_short_calendar() {
-    let spread = Contract::spread().short_calendar(12345, 67890).build().unwrap();
+    let spread = Contract::spread("AAPL").short_calendar(12345, 67890).build().unwrap();
 
     assert_eq!(spread.combo_legs.len(), 2);
     assert_eq!(spread.combo_legs[0].contract_id, 12345);
@@ -250,7 +250,7 @@ fn spread_builder_short_calendar() {
 
 #[test]
 fn spread_builder_vertical() {
-    let spread = Contract::spread().vertical(11111, 22222).build().unwrap();
+    let spread = Contract::spread("AAPL").vertical(11111, 22222).build().unwrap();
 
     assert_eq!(spread.security_type, SecurityType::Spread);
     assert_eq!(spread.combo_legs.len(), 2);
@@ -262,7 +262,7 @@ fn spread_builder_vertical() {
 
 #[test]
 fn spread_builder_custom_legs() {
-    let spread = Contract::spread()
+    let spread = Contract::spread("AAPL")
         .add_leg(10001, LegAction::Buy)
         .ratio(2)
         .on_exchange("CBOE")
@@ -293,29 +293,26 @@ fn spread_builder_custom_legs() {
     assert_eq!(spread.combo_legs[2].ratio, 1);
 }
 
-/// TWS rejects a combo without a symbol (321); the builder carries it onto the contract
-/// whether set before or after the legs (#1128).
 #[test]
-fn spread_builder_sets_symbol() {
-    let before = Contract::spread().symbol("AAPL").vertical(100, 105).build().unwrap();
-    let after = Contract::spread().vertical(100, 105).symbol("AAPL").build().unwrap();
+fn spread_builder_carries_symbol() {
+    let spread = Contract::spread("AAPL").vertical(100, 105).build().unwrap();
 
-    assert_eq!(before.symbol, Symbol::from("AAPL"));
-    assert_eq!(after.symbol, Symbol::from("AAPL"));
-    assert_eq!(before.combo_legs.len(), after.combo_legs.len());
+    assert_eq!(spread.symbol, Symbol::from("AAPL"));
 }
 
-/// Optional in 5.x: unset builds with an empty symbol.
+/// TWS rejects a combo without a symbol (321), so `build` does too (#1131).
 #[test]
-fn spread_builder_symbol_defaults_empty() {
-    let spread = Contract::spread().vertical(100, 105).build().unwrap();
-
-    assert_eq!(spread.symbol, Symbol::default());
+fn spread_builder_rejects_empty_symbol() {
+    let err = Contract::spread("").vertical(100, 105).build().unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Spread requires a symbol"),
+        "got {err:?}"
+    );
 }
 
 #[test]
 fn spread_builder_empty_fails() {
-    let err = Contract::spread().build().unwrap_err();
+    let err = Contract::spread("AAPL").build().unwrap_err();
     assert!(
         matches!(err, Error::InvalidArgument(ref msg) if msg == "Spread must have at least one leg"),
         "got {err:?}"
@@ -379,9 +376,13 @@ fn contract_month_formatting() {
 fn default_implementations() {
     assert_eq!(Exchange::default().as_str(), "SMART");
     assert_eq!(Currency::default().as_str(), "USD");
+}
 
-    let spread = SpreadBuilder::default();
+#[test]
+fn spread_builder_new_defaults_to_usd_on_smart() {
+    let spread = SpreadBuilder::new("AAPL");
     assert!(spread.legs.is_empty());
+    assert_eq!(spread.symbol.as_str(), "AAPL");
     assert_eq!(spread.currency.as_str(), "USD");
     assert_eq!(spread.exchange.as_str(), "SMART");
 }
@@ -465,7 +466,7 @@ fn spread_presets_set_legs() {
     ];
 
     for (name, preset, expected) in cases {
-        let spread = preset(Contract::spread()).build().unwrap();
+        let spread = preset(Contract::spread("AAPL")).build().unwrap();
         assert_eq!(spread.security_type, SecurityType::Spread, "{name}");
         assert_eq!(leg_tuples(&spread), expected, "{name}");
     }
@@ -475,7 +476,7 @@ fn spread_presets_set_legs() {
 fn spread_builder_accepts_contract_id() {
     use crate::accounts::types::ContractId;
 
-    let spread = Contract::spread()
+    let spread = Contract::spread("AAPL")
         .vertical(ContractId(11111), ContractId(22222))
         .long_calendar(ContractId(33333), 44444)
         .add_leg(ContractId(55555), LegAction::Buy)

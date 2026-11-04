@@ -444,20 +444,23 @@ impl Contract {
         }
     }
 
-    /// Creates a spread/combo contract builder.
+    /// Creates a spread/combo contract builder for the combo `symbol`.
+    ///
+    /// The symbol is usually the underlying. For a combo across underlyings, TWS's samples join
+    /// them with a comma (`"IBKR,MCD"`). TWS rejects a combo without one with 321, so
+    /// [`build`](SpreadBuilder::build) rejects an empty symbol.
     ///
     /// # Examples
     ///
     /// ```
-    /// use ibapi::contracts::{Contract, LegAction};
+    /// use ibapi::contracts::Contract;
     ///
-    /// let spread = Contract::spread()
-    ///     .symbol("AAPL")
-    ///     .long_calendar(12345, 67890)
-    ///     .build();
+    /// let spread = Contract::spread("AAPL").long_calendar(12345, 67890).build()?;
+    /// assert_eq!(spread.symbol.to_string(), "AAPL");
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn spread() -> SpreadBuilder {
-        SpreadBuilder::new()
+    pub fn spread(symbol: impl Into<Symbol>) -> SpreadBuilder {
+        SpreadBuilder::new(symbol)
     }
 
     /// Creates a news contract from the specified provider code.

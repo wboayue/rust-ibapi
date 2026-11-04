@@ -67,16 +67,14 @@ fn main() {
     println!("Index: {} on {}", spx.symbol, spx.exchange);
 
     // Spread contract
-    let spread = Contract::spread()
-        .symbol("AAPL")
+    let spread = Contract::spread("AAPL")
         .long_calendar(12345, 67890) // Near and far contract IDs
         .build()
         .expect("Valid spread");
     println!("Long calendar spread with {} legs", spread.combo_legs.len());
 
     // Custom spread with individual legs
-    let custom_spread = Contract::spread()
-        .symbol("AAPL")
+    let custom_spread = Contract::spread("AAPL")
         .add_leg(11111, LegAction::Buy)
         .ratio(2)
         .done()

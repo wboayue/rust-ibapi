@@ -81,7 +81,7 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 #1131, #1132. Guard: `integration/*/tests/spreads.rs`.*
 
 - BAG with no `symbol` → 321 "The symbol or the local-symbol or the security id must be
-  entered". Hence `SpreadBuilder::symbol(..)`.
+  entered". Hence `Contract::spread(symbol)` requires it.
 - Iron condor bought to open is a credit: Buy @ -1.00 accepted. Buy @ +1 → 201
   "Guaranteed-to-Lose"; Sell @ +1 → 201 "Riskless". TWS rejects mis-signed combo prices.
 - Collar (STK leg ratio 100 + long put + short call) accepted, limit ≈ 100 × spot. Unlike
