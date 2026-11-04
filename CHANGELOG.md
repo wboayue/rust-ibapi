@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Contract::spread(symbol)` takes the combo symbol, which TWS requires (error 321 without it); `SpreadBuilder::new` takes it too. `SpreadBuilder::symbol(..)` and `Default for SpreadBuilder` are removed, and `build()` rejects an empty symbol with `Error::InvalidArgument`. See `docs/migration-6.0.md` §5 (#1131).
 - `TickType::Unknown` carries the tick id as `Unknown(i32)`, so a tick IBKR adds later keeps its id; `TickType` gains `From<TickType> for i32` (`tick_type as i32` no longer compiles). `From<&str> for TickType` is replaced by `TickType::from_name`, which returns `Option`, and its inverse `name()`. `Display` of an unknown tick is `Unknown(<id>)`. See `docs/migration-6.0.md` §6 (#1071).
 - `ContractDetails::fund_asset_type` and `fund_distribution_policy_indicator` are now `Option<FundAssetType>` and `Option<FundDistributionPolicyIndicator>`, `None` when TWS sends no value. Both enums lose their `None` variant and `Default`, keep an unrecognized value as `Unknown(String)` instead of reading it as unset, and replace `From<&str>` with `FromStr`, `as_str()` and `Display`. See `docs/migration-6.0.md` §7 (#1071).
+- `NewsBulletin::message_type` is a `news::BulletinType` (`Regular`, `ExchangeUnavailable`, `ExchangeAvailable`, `Unknown(i32)`) and serializes as the variant. Previously it was the wire code as an `i32`; `i32::from(bulletin.message_type)` gives the code back. See `docs/migration-6.0.md` §9 (#1166).
 
 ### Removed
 

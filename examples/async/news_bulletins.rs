@@ -1,5 +1,6 @@
 #![allow(clippy::uninlined_format_args)]
 use futures::StreamExt;
+use ibapi::news::BulletinType;
 use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 
@@ -25,13 +26,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("\n--- News Bulletin ---");
                 println!("ID: {}", bulletin.message_id);
                 println!(
-                    "Type: {} ({})",
+                    "Type: {:?} ({})",
                     bulletin.message_type,
                     match bulletin.message_type {
-                        1 => "Regular bulletin",
-                        2 => "Exchange unavailable",
-                        3 => "Exchange available",
-                        _ => "Unknown",
+                        BulletinType::Regular => "Regular bulletin",
+                        BulletinType::ExchangeUnavailable => "Exchange unavailable",
+                        BulletinType::ExchangeAvailable => "Exchange available",
+                        BulletinType::Unknown(_) => "Unknown",
                     }
                 );
                 println!("Exchange: {}", bulletin.exchange);

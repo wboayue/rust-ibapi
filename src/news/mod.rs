@@ -17,6 +17,10 @@ mod sync;
 #[cfg(feature = "async")]
 mod r#async;
 
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;
+
 // Public types - always available regardless of feature flags
 
 /// News provider information including code and name.
@@ -35,17 +39,49 @@ pub struct NewsProvider {
 pub struct NewsBulletin {
     /// The unique identifier of the news bulletin.
     pub message_id: i32,
-    /// The type of the news bulletin.
-    ///
-    /// Valid values are:
-    /// - `1` - Regular news bulletin
-    /// - `2` - Exchange no longer available for trading
-    /// - `3` - Exchange is available for trading
-    pub message_type: i32,
+    /// The type of the news bulletin: a regular bulletin, or a notice that an exchange is
+    /// unavailable or available for trading.
+    pub message_type: BulletinType,
     /// The text of the news bulletin.
     pub message: String,
     /// The exchange from which this news bulletin originated.
     pub exchange: String,
+}
+
+/// The type of a [`NewsBulletin`].
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BulletinType {
+    /// Regular news bulletin. Wire code `1`.
+    Regular,
+    /// Exchange no longer available for trading. Wire code `2`.
+    ExchangeUnavailable,
+    /// Exchange available for trading. Wire code `3`.
+    ExchangeAvailable,
+    /// Bulletin type code not modeled by this version of the API.
+    Unknown(i32),
+}
+
+impl From<BulletinType> for i32 {
+    fn from(value: BulletinType) -> i32 {
+        match value {
+            BulletinType::Regular => 1,
+            BulletinType::ExchangeUnavailable => 2,
+            BulletinType::ExchangeAvailable => 3,
+            BulletinType::Unknown(code) => code,
+        }
+    }
+}
+
+impl From<i32> for BulletinType {
+    fn from(value: i32) -> Self {
+        match value {
+            1 => BulletinType::Regular,
+            2 => BulletinType::ExchangeUnavailable,
+            3 => BulletinType::ExchangeAvailable,
+            code => BulletinType::Unknown(code),
+        }
+    }
 }
 
 /// Returns news headlines for requested contracts.

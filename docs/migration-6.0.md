@@ -170,3 +170,30 @@ if details.fund_asset_type == FundAssetType::None { /* no value */ }
 if details.fund_asset_type == Some(FundAssetType::Equity) { /* ... */ }
 if details.fund_asset_type.is_none() { /* no value */ }
 ```
+
+### 9. `NewsBulletin::message_type` is a `BulletinType`
+
+`NewsBulletin::message_type` held the bulletin's wire code as an `i32`: `1` regular bulletin, `2` exchange no longer available for trading, `3` exchange available for trading. It is now a `news::BulletinType` with a variant for each of those codes and `Unknown(i32)` for a code this version does not model, which keeps the code as received. `BulletinType::from(i32)` and `i32::from(BulletinType)` convert between the two.
+
+```rust,ignore
+// 5.x
+match bulletin.message_type {
+    2 => mark_closed(&bulletin.exchange),
+    3 => mark_open(&bulletin.exchange),
+    _ => {}
+}
+
+// 6.0
+use ibapi::news::BulletinType;
+
+match bulletin.message_type {
+    BulletinType::ExchangeUnavailable => mark_closed(&bulletin.exchange),
+    BulletinType::ExchangeAvailable => mark_open(&bulletin.exchange),
+    BulletinType::Regular | BulletinType::Unknown(_) => {}
+}
+let code = i32::from(bulletin.message_type); // where the wire code is needed
+```
+
+Match on the variants, or call `i32::from(..)` where the wire code is needed. The compiler finds every comparison with an integer.
+
+The compiler does not catch the serialized form. `NewsBulletin` derives `Serialize` / `Deserialize`, and `message_type` now serializes in the enum's derived externally tagged form: `"Regular"`, `"ExchangeUnavailable"`, `"ExchangeAvailable"`, or `{"Unknown":7}`, where it was the number. Stored or transmitted bulletins written by 5.x carry the number and no longer deserialize; the `utoipa` schema changes the same way.

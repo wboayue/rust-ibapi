@@ -1,6 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::messages::IncomingMessages;
+use crate::news::BulletinType;
 
 #[test]
 fn decode_news_bulletin_proto_works() {
@@ -13,9 +14,31 @@ fn decode_news_bulletin_proto_works() {
 
     let result = decode_news_bulletin_proto(proto_msg).unwrap();
     assert_eq!(result.message_id, 42);
-    assert_eq!(result.message_type, 1);
+    assert_eq!(result.message_type, BulletinType::Regular);
     assert_eq!(result.message, "Market closed early");
     assert_eq!(result.exchange, "NYSE");
+}
+
+#[test]
+fn decode_news_bulletin_maps_type_code() {
+    let cases = [
+        (1, BulletinType::Regular),
+        (2, BulletinType::ExchangeUnavailable),
+        (3, BulletinType::ExchangeAvailable),
+        (7, BulletinType::Unknown(7)),
+    ];
+    for (code, expected) in cases {
+        let proto_msg = crate::proto::NewsBulletin {
+            news_msg_id: Some(42),
+            news_msg_type: Some(code),
+            news_message: Some("Market closed early".into()),
+            originating_exch: Some("NYSE".into()),
+        };
+
+        let result = decode_news_bulletin_proto(proto_msg).unwrap();
+        assert_eq!(result.message_type, expected, "code {code}");
+        assert_eq!(i32::from(result.message_type), code, "code {code}");
+    }
 }
 
 #[test]
