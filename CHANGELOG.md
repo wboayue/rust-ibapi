@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
 
+### Changed
+
+- `orders::CommissionReport` is renamed `CommissionAndFeesReport`, after IBKR's rename to commissions and fees. Its `commission` field is now `commission_and_fees`; the `PlaceOrder`, `OrderUpdate` and `Executions` variants are now `CommissionAndFeesReport`; `IncomingMessages::CommissionsReport` is `CommissionsAndFeesReport`; and `OrderState`'s `commission`, `minimum_commission`, `maximum_commission` and `commission_currency` are `commission_and_fees`, `min_commission_and_fees`, `max_commission_and_fees` and `commission_and_fees_currency`. No alias is kept. See `docs/migration-6.0.md` §4 (#1120).
+
 ### Removed
 
 - `ibapi::protocol` is crate-private. Its 53 constants deprecated in 5.1 (at or below the server version 213 connection floor, so a check always passed) are deleted, along with `is_supported` and `include_if_supported`, which nothing called. The three remaining gates (`CANCEL_CONTRACT_DATA`, `CONFIG`, `UPDATE_CONFIG`) are checked by the requests themselves, which return `Error::ServerVersion` from a server too old for them. See `docs/migration-6.0.md` §1 (#990, #1157).

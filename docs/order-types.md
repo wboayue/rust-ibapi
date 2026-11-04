@@ -1479,7 +1479,7 @@ let analysis = client.order(&contract)
 
 println!("Initial margin: {}", analysis.init_margin);
 println!("Maintenance margin: {}", analysis.maint_margin);
-println!("Commission: {}", analysis.commission);
+println!("Commission: {}", analysis.commission_and_fees);
 ```
 
 ## Important Notes

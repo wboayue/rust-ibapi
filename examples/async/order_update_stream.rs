@@ -63,10 +63,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("  Time: {}", exec_data.execution.time);
                 }
                 Ok(OrderUpdate::OrderBound(binding)) => println!("Order binding: {binding:?}"),
-                Ok(OrderUpdate::CommissionReport(report)) => {
+                Ok(OrderUpdate::CommissionAndFeesReport(report)) => {
                     println!("Commission Report:");
                     println!("  Execution ID: {}", report.execution_id);
-                    println!("  Commission: {} {}", report.commission, report.currency);
+                    println!("  Commission: {} {}", report.commission_and_fees, report.currency);
                 }
                 Err(e) => {
                     eprintln!("Error in order stream: {e:?}");

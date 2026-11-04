@@ -254,7 +254,7 @@ pub const HANDSHAKE_UNKNOWN_FRAME_CODE: i32 = -3;
 /// Synthesized notice code emitted when a typed handshake decoder fails for
 /// a known [`IncomingMessages`](super::IncomingMessages) kind (`OpenOrder`, `OrderStatus`,
 /// `AccountValue`/`PortfolioValue`/`AccountUpdateTime`/`AccountDownloadEnd`,
-/// `ExecutionData`, `CommissionsReport`, `CompletedOrder`). Distinct from
+/// `ExecutionData`, `CommissionsAndFeesReport`, `CompletedOrder`). Distinct from
 /// [`HANDSHAKE_UNKNOWN_FRAME_CODE`] so consumers can separate TWS schema
 /// drift from rust-ibapi decoder bugs. See
 /// [`Notice::is_handshake_synthetic`].

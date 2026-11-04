@@ -42,3 +42,37 @@ match client.config() {
 
 To branch on the version without making the request, compare `client.server_version()` with
 the number from the error or the TWS API docs (`CONFIG` is 219).
+
+### 4. `CommissionReport` is now `CommissionAndFeesReport`
+
+IBKR renamed commissions to "commissions and fees" (C# `CommissionAndFeesReport`, proto
+`CommissionAndFeesReport`), so the public names follow. The data and the wire are unchanged.
+The renames also cover the what-if commission fields on `OrderState` and the message-type
+variant.
+
+| 5.x | 6.0 |
+|---|---|
+| `orders::CommissionReport` | `orders::CommissionAndFeesReport` |
+| `CommissionReport::commission` | `CommissionAndFeesReport::commission_and_fees` |
+| `PlaceOrder::CommissionReport(..)` | `PlaceOrder::CommissionAndFeesReport(..)` |
+| `OrderUpdate::CommissionReport(..)` | `OrderUpdate::CommissionAndFeesReport(..)` |
+| `Executions::CommissionReport(..)` | `Executions::CommissionAndFeesReport(..)` |
+| `IncomingMessages::CommissionsReport` | `IncomingMessages::CommissionsAndFeesReport` |
+| `OrderState::commission` | `OrderState::commission_and_fees` |
+| `OrderState::minimum_commission` | `OrderState::min_commission_and_fees` |
+| `OrderState::maximum_commission` | `OrderState::max_commission_and_fees` |
+| `OrderState::commission_currency` | `OrderState::commission_and_fees_currency` |
+
+```rust,ignore
+// 5.x
+Ok(OrderUpdate::CommissionReport(report)) => println!("{}", report.commission),
+let cost = order_state.commission;
+
+// 6.0
+Ok(OrderUpdate::CommissionAndFeesReport(report)) => println!("{}", report.commission_and_fees),
+let cost = order_state.commission_and_fees;
+```
+
+There's no deprecated `CommissionReport` alias. A type alias would keep only `use` lines
+compiling, while every match arm and field read changes anyway. Pairing a report with its
+execution by `execution_id` is unchanged.

@@ -123,7 +123,7 @@ fn incoming_message_from_i32() {
     assert_eq!(IncomingMessages::from(56), IncomingMessages::DeltaNeutralValidation);
     assert_eq!(IncomingMessages::from(57), IncomingMessages::TickSnapshotEnd);
     assert_eq!(IncomingMessages::from(58), IncomingMessages::MarketDataType);
-    assert_eq!(IncomingMessages::from(59), IncomingMessages::CommissionsReport);
+    assert_eq!(IncomingMessages::from(59), IncomingMessages::CommissionsAndFeesReport);
     assert_eq!(IncomingMessages::from(61), IncomingMessages::Position);
     assert_eq!(IncomingMessages::from(62), IncomingMessages::PositionEnd);
     assert_eq!(IncomingMessages::from(63), IncomingMessages::AccountSummary);
@@ -348,13 +348,13 @@ fn text_framed_message_has_no_order_id_or_execution_id() {
 }
 
 #[test]
-fn execution_id_protobuf_commissions_report() {
+fn execution_id_protobuf_commissions_and_fees_report() {
     let bytes = crate::proto::CommissionAndFeesReport {
         exec_id: Some("exec-proto-1".into()),
         ..Default::default()
     }
     .encode_to_vec();
-    let message = ResponseMessage::from_protobuf(IncomingMessages::CommissionsReport as i32, bytes);
+    let message = ResponseMessage::from_protobuf(IncomingMessages::CommissionsAndFeesReport as i32, bytes);
     assert_eq!(message.execution_id(), Some("exec-proto-1".to_string()));
 }
 
@@ -474,7 +474,7 @@ fn client_id_of_each_order_frame() {
         ),
         (
             "other type",
-            IncomingMessages::CommissionsReport,
+            IncomingMessages::CommissionsAndFeesReport,
             proto::CommissionAndFeesReport {
                 exec_id: Some("e1".into()),
                 ..Default::default()

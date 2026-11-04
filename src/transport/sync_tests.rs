@@ -2353,15 +2353,15 @@ fn execution_data_end_falls_back_to_request_channel() -> Result<(), Error> {
 }
 
 /// `ByExecutionId`: the prior ExecutionData stores `exec-abc → order_id 7`'s
-/// sender, and the CommissionsReport rides that mapping back to the same sub.
+/// sender, and the CommissionsAndFeesReport rides that mapping back to the same sub.
 #[test]
-fn commission_report_routes_via_execution_id_mapping() -> Result<(), Error> {
+fn commission_and_fees_report_routes_via_execution_id_mapping() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
     stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-abc"));
     stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::CommissionsReport as i32,
+        crate::messages::IncomingMessages::CommissionsAndFeesReport as i32,
         &crate::proto::CommissionAndFeesReport {
             exec_id: Some("exec-abc".into()),
             ..Default::default()
@@ -2375,7 +2375,7 @@ fn commission_report_routes_via_execution_id_mapping() -> Result<(), Error> {
     assert_eq!(exec_msg.message_type(), crate::messages::IncomingMessages::ExecutionData);
 
     let commission = sub.next_timeout(TICK).expect("commission report missing")?;
-    assert_eq!(commission.message_type(), crate::messages::IncomingMessages::CommissionsReport);
+    assert_eq!(commission.message_type(), crate::messages::IncomingMessages::CommissionsAndFeesReport);
     Ok(())
 }
 
@@ -2780,12 +2780,12 @@ fn execution_data_end_orphan_dropped() -> Result<(), Error> {
 }
 
 #[test]
-fn commission_report_without_mapping_dropped() -> Result<(), Error> {
+fn commission_and_fees_report_without_mapping_dropped() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let unrelated = bus.send_order_request(OrderId::from(7), &[])?;
 
     stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::CommissionsReport as i32,
+        crate::messages::IncomingMessages::CommissionsAndFeesReport as i32,
         &crate::proto::CommissionAndFeesReport {
             exec_id: Some("exec-not-mapped".into()),
             ..Default::default()
@@ -3896,7 +3896,7 @@ fn foreign_open_order_frame(order_id: i32) -> Vec<u8> {
 
 fn commission_frame(execution_id: &str) -> Vec<u8> {
     binary_proto(
-        IncomingMessages::CommissionsReport as i32,
+        IncomingMessages::CommissionsAndFeesReport as i32,
         &crate::proto::CommissionAndFeesReport {
             exec_id: Some(execution_id.into()),
             ..Default::default()
@@ -3949,7 +3949,7 @@ fn foreign_execution_answers_requests_only() -> Result<(), Error> {
     let types: Vec<_> = std::iter::from_fn(|| request.next_timeout(TICK))
         .map(|m| m.unwrap().message_type())
         .collect();
-    assert_eq!(types, [IncomingMessages::ExecutionData, IncomingMessages::CommissionsReport]);
+    assert_eq!(types, [IncomingMessages::ExecutionData, IncomingMessages::CommissionsAndFeesReport]);
     assert!(order_route.next_timeout(TICK).is_none(), "order route got it");
     let updates: Vec<_> = std::iter::from_fn(|| updates.next_timeout(TICK))
         .map(|m| m.unwrap().message_type())

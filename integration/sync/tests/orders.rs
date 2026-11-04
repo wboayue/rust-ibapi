@@ -364,7 +364,7 @@ fn front_month_es(client: &Client) -> Contract {
         .expect("no ES listing beyond the cutoff")
 }
 
-/// Drain `sub` until both the `ExecutionData` and its `CommissionReport` have
+/// Drain `sub` until both the `ExecutionData` and its `CommissionAndFeesReport` have
 /// arrived, and check they share an `execution_id`. Returns `Err` instead of
 /// panicking so the caller can flatten the position before failing.
 fn observe_execution_then_commission(sub: &Subscription<PlaceOrder>) -> Result<(), String> {
@@ -374,7 +374,7 @@ fn observe_execution_then_commission(sub: &Subscription<PlaceOrder>) -> Result<(
     while execution_id.is_none() || commission_id.is_none() {
         match sub.next_timeout(deadline.saturating_duration_since(Instant::now())) {
             Some(Ok(SubscriptionItem::Data(PlaceOrder::ExecutionData(exec)))) => execution_id = Some(exec.execution.execution_id),
-            Some(Ok(SubscriptionItem::Data(PlaceOrder::CommissionReport(report)))) => commission_id = Some(report.execution_id),
+            Some(Ok(SubscriptionItem::Data(PlaceOrder::CommissionAndFeesReport(report)))) => commission_id = Some(report.execution_id),
             Some(Ok(_)) => continue,
             Some(Err(e)) => return Err(format!("subscription error: {e}")),
             // A commission that reached TWS's wire before its execution is dropped
@@ -412,7 +412,7 @@ fn flatten(client: &Client, contract: &Contract) {
     eprintln!("warning: ES sell did not report Filled within 15s; check the paper account");
 }
 
-/// A live fill delivers `ExecutionData` and then its `CommissionReport` on the
+/// A live fill delivers `ExecutionData` and then its `CommissionAndFeesReport` on the
 /// `place_order` subscription. The commission is routed by the `execution_id`
 /// mapping the execution establishes, so this also guards against the
 /// commission-first wire order described in #788.

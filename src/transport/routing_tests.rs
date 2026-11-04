@@ -478,7 +478,7 @@ fn classify_error_routed_hard_error_is_error() {
 }
 
 /// Order-message routing for message types that lack an order_id at the proto
-/// level. `CompletedOrdersEnd` and `CommissionsReport` are order-routed but
+/// level. `CompletedOrdersEnd` and `CommissionsAndFeesReport` are order-routed but
 /// have no `order_id` field, so the dispatcher falls back to the sentinel `-1`.
 /// (Cases with a real `order_id` are covered by the per-type proto tests below.)
 #[test]
@@ -489,15 +489,15 @@ fn order_message_routing_without_order_id_returns_sentinel() {
         routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
     }
 
-    let commission_report = proto_response(
-        IncomingMessages::CommissionsReport,
+    let commission_and_fees_report = proto_response(
+        IncomingMessages::CommissionsAndFeesReport,
         crate::proto::CommissionAndFeesReport {
             exec_id: Some("exec123".into()),
             ..Default::default()
         }
         .encode_to_vec(),
     );
-    match determine_routing(&commission_report) {
+    match determine_routing(&commission_and_fees_report) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
         routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
     }
@@ -566,8 +566,8 @@ fn determine_routing_protobuf_execution_data_end() {
 }
 
 #[test]
-fn determine_routing_protobuf_commissions_report_no_order_id() {
-    // CommissionsReport has no order_id (in either proto or text); routing
+fn determine_routing_protobuf_commissions_and_fees_report_no_order_id() {
+    // CommissionsAndFeesReport has no order_id (in either proto or text); routing
     // falls back to ByOrderId(-1) and the dispatcher then reroutes via
     // execution_id.
     let bytes = crate::proto::CommissionAndFeesReport {
@@ -575,7 +575,7 @@ fn determine_routing_protobuf_commissions_report_no_order_id() {
         ..Default::default()
     }
     .encode_to_vec();
-    let message = proto_response(IncomingMessages::CommissionsReport, bytes);
+    let message = proto_response(IncomingMessages::CommissionsAndFeesReport, bytes);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
         routing => panic!("Expected ByOrderId(-1), got {routing:?}"),
@@ -619,8 +619,8 @@ fn determine_routing_protobuf_market_data_type() {
 fn first_unroutable_by_request_id_accepts_registered_types() {
     // The two ways in, one per arm of `routable_to_request_id_subscription`.
     let declared = &[
-        IncomingMessages::TickPrice,         // text_request_id_field entry
-        IncomingMessages::CommissionsReport, // order-scoped, arrives via the order-id channel
+        IncomingMessages::TickPrice,                // text_request_id_field entry
+        IncomingMessages::CommissionsAndFeesReport, // order-scoped, arrives via the order-id channel
     ];
     assert_eq!(first_unroutable_by_request_id(declared), None);
     assert_eq!(first_unroutable_by_request_id(&[]), None);
@@ -677,7 +677,7 @@ fn order_message_types_route_by_order_id() {
         IncomingMessages::CompletedOrdersEnd,
         IncomingMessages::ExecutionData,
         IncomingMessages::ExecutionDataEnd,
-        IncomingMessages::CommissionsReport,
+        IncomingMessages::CommissionsAndFeesReport,
     ];
     for message_type in order_types {
         let message = proto_response(message_type, id_at_tag_1.clone());
@@ -699,7 +699,7 @@ fn order_routing_strategy_for_own_and_foreign_frames() {
         (M::ExecutionData, S::ExecutionData, S::ByRequestId),
         (M::OrderBound, S::OrderUpdateOnly, S::Ignore),
         // No client id on the wire: never foreign, listed for completeness.
-        (M::CommissionsReport, S::ByExecutionId, S::ByExecutionId),
+        (M::CommissionsAndFeesReport, S::ByExecutionId, S::ByExecutionId),
         (M::ExecutionDataEnd, S::ExecutionDataEnd, S::ExecutionDataEnd),
         (M::CompletedOrder, S::SharedOnly, S::SharedOnly),
         (M::OpenOrderEnd, S::SharedOnly, S::SharedOnly),

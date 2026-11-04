@@ -4,7 +4,7 @@ use crate::orders::{
     Action, Execution, ExecutionSide, Liquidity, OcaType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin, OrderState,
     ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
 };
-use crate::orders::{CommissionReport, ExecutionData, OrderBound, OrderData, OrderStatus};
+use crate::orders::{CommissionAndFeesReport, ExecutionData, OrderBound, OrderData, OrderStatus};
 use crate::proto;
 use crate::proto::decoders::{
     decode_soft_dollar_tier, optional_f64, parse_decimal_or_zero, parse_optional, parse_optional_decimal, parse_required, required, required_decimal,
@@ -13,7 +13,7 @@ use crate::proto::decoders::{
 use crate::Error;
 
 // All originating outgoing-request gates for OpenOrder, CompletedOrder,
-// OrderStatus, ExecutionData, and CommissionReport are <= the connection floor.
+// OrderStatus, ExecutionData, and CommissionAndFeesReport are <= the connection floor.
 // The server always emits proto framing for these messages; text-framed arrival
 // is rejected via `ResponseMessage::require_proto`, which raises
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
@@ -39,8 +39,8 @@ pub(crate) fn decode_execution_data(message: &ResponseMessage) -> Result<Executi
     decode_execution_data_proto(message.proto()?)
 }
 
-pub(crate) fn decode_commission_report(message: &ResponseMessage) -> Result<CommissionReport, Error> {
-    decode_commission_report_proto(message.proto()?)
+pub(crate) fn decode_commission_and_fees_report(message: &ResponseMessage) -> Result<CommissionAndFeesReport, Error> {
+    decode_commission_and_fees_report_proto(message.proto()?)
 }
 
 pub(crate) fn decode_completed_order(message: &ResponseMessage) -> Result<OrderData, Error> {
@@ -97,10 +97,10 @@ pub(crate) fn decode_completed_order_proto(p: crate::proto::CompletedOrder) -> R
     })
 }
 
-pub(crate) fn decode_commission_report_proto(p: crate::proto::CommissionAndFeesReport) -> Result<CommissionReport, Error> {
-    Ok(CommissionReport {
+pub(crate) fn decode_commission_and_fees_report_proto(p: crate::proto::CommissionAndFeesReport) -> Result<CommissionAndFeesReport, Error> {
+    Ok(CommissionAndFeesReport {
         execution_id: p.exec_id.unwrap_or_default(),
-        commission: p.commission_and_fees.unwrap_or_default(),
+        commission_and_fees: p.commission_and_fees.unwrap_or_default(),
         currency: p.currency.unwrap_or_default(),
         realized_pnl: optional_f64(p.realized_pnl),
         yields: optional_f64(p.bond_yield),
@@ -405,10 +405,10 @@ pub(crate) fn decode_order_state(proto: &proto::OrderState) -> Result<OrderState
         initial_margin_after: optional_f64(proto.init_margin_after),
         maintenance_margin_after: optional_f64(proto.maint_margin_after),
         equity_with_loan_after: optional_f64(proto.equity_with_loan_after),
-        commission: optional_f64(proto.commission_and_fees),
-        minimum_commission: optional_f64(proto.min_commission_and_fees),
-        maximum_commission: optional_f64(proto.max_commission_and_fees),
-        commission_currency: s(&proto.commission_and_fees_currency),
+        commission_and_fees: optional_f64(proto.commission_and_fees),
+        min_commission_and_fees: optional_f64(proto.min_commission_and_fees),
+        max_commission_and_fees: optional_f64(proto.max_commission_and_fees),
+        commission_and_fees_currency: s(&proto.commission_and_fees_currency),
         margin_currency: s(&proto.margin_currency),
         initial_margin_before_outside_rth: optional_f64(proto.init_margin_before_outside_rth),
         maintenance_margin_before_outside_rth: optional_f64(proto.maint_margin_before_outside_rth),
