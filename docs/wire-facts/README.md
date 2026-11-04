@@ -11,6 +11,7 @@ behind a decoder, encoder, or rustdoc decision.
 | [contracts.md](contracts.md) | Contract details, option chains |
 | [market-data.md](market-data.md) | Generic ticks, option computations, tick types |
 | [accounts.md](accounts.md) | Positions, PnL |
+| [news.md](news.md) | Historical news, articles |
 
 ## Entry format
 
