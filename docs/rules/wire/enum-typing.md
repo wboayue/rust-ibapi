@@ -72,8 +72,8 @@ derived serde. There is no closed `TryFrom<i32>` form for streaming paths.
 
 **A one-shot integer field decodes closed.** `ArticleType` (`news_article`, #1070) maps the table
 in a private decoder fn and returns `Error::Parse` for any other code. Its coercing public
-`From<i32>` was removed in 6.0 (#1071); an existing `From<i32>` also blocks `TryFrom<i32>` through
-the blanket impl, so a closed enum gets neither.
+`From<i32>` is removed for 6.0 (#1071); an existing `From<i32>` also blocks `TryFrom<i32>` through
+the blanket impl.
 
 **The wire code lives in the `From` impls, not a discriminant.** No `#[repr(i32)]`, no `Foo = 0`:
 with a payload variant nothing reads the discriminant, so it is decoration a reader takes for the
@@ -104,8 +104,8 @@ exists.
 ## Precedents
 
 Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §30;
-`docs/migration-4.0.md` §2, §9, §13–§15; `docs/migration-5.0.md` §1, §7; `docs/migration-6.0.md` §2–§3. Consult it rather than
-re-deriving which fields were converted.
+`docs/migration-4.0.md` §2, §9, §13–§15; `docs/migration-5.0.md` §1, §7;
+`docs/migration-6.0.md` §2–§3. Consult it rather than re-deriving which fields were converted.
 
 - #518 — established the pattern (`OrderStatus.status` → `OrderStatusKind`).
 - #556, #558 — the generic `parse_required` / `parse_optional` shape.

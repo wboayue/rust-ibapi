@@ -45,7 +45,7 @@ the number from the error or the TWS API docs (`CONFIG` is 219).
 
 ### 2. `ComboLegOpenClose` and `MarketDataType` keep unrecognized codes
 
-Both mapped any code they did not model to a unit `Unknown`, losing the value. `ComboLegOpenClose::Unknown` was itself wire code `3`, so a leg TWS reported with code `4` or higher was sent back as `3` when the contract was reused in an order. Both now take the shape the order enums have had since 4.0 (`Liquidity`, `OcaType`, ...):
+Both mapped any code they did not model to a unit `Unknown`, losing the value. `ComboLegOpenClose::Unknown` was itself wire code `3`, so a leg TWS reported with code `4` or higher was sent back as `3` when the contract was reused in an order. Both now take the shape the order enums already use (`Liquidity`, `OcaType`, ...):
 
 - **`Unknown` carries the code: `Unknown(i32)`.** `From<i32>` keeps any code outside the table, and the new `From<T> for i32` returns it unchanged. `ComboLegOpenClose` code `3` (IB's "unknown" position) is now `Unknown(3)`. An absent `MarketDataType` decodes as `Unknown(0)`, as before.
 - **The variants no longer have explicit discriminants**, so `value as i32` no longer compiles. Use `i32::from(value)`.
