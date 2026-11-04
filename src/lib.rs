@@ -209,8 +209,8 @@ pub mod wsh;
 /// A prelude module for convenient importing of commonly used types.
 pub mod prelude;
 
-/// Protocol version checking and constants for TWS API features.
-pub mod protocol;
+/// Server version gates for features above the connection floor.
+pub(crate) mod protocol;
 
 /// Generated protobuf message types for the TWS API wire protocol.
 pub(crate) mod proto;
