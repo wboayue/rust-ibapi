@@ -118,6 +118,9 @@ fn from_i32_all_values() {
         (109, TickType::OddLotBidExch),
         (110, TickType::OddLotAskExch),
         (111, TickType::Unknown),
+        (112, TickType::ComboImpliedBid),
+        (113, TickType::ComboImpliedAsk),
+        (114, TickType::Unknown),
         (-2, TickType::Unknown),
         (1000, TickType::Unknown),
     ];
@@ -240,6 +243,8 @@ fn from_str_all_values() {
         ("oddLotAskSize", TickType::OddLotAskSize),
         ("oddLotBidExch", TickType::OddLotBidExch),
         ("oddLotAskExch", TickType::OddLotAskExch),
+        ("comboImpliedBid", TickType::ComboImpliedBid),
+        ("comboImpliedAsk", TickType::ComboImpliedAsk),
         ("nonexistent", TickType::Unknown),
         ("", TickType::Unknown),
         ("  ", TickType::Unknown),
@@ -406,6 +411,8 @@ fn display_output() {
         (TickType::OddLotAskSize, "Odd Lot Ask Size"),
         (TickType::OddLotBidExch, "Odd Lot Bid Exchange"),
         (TickType::OddLotAskExch, "Odd Lot Ask Exchange"),
+        (TickType::ComboImpliedBid, "Combo Implied Bid"),
+        (TickType::ComboImpliedAsk, "Combo Implied Ask"),
     ];
 
     for (variant, expected) in &test_cases {
