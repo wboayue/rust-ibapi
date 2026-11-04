@@ -362,27 +362,26 @@ For comprehensive conditional order documentation, see [Order Types - Conditiona
 ## Protocol Version Checking
 
 The handshake refuses servers below version 213 (`PROTOBUF_REST_MESSAGES_3`), so
-a feature at or below it needs no check; those `Features` constants are
-deprecated. Check only a feature above the floor, on the line before the request:
+a feature at or below it needs no check. Gate only a feature above the floor,
+with `check_version` on the line before the request. A caller sees
+`Error::ServerVersion(required, actual, name)`. `protocol` is crate-private:
+callers can't change the server version, so they get the error from the call
+itself rather than pre-checking.
 
 ```rust
-use crate::protocol::{check_version, is_supported, Features};
+use crate::protocol::{check_version, Features};
 
 // Gate a request (from `config/sync.rs`)
 pub fn config(&self) -> Result<Config, Error> {
-    check_version(self.server_version, Features::CONFIG)?;
+    check_version(self.server_version(), Features::CONFIG)?;
     // ... implementation
-}
-
-// Conditional field encoding: a field gated above the floor stays `None`
-// when the server is too old
-if is_supported(server_version, Features::MY_FEATURE) {
-    proto.my_field = Some(request.my_field.clone());
 }
 ```
 
-Order fields gated above the floor are checked in `verify_order`
-(`orders/common/verify.rs`), mirroring C# `ValidateOrderParameters`.
+`Features` holds the request gates. Order fields gated above the floor are
+local `const ProtocolFeature`s in `orders/common/verify.rs`.
+
+`verify_order` checks them, mirroring C# `ValidateOrderParameters`.
 
 ## Subscription Patterns
 
