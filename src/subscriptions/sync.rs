@@ -139,9 +139,9 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Whether the stream has terminated. Set once a `next`, `try_next` or
     /// `next_timeout` call has returned TWS's end marker (as `None`), a
     /// terminal error, or `Err(Error::Cancelled)` after [`cancel`](Self::cancel);
-    /// from then on those calls return `None` without reading. Also set once a
-    /// snapshot's end tick has been returned: the reads do not stop there, but
-    /// TWS sends nothing more for the request. Distinguishes between the
+    /// from then on those calls return `None` without reading. A snapshot's end
+    /// tick does not set it, since the reads go on after it; the end tick is
+    /// itself the signal that a snapshot is complete. Distinguishes between the
     /// `None` that [`try_next`](Self::try_next) and
     /// [`next_timeout`](Self::next_timeout) return at the end and the one they
     /// return while nothing has arrived yet.
@@ -170,7 +170,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// # }
     /// ```
     pub fn is_terminated(&self) -> bool {
-        self.stream_ended.load(Ordering::Relaxed) || self.snapshot_ended.load(Ordering::Relaxed)
+        self.stream_ended.load(Ordering::Relaxed)
     }
 
     /// Whether the stream ended with TWS's end marker, as opposed to an

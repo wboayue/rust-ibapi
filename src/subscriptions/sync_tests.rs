@@ -656,7 +656,7 @@ const READS: [(&str, Read); 3] = [
 ];
 
 #[test]
-fn is_terminated_after_end_marker_snapshot_end_or_error() {
+fn is_terminated_after_end_marker_or_error_not_snapshot_end() {
     for (name, read) in READS {
         let (sub, _keep) = collect_subscription(vec![data(10), RoutedItem::Error(Error::EndOfStream)], true);
         assert!(!sub.is_terminated(), "{name}: new subscription");
@@ -668,7 +668,7 @@ fn is_terminated_after_end_marker_snapshot_end_or_error() {
         // -1 is `CollectItem`'s snapshot-end sentinel.
         let (sub, _keep) = collect_subscription(vec![data(-1)], true);
         assert!(matches!(read(&sub), Some(Ok(SubscriptionItem::Data(CollectItem(-1))))));
-        assert!(sub.is_terminated(), "{name}: after the snapshot end");
+        assert!(!sub.is_terminated(), "{name}: reads go on after a snapshot end");
 
         let (sub, _keep) = collect_subscription(vec![RoutedItem::Error(Error::ConnectionReset)], true);
         assert!(matches!(read(&sub), Some(Err(Error::ConnectionReset))));
