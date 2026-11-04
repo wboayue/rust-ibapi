@@ -298,3 +298,24 @@ let option = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build
 Every option `build()` call gains `?` (or handling of the error); the compiler finds each one where a `Contract` is expected.
 
 After `strike()`, the builder's strike type parameter is `f64`, where it was the validated `Strike`. Code that names the type writes `OptionBuilder<Symbol, f64, ExpirationDate>`. `Strike` and `Strike::new` are unchanged.
+
+### 17. `Order::fa_profile`, `basis_points` and `basis_points_type` are removed
+
+All three are text-protocol fields: `faProfile` went out in the text `placeOrder` until IB desupported FA profiles at server 177, and `basisPoints` / `basisPointsType` came back in the text `openOrder` for EFP orders ("download only" in IB's client). IB's protobuf `Order` message, the only shape the crate has spoken since 3.0, has no field for any of them, so nothing has sent or read them since. They are removed. Deleting an assignment changes nothing TWS sees. For a Financial Advisor allocation, use `fa_group` and `fa_method`, which are transmitted.
+
+```rust,ignore
+// 5.x
+let order = Order {
+    fa_group: "Group1".to_owned(),
+    fa_profile: "Profile1".to_owned(),    // no longer sent
+    ..Order::default()
+};
+
+// 6.0
+let order = Order {
+    fa_group: "Group1".to_owned(),
+    ..Order::default()
+};
+```
+
+The compiler finds every use of the three fields. It does not catch the serialized form: a serialized `Order` no longer has the `fa_profile`, `basis_points` and `basis_points_type` keys. `Order` does not use `deny_unknown_fields`, so an `Order` serialized by 5.x still deserializes and the three keys are ignored.

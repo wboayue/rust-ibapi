@@ -229,8 +229,6 @@ pub struct Order {
     pub trailing_percent: Option<f64>,
     /// The Financial Advisor group the trade will be allocated to. Use an empty string if not applicable.
     pub fa_group: String,
-    /// The Financial Advisor allocation profile the trade will be allocated to. Use an empty string if not applicable.
-    pub fa_profile: String,
     /// The Financial Advisor allocation method the trade will be allocated to. Use an empty string if not applicable.
     pub fa_method: String,
     /// The Financial Advisor percentage concerning the trade's allocation. Use an empty string if not applicable.
@@ -312,10 +310,6 @@ pub struct Order {
     pub delta_neutral_short_sale_slot: i32,
     /// Identifies third party order origin. Used only when deltaNeutralShortSaleSlot = 2.
     pub delta_neutral_designated_location: String,
-    /// Specifies Basis Points for EFP order. The values increment in 0.01% = 1 basis point. For EFP orders only.
-    pub basis_points: Option<f64>,
-    /// Specifies the increment of the Basis Points. For EFP orders only.
-    pub basis_points_type: Option<i32>,
     /// Defines the size of the first, or initial, order component. For Scale orders only.
     pub scale_init_level_size: Option<i32>,
     /// Defines the order size of the subsequent scale order components. For Scale orders only. Used in conjunction with scaleInitLevelSize().
@@ -597,7 +591,6 @@ impl Default for Order {
             trail_stop_price: None,
             trailing_percent: None,
             fa_group: "".to_owned(),
-            fa_profile: "".to_owned(),
             fa_method: "".to_owned(),
             fa_percentage: "".to_owned(),
             open_close: None,
@@ -626,8 +619,6 @@ impl Default for Order {
             delta_neutral_short_sale: false,
             delta_neutral_short_sale_slot: 0,
             delta_neutral_designated_location: "".to_owned(),
-            basis_points: Some(0.0),
-            basis_points_type: Some(0),
             scale_init_level_size: None,
             scale_subs_level_size: None,
             scale_price_increment: None,

@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `ibapi::protocol` is crate-private. Its 53 constants deprecated in 5.1 (at or below the server version 213 connection floor, so a check always passed) are deleted, along with `is_supported` and `include_if_supported`, which nothing called. The three remaining gates (`CANCEL_CONTRACT_DATA`, `CONFIG`, `UPDATE_CONFIG`) are checked by the requests themselves, which return `Error::ServerVersion` from a server too old for them. See `docs/migration-6.0.md` §1 (#990, #1157).
 - `From<i32> for ArticleType` is removed: it read any unknown code as `Text`. See `docs/migration-6.0.md` §3 (#1071).
+- `Order::fa_profile`, `basis_points` and `basis_points_type` are removed. IB's protobuf `Order` message has no field for them, so nothing has sent or read them since 3.0. See `docs/migration-6.0.md` §17 (#1184).
 
 ### Fixed
 
