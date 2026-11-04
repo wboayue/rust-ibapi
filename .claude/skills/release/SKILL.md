@@ -123,5 +123,11 @@ URL:
 1. Review and publish the draft release on GitHub.
 2. `cargo publish` from a clean checkout of `vX.Y.Z`.
 
-Optional, after they confirm: check https://crates.io/crates/ibapi shows X.Y.Z and the
-docs.rs build passed.
+Optional, after they confirm: check that crates.io shows X.Y.Z and that the docs.rs build
+passed. docs.rs serves an HTML "version does not exist" page until it has queued the build,
+which can take a few minutes:
+
+```bash
+curl -s -A "rust-ibapi-release-check" https://crates.io/api/v1/crates/ibapi | jq -r .crate.max_version
+curl -s -A "rust-ibapi-release-check" https://docs.rs/crate/ibapi/X.Y.Z/status.json   # {"doc_status":true,...}
+```

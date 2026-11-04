@@ -78,6 +78,18 @@ gh pr checks <N> --watch --interval 30
 - **Retargeting does not start CI.** After `gh pr edit <N> --base main`, push something:
   `git merge origin/main && git push` on the branch.
 - A red leg: reproduce locally with that leg's exact flags before pushing a fix.
+- **Fork PRs** wait at `action_required` until approved:
+  `gh api -X POST repos/wboayue/rust-ibapi/actions/runs/<id>/approve`. Approve the run for
+  the **current head SHA** (`gh api "repos/wboayue/rust-ibapi/actions/runs?head_sha=<sha>"`).
+  Approving an older run tests a stale commit, so cancel it.
+- **A conflicting PR gets no CI at all.** Pushes to a PR with `mergeable: CONFLICTING` start
+  no run. Resolve the conflict first (§6 Fork PRs).
+- **Confirm green against the head you'll merge.** A `--watch` started right after a push can
+  report the previous head's checks:
+  `gh api repos/wboayue/rust-ibapi/commits/<sha>/check-runs --jq '.check_runs[]|"\(.name) \(.conclusion)"'`.
+  Merge with `--match-head-commit <sha>` so a later push can't slip in.
+- A failure unrelated to the diff, like `No space left on device` on the runner, is
+  infrastructure: `gh run rerun <id> --failed`.
 
 ## 6. Merge
 
