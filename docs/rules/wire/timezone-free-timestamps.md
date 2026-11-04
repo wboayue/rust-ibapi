@@ -36,8 +36,8 @@ host zone. Use a form that's the same everywhere, or hand the text to the caller
 
 ## Existing exceptions
 
-These were written before this rule and resolve zones because the wire gave no zone-free
-alternative. Don't extend them, don't copy them, and don't route a new field through them:
+These were written before this rule and resolve or assume a zone. Don't extend them, don't
+copy them, and don't route a new field through them:
 
 - `connection::common::parse_connection_time`: the handshake's `YYYYMMDD HH:MM:SS <zone>`,
   which also sets `Client::time_zone()`.
