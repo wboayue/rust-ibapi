@@ -119,12 +119,6 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("GM").build();
     ///
-    /// // Ending now:
-    /// let schedule = client
-    ///     .historical_schedules(&contract, 30.days())
-    ///     .fetch()
-    ///     .expect("historical schedule request failed");
-    ///
     /// // Anchored to a specific end date:
     /// let schedule = client
     ///     .historical_schedules(&contract, 30.days())
@@ -132,7 +126,7 @@ impl Client {
     ///     .fetch()
     ///     .expect("historical schedule request failed");
     ///
-    /// // Extended-hours sessions:
+    /// // Extended-hours sessions, ending now:
     /// let schedule = client
     ///     .historical_schedules(&contract, 30.days())
     ///     .trading_hours(TradingHours::Extended)

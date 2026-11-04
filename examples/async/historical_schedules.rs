@@ -4,7 +4,8 @@
 //! This example demonstrates how to retrieve trading schedule information
 //! for a contract using the async API. It exercises the
 //! `historical_schedules` builder both without `.ending()` (anchors at
-//! current time) and with `.ending(date)` (anchors at a specific end date).
+//! current time) and with `.ending(date)` (anchors at a specific end date),
+//! and compares regular- with extended-hours sessions for a future.
 //!
 //! # Usage
 //!
@@ -22,8 +23,8 @@
 use std::sync::Arc;
 
 use ibapi::{
-    contracts::{Contract, ContractMonth},
-    market_data::historical::ToDuration,
+    contracts::Contract,
+    market_data::{historical::ToDuration, TradingHours},
     Client,
 };
 use time::macros::datetime;
@@ -40,14 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contracts = vec![
         ("AAPL", Contract::stock("AAPL").build(), "NASDAQ"),
         ("SPY", Contract::stock("SPY").build(), "NYSE"),
-        (
-            "GC",
-            Contract::futures("GC")
-                .expires_in(ContractMonth::new(2025, 2))
-                .on_exchange("COMEX")
-                .build(),
-            "COMEX",
-        ),
+        ("GC", Contract::futures("GC").front_month().on_exchange("COMEX").build(), "COMEX"),
     ];
 
     // Request trading schedule for each contract
@@ -97,6 +91,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             println!("Error: {e:?}");
+        }
+    }
+
+    // Regular vs extended hours: a future's full session opens the prior
+    // evening, and each session is dated by its trade date.
+    println!("\n\nRegular vs extended hours (ES futures, last 3 sessions):");
+    let contract = Contract::futures("ES").next_quarter().on_exchange("CME").build();
+    for trading_hours in [TradingHours::Regular, TradingHours::Extended] {
+        match client
+            .historical_schedules(&contract, 5.days())
+            .trading_hours(trading_hours)
+            .fetch()
+            .await
+        {
+            Ok(schedule) => {
+                println!("  {trading_hours:?}:");
+                for session in schedule.sessions.iter().rev().take(3).rev() {
+                    println!("    {} - Trading: {} to {}", session.reference, session.start, session.end);
+                }
+            }
+            Err(e) => println!("  {trading_hours:?} error: {e:?}"),
         }
     }
 

@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --no-default-features --features sync --example historical_schedules -- <STOCK_SYMBOL> [--connection_string <HOST:PORT>]
+//! cargo run --no-default-features --features sync --example historical_schedules -- <STOCK_SYMBOL> [--extended] [--connection_string <HOST:PORT>]
 //! ```
 
 use clap::{arg, Command};
@@ -12,18 +12,21 @@ use time::macros::datetime;
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::historical::ToDuration;
+use ibapi::market_data::TradingHours;
 
 fn main() {
     env_logger::init();
 
     let matches = Command::new("historical_schedules")
-        .about("Get the last 7 days of trading schedules for the given stock")
+        .about("Get 7 days of trading schedules ending 2023-04-15 for the given stock")
         .arg(arg!(<STOCK_SYMBOL>).required(true))
+        .arg(arg!(--extended "Include extended-hours sessions"))
         .arg(arg!(--connection_string <VALUE>).default_value("127.0.0.1:4002"))
         .get_matches();
 
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let stock_symbol = matches.get_one::<String>("STOCK_SYMBOL").expect("stock symbol is required");
+    let trading_hours = TradingHours::from_use_rth(!matches.get_flag("extended"));
 
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
@@ -32,6 +35,7 @@ fn main() {
     let schedule = client
         .historical_schedules(&contract, 7.days())
         .ending(datetime!(2023-04-15 0:00 UTC))
+        .trading_hours(trading_hours)
         .fetch()
         .expect("historical schedule request failed");
 
