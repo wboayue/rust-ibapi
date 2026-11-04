@@ -27,7 +27,9 @@ host zone. Use a form that's the same everywhere, or hand the text to the caller
 - **Inbound, prefer a zone-free wire form:** Unix seconds (`formatDate=2`), a bare date
   (`YYYYMMDD` → `Date`), or a rendering that is UTC by definition (`YYYYMMDD-HH:MM:SS`, the
   gateway's UTC format). Parse it with one `format_description!`, not a list of guesses. A
-  zone-less text is UTC only if a doc or a live capture says so (`docs/wire-facts/`).
+  zone-less text is UTC only if a doc or a live capture says so (`docs/wire-facts/`), as for
+  historical news `time` (`news::common::decoders::try_parse_time_as_utc`, see
+  [news wire facts](../../wire-facts/news.md#historical-news-time-is-utc)).
 - **Inbound, only zoned or local text available:** pass it through as a `String` field. Don't
   resolve it. Leave the zone to the caller, who knows their gateway setup.
 - **Don't add request options that switch TWS to a zone-dependent rendering.** `formatDate=1`
@@ -36,7 +38,7 @@ host zone. Use a form that's the same everywhere, or hand the text to the caller
 
 ## Existing exceptions
 
-These were written before this rule and resolve or assume a zone. Don't extend them, don't
+These were written before this rule and resolve a zone. Don't extend them, don't
 copy them, and don't route a new field through them:
 
 - `connection::common::parse_connection_time`: the handshake's `YYYYMMDD HH:MM:SS <zone>`,
@@ -46,9 +48,6 @@ copy them, and don't route a new field through them:
   rather than being guessed (#904).
 - `parse_schedule_date_time`: historical schedule sessions, resolved in the schedule's own
   `time_zone`.
-- `news::common::decoders::try_parse_time_as_utc`: historical news `time`. It *assumes* the
-  zone-less `YYYY-MM-DD HH:MM:SS.s` text is UTC, with no doc or capture behind that, and
-  silently falls back to the Unix epoch when parsing fails.
 
 A new decoder that seems to need one of these is a design question. Raise it before writing
 the code.
