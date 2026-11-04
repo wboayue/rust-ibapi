@@ -1,138 +1,140 @@
 #[cfg(test)]
 use super::*;
 
+/// Every modeled code, plus unassigned ones: -1 (the default), 47 (removed), 111 (gap), 114
+/// (above the table), and far outside it. Written independently of the `tick_types!` rows, so
+/// a mistyped row fails here.
 #[test]
-fn from_i32_all_values() {
-    let test_cases = vec![
-        (-1, TickType::Unknown),
-        (0, TickType::BidSize),
-        (1, TickType::Bid),
-        (2, TickType::Ask),
-        (3, TickType::AskSize),
-        (4, TickType::Last),
-        (5, TickType::LastSize),
-        (6, TickType::High),
-        (7, TickType::Low),
-        (8, TickType::Volume),
-        (9, TickType::Close),
-        (10, TickType::BidOption),
-        (11, TickType::AskOption),
-        (12, TickType::LastOption),
-        (13, TickType::ModelOption),
-        (14, TickType::Open),
-        (15, TickType::Low13Week),
-        (16, TickType::High13Week),
-        (17, TickType::Low26Week),
-        (18, TickType::High26Week),
-        (19, TickType::Low52Week),
-        (20, TickType::High52Week),
-        (21, TickType::AvgVolume),
-        (22, TickType::OpenInterest),
-        (23, TickType::OptionHistoricalVol),
-        (24, TickType::OptionImpliedVol),
-        (25, TickType::OptionBidExch),
-        (26, TickType::OptionAskExch),
-        (27, TickType::OptionCallOpenInterest),
-        (28, TickType::OptionPutOpenInterest),
-        (29, TickType::OptionCallVolume),
-        (30, TickType::OptionPutVolume),
-        (31, TickType::IndexFuturePremium),
-        (32, TickType::BidExch),
-        (33, TickType::AskExch),
-        (34, TickType::AuctionVolume),
-        (35, TickType::AuctionPrice),
-        (36, TickType::AuctionImbalance),
-        (37, TickType::MarkPrice),
-        (38, TickType::BidEfpComputation),
-        (39, TickType::AskEfpComputation),
-        (40, TickType::LastEfpComputation),
-        (41, TickType::OpenEfpComputation),
-        (42, TickType::HighEfpComputation),
-        (43, TickType::LowEfpComputation),
-        (44, TickType::CloseEfpComputation),
-        (45, TickType::LastTimestamp),
-        (46, TickType::Shortable),
-        // id 47 (FundamentalRatios) removed in TWS 10.47; now decodes to Unknown.
-        (47, TickType::Unknown),
-        (48, TickType::RtVolume),
-        (49, TickType::Halted),
-        (50, TickType::BidYield),
-        (51, TickType::AskYield),
-        (52, TickType::LastYield),
-        (53, TickType::CustOptionComputation),
-        (54, TickType::TradeCount),
-        (55, TickType::TradeRate),
-        (56, TickType::VolumeRate),
-        (57, TickType::LastRthTrade),
-        (58, TickType::RtHistoricalVol),
-        (59, TickType::IbDividends),
-        (60, TickType::BondFactorMultiplier),
-        (61, TickType::RegulatoryImbalance),
-        (62, TickType::NewsTick),
-        (63, TickType::ShortTermVolume3Min),
-        (64, TickType::ShortTermVolume5Min),
-        (65, TickType::ShortTermVolume10Min),
-        (66, TickType::DelayedBid),
-        (67, TickType::DelayedAsk),
-        (68, TickType::DelayedLast),
-        (69, TickType::DelayedBidSize),
-        (70, TickType::DelayedAskSize),
-        (71, TickType::DelayedLastSize),
-        (72, TickType::DelayedHigh),
-        (73, TickType::DelayedLow),
-        (74, TickType::DelayedVolume),
-        (75, TickType::DelayedClose),
-        (76, TickType::DelayedOpen),
-        (77, TickType::RtTrdVolume),
-        (78, TickType::CreditmanMarkPrice),
-        (79, TickType::CreditmanSlowMarkPrice),
-        (80, TickType::DelayedBidOption),
-        (81, TickType::DelayedAskOption),
-        (82, TickType::DelayedLastOption),
-        (83, TickType::DelayedModelOption),
-        (84, TickType::LastExch),
-        (85, TickType::LastRegTime),
-        (86, TickType::FuturesOpenInterest),
-        (87, TickType::AvgOptVolume),
-        (88, TickType::DelayedLastTimestamp),
-        (89, TickType::ShortableShares),
-        (90, TickType::DelayedHalted),
-        (91, TickType::Reuters2MutualFunds),
-        (92, TickType::EtfNavClose),
-        (93, TickType::EtfNavPriorClose),
-        (94, TickType::EtfNavBid),
-        (95, TickType::EtfNavAsk),
-        (96, TickType::EtfNavLast),
-        (97, TickType::EtfFrozenNavLast),
-        (98, TickType::EtfNavHigh),
-        (99, TickType::EtfNavLow),
-        (100, TickType::SocialMarketAnalytics),
-        (101, TickType::EstimatedIpoMidpoint),
-        (102, TickType::FinalIpoLast),
-        (103, TickType::DelayedYieldBid),
-        (104, TickType::DelayedYieldAsk),
-        (105, TickType::OddLotBid),
-        (106, TickType::OddLotAsk),
-        (107, TickType::OddLotBidSize),
-        (108, TickType::OddLotAskSize),
-        (109, TickType::OddLotBidExch),
-        (110, TickType::OddLotAskExch),
-        (111, TickType::Unknown),
-        (112, TickType::ComboImpliedBid),
-        (113, TickType::ComboImpliedAsk),
-        (114, TickType::Unknown),
-        (-2, TickType::Unknown),
-        (1000, TickType::Unknown),
-    ];
-
-    for (input, expected) in test_cases {
-        assert_eq!(TickType::from(input), expected, "Failed for input: {}", input);
-    }
+fn tick_type_round_trips_every_wire_code() {
+    crate::common::test_utils::wire_enum::check_wire_code_round_trip(
+        &[
+            (TickType::Unknown(-1), -1),
+            (TickType::BidSize, 0),
+            (TickType::Bid, 1),
+            (TickType::Ask, 2),
+            (TickType::AskSize, 3),
+            (TickType::Last, 4),
+            (TickType::LastSize, 5),
+            (TickType::High, 6),
+            (TickType::Low, 7),
+            (TickType::Volume, 8),
+            (TickType::Close, 9),
+            (TickType::BidOption, 10),
+            (TickType::AskOption, 11),
+            (TickType::LastOption, 12),
+            (TickType::ModelOption, 13),
+            (TickType::Open, 14),
+            (TickType::Low13Week, 15),
+            (TickType::High13Week, 16),
+            (TickType::Low26Week, 17),
+            (TickType::High26Week, 18),
+            (TickType::Low52Week, 19),
+            (TickType::High52Week, 20),
+            (TickType::AvgVolume, 21),
+            (TickType::OpenInterest, 22),
+            (TickType::OptionHistoricalVol, 23),
+            (TickType::OptionImpliedVol, 24),
+            (TickType::OptionBidExch, 25),
+            (TickType::OptionAskExch, 26),
+            (TickType::OptionCallOpenInterest, 27),
+            (TickType::OptionPutOpenInterest, 28),
+            (TickType::OptionCallVolume, 29),
+            (TickType::OptionPutVolume, 30),
+            (TickType::IndexFuturePremium, 31),
+            (TickType::BidExch, 32),
+            (TickType::AskExch, 33),
+            (TickType::AuctionVolume, 34),
+            (TickType::AuctionPrice, 35),
+            (TickType::AuctionImbalance, 36),
+            (TickType::MarkPrice, 37),
+            (TickType::BidEfpComputation, 38),
+            (TickType::AskEfpComputation, 39),
+            (TickType::LastEfpComputation, 40),
+            (TickType::OpenEfpComputation, 41),
+            (TickType::HighEfpComputation, 42),
+            (TickType::LowEfpComputation, 43),
+            (TickType::CloseEfpComputation, 44),
+            (TickType::LastTimestamp, 45),
+            (TickType::Shortable, 46),
+            // id 47 (FundamentalRatios) removed in TWS 10.47; now decodes to Unknown(47).
+            (TickType::Unknown(47), 47),
+            (TickType::RtVolume, 48),
+            (TickType::Halted, 49),
+            (TickType::BidYield, 50),
+            (TickType::AskYield, 51),
+            (TickType::LastYield, 52),
+            (TickType::CustOptionComputation, 53),
+            (TickType::TradeCount, 54),
+            (TickType::TradeRate, 55),
+            (TickType::VolumeRate, 56),
+            (TickType::LastRthTrade, 57),
+            (TickType::RtHistoricalVol, 58),
+            (TickType::IbDividends, 59),
+            (TickType::BondFactorMultiplier, 60),
+            (TickType::RegulatoryImbalance, 61),
+            (TickType::NewsTick, 62),
+            (TickType::ShortTermVolume3Min, 63),
+            (TickType::ShortTermVolume5Min, 64),
+            (TickType::ShortTermVolume10Min, 65),
+            (TickType::DelayedBid, 66),
+            (TickType::DelayedAsk, 67),
+            (TickType::DelayedLast, 68),
+            (TickType::DelayedBidSize, 69),
+            (TickType::DelayedAskSize, 70),
+            (TickType::DelayedLastSize, 71),
+            (TickType::DelayedHigh, 72),
+            (TickType::DelayedLow, 73),
+            (TickType::DelayedVolume, 74),
+            (TickType::DelayedClose, 75),
+            (TickType::DelayedOpen, 76),
+            (TickType::RtTrdVolume, 77),
+            (TickType::CreditmanMarkPrice, 78),
+            (TickType::CreditmanSlowMarkPrice, 79),
+            (TickType::DelayedBidOption, 80),
+            (TickType::DelayedAskOption, 81),
+            (TickType::DelayedLastOption, 82),
+            (TickType::DelayedModelOption, 83),
+            (TickType::LastExch, 84),
+            (TickType::LastRegTime, 85),
+            (TickType::FuturesOpenInterest, 86),
+            (TickType::AvgOptVolume, 87),
+            (TickType::DelayedLastTimestamp, 88),
+            (TickType::ShortableShares, 89),
+            (TickType::DelayedHalted, 90),
+            (TickType::Reuters2MutualFunds, 91),
+            (TickType::EtfNavClose, 92),
+            (TickType::EtfNavPriorClose, 93),
+            (TickType::EtfNavBid, 94),
+            (TickType::EtfNavAsk, 95),
+            (TickType::EtfNavLast, 96),
+            (TickType::EtfFrozenNavLast, 97),
+            (TickType::EtfNavHigh, 98),
+            (TickType::EtfNavLow, 99),
+            (TickType::SocialMarketAnalytics, 100),
+            (TickType::EstimatedIpoMidpoint, 101),
+            (TickType::FinalIpoLast, 102),
+            (TickType::DelayedYieldBid, 103),
+            (TickType::DelayedYieldAsk, 104),
+            (TickType::OddLotBid, 105),
+            (TickType::OddLotAsk, 106),
+            (TickType::OddLotBidSize, 107),
+            (TickType::OddLotAskSize, 108),
+            (TickType::OddLotBidExch, 109),
+            (TickType::OddLotAskExch, 110),
+            (TickType::Unknown(111), 111),
+            (TickType::ComboImpliedBid, 112),
+            (TickType::ComboImpliedAsk, 113),
+            (TickType::Unknown(114), 114),
+            (TickType::Unknown(-2), -2),
+            (TickType::Unknown(1000), 1000),
+        ],
+        TickType::Unknown,
+    );
 }
 
 #[test]
-fn from_str_all_values() {
-    let test_cases = vec![
+fn from_name_all_values() {
+    let test_cases = [
         ("bidSize", TickType::BidSize),
         ("bidPrice", TickType::Bid),
         ("askPrice", TickType::Ask),
@@ -245,21 +247,30 @@ fn from_str_all_values() {
         ("oddLotAskExch", TickType::OddLotAskExch),
         ("comboImpliedBid", TickType::ComboImpliedBid),
         ("comboImpliedAsk", TickType::ComboImpliedAsk),
-        ("nonexistent", TickType::Unknown),
-        ("", TickType::Unknown),
-        ("  ", TickType::Unknown),
-        ("BIDSIZE", TickType::Unknown),
-        ("BidSize", TickType::Unknown),
     ];
 
-    for (input, expected) in test_cases {
-        assert_eq!(TickType::from(input), expected, "Failed for input: {}", input);
+    for (name, expected) in test_cases {
+        assert_eq!(TickType::from_name(name), Some(expected), "from_name({name:?})");
+        assert_eq!(expected.name(), Some(name), "{expected:?}.name()");
+    }
+}
+
+/// Exact, case-sensitive match on the field name; anything else is `None`.
+#[test]
+fn from_name_rejects_other_names() {
+    for name in ["nonexistent", "", "  ", "BIDSIZE", "BidSize"] {
+        assert_eq!(TickType::from_name(name), None, "from_name({name:?})");
     }
 }
 
 #[test]
+fn unknown_has_no_name() {
+    assert_eq!(TickType::Unknown(500).name(), None);
+}
+
+#[test]
 fn default_works() {
-    assert_eq!(TickType::default(), TickType::Unknown);
+    assert_eq!(TickType::default(), TickType::Unknown(-1));
 }
 
 #[test]
@@ -276,31 +287,9 @@ fn partial_eq() {
 }
 
 #[test]
-fn edge_cases() {
-    // Test the lowest and highest defined values
-    assert_eq!(TickType::from(0), TickType::BidSize);
-    assert_eq!(TickType::from(110), TickType::OddLotAskExch);
-
-    // Test values just outside the defined range
-    assert_eq!(TickType::from(-2), TickType::Unknown);
-    assert_eq!(TickType::from(111), TickType::Unknown);
-
-    // Test with empty string and whitespace
-    assert_eq!(TickType::from(""), TickType::Unknown);
-    assert_eq!(TickType::from("  "), TickType::Unknown);
-}
-
-#[test]
-fn case_sensitivity() {
-    assert_eq!(TickType::from("BIDSIZE"), TickType::Unknown);
-    assert_eq!(TickType::from("bidSize"), TickType::BidSize);
-    assert_eq!(TickType::from("BidSize"), TickType::Unknown);
-}
-
-#[test]
 fn display_output() {
     let test_cases = [
-        (TickType::Unknown, "Unknown"),
+        (TickType::Unknown(500), "Unknown(500)"),
         (TickType::BidSize, "Bid Size"),
         (TickType::Bid, "Bid"),
         (TickType::Ask, "Ask"),

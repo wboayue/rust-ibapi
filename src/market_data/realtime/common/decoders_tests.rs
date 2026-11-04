@@ -364,10 +364,12 @@ mod tick_price_tests {
 
     #[test]
     fn decode_tick_price_proto_unknown_type() {
-        // TickType 99 → Unknown size tick type → returns Price variant.
-        let proto_msg = tick_price().tick_type(99).price(42.0).size(10.0).attr_mask(0x2).to_proto();
+        // An unmodeled tick id keeps its code and, having no size companion, decodes as Price
+        // even with a size present.
+        let proto_msg = tick_price().tick_type(500).price(42.0).size(10.0).attr_mask(0x2).to_proto();
         match decode_tick_price_proto(proto_msg).expect("decode failed") {
             TickTypes::Price(tp) => {
+                assert_eq!(tp.tick_type, TickType::Unknown(500));
                 assert_eq!(tp.price, 42.0);
                 assert!(tp.attributes.past_limit);
             }
@@ -413,6 +415,12 @@ mod tick_size_tests {
             assert_eq!(tick.tick_type, expected, "type_id {type_id}");
         }
     }
+
+    #[test]
+    fn decode_tick_size_proto_preserves_unknown_type() {
+        let result = decode_tick_size_proto(fixture(500).to_proto()).expect("decode failed");
+        assert_eq!(result.tick_type, TickType::Unknown(500));
+    }
 }
 
 mod tick_string_tests {
@@ -427,6 +435,12 @@ mod tick_string_tests {
         let result = decode_tick_string_proto(fixture().to_proto()).expect("decode failed");
         assert_eq!(result.tick_type, TickType::LastTimestamp);
         assert_eq!(result.value, "1681133400");
+    }
+
+    #[test]
+    fn decode_tick_string_proto_preserves_unknown_type() {
+        let result = decode_tick_string_proto(fixture().tick_type(500).to_proto()).expect("decode failed");
+        assert_eq!(result.tick_type, TickType::Unknown(500));
     }
 }
 
@@ -443,10 +457,27 @@ mod tick_generic_tests {
         assert_eq!(result.tick_type, TickType::Halted);
         assert_eq!(result.value, 0.0);
     }
+
+    #[test]
+    fn decode_tick_generic_proto_preserves_unknown_type() {
+        let result = decode_tick_generic_proto(fixture().tick_type(500).to_proto()).expect("decode failed");
+        assert_eq!(result.tick_type, TickType::Unknown(500));
+    }
 }
 
 mod tick_option_computation_tests {
     use super::*;
+
+    #[test]
+    fn decode_tick_option_computation_proto_preserves_unknown_type() {
+        let proto_msg = crate::proto::TickOptionComputation {
+            req_id: Some(1),
+            tick_type: Some(500),
+            ..Default::default()
+        };
+        let result = decode_tick_option_computation_proto(proto_msg).expect("decode failed");
+        assert_eq!(result.field, TickType::Unknown(500));
+    }
 
     #[test]
     fn decode_tick_option_computation_proto_works() {

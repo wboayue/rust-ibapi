@@ -79,7 +79,9 @@ the blanket impl.
 with a payload variant nothing reads the discriminant, so it is decoration a reader takes for the
 source of truth, and `#[repr(i32)]` is an ABI commitment buying nothing. A missing match arm is a
 compile error; `Foo = 5` paired with `Foo => 6` is not. Document the code on each variant
-(``Wire code `0`.``).
+(``Wire code `0`.``). A table too large to keep in step by hand (`TickType`, 112 codes, also
+carrying a field name and display text) is one private `macro_rules!` table that generates the
+enum, both `From` impls and the rest, with the wire-code doc appended per variant (#1071).
 
 **Check `Order.proto` for the field before giving it this shape.** `AuctionStrategy` was typed "for
 uniformity" in #825 on a field the proto `Order` does not carry (IBKR's `Order.proto` has no
@@ -105,7 +107,7 @@ exists.
 
 Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §30;
 `docs/migration-4.0.md` §2, §9, §13–§15; `docs/migration-5.0.md` §1, §7;
-`docs/migration-6.0.md` §2–§3, §7. Consult it rather than re-deriving which fields were converted.
+`docs/migration-6.0.md` §2–§3, §6–§7. Consult it rather than re-deriving which fields were converted.
 
 - #518 — established the pattern (`OrderStatus.status` → `OrderStatusKind`).
 - #556, #558 — the generic `parse_required` / `parse_optional` shape.

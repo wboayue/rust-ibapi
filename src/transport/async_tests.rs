@@ -1192,7 +1192,7 @@ async fn subscription_10091_preserves_later_option_computation() {
     let mut subscription = Subscription::new_from_internal(internal, bus.clone(), Some(request_id.raw()), None, DecoderContext::default());
     let computation = tick_option_computation()
         .request_id(request_id.raw())
-        .tick_type(TickType::DelayedModelOption as i32)
+        .tick_type(i32::from(TickType::DelayedModelOption))
         .tick_attrib(0)
         .delta(0.5)
         .to_proto();
