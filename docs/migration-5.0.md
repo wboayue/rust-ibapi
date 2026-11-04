@@ -1,6 +1,6 @@
 # Migration Guide: 4.x to 5.0
 
-This guide covers the breaking changes in `ibapi` 5.0. For 3.x → 4.x, see [`migration-4.0.md`](migration-4.0.md).
+This guide covers the breaking changes in `ibapi` 5.0. The 5.x line ended with 5.6.0; for 5.x → 6.0, see [`migration-6.0.md`](migration-6.0.md). For 3.x → 4.x, see [`migration-4.0.md`](migration-4.0.md).
 
 ## Breaking changes
 
