@@ -35,9 +35,10 @@ The async client is on by default; features are additive:
 
 ## Versioning and branches
 
-- **`main`** — 5.x, the only maintained branch. 5.x minors stay non-breaking; a breaking
-  change (consistent naming, idiomatic API, cleanup) is queued for 6.0 — ask before making
-  one. `docs/migration-5.0.md` is frozen; 6.0 work opens `docs/migration-6.0.md`.
+- **`main`** — 6.0 development (`6.0.0-dev`), the only maintained branch. 5.6.0 was the
+  last 5.x release from `main`. Breaking changes (consistent naming, idiomatic API, cleanup;
+  see the 6.0 milestone) land here, each with its section in `docs/migration-6.0.md`.
+  `docs/migration-5.0.md` is frozen.
 - **`v2-stable`** — frozen. Touch it only to backport a specific named bug on explicit request.
 
 All changes go through pull requests.

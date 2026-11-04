@@ -11,6 +11,7 @@ An unofficial Rust client for the Interactive Brokers [TWS API](https://ibkrcamp
 Use it to retrieve account information, request real-time and historical market data, place and monitor orders, run market scans, and read news and Wall Street Horizon (WSH) event data. Contract builders check required fields at compile time, subscriptions cancel themselves when dropped, and the client reconnects automatically after a dropped connection.
 
 > **📚 Migrating?**
+> - [v5.x → v6.0](docs/migration-6.0.md) (in development)
 > - [v4.x → v5.0](docs/migration-5.0.md)
 > - [v3.x → v4.x](docs/migration-4.0.md)
 > - [v2.x → v3.0](docs/migration-3.0.md): `Subscription` shape and notification handling

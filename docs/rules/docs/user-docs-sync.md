@@ -8,18 +8,18 @@ triggers:
   - changing a public field's type or a return type's shape
   - adding a builder method or feature flag a user upgrading would search for
   - about to grep for a name you just renamed
-symbols: [README.md, migration-5.0.md]
+symbols: [README.md, migration-6.0.md]
 related: [changelog-entry, public-api-examples, restrict-after-callers, modernize-touched-modules]
 precedents: ["#549", "#771", "#884"]
 memory: [feedback_md_doc_snippets_rot_silently, feedback_field_removal_breaks_public_contract]
 ---
 
 Treat `README.md` and the **next major's** migration guide as public API: a breaking change
-updates both in the same PR. 5.0 shipped (2026-10-04), so `docs/migration-5.0.md` is a frozen
-record like `docs/migration-4.0.md`, `docs/migration-3.0.md`, and `MIGRATION.md`; a breaking
-change on 5.x means starting 6.0 and `docs/migration-6.0.md` — ask before doing so. Frozen
-guides get no new sections, but a rename can still strand their prose, so they stay in the grep
-set below.
+updates both in the same PR. `main` is 6.0 development, so the live guide is
+`docs/migration-6.0.md`. `docs/migration-5.0.md` (5.6.0 was the last 5.x release from `main`)
+is a frozen record like `docs/migration-4.0.md`, `docs/migration-3.0.md`, and `MIGRATION.md`.
+Frozen guides get no new sections, but a rename can still strand their prose, so they stay in
+the grep set below.
 
 Update the migration guide when the PR:
 
