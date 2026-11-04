@@ -233,6 +233,10 @@ pub enum TickType {
     OddLotBidExch = 109,
     /// Exchange code supplying the odd-lot ask.
     OddLotAskExch = 110,
+    /// Implied bid price of a combo (BAG) contract.
+    ComboImpliedBid = 112,
+    /// Implied ask price of a combo (BAG) contract.
+    ComboImpliedAsk = 113,
 }
 
 impl From<i32> for TickType {
@@ -349,6 +353,8 @@ impl From<i32> for TickType {
             108 => Self::OddLotAskSize,
             109 => Self::OddLotBidExch,
             110 => Self::OddLotAskExch,
+            112 => Self::ComboImpliedBid,
+            113 => Self::ComboImpliedAsk,
             _ => Self::Unknown,
         }
     }
@@ -467,6 +473,8 @@ impl From<&str> for TickType {
             "oddLotAskSize" => Self::OddLotAskSize,
             "oddLotBidExch" => Self::OddLotBidExch,
             "oddLotAskExch" => Self::OddLotAskExch,
+            "comboImpliedBid" => Self::ComboImpliedBid,
+            "comboImpliedAsk" => Self::ComboImpliedAsk,
             _ => Self::Unknown,
         }
     }
@@ -586,6 +594,8 @@ impl fmt::Display for TickType {
             Self::OddLotAskSize => write!(f, "Odd Lot Ask Size"),
             Self::OddLotBidExch => write!(f, "Odd Lot Bid Exchange"),
             Self::OddLotAskExch => write!(f, "Odd Lot Ask Exchange"),
+            Self::ComboImpliedBid => write!(f, "Combo Implied Bid"),
+            Self::ComboImpliedAsk => write!(f, "Combo Implied Ask"),
         }
     }
 }

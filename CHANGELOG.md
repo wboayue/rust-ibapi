@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
+
 ## [5.6.0] - 2026-11-03
 
 ### Added
