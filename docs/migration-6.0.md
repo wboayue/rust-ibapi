@@ -131,7 +131,8 @@ let spread = Contract::spread("AAPL").vertical(long_call, short_call).build()?;
 - **An unrecognized value is `Unknown(String)`**, carrying the raw wire string.
 - **`From<&str>` is replaced by `FromStr`** (`"004".parse::<FundAssetType>()`), which rejects
   only an empty string. `as_str()` and `Display` return the wire value (`"004"`, `"Y"`).
-- **Serde:** `Unknown` serializes in the derived tagged form, `{"Unknown":"008"}`.
+- **Serde:** `Unknown` serializes in the derived tagged form, `{"Unknown":"008"}`. An unset
+  field is `null`, so JSON saved by 5.x with `"None"` for either field no longer deserializes.
 
 ```rust,ignore
 // 5.x

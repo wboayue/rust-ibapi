@@ -733,9 +733,9 @@ pub struct ContractDetails {
     pub fund_blue_sky_states: String,
     /// Fund blue sky territories.
     pub fund_blue_sky_territories: String,
-    /// Fund distribution policy indicator; `None` when not sent.
+    /// Fund distribution policy indicator; `None` when absent or empty.
     pub fund_distribution_policy_indicator: Option<FundDistributionPolicyIndicator>,
-    /// Fund asset type; `None` when not sent.
+    /// Fund asset type; `None` when absent or empty.
     pub fund_asset_type: Option<FundAssetType>,
 
     /// Ineligibility reasons for the contract.
