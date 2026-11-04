@@ -117,6 +117,9 @@ precedents.
   the integration crate builds are the one local-only gate; CI covers the rest. The full flow
   through merge (stacked and fork PRs, CI quirks, merge strategy) is the `/ship` skill
   ([`.claude/skills/ship`](.claude/skills/ship/SKILL.md))
+- **Reviewing a PR, or about to report a bug, motivation or precedent from reading code** →
+  [review claims](docs/rules/workflow/review-claims.md): trace it to a production constructor
+  or check it live first. Fixtures reach states production can't
 - **Touching `Subscription`, a proto encoder/decoder, or any public API shape** →
   [integration crate builds](docs/rules/workflow/integration-crate-builds.md) — those crates are
   outside `default-members`, so every automated gate skips them

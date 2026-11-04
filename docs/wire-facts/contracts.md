@@ -2,6 +2,19 @@
 
 Contract details and option chains. Format: [README](README.md).
 
+### Quarterly-only futures need `next_quarter()`, not `front_month()`
+
+*Live 2026-11-03 22:39 ET off-hours, paper, server 226; #1149.*
+
+- `Contract::futures("ES").front_month().on_exchange("CME")` asks for the current month
+  (`ContractMonth::front` picks the current month through the 15th, then the next): November
+  on 2026-11-03. ES lists only quarterly contracts, so `historical_schedules` drew error 200 "No
+  security definition has been found for the request". `next_quarter()` (December) resolved.
+- `Contract::futures("GC").front_month().on_exchange("COMEX")` resolved: GC lists nearby
+  monthly contracts.
+- **Not probed:** other quarterly-only products (NQ, ZN, 6E), and which month `front_month()`
+  picks near a quarterly expiry.
+
 ### `Contract.lastTradeDate` (tag 21)
 
 *Live 2026-10-26, server 226, contract_details; #1099.*
