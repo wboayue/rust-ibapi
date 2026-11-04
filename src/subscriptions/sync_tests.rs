@@ -645,6 +645,48 @@ fn collect_to_end_within_closed_channel_is_unexpected_end() {
     assert!(started.elapsed() < Duration::from_secs(1));
 }
 
+// --- is_terminated ------------------------------------------------------------
+
+type Read = fn(&Subscription<CollectItem>) -> Option<Result<SubscriptionItem<CollectItem>, Error>>;
+
+const READS: [(&str, Read); 3] = [
+    ("next", |sub| sub.next()),
+    ("try_next", |sub| sub.try_next()),
+    ("next_timeout", |sub| sub.next_timeout(Duration::from_millis(100))),
+];
+
+#[test]
+fn is_terminated_after_end_marker_or_error_not_snapshot_end() {
+    for (name, read) in READS {
+        let (sub, _keep) = collect_subscription(vec![data(10), RoutedItem::Error(Error::EndOfStream)], true);
+        assert!(!sub.is_terminated(), "{name}: new subscription");
+        assert!(matches!(read(&sub), Some(Ok(SubscriptionItem::Data(CollectItem(10))))));
+        assert!(!sub.is_terminated(), "{name}: after a data item");
+        assert!(read(&sub).is_none());
+        assert!(sub.is_terminated(), "{name}: after the end marker");
+
+        // -1 is `CollectItem`'s snapshot-end sentinel.
+        let (sub, _keep) = collect_subscription(vec![data(-1)], true);
+        assert!(matches!(read(&sub), Some(Ok(SubscriptionItem::Data(CollectItem(-1))))));
+        assert!(!sub.is_terminated(), "{name}: reads go on after a snapshot end");
+
+        let (sub, _keep) = collect_subscription(vec![RoutedItem::Error(Error::ConnectionReset)], true);
+        assert!(matches!(read(&sub), Some(Err(Error::ConnectionReset))));
+        assert!(sub.is_terminated(), "{name}: after a terminal error");
+    }
+}
+
+#[test]
+fn is_terminated_false_while_nothing_has_arrived() {
+    let (sub, _keep) = collect_subscription(vec![], true);
+
+    assert!(sub.try_next().is_none());
+    assert!(sub.next_timeout(Duration::from_millis(10)).is_none());
+    assert!(!sub.is_terminated());
+}
+
+// --- next_batch ------------------------------------------------------------
+
 #[test]
 fn next_batch_closes_after_quiet_period() {
     let (sub, _keep) = collect_subscription(vec![data(10), data(20)], true);

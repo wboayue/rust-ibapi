@@ -11,9 +11,10 @@
 pub mod sync_impl {
     //! Sync `NoticeStream` backed by a crossbeam channel.
 
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Duration;
 
-    use crossbeam::channel::Receiver;
+    use crossbeam::channel::{Receiver, RecvTimeoutError, TryRecvError};
 
     use crate::messages::Notice;
 
@@ -24,26 +25,64 @@ pub mod sync_impl {
     #[must_use = "NoticeStream must be polled (.next() / .iter()) to receive notices; dropping it releases the dispatcher slot"]
     pub struct NoticeStream {
         receiver: Receiver<Notice>,
+        ended: AtomicBool,
     }
 
     impl NoticeStream {
         pub(crate) fn new(receiver: Receiver<Notice>) -> Self {
-            Self { receiver }
+            Self {
+                receiver,
+                ended: AtomicBool::new(false),
+            }
+        }
+
+        /// Whether the bus has shut down, which also happens when the automatic
+        /// reconnect gives up. Set once a `next`, `try_next` or `next_timeout`
+        /// call has found the channel closed; from then on they return `None`.
+        /// Distinguishes between the `None` that [`try_next`](Self::try_next) and
+        /// [`next_timeout`](Self::next_timeout) return then and the one they
+        /// return while nothing is queued.
+        pub fn is_terminated(&self) -> bool {
+            self.ended.load(Ordering::Relaxed)
         }
 
         /// Block until the next notice arrives, returning `None` when the bus shuts down.
         pub fn next(&self) -> Option<Notice> {
-            self.receiver.recv().ok()
+            let notice = self.receiver.recv().ok();
+            if notice.is_none() {
+                self.ended.store(true, Ordering::Relaxed);
+            }
+            notice
         }
 
-        /// Return the next notice if one is queued right now, else `None`.
+        /// Return the next notice if one is queued right now. `None` means
+        /// either that nothing is queued or that the bus has shut down;
+        /// [`is_terminated`](Self::is_terminated) distinguishes between the
+        /// two.
         pub fn try_next(&self) -> Option<Notice> {
-            self.receiver.try_recv().ok()
+            match self.receiver.try_recv() {
+                Ok(notice) => Some(notice),
+                Err(TryRecvError::Empty) => None,
+                Err(TryRecvError::Disconnected) => {
+                    self.ended.store(true, Ordering::Relaxed);
+                    None
+                }
+            }
         }
 
-        /// Wait up to `timeout` for the next notice.
+        /// Wait up to `timeout` for the next notice. `None` means either that
+        /// `timeout` passed or that the bus has shut down;
+        /// [`is_terminated`](Self::is_terminated) distinguishes between the
+        /// two.
         pub fn next_timeout(&self, timeout: Duration) -> Option<Notice> {
-            self.receiver.recv_timeout(timeout).ok()
+            match self.receiver.recv_timeout(timeout) {
+                Ok(notice) => Some(notice),
+                Err(RecvTimeoutError::Timeout) => None,
+                Err(RecvTimeoutError::Disconnected) => {
+                    self.ended.store(true, Ordering::Relaxed);
+                    None
+                }
+            }
         }
 
         /// Blocking iterator over notices. Ends when the bus shuts down.

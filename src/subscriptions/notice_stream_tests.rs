@@ -51,6 +51,39 @@ mod sync_tests {
     }
 
     #[test]
+    fn is_terminated_false_while_nothing_is_queued() {
+        let (_sender, receiver) = channel::unbounded::<Notice>();
+        let stream = NoticeStream::new(receiver);
+
+        assert!(stream.try_next().is_none());
+        assert!(!stream.is_terminated());
+        assert!(stream.next_timeout(Duration::from_millis(10)).is_none());
+        assert!(!stream.is_terminated());
+    }
+
+    #[test]
+    fn is_terminated_true_once_a_read_finds_the_bus_shut_down() {
+        for read in [
+            (|s: &NoticeStream| s.try_next()) as fn(&NoticeStream) -> Option<Notice>,
+            |s| s.next_timeout(Duration::from_millis(10)),
+            |s| s.next(),
+        ] {
+            let (sender, receiver) = channel::unbounded::<Notice>();
+            let stream = NoticeStream::new(receiver);
+            assert!(!stream.is_terminated());
+
+            sender.send(test_notice(2104, "farm OK")).unwrap();
+            assert_eq!(read(&stream).expect("notice").code, 2104);
+            assert!(!stream.is_terminated(), "a delivered notice does not end the stream");
+
+            drop(sender);
+            assert!(read(&stream).is_none());
+            assert!(stream.is_terminated());
+            assert!(read(&stream).is_none());
+        }
+    }
+
+    #[test]
     fn iter_yields_buffered_notices_in_order() {
         let (sender, receiver) = channel::unbounded();
         let stream = NoticeStream::new(receiver);
