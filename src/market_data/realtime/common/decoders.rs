@@ -173,23 +173,24 @@ pub(crate) fn decode_tick_price_proto(msg: crate::proto::TickPrice) -> Result<Ti
         pre_open: attr_mask & 0x4 != 0,
     };
 
+    // The size tick a price tick carries, if it has one.
     let size_tick_type = match tick_type {
-        TickType::Bid => TickType::BidSize,
-        TickType::Ask => TickType::AskSize,
-        TickType::Last => TickType::LastSize,
-        TickType::DelayedBid => TickType::DelayedBidSize,
-        TickType::DelayedAsk => TickType::DelayedAskSize,
-        TickType::DelayedLast => TickType::DelayedLastSize,
-        _ => TickType::Unknown,
+        TickType::Bid => Some(TickType::BidSize),
+        TickType::Ask => Some(TickType::AskSize),
+        TickType::Last => Some(TickType::LastSize),
+        TickType::DelayedBid => Some(TickType::DelayedBidSize),
+        TickType::DelayedAsk => Some(TickType::DelayedAskSize),
+        TickType::DelayedLast => Some(TickType::DelayedLastSize),
+        _ => None,
     };
 
     match (size_tick_type, size) {
-        (TickType::Unknown, _) | (_, None) => Ok(TickTypes::Price(TickPrice {
+        (None, _) | (_, None) => Ok(TickTypes::Price(TickPrice {
             tick_type,
             price,
             attributes,
         })),
-        (size_tick_type, Some(size)) => Ok(TickTypes::PriceSize(TickPriceSize {
+        (Some(size_tick_type), Some(size)) => Ok(TickTypes::PriceSize(TickPriceSize {
             price_tick_type: tick_type,
             price,
             attributes,

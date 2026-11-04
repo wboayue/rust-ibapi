@@ -2016,7 +2016,7 @@ fn subscription_10091_preserves_later_option_computation() -> Result<(), Error> 
     let subscription = wrap_subscription::<TickTypes>(bus.clone(), internal);
     let computation = tick_option_computation()
         .request_id(request_id.raw())
-        .tick_type(TickType::DelayedModelOption as i32)
+        .tick_type(i32::from(TickType::DelayedModelOption))
         .tick_attrib(0)
         .delta(0.5)
         .to_proto();

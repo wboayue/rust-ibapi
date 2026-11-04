@@ -119,3 +119,30 @@ let spread = Contract::spread().symbol("AAPL").vertical(long_call, short_call).b
 // 6.0
 let spread = Contract::spread("AAPL").vertical(long_call, short_call).build()?;
 ```
+
+### 6. `TickType::Unknown` carries the tick id
+
+`TickType` mapped any tick id it did not model to a unit `Unknown`, so a tick IBKR added later lost
+its id on every market data stream. It now takes the shape of §2:
+
+- **`Unknown(i32)`** holds the id as received. Match `TickType::Unknown(_)`, or bind the id.
+- **The variants no longer have explicit discriminants**, so `tick_type as i32` no longer compiles.
+  Use `i32::from(tick_type)`; `TickType::from(i32)` is unchanged for modeled ids.
+- **`From<&str>` is replaced by `TickType::from_name(&str) -> Option<TickType>`**, which returns
+  `None` for a name it doesn't know instead of `Unknown`. `name()` is its inverse. Both use the
+  TWS API field names (`"bidSize"`, `"bidPrice"`), not the `Display` text.
+- **`Display` of an unknown tick is `Unknown(<id>)`**, for example `Unknown(500)`, where it was
+  `Unknown`.
+- **`TickType::default()` is `Unknown(-1)`**, the same value as before.
+
+```rust,ignore
+// 5.x
+let id = tick.tick_type as i32;
+let bid_size = TickType::from("bidSize");
+if tick.tick_type == TickType::Unknown { /* ... */ }
+
+// 6.0
+let id = i32::from(tick.tick_type);
+let bid_size = TickType::from_name("bidSize"); // Option<TickType>
+if let TickType::Unknown(id) = tick.tick_type { /* ... */ }
+```

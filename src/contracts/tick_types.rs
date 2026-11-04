@@ -1,602 +1,310 @@
 use std::fmt;
 
-/// Market data tick types available from the TWS API.
-///
-/// These represent different types of market data that can be requested
-/// and received from Interactive Brokers. Each tick type corresponds to
-/// a specific piece of market information like bid, ask, last trade, volume, etc.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub enum TickType {
-    /// Unknown or invalid tick type.
-    #[default]
-    Unknown = -1,
+/// Generates [`TickType`] and its conversions from one table, so the wire code, C# field name and
+/// display name of a tick can't drift apart. Each row is
+/// `Variant = code, "csharpFieldName", "Display Name";` under the variant's doc comment.
+macro_rules! tick_types {
+    ($( $(#[$meta:meta])* $variant:ident = $code:literal, $name:literal, $display:literal; )*) => {
+        /// Market data tick types available from the TWS API.
+        ///
+        /// These represent different types of market data that can be requested
+        /// and received from Interactive Brokers. Each tick type corresponds to
+        /// a specific piece of market information like bid, ask, last trade, volume, etc.
+        #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+        #[derive(Debug, Clone, Copy, PartialEq)]
+        pub enum TickType {
+            $(
+                $(#[$meta])*
+                #[doc = concat!("\n\nWire code `", stringify!($code), "`.")]
+                $variant,
+            )*
+            /// Tick id not modeled by this version of the API, carried as received.
+            Unknown(i32),
+        }
+
+        impl From<i32> for TickType {
+            fn from(value: i32) -> Self {
+                match value {
+                    $( $code => Self::$variant, )*
+                    code => Self::Unknown(code),
+                }
+            }
+        }
+
+        impl From<TickType> for i32 {
+            fn from(value: TickType) -> i32 {
+                match value {
+                    $( TickType::$variant => $code, )*
+                    TickType::Unknown(code) => code,
+                }
+            }
+        }
+
+        impl TickType {
+            /// Looks up a tick type by its TWS API field name, as the reference client's
+            /// `TickType.getField` spells it (`"bidSize"`, `"bidPrice"`, `"trades/min"`).
+            /// Matching is exact and case-sensitive; `None` for any other name.
+            pub fn from_name(name: &str) -> Option<Self> {
+                match name {
+                    $( $name => Some(Self::$variant), )*
+                    _ => None,
+                }
+            }
+
+            /// The TWS API field name of this tick type, the inverse of
+            /// [`from_name`](Self::from_name). `None` for [`Unknown`](Self::Unknown).
+            pub fn name(&self) -> Option<&'static str> {
+                match self {
+                    $( Self::$variant => Some($name), )*
+                    Self::Unknown(_) => None,
+                }
+            }
+        }
+
+        impl fmt::Display for TickType {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self {
+                    $( Self::$variant => f.write_str($display), )*
+                    Self::Unknown(code) => write!(f, "Unknown({code})"),
+                }
+            }
+        }
+    };
+}
+
+tick_types! {
     /// Number of contracts or shares offered at the bid price.
-    BidSize = 0,
+    BidSize = 0, "bidSize", "Bid Size";
     /// Highest price a buyer is willing to pay.
-    Bid = 1,
+    Bid = 1, "bidPrice", "Bid";
     /// Lowest price a seller is willing to accept.
-    Ask = 2,
+    Ask = 2, "askPrice", "Ask";
     /// Number of contracts or shares offered at the ask price.
-    AskSize = 3,
+    AskSize = 3, "askSize", "Ask Size";
     /// Price of the last trade.
-    Last = 4,
+    Last = 4, "lastPrice", "Last";
     /// Number of contracts or shares traded in the last trade.
-    LastSize = 5,
+    LastSize = 5, "lastSize", "Last Size";
     /// Highest price of the day.
-    High = 6,
+    High = 6, "high", "High";
     /// Lowest price of the day.
-    Low = 7,
+    Low = 7, "low", "Low";
     /// Total trading volume for the day.
-    Volume = 8,
+    Volume = 8, "volume", "Volume";
     /// Previous day's closing price.
-    Close = 9,
+    Close = 9, "close", "Close";
     /// Bid price for options.
-    BidOption = 10,
+    BidOption = 10, "bidOptComp", "Bid Option";
     /// Ask price for options.
-    AskOption = 11,
+    AskOption = 11, "askOptComp", "Ask Option";
     /// Last traded price for options.
-    LastOption = 12,
+    LastOption = 12, "lastOptComp", "Last Option";
     /// Model-based option price.
-    ModelOption = 13,
+    ModelOption = 13, "modelOptComp", "Model Option";
     /// Opening price of the day.
-    Open = 14,
+    Open = 14, "open", "Open";
     /// Lowest price in the last 13 weeks.
-    Low13Week = 15,
+    Low13Week = 15, "13WeekLow", "13 Week Low";
     /// Highest price in the last 13 weeks.
-    High13Week = 16,
+    High13Week = 16, "13WeekHigh", "13 Week High";
     /// Lowest price in the last 26 weeks.
-    Low26Week = 17,
+    Low26Week = 17, "26WeekLow", "26 Week Low";
     /// Highest price in the last 26 weeks.
-    High26Week = 18,
+    High26Week = 18, "26WeekHigh", "26 Week High";
     /// Lowest price in the last 52 weeks.
-    Low52Week = 19,
+    Low52Week = 19, "52WeekLow", "52 Week Low";
     /// Highest price in the last 52 weeks.
-    High52Week = 20,
+    High52Week = 20, "52WeekHigh", "52 Week High";
     /// Average daily trading volume.
-    AvgVolume = 21,
+    AvgVolume = 21, "AvgVolume", "Average Volume";
     /// Total number of outstanding contracts.
-    OpenInterest = 22,
+    OpenInterest = 22, "OpenInterest", "Open Interest";
     /// Historical volatility for options.
-    OptionHistoricalVol = 23,
+    OptionHistoricalVol = 23, "OptionHistoricalVolatility", "Option Historical Volatility";
     /// Implied volatility for options.
-    OptionImpliedVol = 24,
+    OptionImpliedVol = 24, "OptionImpliedVolatility", "Option Implied Volatility";
     /// Exchange code from which the option bid quote originated.
-    OptionBidExch = 25,
+    OptionBidExch = 25, "OptionBidExchStr", "Option Bid Exchange";
     /// Exchange code from which the option ask quote originated.
-    OptionAskExch = 26,
+    OptionAskExch = 26, "OptionAskExchStr", "Option Ask Exchange";
     /// Current open interest for call options.
-    OptionCallOpenInterest = 27,
+    OptionCallOpenInterest = 27, "OptionCallOpenInterest", "Option Call Open Interest";
     /// Current open interest for put options.
-    OptionPutOpenInterest = 28,
+    OptionPutOpenInterest = 28, "OptionPutOpenInterest", "Option Put Open Interest";
     /// Trading volume for call options.
-    OptionCallVolume = 29,
+    OptionCallVolume = 29, "OptionCallVolume", "Option Call Volume";
     /// Trading volume for put options.
-    OptionPutVolume = 30,
+    OptionPutVolume = 30, "OptionPutVolume", "Option Put Volume";
     /// Premium of the index future over fair value.
-    IndexFuturePremium = 31,
+    IndexFuturePremium = 31, "IndexFuturePremium", "Index Future Premium";
     /// Exchange code supplying the top-of-book bid.
-    BidExch = 32,
+    BidExch = 32, "bidExch", "Bid Exchange";
     /// Exchange code supplying the top-of-book ask.
-    AskExch = 33,
+    AskExch = 33, "askExch", "Ask Exchange";
     /// Shares/contracts offered during the auction.
-    AuctionVolume = 34,
+    AuctionVolume = 34, "auctionVolume", "Auction Volume";
     /// Indicative auction clearing price.
-    AuctionPrice = 35,
+    AuctionPrice = 35, "auctionPrice", "Auction Price";
     /// Imbalance between buy and sell interest in the auction.
-    AuctionImbalance = 36,
+    AuctionImbalance = 36, "auctionImbalance", "Auction Imbalance";
     /// Mark price (used for margining in futures).
-    MarkPrice = 37,
+    MarkPrice = 37, "markPrice", "Mark Price";
     /// Bid-side exchange for EFP (Exchange for Physical) computations.
-    BidEfpComputation = 38,
+    BidEfpComputation = 38, "bidEFP", "Bid EFP Computation";
     /// Ask-side exchange for EFP computations.
-    AskEfpComputation = 39,
+    AskEfpComputation = 39, "askEFP", "Ask EFP Computation";
     /// Last trade exchange for EFP computations.
-    LastEfpComputation = 40,
+    LastEfpComputation = 40, "lastEFP", "Last EFP Computation";
     /// Opening price exchange for EFP computations.
-    OpenEfpComputation = 41,
+    OpenEfpComputation = 41, "openEFP", "Open EFP Computation";
     /// High price exchange for EFP computations.
-    HighEfpComputation = 42,
+    HighEfpComputation = 42, "highEFP", "High EFP Computation";
     /// Low price exchange for EFP computations.
-    LowEfpComputation = 43,
+    LowEfpComputation = 43, "lowEFP", "Low EFP Computation";
     /// Closing price exchange for EFP computations.
-    CloseEfpComputation = 44,
+    CloseEfpComputation = 44, "closeEFP", "Close EFP Computation";
     /// Timestamp (epoch seconds) for the last tick.
-    LastTimestamp = 45,
+    LastTimestamp = 45, "lastTimestamp", "Last Timestamp";
     /// Number of shares available for shorting.
-    Shortable = 46,
+    Shortable = 46, "shortable", "Shortable";
     // id 47 (FundamentalRatios) removed: IBKR removed the fundamental-data
     // feature in TWS 10.47; id 47 now decodes to `Unknown`.
     /// Real-time consolidated volume message.
-    RtVolume = 48,
+    RtVolume = 48, "RTVolume", "RT Volume";
     /// Indicates if trading is halted (0 = not halted, 1 = halted).
-    Halted = 49,
+    Halted = 49, "halted", "Halted";
     /// Yield computed from the bid price (fixed income).
-    BidYield = 50,
+    BidYield = 50, "bidYield", "Bid Yield";
     /// Yield computed from the ask price (fixed income).
-    AskYield = 51,
+    AskYield = 51, "askYield", "Ask Yield";
     /// Yield of the last trade (fixed income).
-    LastYield = 52,
+    LastYield = 52, "lastYield", "Last Yield";
     /// Custom option computation values supplied by IB.
-    CustOptionComputation = 53,
+    CustOptionComputation = 53, "custOptComp", "Custom Option Computation";
     /// Number of trades over the reporting interval.
-    TradeCount = 54,
+    TradeCount = 54, "trades", "Trade Count";
     /// Trades per minute over the interval.
-    TradeRate = 55,
+    TradeRate = 55, "trades/min", "Trade Rate";
     /// Volume per minute over the interval.
-    VolumeRate = 56,
+    VolumeRate = 56, "volume/min", "Volume Rate";
     /// Last regular trading hours trade details.
-    LastRthTrade = 57,
+    LastRthTrade = 57, "lastRTHTrade", "Last RTH Trade";
     /// Real-time historical volatility value.
-    RtHistoricalVol = 58,
+    RtHistoricalVol = 58, "RTHistoricalVol", "RT Historical Volatility";
     /// Projected dividend information.
-    IbDividends = 59,
+    IbDividends = 59, "IBDividends", "IB Dividends";
     /// Factor multiplier used for bonds.
-    BondFactorMultiplier = 60,
+    BondFactorMultiplier = 60, "bondFactorMultiplier", "Bond Factor Multiplier";
     /// Regulatory imbalance indicator from exchanges.
-    RegulatoryImbalance = 61,
+    RegulatoryImbalance = 61, "regulatoryImbalance", "Regulatory Imbalance";
     /// Exchange-issued news headline.
-    NewsTick = 62,
+    NewsTick = 62, "newsTick", "News Tick";
     /// Short-term volume averaged over 3 minutes.
-    ShortTermVolume3Min = 63,
+    ShortTermVolume3Min = 63, "shortTermVolume3Min", "Short Term Volume 3 Min";
     /// Short-term volume averaged over 5 minutes.
-    ShortTermVolume5Min = 64,
+    ShortTermVolume5Min = 64, "shortTermVolume5Min", "Short Term Volume 5 Min";
     /// Short-term volume averaged over 10 minutes.
-    ShortTermVolume10Min = 65,
+    ShortTermVolume10Min = 65, "shortTermVolume10Min", "Short Term Volume 10 Min";
     /// Delayed bid price.
-    DelayedBid = 66,
+    DelayedBid = 66, "delayedBid", "Delayed Bid";
     /// Delayed ask price.
-    DelayedAsk = 67,
+    DelayedAsk = 67, "delayedAsk", "Delayed Ask";
     /// Delayed last traded price.
-    DelayedLast = 68,
+    DelayedLast = 68, "delayedLast", "Delayed Last";
     /// Delayed bid size.
-    DelayedBidSize = 69,
+    DelayedBidSize = 69, "delayedBidSize", "Delayed Bid Size";
     /// Delayed ask size.
-    DelayedAskSize = 70,
+    DelayedAskSize = 70, "delayedAskSize", "Delayed Ask Size";
     /// Delayed last trade size.
-    DelayedLastSize = 71,
+    DelayedLastSize = 71, "delayedLastSize", "Delayed Last Size";
     /// Delayed session high.
-    DelayedHigh = 72,
+    DelayedHigh = 72, "delayedHigh", "Delayed High";
     /// Delayed session low.
-    DelayedLow = 73,
+    DelayedLow = 73, "delayedLow", "Delayed Low";
     /// Delayed volume.
-    DelayedVolume = 74,
+    DelayedVolume = 74, "delayedVolume", "Delayed Volume";
     /// Delayed session close.
-    DelayedClose = 75,
+    DelayedClose = 75, "delayedClose", "Delayed Close";
     /// Delayed session open.
-    DelayedOpen = 76,
+    DelayedOpen = 76, "delayedOpen", "Delayed Open";
     /// Real-time trade volume (aggregate).
-    RtTrdVolume = 77,
+    RtTrdVolume = 77, "rtTrdVolume", "RT Trade Volume";
     /// Credit manager mark price.
-    CreditmanMarkPrice = 78,
+    CreditmanMarkPrice = 78, "creditmanMarkPrice", "Creditman Mark Price";
     /// Credit manager slow mark price.
-    CreditmanSlowMarkPrice = 79,
+    CreditmanSlowMarkPrice = 79, "creditmanSlowMarkPrice", "Creditman Slow Mark Price";
     /// Delayed option bid computation.
-    DelayedBidOption = 80,
+    DelayedBidOption = 80, "delayedBidOptComp", "Delayed Bid Option";
     /// Delayed option ask computation.
-    DelayedAskOption = 81,
+    DelayedAskOption = 81, "delayedAskOptComp", "Delayed Ask Option";
     /// Delayed option last computation.
-    DelayedLastOption = 82,
+    DelayedLastOption = 82, "delayedLastOptComp", "Delayed Last Option";
     /// Delayed option model price.
-    DelayedModelOption = 83,
+    DelayedModelOption = 83, "delayedModelOptComp", "Delayed Model Option";
     /// Exchange code for the last trade.
-    LastExch = 84,
+    LastExch = 84, "lastExchange", "Last Exchange";
     /// Time of the last regular trade.
-    LastRegTime = 85,
+    LastRegTime = 85, "lastRegTime", "Last Reg Time";
     /// Open interest for futures contracts.
-    FuturesOpenInterest = 86,
+    FuturesOpenInterest = 86, "futuresOpenInterest", "Futures Open Interest";
     /// Average option volume over 90 days.
-    AvgOptVolume = 87,
+    AvgOptVolume = 87, "avgOptVolume", "Average Option Volume";
     /// Timestamp associated with delayed last price.
-    DelayedLastTimestamp = 88,
+    DelayedLastTimestamp = 88, "delayedLastTimestamp", "Delayed Last Timestamp";
     /// Number of shares available to short.
-    ShortableShares = 89,
+    ShortableShares = 89, "shortableShares", "Shortable Shares";
     /// Delayed trading halt status.
-    DelayedHalted = 90,
+    DelayedHalted = 90, "delayedHalted", "Delayed Halted";
     /// Reuters mutual fund indicative value.
-    Reuters2MutualFunds = 91,
+    Reuters2MutualFunds = 91, "reuters2MutualFunds", "Reuters2 Mutual Funds";
     /// ETF net asset value (NAV) close.
-    EtfNavClose = 92,
+    EtfNavClose = 92, "etfNavClose", "ETF NAV Close";
     /// Prior day ETF NAV close.
-    EtfNavPriorClose = 93,
+    EtfNavPriorClose = 93, "etfNavPriorClose", "ETF NAV Prior Close";
     /// ETF NAV bid.
-    EtfNavBid = 94,
+    EtfNavBid = 94, "etfNavBid", "ETF NAV Bid";
     /// ETF NAV ask.
-    EtfNavAsk = 95,
+    EtfNavAsk = 95, "etfNavAsk", "ETF NAV Ask";
     /// ETF NAV last.
-    EtfNavLast = 96,
+    EtfNavLast = 96, "etfNavLast", "ETF NAV Last";
     /// Frozen ETF NAV last value.
-    EtfFrozenNavLast = 97,
+    EtfFrozenNavLast = 97, "etfFrozenNavLast", "ETF Frozen NAV Last";
     /// Intraday high estimate for ETF NAV.
-    EtfNavHigh = 98,
+    EtfNavHigh = 98, "etfNavHigh", "ETF NAV High";
     /// Intraday low estimate for ETF NAV.
-    EtfNavLow = 99,
+    EtfNavLow = 99, "etfNavLow", "ETF NAV Low";
     /// Social market analytics sentiment score.
-    SocialMarketAnalytics = 100,
+    SocialMarketAnalytics = 100, "socialMarketAnalytics", "Social Market Analytics";
     /// Estimated midpoint for an IPO.
-    EstimatedIpoMidpoint = 101,
+    EstimatedIpoMidpoint = 101, "estimatedIPOMidpoint", "Estimated IPO Midpoint";
     /// Final pricing for an IPO.
-    FinalIpoLast = 102,
+    FinalIpoLast = 102, "finalIPOLast", "Final IPO Last";
     /// Delayed bid yield.
-    DelayedYieldBid = 103,
+    DelayedYieldBid = 103, "delayedYieldBid", "Delayed Yield Bid";
     /// Delayed ask yield.
-    DelayedYieldAsk = 104,
+    DelayedYieldAsk = 104, "delayedYieldAsk", "Delayed Yield Ask";
     /// Odd-lot bid price.
-    OddLotBid = 105,
+    OddLotBid = 105, "oddLotBid", "Odd Lot Bid";
     /// Odd-lot ask price.
-    OddLotAsk = 106,
+    OddLotAsk = 106, "oddLotAsk", "Odd Lot Ask";
     /// Odd-lot bid size.
-    OddLotBidSize = 107,
+    OddLotBidSize = 107, "oddLotBidSize", "Odd Lot Bid Size";
     /// Odd-lot ask size.
-    OddLotAskSize = 108,
+    OddLotAskSize = 108, "oddLotAskSize", "Odd Lot Ask Size";
     /// Exchange code supplying the odd-lot bid.
-    OddLotBidExch = 109,
+    OddLotBidExch = 109, "oddLotBidExch", "Odd Lot Bid Exchange";
     /// Exchange code supplying the odd-lot ask.
-    OddLotAskExch = 110,
+    OddLotAskExch = 110, "oddLotAskExch", "Odd Lot Ask Exchange";
     /// Implied bid price of a combo (BAG) contract.
-    ComboImpliedBid = 112,
+    ComboImpliedBid = 112, "comboImpliedBid", "Combo Implied Bid";
     /// Implied ask price of a combo (BAG) contract.
-    ComboImpliedAsk = 113,
+    ComboImpliedAsk = 113, "comboImpliedAsk", "Combo Implied Ask";
 }
 
-impl From<i32> for TickType {
-    fn from(value: i32) -> Self {
-        match value {
-            -1 => Self::Unknown,
-            0 => Self::BidSize,
-            1 => Self::Bid,
-            2 => Self::Ask,
-            3 => Self::AskSize,
-            4 => Self::Last,
-            5 => Self::LastSize,
-            6 => Self::High,
-            7 => Self::Low,
-            8 => Self::Volume,
-            9 => Self::Close,
-            10 => Self::BidOption,
-            11 => Self::AskOption,
-            12 => Self::LastOption,
-            13 => Self::ModelOption,
-            14 => Self::Open,
-            15 => Self::Low13Week,
-            16 => Self::High13Week,
-            17 => Self::Low26Week,
-            18 => Self::High26Week,
-            19 => Self::Low52Week,
-            20 => Self::High52Week,
-            21 => Self::AvgVolume,
-            22 => Self::OpenInterest,
-            23 => Self::OptionHistoricalVol,
-            24 => Self::OptionImpliedVol,
-            25 => Self::OptionBidExch,
-            26 => Self::OptionAskExch,
-            27 => Self::OptionCallOpenInterest,
-            28 => Self::OptionPutOpenInterest,
-            29 => Self::OptionCallVolume,
-            30 => Self::OptionPutVolume,
-            31 => Self::IndexFuturePremium,
-            32 => Self::BidExch,
-            33 => Self::AskExch,
-            34 => Self::AuctionVolume,
-            35 => Self::AuctionPrice,
-            36 => Self::AuctionImbalance,
-            37 => Self::MarkPrice,
-            38 => Self::BidEfpComputation,
-            39 => Self::AskEfpComputation,
-            40 => Self::LastEfpComputation,
-            41 => Self::OpenEfpComputation,
-            42 => Self::HighEfpComputation,
-            43 => Self::LowEfpComputation,
-            44 => Self::CloseEfpComputation,
-            45 => Self::LastTimestamp,
-            46 => Self::Shortable,
-            48 => Self::RtVolume,
-            49 => Self::Halted,
-            50 => Self::BidYield,
-            51 => Self::AskYield,
-            52 => Self::LastYield,
-            53 => Self::CustOptionComputation,
-            54 => Self::TradeCount,
-            55 => Self::TradeRate,
-            56 => Self::VolumeRate,
-            57 => Self::LastRthTrade,
-            58 => Self::RtHistoricalVol,
-            59 => Self::IbDividends,
-            60 => Self::BondFactorMultiplier,
-            61 => Self::RegulatoryImbalance,
-            62 => Self::NewsTick,
-            63 => Self::ShortTermVolume3Min,
-            64 => Self::ShortTermVolume5Min,
-            65 => Self::ShortTermVolume10Min,
-            66 => Self::DelayedBid,
-            67 => Self::DelayedAsk,
-            68 => Self::DelayedLast,
-            69 => Self::DelayedBidSize,
-            70 => Self::DelayedAskSize,
-            71 => Self::DelayedLastSize,
-            72 => Self::DelayedHigh,
-            73 => Self::DelayedLow,
-            74 => Self::DelayedVolume,
-            75 => Self::DelayedClose,
-            76 => Self::DelayedOpen,
-            77 => Self::RtTrdVolume,
-            78 => Self::CreditmanMarkPrice,
-            79 => Self::CreditmanSlowMarkPrice,
-            80 => Self::DelayedBidOption,
-            81 => Self::DelayedAskOption,
-            82 => Self::DelayedLastOption,
-            83 => Self::DelayedModelOption,
-            84 => Self::LastExch,
-            85 => Self::LastRegTime,
-            86 => Self::FuturesOpenInterest,
-            87 => Self::AvgOptVolume,
-            88 => Self::DelayedLastTimestamp,
-            89 => Self::ShortableShares,
-            90 => Self::DelayedHalted,
-            91 => Self::Reuters2MutualFunds,
-            92 => Self::EtfNavClose,
-            93 => Self::EtfNavPriorClose,
-            94 => Self::EtfNavBid,
-            95 => Self::EtfNavAsk,
-            96 => Self::EtfNavLast,
-            97 => Self::EtfFrozenNavLast,
-            98 => Self::EtfNavHigh,
-            99 => Self::EtfNavLow,
-            100 => Self::SocialMarketAnalytics,
-            101 => Self::EstimatedIpoMidpoint,
-            102 => Self::FinalIpoLast,
-            103 => Self::DelayedYieldBid,
-            104 => Self::DelayedYieldAsk,
-            105 => Self::OddLotBid,
-            106 => Self::OddLotAsk,
-            107 => Self::OddLotBidSize,
-            108 => Self::OddLotAskSize,
-            109 => Self::OddLotBidExch,
-            110 => Self::OddLotAskExch,
-            112 => Self::ComboImpliedBid,
-            113 => Self::ComboImpliedAsk,
-            _ => Self::Unknown,
-        }
-    }
-}
-
-impl From<&str> for TickType {
-    fn from(value: &str) -> Self {
-        match value {
-            "bidSize" => Self::BidSize,
-            "bidPrice" => Self::Bid,
-            "askPrice" => Self::Ask,
-            "askSize" => Self::AskSize,
-            "lastPrice" => Self::Last,
-            "lastSize" => Self::LastSize,
-            "high" => Self::High,
-            "low" => Self::Low,
-            "volume" => Self::Volume,
-            "close" => Self::Close,
-            "bidOptComp" => Self::BidOption,
-            "askOptComp" => Self::AskOption,
-            "lastOptComp" => Self::LastOption,
-            "modelOptComp" => Self::ModelOption,
-            "open" => Self::Open,
-            "13WeekLow" => Self::Low13Week,
-            "13WeekHigh" => Self::High13Week,
-            "26WeekLow" => Self::Low26Week,
-            "26WeekHigh" => Self::High26Week,
-            "52WeekLow" => Self::Low52Week,
-            "52WeekHigh" => Self::High52Week,
-            "AvgVolume" => Self::AvgVolume,
-            "OpenInterest" => Self::OpenInterest,
-            "OptionHistoricalVolatility" => Self::OptionHistoricalVol,
-            "OptionImpliedVolatility" => Self::OptionImpliedVol,
-            "OptionBidExchStr" => Self::OptionBidExch,
-            "OptionAskExchStr" => Self::OptionAskExch,
-            "OptionCallOpenInterest" => Self::OptionCallOpenInterest,
-            "OptionPutOpenInterest" => Self::OptionPutOpenInterest,
-            "OptionCallVolume" => Self::OptionCallVolume,
-            "OptionPutVolume" => Self::OptionPutVolume,
-            "IndexFuturePremium" => Self::IndexFuturePremium,
-            "bidExch" => Self::BidExch,
-            "askExch" => Self::AskExch,
-            "auctionVolume" => Self::AuctionVolume,
-            "auctionPrice" => Self::AuctionPrice,
-            "auctionImbalance" => Self::AuctionImbalance,
-            "markPrice" => Self::MarkPrice,
-            "bidEFP" => Self::BidEfpComputation,
-            "askEFP" => Self::AskEfpComputation,
-            "lastEFP" => Self::LastEfpComputation,
-            "openEFP" => Self::OpenEfpComputation,
-            "highEFP" => Self::HighEfpComputation,
-            "lowEFP" => Self::LowEfpComputation,
-            "closeEFP" => Self::CloseEfpComputation,
-            "lastTimestamp" => Self::LastTimestamp,
-            "shortable" => Self::Shortable,
-            "RTVolume" => Self::RtVolume,
-            "halted" => Self::Halted,
-            "bidYield" => Self::BidYield,
-            "askYield" => Self::AskYield,
-            "lastYield" => Self::LastYield,
-            "custOptComp" => Self::CustOptionComputation,
-            "trades" => Self::TradeCount,
-            "trades/min" => Self::TradeRate,
-            "volume/min" => Self::VolumeRate,
-            "lastRTHTrade" => Self::LastRthTrade,
-            "RTHistoricalVol" => Self::RtHistoricalVol,
-            "IBDividends" => Self::IbDividends,
-            "bondFactorMultiplier" => Self::BondFactorMultiplier,
-            "regulatoryImbalance" => Self::RegulatoryImbalance,
-            "newsTick" => Self::NewsTick,
-            "shortTermVolume3Min" => Self::ShortTermVolume3Min,
-            "shortTermVolume5Min" => Self::ShortTermVolume5Min,
-            "shortTermVolume10Min" => Self::ShortTermVolume10Min,
-            "delayedBid" => Self::DelayedBid,
-            "delayedAsk" => Self::DelayedAsk,
-            "delayedLast" => Self::DelayedLast,
-            "delayedBidSize" => Self::DelayedBidSize,
-            "delayedAskSize" => Self::DelayedAskSize,
-            "delayedLastSize" => Self::DelayedLastSize,
-            "delayedHigh" => Self::DelayedHigh,
-            "delayedLow" => Self::DelayedLow,
-            "delayedVolume" => Self::DelayedVolume,
-            "delayedClose" => Self::DelayedClose,
-            "delayedOpen" => Self::DelayedOpen,
-            "rtTrdVolume" => Self::RtTrdVolume,
-            "creditmanMarkPrice" => Self::CreditmanMarkPrice,
-            "creditmanSlowMarkPrice" => Self::CreditmanSlowMarkPrice,
-            "delayedBidOptComp" => Self::DelayedBidOption,
-            "delayedAskOptComp" => Self::DelayedAskOption,
-            "delayedLastOptComp" => Self::DelayedLastOption,
-            "delayedModelOptComp" => Self::DelayedModelOption,
-            "lastExchange" => Self::LastExch,
-            "lastRegTime" => Self::LastRegTime,
-            "futuresOpenInterest" => Self::FuturesOpenInterest,
-            "avgOptVolume" => Self::AvgOptVolume,
-            "delayedLastTimestamp" => Self::DelayedLastTimestamp,
-            "shortableShares" => Self::ShortableShares,
-            "delayedHalted" => Self::DelayedHalted,
-            "reuters2MutualFunds" => Self::Reuters2MutualFunds,
-            "etfNavClose" => Self::EtfNavClose,
-            "etfNavPriorClose" => Self::EtfNavPriorClose,
-            "etfNavBid" => Self::EtfNavBid,
-            "etfNavAsk" => Self::EtfNavAsk,
-            "etfNavLast" => Self::EtfNavLast,
-            "etfFrozenNavLast" => Self::EtfFrozenNavLast,
-            "etfNavHigh" => Self::EtfNavHigh,
-            "etfNavLow" => Self::EtfNavLow,
-            "socialMarketAnalytics" => Self::SocialMarketAnalytics,
-            "estimatedIPOMidpoint" => Self::EstimatedIpoMidpoint,
-            "finalIPOLast" => Self::FinalIpoLast,
-            "delayedYieldBid" => Self::DelayedYieldBid,
-            "delayedYieldAsk" => Self::DelayedYieldAsk,
-            "oddLotBid" => Self::OddLotBid,
-            "oddLotAsk" => Self::OddLotAsk,
-            "oddLotBidSize" => Self::OddLotBidSize,
-            "oddLotAskSize" => Self::OddLotAskSize,
-            "oddLotBidExch" => Self::OddLotBidExch,
-            "oddLotAskExch" => Self::OddLotAskExch,
-            "comboImpliedBid" => Self::ComboImpliedBid,
-            "comboImpliedAsk" => Self::ComboImpliedAsk,
-            _ => Self::Unknown,
-        }
-    }
-}
-
-impl fmt::Display for TickType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Unknown => write!(f, "Unknown"),
-            Self::BidSize => write!(f, "Bid Size"),
-            Self::Bid => write!(f, "Bid"),
-            Self::Ask => write!(f, "Ask"),
-            Self::AskSize => write!(f, "Ask Size"),
-            Self::Last => write!(f, "Last"),
-            Self::LastSize => write!(f, "Last Size"),
-            Self::High => write!(f, "High"),
-            Self::Low => write!(f, "Low"),
-            Self::Volume => write!(f, "Volume"),
-            Self::Close => write!(f, "Close"),
-            Self::BidOption => write!(f, "Bid Option"),
-            Self::AskOption => write!(f, "Ask Option"),
-            Self::LastOption => write!(f, "Last Option"),
-            Self::ModelOption => write!(f, "Model Option"),
-            Self::Open => write!(f, "Open"),
-            Self::Low13Week => write!(f, "13 Week Low"),
-            Self::High13Week => write!(f, "13 Week High"),
-            Self::Low26Week => write!(f, "26 Week Low"),
-            Self::High26Week => write!(f, "26 Week High"),
-            Self::Low52Week => write!(f, "52 Week Low"),
-            Self::High52Week => write!(f, "52 Week High"),
-            Self::AvgVolume => write!(f, "Average Volume"),
-            Self::OpenInterest => write!(f, "Open Interest"),
-            Self::OptionHistoricalVol => write!(f, "Option Historical Volatility"),
-            Self::OptionImpliedVol => write!(f, "Option Implied Volatility"),
-            Self::OptionBidExch => write!(f, "Option Bid Exchange"),
-            Self::OptionAskExch => write!(f, "Option Ask Exchange"),
-            Self::OptionCallOpenInterest => write!(f, "Option Call Open Interest"),
-            Self::OptionPutOpenInterest => write!(f, "Option Put Open Interest"),
-            Self::OptionCallVolume => write!(f, "Option Call Volume"),
-            Self::OptionPutVolume => write!(f, "Option Put Volume"),
-            Self::IndexFuturePremium => write!(f, "Index Future Premium"),
-            Self::BidExch => write!(f, "Bid Exchange"),
-            Self::AskExch => write!(f, "Ask Exchange"),
-            Self::AuctionVolume => write!(f, "Auction Volume"),
-            Self::AuctionPrice => write!(f, "Auction Price"),
-            Self::AuctionImbalance => write!(f, "Auction Imbalance"),
-            Self::MarkPrice => write!(f, "Mark Price"),
-            Self::BidEfpComputation => write!(f, "Bid EFP Computation"),
-            Self::AskEfpComputation => write!(f, "Ask EFP Computation"),
-            Self::LastEfpComputation => write!(f, "Last EFP Computation"),
-            Self::OpenEfpComputation => write!(f, "Open EFP Computation"),
-            Self::HighEfpComputation => write!(f, "High EFP Computation"),
-            Self::LowEfpComputation => write!(f, "Low EFP Computation"),
-            Self::CloseEfpComputation => write!(f, "Close EFP Computation"),
-            Self::LastTimestamp => write!(f, "Last Timestamp"),
-            Self::Shortable => write!(f, "Shortable"),
-            Self::RtVolume => write!(f, "RT Volume"),
-            Self::Halted => write!(f, "Halted"),
-            Self::BidYield => write!(f, "Bid Yield"),
-            Self::AskYield => write!(f, "Ask Yield"),
-            Self::LastYield => write!(f, "Last Yield"),
-            Self::CustOptionComputation => write!(f, "Custom Option Computation"),
-            Self::TradeCount => write!(f, "Trade Count"),
-            Self::TradeRate => write!(f, "Trade Rate"),
-            Self::VolumeRate => write!(f, "Volume Rate"),
-            Self::LastRthTrade => write!(f, "Last RTH Trade"),
-            Self::RtHistoricalVol => write!(f, "RT Historical Volatility"),
-            Self::IbDividends => write!(f, "IB Dividends"),
-            Self::BondFactorMultiplier => write!(f, "Bond Factor Multiplier"),
-            Self::RegulatoryImbalance => write!(f, "Regulatory Imbalance"),
-            Self::NewsTick => write!(f, "News Tick"),
-            Self::ShortTermVolume3Min => write!(f, "Short Term Volume 3 Min"),
-            Self::ShortTermVolume5Min => write!(f, "Short Term Volume 5 Min"),
-            Self::ShortTermVolume10Min => write!(f, "Short Term Volume 10 Min"),
-            Self::DelayedBid => write!(f, "Delayed Bid"),
-            Self::DelayedAsk => write!(f, "Delayed Ask"),
-            Self::DelayedLast => write!(f, "Delayed Last"),
-            Self::DelayedBidSize => write!(f, "Delayed Bid Size"),
-            Self::DelayedAskSize => write!(f, "Delayed Ask Size"),
-            Self::DelayedLastSize => write!(f, "Delayed Last Size"),
-            Self::DelayedHigh => write!(f, "Delayed High"),
-            Self::DelayedLow => write!(f, "Delayed Low"),
-            Self::DelayedVolume => write!(f, "Delayed Volume"),
-            Self::DelayedClose => write!(f, "Delayed Close"),
-            Self::DelayedOpen => write!(f, "Delayed Open"),
-            Self::RtTrdVolume => write!(f, "RT Trade Volume"),
-            Self::CreditmanMarkPrice => write!(f, "Creditman Mark Price"),
-            Self::CreditmanSlowMarkPrice => write!(f, "Creditman Slow Mark Price"),
-            Self::DelayedBidOption => write!(f, "Delayed Bid Option"),
-            Self::DelayedAskOption => write!(f, "Delayed Ask Option"),
-            Self::DelayedLastOption => write!(f, "Delayed Last Option"),
-            Self::DelayedModelOption => write!(f, "Delayed Model Option"),
-            Self::LastExch => write!(f, "Last Exchange"),
-            Self::LastRegTime => write!(f, "Last Reg Time"),
-            Self::FuturesOpenInterest => write!(f, "Futures Open Interest"),
-            Self::AvgOptVolume => write!(f, "Average Option Volume"),
-            Self::DelayedLastTimestamp => write!(f, "Delayed Last Timestamp"),
-            Self::ShortableShares => write!(f, "Shortable Shares"),
-            Self::DelayedHalted => write!(f, "Delayed Halted"),
-            Self::Reuters2MutualFunds => write!(f, "Reuters2 Mutual Funds"),
-            Self::EtfNavClose => write!(f, "ETF NAV Close"),
-            Self::EtfNavPriorClose => write!(f, "ETF NAV Prior Close"),
-            Self::EtfNavBid => write!(f, "ETF NAV Bid"),
-            Self::EtfNavAsk => write!(f, "ETF NAV Ask"),
-            Self::EtfNavLast => write!(f, "ETF NAV Last"),
-            Self::EtfFrozenNavLast => write!(f, "ETF Frozen NAV Last"),
-            Self::EtfNavHigh => write!(f, "ETF NAV High"),
-            Self::EtfNavLow => write!(f, "ETF NAV Low"),
-            Self::SocialMarketAnalytics => write!(f, "Social Market Analytics"),
-            Self::EstimatedIpoMidpoint => write!(f, "Estimated IPO Midpoint"),
-            Self::FinalIpoLast => write!(f, "Final IPO Last"),
-            Self::DelayedYieldBid => write!(f, "Delayed Yield Bid"),
-            Self::DelayedYieldAsk => write!(f, "Delayed Yield Ask"),
-            Self::OddLotBid => write!(f, "Odd Lot Bid"),
-            Self::OddLotAsk => write!(f, "Odd Lot Ask"),
-            Self::OddLotBidSize => write!(f, "Odd Lot Bid Size"),
-            Self::OddLotAskSize => write!(f, "Odd Lot Ask Size"),
-            Self::OddLotBidExch => write!(f, "Odd Lot Bid Exchange"),
-            Self::OddLotAskExch => write!(f, "Odd Lot Ask Exchange"),
-            Self::ComboImpliedBid => write!(f, "Combo Implied Bid"),
-            Self::ComboImpliedAsk => write!(f, "Combo Implied Ask"),
-        }
+/// `Unknown(-1)`: no tick type, the value `Unknown` had before 6.0. IB assigns no tick id `-1`.
+impl Default for TickType {
+    fn default() -> Self {
+        Self::Unknown(-1)
     }
 }
 
