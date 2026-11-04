@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `HistoricalScheduleBuilder::trading_hours` (sync and async): request extended-hours sessions with `TradingHours::Extended`. The schedule request always asked for regular trading hours, so a product's full session (for example, a futures contract's 17:00–16:00 session) was unreachable (#TBD).
+- `HistoricalScheduleBuilder::trading_hours` (sync and async): request extended-hours sessions with `TradingHours::Extended`. The schedule request always asked for regular trading hours, so a product's full session (for example, a futures contract's 17:00–16:00 session) was unreachable (#1147).
 
 ## [5.5.0] - 2026-10-30
 

@@ -79,27 +79,32 @@ mod sync_tests {
     }
 
     #[test]
-    fn extended_hours_clears_use_rth() {
-        let (client, bus) = client_with_schedule();
-        let contract = Contract::stock("AAPL").build();
+    fn trading_hours_sets_use_rth() {
+        for (name, trading_hours, use_rth) in [
+            ("explicit Regular", TradingHours::Regular, true),
+            ("Extended", TradingHours::Extended, false),
+        ] {
+            let (client, bus) = client_with_schedule();
+            let contract = Contract::stock("AAPL").build();
 
-        client
-            .historical_schedules(&contract, 7.days())
-            .trading_hours(TradingHours::Extended)
-            .fetch()
-            .expect("fetch failed");
+            client
+                .historical_schedules(&contract, 7.days())
+                .trading_hours(trading_hours)
+                .fetch()
+                .unwrap_or_else(|e| panic!("{name}: fetch failed: {e}"));
 
-        assert_request(
-            &bus,
-            0,
-            &historical_data_request()
-                .contract(&contract)
-                .end_date(None)
-                .duration(Duration::days(7))
-                .bar_size(BarSize::Day)
-                .what_to_show(WhatToShow::Schedule)
-                .use_rth(false),
-        );
+            assert_request(
+                &bus,
+                0,
+                &historical_data_request()
+                    .contract(&contract)
+                    .end_date(None)
+                    .duration(Duration::days(7))
+                    .bar_size(BarSize::Day)
+                    .what_to_show(WhatToShow::Schedule)
+                    .use_rth(use_rth),
+            );
+        }
     }
 }
 
@@ -171,27 +176,32 @@ mod async_tests {
     }
 
     #[tokio::test]
-    async fn extended_hours_clears_use_rth() {
-        let (client, bus) = client_with_schedule();
-        let contract = Contract::stock("AAPL").build();
+    async fn trading_hours_sets_use_rth() {
+        for (name, trading_hours, use_rth) in [
+            ("explicit Regular", TradingHours::Regular, true),
+            ("Extended", TradingHours::Extended, false),
+        ] {
+            let (client, bus) = client_with_schedule();
+            let contract = Contract::stock("AAPL").build();
 
-        client
-            .historical_schedules(&contract, 7.days())
-            .trading_hours(TradingHours::Extended)
-            .fetch()
-            .await
-            .expect("fetch failed");
+            client
+                .historical_schedules(&contract, 7.days())
+                .trading_hours(trading_hours)
+                .fetch()
+                .await
+                .unwrap_or_else(|e| panic!("{name}: fetch failed: {e}"));
 
-        assert_request(
-            &bus,
-            0,
-            &historical_data_request()
-                .contract(&contract)
-                .end_date(None)
-                .duration(Duration::days(7))
-                .bar_size(BarSize::Day)
-                .what_to_show(WhatToShow::Schedule)
-                .use_rth(false),
-        );
+            assert_request(
+                &bus,
+                0,
+                &historical_data_request()
+                    .contract(&contract)
+                    .end_date(None)
+                    .duration(Duration::days(7))
+                    .bar_size(BarSize::Day)
+                    .what_to_show(WhatToShow::Schedule)
+                    .use_rth(use_rth),
+            );
+        }
     }
 }

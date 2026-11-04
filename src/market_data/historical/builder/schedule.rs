@@ -36,7 +36,7 @@ impl<'a, C> HistoricalScheduleBuilder<'a, C> {
         self
     }
 
-    /// Include extended-hours sessions (defaults to [`TradingHours::Regular`]).
+    /// Override regular- vs extended-hours sessions (defaults to [`TradingHours::Regular`]).
     ///
     /// The flag selects the sessions IBKR returns: `Regular` asks for regular
     /// trading hours only, `Extended` for the full product session (for

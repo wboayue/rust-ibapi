@@ -635,7 +635,8 @@ pub struct Schedule {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Session {
-    /// Calendar date for the session.
+    /// Trade date the session belongs to. May differ from `start`'s date: an
+    /// extended futures session dated Monday opens Sunday evening.
     pub reference: Date,
     /// Session start time.
     pub start: OffsetDateTime,
