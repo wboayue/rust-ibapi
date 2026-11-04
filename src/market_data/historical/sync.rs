@@ -426,6 +426,17 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         self.request_id
     }
 
+    /// Whether the stream has terminated and every later `next`, `try_next` or
+    /// `next_timeout` returns `None`: the last batch was read and its ticks
+    /// drained, or a terminal error or `Err(Error::Cancelled)` after
+    /// [`cancel`](Self::cancel) was returned. Distinguishes between the `None`
+    /// that [`try_next`](Self::try_next) and
+    /// [`next_timeout`](Self::next_timeout) return at the end and the one they
+    /// return while nothing has arrived yet.
+    pub fn is_terminated(&self) -> bool {
+        (self.done.load(Ordering::Relaxed) || self.stream_ended.load(Ordering::Relaxed)) && self.buffer.lock().unwrap().is_empty()
+    }
+
     /// Cancel the historical-ticks request. After completion nothing is written.
     /// Also fired automatically on `Drop` for unfinished subscriptions; explicit calls are idempotent.
     ///
@@ -590,8 +601,9 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
 
     /// Attempt to fetch the next item without blocking.
     ///
-    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next); returns `None`
-    /// if nothing is queued right now.
+    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next). `None` means
+    /// either that nothing is queued right now or that the stream ended;
+    /// [`is_terminated`](Self::is_terminated) distinguishes between the two.
     ///
     /// # Examples
     ///
@@ -613,8 +625,9 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     /// Wait up to `duration` for the next item to arrive.
     ///
     /// Same `SubscriptionItem<T>` shape as [`next`](Self::next). `None` means
-    /// either that `duration` passed or that the stream ended; terminal errors
-    /// come as `Some(Err(_))`.
+    /// either that `duration` passed or that the stream ended;
+    /// [`is_terminated`](Self::is_terminated) distinguishes between the two.
+    /// Terminal errors come as `Some(Err(_))`.
     ///
     /// # Examples
     ///

@@ -251,7 +251,7 @@ In both examples, the request for realtime bars returns a [Subscription](https:/
 
 #### Non-blocking Iteration (Sync)
 
-Continuing from the sync example above, `try_iter_data()` polls without blocking:
+Continuing from the sync example above, `try_iter_data()` polls without blocking. It yields `None` both while nothing new is queued and once the stream can yield nothing more; `is_terminated()` distinguishes between the two:
 
 ```rust
 use std::time::Duration;
