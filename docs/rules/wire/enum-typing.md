@@ -105,7 +105,7 @@ exists.
 
 Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §30;
 `docs/migration-4.0.md` §2, §9, §13–§15; `docs/migration-5.0.md` §1, §7;
-`docs/migration-6.0.md` §2–§3. Consult it rather than re-deriving which fields were converted.
+`docs/migration-6.0.md` §2–§3, §7. Consult it rather than re-deriving which fields were converted.
 
 - #518 — established the pattern (`OrderStatus.status` → `OrderStatusKind`).
 - #556, #558 — the generic `parse_required` / `parse_optional` shape.
