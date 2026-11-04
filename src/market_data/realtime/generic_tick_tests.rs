@@ -36,6 +36,7 @@ fn constants_match_documented_numeric_ids() {
         (ETF_NAV_HIGH_LOW, "614"),
         (CREDITMAN_SLOW_MARK_PRICE, "619"),
         (ETF_FROZEN_NAV_LAST, "623"),
+        (COMBO_IMPLIED_BID_ASK, "760"),
         (ODD_LOT, "787"),
     ];
 

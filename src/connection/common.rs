@@ -193,7 +193,7 @@ impl Default for ConnectionHandler {
     fn default() -> Self {
         Self {
             min_version: server_versions::PROTOBUF_REST_MESSAGES_3,
-            max_version: server_versions::CONDITIONS_INCLUDE_OVERNIGHT,
+            max_version: server_versions::COMBO_IMPLIED_BID_ASK,
         }
     }
 }
