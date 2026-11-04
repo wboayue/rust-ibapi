@@ -67,6 +67,9 @@ Probe rules:
   fills arrive in chunks; re-read `filled` from the cancel reply before flattening, and
   flatten anything that filled.
 - Probe each variant/value separately; record which code each draws (e.g. 321 vs 430).
+- A capture covers only the instruments and session it ran against. 512 futures fills carried
+  only `BOT` / `SLD`; `SSHORT` / `SLONG` need equity short sales. Match both to the question
+  before calling a vocabulary complete, and list what wasn't covered under **Not probed**.
 
 ## 3. Hang triage
 

@@ -8,7 +8,7 @@ triggers:
   - a decoder falls back to T::default() on a missing field
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
-related: [proto-only-decoding, fixture-builders]
+related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
 precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071"]
 ---
 
@@ -62,16 +62,8 @@ VB sample app's display fallback (`appendNonEmptyString(.., contract.Right, "?")
 wire. Display helpers and `*_PLACEHOLDER` constants say nothing about the wire; decoder reads
 (`ReadString`, `decodeString`) do. No wire evidence for the literal → fix the fixture.
 
-A live capture is bounded by what it ran against. 512 futures fills carried only `BOT` / `SLD`;
-`SSHORT` / `SLONG` need equity short sales. Session state matters the same way (an empty paper
-session and one with a prior open order surface different messages). Match instrument and
-session to the question before calling a vocabulary complete.
-
-If a decode helper's signature forces a wrapper at the new call site, generalize it (take
-`Option<&str>`, not `&Option<String>`; `&[T]`, not `&Vec<T>`) and migrate its callers in a
-precursor PR that merges first. #558 did that for `parse_required` / `parse_optional` so #559
-could pass a text value without allocating; folding it into #559 would have mixed a refactor
-into a feature diff.
+If a decode helper's signature doesn't fit the new call site, change it in a precursor PR first;
+see [modernize touched modules](../workflow/modernize-touched-modules.md).
 
 ## Integer-coded enums
 

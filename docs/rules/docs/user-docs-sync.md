@@ -8,6 +8,7 @@ triggers:
   - changing a public field's type or a return type's shape
   - adding a builder method or feature flag a user upgrading would search for
   - about to grep for a name you just renamed
+  - a multi-PR arc concludes (floor reached, major version, sweep finished)
 symbols: [README.md, migration-6.0.md]
 related: [changelog-entry, public-api-examples, restrict-after-callers, modernize-touched-modules]
 precedents: ["#549", "#771", "#884"]

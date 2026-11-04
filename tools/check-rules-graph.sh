@@ -103,7 +103,7 @@ done
 # --- 6. no references to private memory -------------------------------------
 
 for file in $(nodes) "$RULES_DIR/README.md"; do
-    sed -n '2,/^---$/p' "$file" | grep -qE "^memory:" &&
+    grep -qE '^memory:' "$file" &&
         echo "$file: memory: key references files outside the repo (fold the evidence into the node)" >>"$ERRORS"
 done
 
