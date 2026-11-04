@@ -341,3 +341,5 @@ pub const USE_PRECISION_FROM_SEC_DEF: i32 = 224;
 pub const ODD_LOT_BID_ASK_QUOTES: i32 = 225;
 /// Minimum server version for conditional orders that trigger during the OVERNIGHT session.
 pub const CONDITIONS_INCLUDE_OVERNIGHT: i32 = 226;
+/// Minimum server version for combo implied bid/ask ticks (generic tick 760).
+pub const COMBO_IMPLIED_BID_ASK: i32 = 227;
