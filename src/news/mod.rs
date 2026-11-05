@@ -52,8 +52,9 @@ pub struct NewsBulletin {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct NewsArticle {
-    /// The article's published time.
-    pub time: OffsetDateTime,
+    /// The article's published time, in UTC. `None` when TWS sends no time, or one this
+    /// client can't parse (logged as a warning).
+    pub time: Option<OffsetDateTime>,
     /// The provider code for the news article.
     pub provider_code: String,
     /// Identifier used to track the particular article.
