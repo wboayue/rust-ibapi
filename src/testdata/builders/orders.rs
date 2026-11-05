@@ -280,6 +280,7 @@ pub struct ExecutionDataResponse {
     pub ev_multiplier: Option<f64>,
     pub model_code: String,
     pub last_liquidity: i32,
+    pub option_exercise_type: Option<i32>,
 }
 
 impl Default for ExecutionDataResponse {
@@ -311,6 +312,7 @@ impl Default for ExecutionDataResponse {
             ev_multiplier: None,
             model_code: String::new(),
             last_liquidity: 2,
+            option_exercise_type: None,
         }
     }
 }
@@ -368,6 +370,10 @@ impl ExecutionDataResponse {
         self.last_liquidity = v;
         self
     }
+    pub fn option_exercise_type(mut self, v: i32) -> Self {
+        self.option_exercise_type = Some(v);
+        self
+    }
 }
 
 impl ResponseProtoEncoder for ExecutionDataResponse {
@@ -405,6 +411,7 @@ impl ResponseProtoEncoder for ExecutionDataResponse {
                 ev_multiplier: self.ev_multiplier,
                 model_code: some_str(&self.model_code),
                 last_liquidity: Some(self.last_liquidity),
+                opt_exercise_or_lapse_type: self.option_exercise_type,
                 ..Default::default()
             }),
         }
