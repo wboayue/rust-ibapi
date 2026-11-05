@@ -2,6 +2,7 @@
 //! out a reconnect.
 
 use std::sync::{Condvar, Mutex, PoisonError};
+use std::time::Instant;
 
 use crate::errors::Error;
 use crate::transport::common::{lock, SessionState};
@@ -70,11 +71,21 @@ impl ConnectionSignal {
     }
 
     /// Block until the session is connected again, returning
-    /// [`Error::ConnectionFailed`] or [`Error::Shutdown`] if it never will be.
-    pub(crate) fn wait_connected(&self) -> Result<(), Error> {
+    /// [`Error::ConnectionFailed`] or [`Error::Shutdown`] if it never will be,
+    /// or [`Error::Timeout`] if `deadline` passes first.
+    pub(crate) fn wait_connected(&self, deadline: Option<Instant>) -> Result<(), Error> {
         let mut state = lock(&self.state);
         while *state == SessionState::Disconnected {
-            state = self.changed.wait(state).unwrap_or_else(PoisonError::into_inner);
+            state = match deadline {
+                None => self.changed.wait(state).unwrap_or_else(PoisonError::into_inner),
+                Some(deadline) => {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
+                        return Err(Error::Timeout);
+                    }
+                    self.changed.wait_timeout(state, remaining).unwrap_or_else(PoisonError::into_inner).0
+                }
+            };
         }
         state.check()
     }

@@ -2,6 +2,7 @@
 //! a reconnect.
 
 use tokio::sync::watch;
+use tokio::time::Instant;
 
 use crate::errors::Error;
 use crate::transport::common::SessionState;
@@ -68,17 +69,22 @@ impl ConnectionSignal {
     }
 
     /// Resolve once the session is connected again, returning
-    /// [`Error::ConnectionFailed`] or [`Error::Shutdown`] if it never will be.
-    pub(crate) async fn wait_connected(&self) -> Result<(), Error> {
+    /// [`Error::ConnectionFailed`] or [`Error::Shutdown`] if it never will be,
+    /// or [`Error::Timeout`] if `deadline` passes first.
+    pub(crate) async fn wait_connected(&self, deadline: Option<Instant>) -> Result<(), Error> {
         let mut receiver = self.sender.subscribe();
         loop {
             let state = *receiver.borrow_and_update();
             if state != SessionState::Disconnected {
                 return state.check();
             }
+            let changed = match deadline {
+                None => receiver.changed().await,
+                Some(deadline) => tokio::time::timeout_at(deadline, receiver.changed()).await.map_err(|_| Error::Timeout)?,
+            };
             // The bus outlives every waiter, but a closed channel still
             // means no reconnect is coming.
-            if receiver.changed().await.is_err() {
+            if changed.is_err() {
                 return Err(Error::Shutdown);
             }
         }
