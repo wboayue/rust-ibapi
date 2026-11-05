@@ -170,3 +170,28 @@ if details.fund_asset_type == FundAssetType::None { /* no value */ }
 if details.fund_asset_type == Some(FundAssetType::Equity) { /* ... */ }
 if details.fund_asset_type.is_none() { /* no value */ }
 ```
+
+### 8. `NewsArticle::time` is `Option`
+
+An article with no time, or one the client couldn't parse, arrived dated 1970-01-01, which
+looked like a real date to code that sorts or filters by time. A tick news timestamp out of
+range instead ended the `contract_news` or `broad_tape_news` subscription with `Error::Parse`.
+Now:
+
+- **`NewsArticle::time` is `Option<OffsetDateTime>`**, `None` in all of those cases. The
+  subscription carries on, and unparseable text or an out-of-range timestamp is logged with
+  `log::warn!` and the raw value.
+- **Serde:** an unset time serializes as `null`.
+
+```rust,ignore
+// 5.x
+println!("{}", article.time);
+articles.sort_by_key(|a| a.time);
+
+// 6.0
+match article.time {
+    Some(time) => println!("{time}"),
+    None => println!("time unknown"),
+}
+articles.sort_by_key(|a| a.time); // None sorts first
+```
