@@ -351,7 +351,9 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// 162: the request is over at TWS.
     ///
     /// # Errors
-    /// [`Error::InvalidArgument`] for an invalid date range; nothing is sent.
+    /// [`Error::InvalidArgument`], with nothing sent, for an invalid date range,
+    /// [`WhatToShow::AdjustedLast`] with an end date, or a `buffer_limit`
+    /// outside `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
     ///
     /// # Examples
     ///
@@ -520,7 +522,9 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// 162: the request is over at TWS.
     ///
     /// # Errors
-    /// [`Error::InvalidArgument`] for an invalid date range; nothing is sent.
+    /// [`Error::InvalidArgument`], with nothing sent, for an invalid date range,
+    /// [`WhatToShow::AdjustedLast`] with an end date, or a `buffer_limit`
+    /// outside `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
     ///
     /// # Examples
     ///

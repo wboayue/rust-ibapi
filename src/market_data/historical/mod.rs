@@ -556,7 +556,7 @@ fn cancel_historical_data(request_id: Option<i32>) -> Result<Vec<u8>, Error> {
 /// The frames of a historical bar request that doesn't stream updates: the
 /// bars, then the window.
 ///
-/// Yielded by `historical_data(..).subscribe()`, in that order. `End` ends the
+/// Yielded by [`HistoricalDataBuilder::subscribe`], in that order. `End` ends the
 /// request at TWS: a subscription that has read it sends no cancel when
 /// dropped, and one dropped before it does. Unlike [`HistoricalBarUpdate`],
 /// nothing follows `End`.

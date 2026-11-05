@@ -367,6 +367,30 @@ mod sync_tests {
     }
 
     #[test]
+    fn subscribe_rejects_invalid_arguments_unsent() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+
+        let adjusted_with_end = client
+            .historical_data(&contract, BarSize::Hour)
+            .what_to_show(WhatToShow::AdjustedLast)
+            .duration(1.days())
+            .ending(datetime!(2026-04-15 0:00 UTC))
+            .subscribe();
+        let zero_limit = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .buffer_limit(0)
+            .subscribe();
+
+        for result in [adjusted_with_end, zero_limit] {
+            let Err(err) = result else { panic!("expected InvalidArgument") };
+            assert!(matches!(err, Error::InvalidArgument(_)), "got: {err}");
+        }
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
+    }
+
+    #[test]
     fn subscribe_connection_reset_is_not_resent() {
         let bus = Arc::new(MessageBusStub::with_ordered_responses(historical_data_response_pair()).with_connection_resets(1));
         let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
@@ -636,6 +660,32 @@ mod async_tests {
         assert!(matches!(outcome, Drained::Rejected(notice) if notice.code == 162));
         settle().await;
         assert_eq!(cancels(&bus), 0, "the rejection ended the request at TWS");
+    }
+
+    #[tokio::test]
+    async fn subscribe_rejects_invalid_arguments_unsent() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+
+        let adjusted_with_end = client
+            .historical_data(&contract, BarSize::Hour)
+            .what_to_show(WhatToShow::AdjustedLast)
+            .duration(1.days())
+            .ending(datetime!(2026-04-15 0:00 UTC))
+            .subscribe()
+            .await;
+        let zero_limit = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .buffer_limit(0)
+            .subscribe()
+            .await;
+
+        for result in [adjusted_with_end, zero_limit] {
+            let Err(err) = result else { panic!("expected InvalidArgument") };
+            assert!(matches!(err, Error::InvalidArgument(_)), "got: {err}");
+        }
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
     }
 
     #[tokio::test]
