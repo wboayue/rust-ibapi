@@ -2217,7 +2217,12 @@ struct Handoff {
 }
 
 /// Bounds every wait in the test sockets below, so a broken gate fails, not hangs.
-const HANDOFF_WAIT: Duration = Duration::from_secs(5);
+const TEST_SOCKET_WAIT: Duration = Duration::from_secs(5);
+
+/// Whether `buf` holds the frame a test socket singles out by `marker`.
+fn carries(buf: &[u8], marker: &[u8]) -> bool {
+    buf.windows(marker.len()).any(|w| w == marker)
+}
 
 impl HandoffSocket {
     fn new(stream: MemoryStream, marker: &'static [u8]) -> Self {
@@ -2226,10 +2231,6 @@ impl HandoffSocket {
             marker,
             state: Arc::new(tokio::sync::watch::Sender::new(Handoff::default())),
         }
-    }
-
-    fn carries_marker(&self, buf: &[u8]) -> bool {
-        buf.windows(self.marker.len()).any(|w| w == self.marker)
     }
 
     /// Wait up to `timeout` for `done`; whether it held.
@@ -2251,7 +2252,7 @@ impl HandoffSocket {
     /// The generations the sender's frame landed on.
     fn sender_generations(&self) -> Vec<usize> {
         let state = self.state.borrow();
-        state.writes.iter().filter(|(_, w)| self.carries_marker(w)).map(|(g, _)| *g).collect()
+        state.writes.iter().filter(|(_, w)| carries(w, self.marker)).map(|(g, _)| *g).collect()
     }
 }
 
@@ -2262,10 +2263,10 @@ impl AsyncIo for HandoffSocket {
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        let is_sender = self.carries_marker(buf);
+        let is_sender = carries(buf, self.marker);
         if is_sender {
             self.state.send_modify(|s| s.sender_queued = true);
-            self.wait(HANDOFF_WAIT, |s| s.generation > 0 || s.released).await;
+            self.wait(TEST_SOCKET_WAIT, |s| s.generation > 0 || s.released).await;
         }
         self.state.send_modify(|s| {
             let generation = s.generation;
@@ -2287,7 +2288,7 @@ impl AsyncReconnect for HandoffSocket {
         self.state.send_modify(|s| s.generation += 1);
         // The swap is done; a sender still queued takes the writer next,
         // ahead of the handshake.
-        self.wait(HANDOFF_WAIT, |s| s.sender_wrote).await;
+        self.wait(TEST_SOCKET_WAIT, |s| s.sender_wrote).await;
         Ok(())
     }
 
@@ -2318,7 +2319,7 @@ async fn queued_send_is_not_written_into_the_reconnect_handshake() {
         async move { bus.send_request(RequestId::nth(100), MARKER.to_vec()).await.map(|_| ()) }
     });
     assert!(
-        socket.wait(HANDOFF_WAIT, |s| s.sender_queued).await,
+        socket.wait(TEST_SOCKET_WAIT, |s| s.sender_queued).await,
         "the sender never reached the writer"
     );
 
@@ -2341,7 +2342,7 @@ async fn queued_send_is_not_written_into_the_reconnect_handshake() {
     socket.wait(TICK, |s| s.generation > 0).await;
     socket.release();
 
-    let notice = tokio::time::timeout(HANDOFF_WAIT, notices.recv())
+    let notice = tokio::time::timeout(TEST_SOCKET_WAIT, notices.recv())
         .await
         .expect("no reconnect notice on the notice stream")
         .expect("notice stream closed");
@@ -2384,11 +2385,11 @@ impl StuckWriteSocket {
         }
     }
 
-    /// Wait up to `HANDOFF_WAIT` for `done`; whether it held.
+    /// Wait up to `TEST_SOCKET_WAIT` for `done`; whether it held.
     async fn wait(&self, done: impl Fn(&StuckWrite) -> bool) -> bool {
         let mut rx = self.state.subscribe();
         // The `Ref` `wait_for` resolves to borrows `rx`: drop it before `rx`.
-        let held = matches!(tokio::time::timeout(HANDOFF_WAIT, rx.wait_for(|s| done(s))).await, Ok(Ok(_)));
+        let held = matches!(tokio::time::timeout(TEST_SOCKET_WAIT, rx.wait_for(|s| done(s))).await, Ok(Ok(_)));
         held
     }
 }
@@ -2400,7 +2401,7 @@ impl AsyncIo for StuckWriteSocket {
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        if !buf.windows(self.marker.len()).any(|w| w == self.marker) {
+        if !carries(buf, self.marker) {
             return self.stream.write_all(buf).await;
         }
         self.state.send_modify(|s| s.stuck = true);

@@ -3381,7 +3381,12 @@ struct Handoff {
 }
 
 /// Bounds every wait in the test sockets below, so a broken gate fails, not hangs.
-const HANDOFF_WAIT: Duration = Duration::from_secs(5);
+const TEST_SOCKET_WAIT: Duration = Duration::from_secs(5);
+
+/// Whether `buf` holds the frame a test socket singles out by `marker`.
+fn carries(buf: &[u8], marker: &[u8]) -> bool {
+    buf.windows(marker.len()).any(|w| w == marker)
+}
 
 impl HandoffSocket {
     fn new(stream: MemoryStream, marker: &'static [u8]) -> Self {
@@ -3410,12 +3415,7 @@ impl HandoffSocket {
     fn sender_generations(&self) -> Vec<usize> {
         let state = self.state.0.lock().unwrap();
         let marker = self.marker;
-        state
-            .writes
-            .iter()
-            .filter(|(_, w)| w.windows(marker.len()).any(|x| x == marker))
-            .map(|(g, _)| *g)
-            .collect()
+        state.writes.iter().filter(|(_, w)| carries(w, marker)).map(|(g, _)| *g).collect()
     }
 }
 
@@ -3427,12 +3427,12 @@ impl Io for HandoffSocket {
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let (mutex, changed) = &*self.state;
         let mut state = mutex.lock().unwrap();
-        let is_sender = buf.windows(self.marker.len()).any(|w| w == self.marker);
+        let is_sender = carries(buf, self.marker);
         if is_sender {
             state.sender_queued = true;
             changed.notify_all();
             state = changed
-                .wait_timeout_while(state, HANDOFF_WAIT, |s| s.generation == 0 && !s.released)
+                .wait_timeout_while(state, TEST_SOCKET_WAIT, |s| s.generation == 0 && !s.released)
                 .unwrap()
                 .0;
         }
@@ -3460,7 +3460,7 @@ impl Reconnect for HandoffSocket {
         changed.notify_all();
         // The swap is done; a sender still queued takes the writer next,
         // ahead of the handshake.
-        let _ = changed.wait_timeout_while(state, HANDOFF_WAIT, |s| !s.sender_wrote).unwrap();
+        let _ = changed.wait_timeout_while(state, TEST_SOCKET_WAIT, |s| !s.sender_wrote).unwrap();
         Ok(())
     }
 
@@ -3489,7 +3489,7 @@ fn queued_send_is_not_written_into_the_reconnect_handshake() {
         let bus = bus.clone();
         move || bus.send_request(RequestId::nth(100), MARKER).map(|_| ())
     });
-    assert!(socket.wait(HANDOFF_WAIT, |s| s.sender_queued), "the sender never reached the writer");
+    assert!(socket.wait(TEST_SOCKET_WAIT, |s| s.sender_queued), "the sender never reached the writer");
 
     // The session breaks while the peer keeps the socket open: InvalidFrame.
     stream.push_inbound(b"xx".to_vec());
@@ -3557,7 +3557,7 @@ impl StuckWriteSocket {
     fn wait_stuck(&self) {
         let (mutex, changed) = &*self.state;
         let guard = mutex.lock().unwrap();
-        let (_guard, result) = changed.wait_timeout_while(guard, HANDOFF_WAIT, |s| !s.stuck).unwrap();
+        let (_guard, result) = changed.wait_timeout_while(guard, TEST_SOCKET_WAIT, |s| !s.stuck).unwrap();
         assert!(!result.timed_out(), "the write never got stuck");
     }
 }
@@ -3568,14 +3568,14 @@ impl Io for StuckWriteSocket {
     }
 
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        if !buf.windows(self.marker.len()).any(|w| w == self.marker) {
+        if !carries(buf, self.marker) {
             return self.stream.write_all(buf);
         }
         let (mutex, changed) = &*self.state;
         let mut state = mutex.lock().unwrap();
         state.stuck = true;
         changed.notify_all();
-        let (state, _) = changed.wait_timeout_while(state, HANDOFF_WAIT, |s| !s.severed).unwrap();
+        let (state, _) = changed.wait_timeout_while(state, TEST_SOCKET_WAIT, |s| !s.severed).unwrap();
         if state.severed {
             Err(Error::ConnectionReset)
         } else {
