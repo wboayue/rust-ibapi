@@ -88,6 +88,14 @@ fn validation_error_display() {
 
     let err = ValidationError::InvalidBracketOrder("test".to_string());
     assert_eq!(err.to_string(), "Invalid bracket order: test");
+
+    let err = ValidationError::InvalidPercentage {
+        field: "max_pct_vol",
+        value: 0.05,
+        min: 0.1,
+        max: 0.5,
+    };
+    assert_eq!(err.to_string(), "Invalid max_pct_vol: 0.05 (must be between 0.1 and 0.5)");
 }
 
 #[test]

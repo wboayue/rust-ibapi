@@ -62,11 +62,10 @@ pub enum Error {
     #[error("InvalidArgument: {0}")]
     InvalidArgument(String),
 
-    /// An order builder rejected its inputs before anything was sent:
-    /// `OrderBuilder::submit`, `analyze` and `build_order`, the bracket and
-    /// attached-order submits, `ExerciseOptionsBuilder::submit`, and `?` on
-    /// any [`ValidationError`]. Carries the `ValidationError`, so callers
-    /// match on its variants instead of parsing a message.
+    /// An order builder rejected its inputs before anything was sent (e.g.
+    /// `OrderBuilder::submit`), or `?` was applied to a [`ValidationError`].
+    /// Carries the `ValidationError`, so callers match on its variants instead
+    /// of parsing a message.
     #[error("validation error: {0}")]
     Validation(#[from] ValidationError),
 
