@@ -7,7 +7,7 @@ triggers:
   - typing a String field as an enum
   - a decoder falls back to T::default() on a missing field
   - adding a FromStr impl for a wire value
-symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
+symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
 precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071"]
 ---
@@ -70,19 +70,20 @@ see [modernize touched modules](../workflow/modernize-touched-modules.md).
 A field arriving as an `i32` code (`Liquidity`, `OcaType`, `TriggerMethod`, ...) has no
 missing/empty half; the proto default is a real code. **`From<i32>` never coerces an unrecognized
 code to a known variant**: add an `Unknown(i32)` variant and make `From<i32>` total, returning
-`Unknown(code)` outside the table. The order enums also implement `From<T> for i32`, hand-written
-because `value as i32` no longer compiles with a payload variant. `Unknown(i32)` keeps `Copy` and
-derived serde. There is no closed `TryFrom<i32>` form for streaming paths.
+`Unknown(code)` outside the table. Each also implements `From<T> for i32`, since `value as i32`
+no longer compiles with a payload variant. `impl_wire_code!` (`src/macros.rs`) generates both from
+one table. `Unknown(i32)` keeps `Copy` and derived serde. There is no closed `TryFrom<i32>` form for streaming paths.
 
 **A one-shot integer field decodes closed.** `ArticleType` (`news_article`, #1070) maps the table
 in a private decoder fn and returns `Error::Parse` for any other code. Its coercing public
 `From<i32>` is removed for 6.0 (#1071); an existing `From<i32>` also blocks `TryFrom<i32>` through
 the blanket impl.
 
-**The wire code lives in the `From` impls, not a discriminant.** No `#[repr(i32)]`, no `Foo = 0`:
-with a payload variant nothing reads the discriminant, so it is decoration a reader takes for the
-source of truth, and `#[repr(i32)]` is an ABI commitment buying nothing. A missing match arm is a
-compile error; `Foo = 5` paired with `Foo => 6` is not. Document the code on each variant
+**The wire code lives in the `impl_wire_code!` table, not a discriminant.** No `#[repr(i32)]`, no
+`Foo = 0` on the enum: with a payload variant nothing reads the discriminant, so it is decoration a
+reader takes for the source of truth, and `#[repr(i32)]` is an ABI commitment buying nothing. The
+macro writes both directions from one `Variant = code` list, so they cannot disagree; a variant
+missing from it is a non-exhaustive-match error. Document the code on each variant
 (``Wire code `0`.``). A table too large to keep in step by hand (`TickType`, 112 codes, also
 carrying a field name and display text) is one private `macro_rules!` table that generates the
 enum, both `From` impls and the rest, with the wire-code doc appended per variant (#1071).

@@ -292,6 +292,41 @@ fn what_if_type_round_trips_every_wire_code() {
     );
 }
 
+#[test]
+fn liquidity_round_trips_every_wire_code() {
+    check_wire_code_round_trip(
+        &[
+            (Liquidity::None, 0),
+            (Liquidity::AddedLiquidity, 1),
+            (Liquidity::RemovedLiquidity, 2),
+            (Liquidity::LiquidityRoutedOut, 3),
+            (Liquidity::Unknown(4), 4),
+            (Liquidity::Unknown(-1), -1),
+        ],
+        Liquidity::Unknown,
+    );
+}
+
+#[test]
+fn option_exercise_type_round_trips_every_wire_code() {
+    check_wire_code_round_trip(
+        &[
+            (OptionExerciseType::None, -1),
+            (OptionExerciseType::Exercise, 1),
+            (OptionExerciseType::Lapse, 2),
+            (OptionExerciseType::DoNothing, 3),
+            (OptionExerciseType::Assigned, 100),
+            (OptionExerciseType::AutoexerciseClearing, 101),
+            (OptionExerciseType::Expired, 102),
+            (OptionExerciseType::AutoexerciseTrading, 200),
+            (OptionExerciseType::Netting, 203),
+            (OptionExerciseType::Unknown(0), 0),
+            (OptionExerciseType::Unknown(4), 4),
+        ],
+        OptionExerciseType::Unknown,
+    );
+}
+
 /// Compile-time guard that `ALL_TIFS` lists every modeled variant. A new
 /// variant has no arm in `modeled_index` and fails to compile; the arm it
 /// forces then indexes past `seen`, so the table has to grow before the
