@@ -171,18 +171,6 @@ fn strike_new_rejects_non_positive_and_non_finite() {
 }
 
 #[test]
-fn strike_new_unchecked_succeeds_for_positive() {
-    let s = Strike::new_unchecked(42.0);
-    assert_eq!(s.value(), 42.0);
-}
-
-#[test]
-#[should_panic(expected = "Strike price must be positive")]
-fn strike_new_unchecked_panics_for_non_positive() {
-    let _ = Strike::new_unchecked(0.0);
-}
-
-#[test]
 fn expiration_date_display_format() {
     let d = ExpirationDate::new(2025, 3, 21);
     assert_eq!(format!("{}", d), "20250321");

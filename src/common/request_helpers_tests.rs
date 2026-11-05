@@ -656,7 +656,7 @@ mod cancelling {
     }
 
     fn option() -> Contract {
-        Contract::call("AAPL").strike(240.0).expires_on(2026, 11, 20).build()
+        Contract::call("AAPL").strike(240.0).expires_on(2026, 11, 20).build().unwrap()
     }
 
     /// Every cancellable one-shot goes through `one_shot_cancelling` with its

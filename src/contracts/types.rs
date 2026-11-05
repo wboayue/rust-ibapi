@@ -279,11 +279,6 @@ impl Strike {
         }
     }
 
-    /// Create a strike price, panicking if invalid (for internal use in builders)
-    pub(crate) fn new_unchecked(price: f64) -> Self {
-        Strike::new(price).expect("Strike price must be positive and finite")
-    }
-
     /// Access the numeric strike value.
     pub fn value(&self) -> f64 {
         self.0

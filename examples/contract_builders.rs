@@ -21,7 +21,11 @@ fn main() {
     println!("International stock: {:?} on {}", toyota.symbol, toyota.exchange);
 
     // Call option - type-safe with required fields
-    let call = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build();
+    let call = Contract::call("AAPL")
+        .strike(150.0)
+        .expires_on(2024, 12, 20)
+        .build()
+        .expect("valid option contract");
     println!(
         "Call option: {} {} strike {} exp {}",
         call.symbol,
@@ -35,7 +39,8 @@ fn main() {
         .strike(450.0)
         .expires(ExpirationDate::new(2024, 3, 15))
         .on_exchange("CBOE")
-        .build();
+        .build()
+        .expect("valid option contract");
     println!(
         "Put option: {} {} strike {}",
         put.symbol,

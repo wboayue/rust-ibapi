@@ -8,7 +8,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
     // SPY option — should have a last_trade_date
-    let contract = Contract::call("SPY").strike(600.0).expires_on(2026, 3, 20).build();
+    let contract = Contract::call("SPY").strike(600.0).expires_on(2026, 3, 20).build()?;
 
     let details = client.contract_details(&contract).await?;
 

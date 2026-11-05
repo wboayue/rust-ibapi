@@ -282,3 +282,19 @@ let condition = price(265598, "SMART").build();                     // 5.x: pani
 Each builder now takes a type parameter for its threshold, `Missing` until a comparison sets it (§11): `PriceConditionBuilder<f64>`, `TimeConditionBuilder<String>`, `MarginConditionBuilder<i32>`, `VolumeConditionBuilder<i32>`, `PercentChangeConditionBuilder<f64>`. Code that names a builder's type after the comparison writes it with the parameter; the bare name means the state before one.
 
 `greater_than()` and `less_than()` can be called once per builder. A second call, which used to replace the first, no longer compiles.
+
+### 13. `OptionBuilder::build()` returns `Result`
+
+`Contract::call(..)` / `Contract::put(..)` checked the strike in `strike()` and panicked on one that was not positive and finite (zero, negative, NaN or infinite). `strike()` now takes any `f64`, and `build()` checks it, returning `Result<Contract, Error>`: `Error::InvalidArgument` for a bad strike. This is the shape of `SpreadBuilder::build()` and `ContractBuilder::build()`.
+
+```rust,ignore
+// 5.x
+let option = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build();
+
+// 6.0
+let option = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build()?;
+```
+
+Every option `build()` call gains `?` (or handling of the error); the compiler finds each one where a `Contract` is expected.
+
+After `strike()`, the builder's strike type parameter is `f64`, where it was the validated `Strike`. Code that names the type writes `OptionBuilder<Symbol, f64, ExpirationDate>`. `Strike` and `Strike::new` are unchanged.

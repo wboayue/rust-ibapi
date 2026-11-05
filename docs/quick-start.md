@@ -169,7 +169,7 @@ let stock = Contract::stock("AAPL").build();
 let option = Contract::call("AAPL")
     .strike(150.0)
     .expires_on(2024, 12, 20)
-    .build();
+    .build()?;
 ```
 
 For detailed documentation on creating all contract types, see the [Contract Builder Guide](contract-builder.md).

@@ -118,16 +118,12 @@ impl OptionBuilder<Missing, Missing, Missing> {
 
 // Can only set strike when symbol is present
 impl<E> OptionBuilder<Symbol, Missing, E> {
-    /// Specify the option strike price.
-    ///
-    /// # Panics
-    ///
-    /// If `price` is not positive and finite (zero, negative, NaN or infinite).
-    pub fn strike(self, price: f64) -> OptionBuilder<Symbol, Strike, E> {
+    /// Specify the option strike price. [`build()`](OptionBuilder::build) checks it.
+    pub fn strike(self, price: f64) -> OptionBuilder<Symbol, f64, E> {
         OptionBuilder {
             symbol: self.symbol,
             right: self.right,
-            strike: Strike::new_unchecked(price),
+            strike: price,
             expiry: self.expiry,
             exchange: self.exchange,
             currency: self.currency,
@@ -205,13 +201,18 @@ impl<S, E> OptionBuilder<Symbol, S, E> {
 }
 
 // Build only available when all required fields are set
-impl OptionBuilder<Symbol, Strike, ExpirationDate> {
+impl OptionBuilder<Symbol, f64, ExpirationDate> {
     /// Finalize the option contract once symbol, strike, and expiry are set.
-    pub fn build(self) -> Contract {
-        Contract {
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidArgument`] unless the strike is positive and finite.
+    pub fn build(self) -> Result<Contract, Error> {
+        let strike = Strike::new(self.strike).map_err(Error::InvalidArgument)?;
+        Ok(Contract {
             symbol: self.symbol,
             security_type: SecurityType::Option,
-            strike: self.strike.value(),
+            strike: strike.value(),
             right: Some(self.right),
             last_trade_date_or_contract_month: self.expiry.to_string(),
             exchange: self.exchange,
@@ -220,7 +221,7 @@ impl OptionBuilder<Symbol, Strike, ExpirationDate> {
             primary_exchange: self.primary_exchange.unwrap_or_else(|| Exchange::from("")),
             trading_class: self.trading_class.unwrap_or_default(),
             ..Default::default()
-        }
+        })
     }
 }
 

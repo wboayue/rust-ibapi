@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `NewsBulletin::message_type` is a `news::BulletinType` (`Regular`, `ExchangeUnavailable`, `ExchangeAvailable`, `Unknown(i32)`) and serializes as the variant. Previously it was the wire code as an `i32`; `i32::from(bulletin.message_type)` gives the code back. See `docs/migration-6.0.md` §10 (#1166).
 - `Missing`, the typestate marker for an unset required builder field, moves from `ibapi::contracts` to the new `ibapi::builder` module; no alias is kept. See `docs/migration-6.0.md` §11 (#1119).
 - `PriceConditionBuilder`, `TimeConditionBuilder`, `MarginConditionBuilder`, `VolumeConditionBuilder` and `PercentChangeConditionBuilder` are typestate builders: `build()` and `From<..> for OrderCondition` exist only after `greater_than()` or `less_than()`, so a missing comparison is a compile error instead of a panic, and a second comparison no longer compiles. See `docs/migration-6.0.md` §12 (#1119).
+- `OptionBuilder::build()` (`Contract::call(..)` / `Contract::put(..)`) returns `Result<Contract, Error>`: `Error::InvalidArgument` for a strike that isn't positive and finite, where `strike()` panicked. After `strike()` the builder's strike type parameter is `f64` instead of `Strike`. See `docs/migration-6.0.md` §13 (#1119).
 
 ### Removed
 

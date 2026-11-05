@@ -19,7 +19,11 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract = Contract::call("AAPL").strike(180.0).expires_on(2025, 2, 21).build();
+    let contract = Contract::call("AAPL")
+        .strike(180.0)
+        .expires_on(2025, 2, 21)
+        .build()
+        .expect("valid option contract");
     println!("contract: {contract:?}");
 
     // Submit two 5-contract market buys via the fluent path.

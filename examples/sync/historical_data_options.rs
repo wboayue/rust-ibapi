@@ -18,7 +18,11 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract = Contract::call("AMZN").strike(230.0).expires_on(2025, 1, 31).build();
+    let contract = Contract::call("AMZN")
+        .strike(230.0)
+        .expires_on(2025, 1, 31)
+        .build()
+        .expect("valid option contract");
 
     let historical_data = client
         .historical_data(&contract, HistoricalBarSize::Hour)

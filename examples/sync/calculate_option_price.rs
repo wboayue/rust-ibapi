@@ -14,7 +14,11 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract = Contract::call("AAPL").strike(240.0).expires_on(2025, 6, 20).build();
+    let contract = Contract::call("AAPL")
+        .strike(240.0)
+        .expires_on(2025, 6, 20)
+        .build()
+        .expect("valid option contract");
 
     let calculation = client.calculate_option_price(&contract, 0.2, 235.0).expect("request failed");
     println!("calculation: {calculation:?}");

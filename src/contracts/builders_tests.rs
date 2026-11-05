@@ -28,7 +28,7 @@ fn stock_builder_customization() {
 
 #[test]
 fn call_option_builder() {
-    let call = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build();
+    let call = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build().unwrap();
 
     assert_eq!(call.symbol, Symbol::from("AAPL"));
     assert_eq!(call.security_type, SecurityType::Option);
@@ -48,7 +48,8 @@ fn put_option_builder() {
         .primary("CBOE")
         .trading_class("SPXW")
         .multiplier(100)
-        .build();
+        .build()
+        .unwrap();
 
     assert_eq!(put.symbol, Symbol::from("SPY"));
     assert_eq!(put.security_type, SecurityType::Option);
@@ -73,6 +74,27 @@ fn invalid_strike_price() {
     let result = Strike::new(100.0);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().value(), 100.0);
+}
+
+/// `strike()` takes any `f64`; `build()` rejects one that is not positive and finite.
+#[test]
+fn option_build_rejects_invalid_strike() {
+    let cases = [
+        ("zero", 0.0),
+        ("negative", -10.0),
+        ("nan", f64::NAN),
+        ("infinite", f64::INFINITY),
+        ("negative infinite", f64::NEG_INFINITY),
+    ];
+    for (label, strike) in cases {
+        for builder in [Contract::call("AAPL"), Contract::put("AAPL")] {
+            let result = builder.strike(strike).expires_on(2024, 12, 20).build();
+            match result {
+                Err(Error::InvalidArgument(message)) => assert_eq!(message, "Strike price must be positive and finite", "{label}"),
+                other => panic!("{label}: expected InvalidArgument, got {other:?}"),
+            }
+        }
+    }
 }
 
 #[test]
@@ -493,7 +515,7 @@ fn spread_builder_accepts_contract_id() {
 #[test]
 fn option_convenience_date_methods() {
     // Test expires_weekly - should set next Friday
-    let weekly_option = Contract::call("SPY").strike(450.0).expires_weekly().build();
+    let weekly_option = Contract::call("SPY").strike(450.0).expires_weekly().build().unwrap();
 
     // Weekly expiration should be set
     assert!(!weekly_option.last_trade_date_or_contract_month.is_empty());
@@ -501,7 +523,7 @@ fn option_convenience_date_methods() {
     assert_eq!(weekly_option.last_trade_date_or_contract_month.len(), 8);
 
     // Test expires_monthly - should set third Friday of month
-    let monthly_option = Contract::put("AAPL").strike(150.0).expires_monthly().build();
+    let monthly_option = Contract::put("AAPL").strike(150.0).expires_monthly().build().unwrap();
 
     // Monthly expiration should be set
     assert!(!monthly_option.last_trade_date_or_contract_month.is_empty());
