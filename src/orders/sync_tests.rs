@@ -640,10 +640,7 @@ fn order_update_stream() {
             IncomingMessages::OrderStatus,
             order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_proto(),
         ),
-        proto_response(
-            IncomingMessages::ExecutionData,
-            execution_data().opt_exercise_or_lapse_type(102).encode_proto(),
-        ),
+        proto_response(IncomingMessages::ExecutionData, execution_data().option_exercise_type(102).encode_proto()),
         proto_response(IncomingMessages::CommissionsAndFeesReport, commission_and_fees_report().encode_proto()),
     ]));
 

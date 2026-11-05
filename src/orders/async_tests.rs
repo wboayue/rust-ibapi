@@ -378,7 +378,7 @@ async fn executions() {
                 .price(5800.0)
                 .perm_id(2126726143)
                 .last_liquidity(1)
-                .opt_exercise_or_lapse_type(100)
+                .option_exercise_type(100)
                 .encode_proto(),
         ),
         proto_response(

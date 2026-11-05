@@ -1611,28 +1611,29 @@ impl From<i32> for Liquidity {
     }
 }
 
-/// How an option execution came about: an exercise, lapse, assignment or similar event.
+/// Option exercise or lapse type of an execution (TWS `optExerciseOrLapseType`).
 ///
-/// [`Execution::option_exercise_type`] is [`OptionExerciseType::None`] for an ordinary trade.
+/// Variant names and codes follow the IBKR reference client, which does not define them
+/// further.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum OptionExerciseType {
-    /// Not an exercise or lapse. Wire code `-1`; also used when TWS omits the field.
+    /// No exercise or lapse type. Wire code `-1`; also used when TWS omits the field.
     #[default]
     None,
-    /// The option was exercised. Wire code `1`.
+    /// Exercise. Wire code `1`.
     Exercise,
-    /// The option was lapsed. Wire code `2`.
+    /// Lapse. Wire code `2`.
     Lapse,
-    /// No action was taken. Wire code `3`.
+    /// Do nothing. Wire code `3`.
     DoNothing,
-    /// The option was assigned. Wire code `100`.
+    /// Assigned. Wire code `100`.
     Assigned,
-    /// Automatic exercise by the clearing house. Wire code `101`.
+    /// Auto-exercise (clearing). Wire code `101`.
     AutoexerciseClearing,
-    /// The option expired. Wire code `102`.
+    /// Expired. Wire code `102`.
     Expired,
-    /// Automatic exercise by trading. Wire code `200`.
+    /// Auto-exercise (trading). Wire code `200`.
     AutoexerciseTrading,
     /// Netting. Wire code `203`.
     Netting,
@@ -1708,7 +1709,8 @@ pub struct Execution {
     pub pending_price_revision: bool,
     /// Identifies the submitter of the execution.
     pub submitter: String,
-    /// Whether this execution came from an option exercise, lapse, assignment or similar event.
+    /// Option exercise or lapse type (TWS `optExerciseOrLapseType`); [`OptionExerciseType::None`]
+    /// when TWS sends `-1` or omits the field.
     pub option_exercise_type: OptionExerciseType,
 }
 
