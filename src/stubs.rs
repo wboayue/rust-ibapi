@@ -78,7 +78,7 @@ pub(crate) struct MessageBusStub {
 }
 
 /// What `send_message` does after recording the message.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 enum SendMode {
     Succeed,
     Fail,

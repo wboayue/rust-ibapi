@@ -162,7 +162,18 @@ fn subscription_with_capacity<T: StreamDecoder<T>>(
     order_id: Option<i32>,
     context: DecoderContext,
 ) -> Fixture<T> {
-    let bus = Arc::new(MessageBusStub::default());
+    subscription_on(MessageBusStub::default(), capacity, request_id, order_id, context)
+}
+
+/// [`subscription_with_capacity`] over `bus`.
+fn subscription_on<T: StreamDecoder<T>>(
+    bus: MessageBusStub,
+    capacity: usize,
+    request_id: Option<i32>,
+    order_id: Option<i32>,
+    context: DecoderContext,
+) -> Fixture<T> {
+    let bus = Arc::new(bus);
     let (tx, rx) = broadcast::channel(capacity);
     let internal = AsyncInternalSubscription::new(rx);
     Fixture {
@@ -1179,14 +1190,7 @@ fn drain_fixture() -> Fixture<CancellableEndItem> {
 
 /// [`drain_fixture`] over `bus`.
 fn drain_fixture_on(bus: MessageBusStub) -> Fixture<CancellableEndItem> {
-    let bus = Arc::new(bus);
-    let (tx, rx) = broadcast::channel(100);
-    let internal = AsyncInternalSubscription::new(rx);
-    Fixture {
-        subscription: Subscription::new_from_internal(internal, bus.clone(), Some(123), None, DecoderContext::default()),
-        tx,
-        bus,
-    }
+    subscription_on(bus, 100, Some(123), None, DecoderContext::default())
 }
 
 #[tokio::test]
