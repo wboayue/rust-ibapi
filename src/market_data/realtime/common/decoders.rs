@@ -253,8 +253,8 @@ pub(crate) fn decode_market_depth_proto(msg: crate::proto::MarketDepth) -> Resul
 
     Ok(MarketDepth {
         position: data.position.unwrap_or_default(),
-        operation: data.operation.unwrap_or_default(),
-        side: data.side.unwrap_or_default(),
+        operation: data.operation.unwrap_or_default().into(),
+        side: data.side.unwrap_or_default().into(),
         price: data.price.unwrap_or_default(),
         size: parse_decimal_or_zero(data.size.as_deref())?,
     })
@@ -266,8 +266,8 @@ pub(crate) fn decode_market_depth_l2_proto(msg: crate::proto::MarketDepthL2) -> 
     Ok(MarketDepthL2 {
         position: data.position.unwrap_or_default(),
         market_maker: data.market_maker.unwrap_or_default(),
-        operation: data.operation.unwrap_or_default(),
-        side: data.side.unwrap_or_default(),
+        operation: data.operation.unwrap_or_default().into(),
+        side: data.side.unwrap_or_default().into(),
         price: data.price.unwrap_or_default(),
         size: parse_decimal_or_zero(data.size.as_deref())?,
         smart_depth: data.is_smart_depth.unwrap_or_default(),
