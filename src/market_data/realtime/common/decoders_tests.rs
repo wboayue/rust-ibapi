@@ -294,7 +294,7 @@ mod market_depth_tests {
     }
 
     #[test]
-    fn decode_market_depth_l2_proto_default_smart_depth() {
+    fn decode_market_depth_l2_proto_default_is_smart_depth() {
         let proto_msg = crate::proto::MarketDepthL2 {
             req_id: Some(9000),
             market_depth_data: Some(crate::proto::MarketDepthData {

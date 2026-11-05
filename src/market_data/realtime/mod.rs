@@ -340,7 +340,7 @@ pub struct MarketDepthL2 {
     pub price: f64,
     /// The order's size.
     pub size: f64,
-    /// Flag indicating if this is smart depth response (aggregate data from multiple exchanges, v974+)
+    /// Flag indicating if this is smart depth response (aggregate data from multiple exchanges)
     pub is_smart_depth: bool,
 }
 
