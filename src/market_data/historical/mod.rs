@@ -460,7 +460,16 @@ impl HistoricalData {
     /// use ibapi::market_data::historical::{Bar, BarTimestamp, HistoricalData};
     /// use time::macros::datetime;
     ///
-    /// let bar = |at| Bar { date: BarTimestamp::DateTime(at), open: 1.0, high: 1.0, low: 1.0, close: 1.0, volume: 0.0, wap: 0.0, count: 0 };
+    /// let bar = |at| Bar {
+    ///     date: BarTimestamp::DateTime(at),
+    ///     open: 1.0,
+    ///     high: 1.0,
+    ///     low: 1.0,
+    ///     close: 1.0,
+    ///     volume: 0.0,
+    ///     wap: 0.0,
+    ///     count: 0,
+    /// };
     /// let data = HistoricalData {
     ///     start: datetime!(2026-04-14 0:00 UTC),
     ///     end: datetime!(2026-04-16 0:00 UTC),
