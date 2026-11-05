@@ -65,7 +65,7 @@ pub(crate) struct MessageBusStub {
     /// Keep every stubbed subscription open after its scripted items, as a
     /// real one is until TWS answers. See [`MessageBusStub::keeping_channels_open`].
     keep_open: AtomicBool,
-    /// How long `wait_connected` takes. See [`MessageBusStub::with_reconnect_delay`].
+    /// How long `wait_connected` takes, unless its deadline comes first. See [`MessageBusStub::with_reconnect_delay`].
     reconnect_delay: Duration,
     /// `wait_connected` reports the reconnect gave up. See [`MessageBusStub::with_failed_reconnect`].
     reconnect_fails: bool,
@@ -353,8 +353,13 @@ impl MessageBus for MessageBusStub {
 
     fn ensure_shutdown(&self) {}
 
-    fn wait_connected(&self) -> Result<(), Error> {
+    fn wait_connected(&self, deadline: Option<std::time::Instant>) -> Result<(), Error> {
         if !self.reconnect_delay.is_zero() {
+            let reconnected = std::time::Instant::now() + self.reconnect_delay;
+            if let Some(deadline) = deadline.filter(|deadline| *deadline < reconnected) {
+                std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+                return Err(Error::Timeout);
+            }
             std::thread::sleep(self.reconnect_delay);
         }
         self.reconnect_outcome()
@@ -506,11 +511,16 @@ impl AsyncMessageBus for MessageBusStub {
         // No-op for test stub
     }
 
-    async fn wait_connected(&self) -> Result<(), Error> {
+    async fn wait_connected(&self, deadline: Option<tokio::time::Instant>) -> Result<(), Error> {
         // Even a zero sleep yields, letting a dropped subscription's spawned
         // cancel run before the retry; tests counting requests rely on it not.
         if !self.reconnect_delay.is_zero() {
-            tokio::time::sleep(self.reconnect_delay).await;
+            let reconnected = tokio::time::Instant::now() + self.reconnect_delay;
+            if let Some(deadline) = deadline.filter(|deadline| *deadline < reconnected) {
+                tokio::time::sleep_until(deadline).await;
+                return Err(Error::Timeout);
+            }
+            tokio::time::sleep_until(reconnected).await;
         }
         self.reconnect_outcome()
     }

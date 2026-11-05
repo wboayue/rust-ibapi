@@ -8,7 +8,7 @@ async fn wait_connected_returns_immediately_while_connected() {
     let signal = ConnectionSignal::default();
     assert!(signal.is_connected());
 
-    tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+    tokio::time::timeout(Duration::from_secs(5), signal.wait_connected(None))
         .await
         .expect("connected wait must not block")
         .expect("wait_connected");
@@ -26,7 +26,7 @@ async fn wait_connected_returns_when_the_session_comes_back() {
         waker.set_connected();
     });
 
-    tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+    tokio::time::timeout(Duration::from_secs(5), signal.wait_connected(None))
         .await
         .expect("wait_connected did not return on reconnect")
         .expect("wait_connected");
@@ -44,7 +44,7 @@ async fn wait_connected_returns_shutdown_when_requested_during_the_wait() {
         waker.shutdown();
     });
 
-    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected(None))
         .await
         .expect("wait_connected did not return on shutdown");
     assert!(matches!(result, Err(Error::Shutdown)), "got {result:?}");
@@ -58,7 +58,7 @@ async fn shutdown_is_terminal() {
     signal.set_connected();
 
     assert!(!signal.is_connected(), "a late reconnect must not revive a shut-down session");
-    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected(None))
         .await
         .expect("wait_connected blocked after shutdown");
     assert!(matches!(result, Err(Error::Shutdown)), "got {result:?}");
@@ -92,7 +92,7 @@ async fn wait_connected_returns_connection_failed_when_the_reconnect_gives_up() 
         waker.fail();
     });
 
-    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected(None))
         .await
         .expect("wait_connected did not return on failure");
     assert!(matches!(result, Err(Error::ConnectionFailed)), "got {result:?}");
@@ -110,8 +110,36 @@ async fn failed_survives_the_following_shutdown_and_a_late_reconnect() {
     signal.set_connected();
 
     assert!(!signal.is_connected());
-    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected())
+    let result = tokio::time::timeout(Duration::from_secs(5), signal.wait_connected(None))
         .await
         .expect("wait_connected blocked after failure");
     assert!(matches!(result, Err(Error::ConnectionFailed)), "got {result:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn wait_connected_times_out_at_the_deadline() {
+    let signal = ConnectionSignal::default();
+    signal.set_disconnected();
+
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let result = signal.wait_connected(Some(deadline)).await;
+    assert!(matches!(result, Err(Error::Timeout)), "got {result:?}");
+    assert_eq!(Instant::now(), deadline);
+}
+
+#[tokio::test]
+async fn wait_connected_returns_when_the_session_comes_back_before_the_deadline() {
+    let signal = Arc::new(ConnectionSignal::default());
+    signal.set_disconnected();
+
+    let waker = Arc::clone(&signal);
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        waker.set_connected();
+    });
+
+    signal
+        .wait_connected(Some(Instant::now() + Duration::from_secs(5)))
+        .await
+        .expect("wait_connected");
 }

@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
 - `Execution::option_exercise_type` (`OptionExerciseType`) exposes TWS `optExerciseOrLapseType`; `None` when TWS sends `-1` or omits it. A struct literal of `Execution` without `..Default::default()` must add the field (#1175).
 
+### Fixed
+
+- A one-shot request (such as `managed_accounts()`) or a historical `fetch()` made while the connection is down returns `Error::Timeout` at its deadline (`one_shot_timeout`, or 30 seconds for shared one-shots) instead of waiting out the whole reconnect. A blocking call could hold its thread for minutes. Sync and async (#1168).
+
 ## [5.6.0] - 2026-11-03
 
 ### Added

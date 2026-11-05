@@ -8,7 +8,7 @@ use std::net::TcpStream;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info, trace, warn};
@@ -1042,8 +1042,8 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         self.join();
     }
 
-    fn wait_connected(&self) -> Result<(), Error> {
-        self.connection_state.wait_connected()
+    fn wait_connected(&self, deadline: Option<Instant>) -> Result<(), Error> {
+        self.connection_state.wait_connected(deadline)
     }
 
     fn is_connected(&self) -> bool {
