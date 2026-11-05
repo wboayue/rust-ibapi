@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
 - `Execution::option_exercise_type` (`OptionExerciseType`) exposes TWS `optExerciseOrLapseType`; `None` when TWS sends `-1` or omits it. A struct literal of `Execution` without `..Default::default()` must add the field (#1175).
+- `Liquidity` and `OptionExerciseType` implement `From<T> for i32`, like the other integer-coded enums; `Liquidity` is now `Copy` and `Eq`.
 
 ### Changed
 
@@ -21,8 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ContractDetails::fund_asset_type` and `fund_distribution_policy_indicator` are now `Option<FundAssetType>` and `Option<FundDistributionPolicyIndicator>`, `None` when TWS sends no value. Both enums lose their `None` variant and `Default`, keep an unrecognized value as `Unknown(String)` instead of reading it as unset, and replace `From<&str>` with `FromStr`, `as_str()` and `Display`. See `docs/migration-6.0.md` §7 (#1071).
 - `NewsArticle::time` is now `Option<OffsetDateTime>`: `None` when TWS sends no time or one the client can't parse (logged as a warning), for `historical_news`, `contract_news` and `broad_tape_news`. Such an article was dated 1970-01-01, and a tick news timestamp out of range ended the subscription with `Error::Parse`. See `docs/migration-6.0.md` §8 (#1154).
 - `MarketDepth::operation`, `MarketDepth::side`, `MarketDepthL2::operation` and `MarketDepthL2::side` are enums instead of `i32`: `DepthOperation` (`Insert`, `Update`, `Delete`) and `DepthSide` (`Ask`, `Bid`), each with `Unknown(i32)` for a code this version does not model. Serialized, each is a variant name (`"Insert"`, `"Bid"`) or `{"Unknown": n}` rather than a number, and the `utoipa` schemas change to match. See `docs/migration-6.0.md` §9 (#1164).
-- `Missing`, the typestate marker for an unset required builder field, moves from `ibapi::contracts` to the new `ibapi::builder` module; no alias is kept. See `docs/migration-6.0.md` §10 (#1119).
-- `PriceConditionBuilder`, `TimeConditionBuilder`, `MarginConditionBuilder`, `VolumeConditionBuilder` and `PercentChangeConditionBuilder` are typestate builders: `build()` and `From<..> for OrderCondition` exist only after `greater_than()` or `less_than()`, so a missing comparison is a compile error instead of a panic, and a second comparison no longer compiles. See `docs/migration-6.0.md` §11 (#1119).
+- `NewsBulletin::message_type` is a `news::BulletinType` (`Regular`, `ExchangeUnavailable`, `ExchangeAvailable`, `Unknown(i32)`) and serializes as the variant. Previously it was the wire code as an `i32`; `i32::from(bulletin.message_type)` gives the code back. See `docs/migration-6.0.md` §10 (#1166).
+- `Missing`, the typestate marker for an unset required builder field, moves from `ibapi::contracts` to the new `ibapi::builder` module; no alias is kept. See `docs/migration-6.0.md` §11 (#1119).
+- `PriceConditionBuilder`, `TimeConditionBuilder`, `MarginConditionBuilder`, `VolumeConditionBuilder` and `PercentChangeConditionBuilder` are typestate builders: `build()` and `From<..> for OrderCondition` exist only after `greater_than()` or `less_than()`, so a missing comparison is a compile error instead of a panic, and a second comparison no longer compiles. See `docs/migration-6.0.md` §12 (#1119).
 
 ### Removed
 

@@ -1024,18 +1024,11 @@ fn decode_execution_option_exercise_type() {
         decode_execution(&proto_exec).unwrap().option_exercise_type
     };
 
-    // Table from Execution.cs `COptionExerciseType`.
+    // The code table is pinned by `option_exercise_type_round_trips_every_wire_code`;
+    // here, only that the decoder routes the field through it.
     let cases = [
         (-1, OptionExerciseType::None),
-        (1, OptionExerciseType::Exercise),
-        (2, OptionExerciseType::Lapse),
-        (3, OptionExerciseType::DoNothing),
         (100, OptionExerciseType::Assigned),
-        (101, OptionExerciseType::AutoexerciseClearing),
-        (102, OptionExerciseType::Expired),
-        (200, OptionExerciseType::AutoexerciseTrading),
-        (203, OptionExerciseType::Netting),
-        (0, OptionExerciseType::Unknown(0)),
         (999, OptionExerciseType::Unknown(999)),
     ];
     for (code, expected) in cases {

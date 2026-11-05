@@ -24,16 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(bulletin) => {
                 println!("\n--- News Bulletin ---");
                 println!("ID: {}", bulletin.message_id);
-                println!(
-                    "Type: {} ({})",
-                    bulletin.message_type,
-                    match bulletin.message_type {
-                        1 => "Regular bulletin",
-                        2 => "Exchange unavailable",
-                        3 => "Exchange available",
-                        _ => "Unknown",
-                    }
-                );
+                println!("Type: {:?}", bulletin.message_type);
                 println!("Exchange: {}", bulletin.exchange);
                 println!("Message: {}", bulletin.message);
             }

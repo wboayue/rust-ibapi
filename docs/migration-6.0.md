@@ -227,9 +227,36 @@ Match on the variants, or call `i32::from(..)` where the wire code is needed. Th
 
 The compiler does not catch the serialized form. `MarketDepth` and `MarketDepthL2` derive `Serialize` / `Deserialize`, and `operation` and `side` now serialize in the enums' derived externally tagged form: `"Insert"`, `"Update"`, `"Delete"`, `"Ask"`, `"Bid"`, or `{"Unknown":9}`, where they were numbers. Stored or transmitted rows written by 5.x carry the numbers and no longer deserialize; the `utoipa` schemas change the same way.
 
-### 10. `Missing` moves to `ibapi::builder`
+### 10. `NewsBulletin::message_type` is a `BulletinType`
 
-`Missing`, the marker a typestate builder carries for a required field it has not been given, was `ibapi::contracts::Missing`. The order condition builders use it too now (§11), so it lives in a shared module, `ibapi::builder`. No other path is kept.
+`NewsBulletin::message_type` held the bulletin's wire code as an `i32`: `1` regular bulletin, `2` exchange no longer available for trading, `3` exchange available for trading. It is now a `news::BulletinType` with a variant for each of those codes and `Unknown(i32)` for a code this version does not model, which keeps the code as received. `BulletinType::from(i32)` and `i32::from(BulletinType)` convert between the two.
+
+```rust,ignore
+// 5.x
+match bulletin.message_type {
+    2 => mark_closed(&bulletin.exchange),
+    3 => mark_open(&bulletin.exchange),
+    _ => {}
+}
+
+// 6.0
+use ibapi::news::BulletinType;
+
+match bulletin.message_type {
+    BulletinType::ExchangeUnavailable => mark_closed(&bulletin.exchange),
+    BulletinType::ExchangeAvailable => mark_open(&bulletin.exchange),
+    BulletinType::Regular | BulletinType::Unknown(_) => {}
+}
+let code = i32::from(bulletin.message_type); // where the wire code is needed
+```
+
+Match on the variants, or call `i32::from(..)` where the wire code is needed. The compiler finds every comparison with an integer.
+
+The compiler does not catch the serialized form. `NewsBulletin` derives `Serialize` / `Deserialize`, and `message_type` now serializes in the enum's derived externally tagged form: `"Regular"`, `"ExchangeUnavailable"`, `"ExchangeAvailable"`, or `{"Unknown":7}`, where it was the number. Stored or transmitted bulletins written by 5.x carry the number and no longer deserialize; the `utoipa` schema changes the same way.
+
+### 11. `Missing` moves to `ibapi::builder`
+
+`Missing`, the marker a typestate builder carries for a required field it has not been given, was `ibapi::contracts::Missing`. The order condition builders use it too now (§12), so it lives in a shared module, `ibapi::builder`. No other path is kept.
 
 ```rust,ignore
 // 5.x
@@ -241,7 +268,7 @@ use ibapi::builder::Missing;
 
 Only code that names a builder's type needs the import, such as `OptionBuilder<Symbol, Missing, Missing>` in a signature.
 
-### 11. Condition builders require a comparison before `build()`
+### 12. Condition builders require a comparison before `build()`
 
 `PriceConditionBuilder`, `TimeConditionBuilder`, `MarginConditionBuilder`, `VolumeConditionBuilder` and `PercentChangeConditionBuilder` panicked in `build()` when neither `greater_than()` nor `less_than()` had been called. They are now typestate builders: `build()`, and the `From<..> for OrderCondition` conversion that `OrderBuilder::condition`, `and_condition` and `or_condition` use, exist only after a comparison. A missing comparison is a compile error rather than a panic.
 
@@ -252,6 +279,6 @@ let condition = price(265598, "SMART").greater_than(150.0).build(); // 5.x and 6
 let condition = price(265598, "SMART").build();                     // 5.x: panicked; 6.0: does not compile
 ```
 
-Each builder now takes a type parameter for its threshold, `Missing` until a comparison sets it (§10): `PriceConditionBuilder<f64>`, `TimeConditionBuilder<String>`, `MarginConditionBuilder<i32>`, `VolumeConditionBuilder<i32>`, `PercentChangeConditionBuilder<f64>`. Code that names a builder's type after the comparison writes it with the parameter; the bare name means the state before one.
+Each builder now takes a type parameter for its threshold, `Missing` until a comparison sets it (§11): `PriceConditionBuilder<f64>`, `TimeConditionBuilder<String>`, `MarginConditionBuilder<i32>`, `VolumeConditionBuilder<i32>`, `PercentChangeConditionBuilder<f64>`. Code that names a builder's type after the comparison writes it with the parameter; the bare name means the state before one.
 
 `greater_than()` and `less_than()` can be called once per builder. A second call, which used to replace the first, no longer compiles.

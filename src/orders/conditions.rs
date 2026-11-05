@@ -34,35 +34,15 @@ pub enum TriggerMethod {
     Unknown(i32),
 }
 
-impl From<TriggerMethod> for i32 {
-    fn from(method: TriggerMethod) -> i32 {
-        match method {
-            TriggerMethod::Default => 0,
-            TriggerMethod::DoubleBidAsk => 1,
-            TriggerMethod::Last => 2,
-            TriggerMethod::DoubleLast => 3,
-            TriggerMethod::BidAsk => 4,
-            TriggerMethod::LastOrBidAsk => 7,
-            TriggerMethod::Midpoint => 8,
-            TriggerMethod::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for TriggerMethod {
-    fn from(value: i32) -> Self {
-        match value {
-            0 => TriggerMethod::Default,
-            1 => TriggerMethod::DoubleBidAsk,
-            2 => TriggerMethod::Last,
-            3 => TriggerMethod::DoubleLast,
-            4 => TriggerMethod::BidAsk,
-            7 => TriggerMethod::LastOrBidAsk,
-            8 => TriggerMethod::Midpoint,
-            code => TriggerMethod::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(TriggerMethod {
+    Default = 0,
+    DoubleBidAsk = 1,
+    Last = 2,
+    DoubleLast = 3,
+    BidAsk = 4,
+    LastOrBidAsk = 7,
+    Midpoint = 8,
+});
 
 /// Price-based condition that activates an order when a contract reaches a specified price.
 ///

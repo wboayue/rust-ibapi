@@ -83,29 +83,12 @@ pub enum MarketDataType {
     Unknown(i32),
 }
 
-impl From<MarketDataType> for i32 {
-    fn from(value: MarketDataType) -> i32 {
-        match value {
-            MarketDataType::Realtime => 1,
-            MarketDataType::Frozen => 2,
-            MarketDataType::Delayed => 3,
-            MarketDataType::DelayedFrozen => 4,
-            MarketDataType::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for MarketDataType {
-    fn from(value: i32) -> Self {
-        match value {
-            1 => Self::Realtime,
-            2 => Self::Frozen,
-            3 => Self::Delayed,
-            4 => Self::DelayedFrozen,
-            code => Self::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(MarketDataType {
+    Realtime = 1,
+    Frozen = 2,
+    Delayed = 3,
+    DelayedFrozen = 4,
+});
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]

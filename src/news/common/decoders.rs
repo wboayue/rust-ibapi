@@ -1,7 +1,7 @@
 use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
-use super::super::{ArticleType, NewsArticle, NewsArticleBody, NewsBulletin, NewsProvider};
+use super::super::{ArticleType, BulletinType, NewsArticle, NewsArticleBody, NewsBulletin, NewsProvider};
 use crate::messages::ResponseMessage;
 use crate::Error;
 
@@ -74,7 +74,7 @@ pub(crate) fn decode_tick_news_proto(p: crate::proto::TickNews) -> Result<NewsAr
 pub(crate) fn decode_news_bulletin_proto(p: crate::proto::NewsBulletin) -> Result<NewsBulletin, Error> {
     Ok(NewsBulletin {
         message_id: p.news_msg_id.unwrap_or_default(),
-        message_type: p.news_msg_type.unwrap_or_default(),
+        message_type: BulletinType::from(p.news_msg_type.unwrap_or_default()),
         message: p.news_message.unwrap_or_default(),
         exchange: p.originating_exch.unwrap_or_default(),
     })
