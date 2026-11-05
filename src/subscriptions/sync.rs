@@ -218,7 +218,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ///
     /// | Outcome | Meaning |
     /// | --- | --- |
-    /// | [`Drained::Ended`] | TWS sent the end marker, before or after the cancel. Nothing is written if it (or a snapshot's end) had already arrived. |
+    /// | [`Drained::Ended`] | TWS sent the end marker or a snapshot's end, before or after the cancel. Nothing is written if it had already been read. |
     /// | [`Drained::Rejected`] | TWS answered with an error for the request, before or during the drain. |
     /// | [`Drained::Unconfirmed`] | The deadline passed, or the stream had already ended with an error on our side (such as [`Error::BufferLimitExceeded`]). Treat the id as possibly live. |
     /// | `Err` | The connection reset or the client shut down meanwhile. |
@@ -295,6 +295,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 Some(item) => {
                     if let Some(outcome) = drain_outcome(item) {
                         return outcome;
+                    }
+                    // A snapshot's end finishes the request at TWS; nothing follows it.
+                    if self.snapshot_ended.load(Ordering::Relaxed) {
+                        return Ok(Drained::Ended);
                     }
                 }
                 None if self.ended_natively() => return Ok(Drained::Ended),

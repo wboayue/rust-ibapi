@@ -900,6 +900,17 @@ fn drain_after_snapshot_end_writes_nothing() {
     assert!(bus.request_messages().is_empty());
 }
 
+/// A snapshot end read during the drain settles it: nothing follows it.
+#[test]
+fn drain_sees_snapshot_end_after_cancel() {
+    let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![data(1), data(-1)]);
+
+    let started = Instant::now();
+    assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Ended);
+    assert!(started.elapsed() < Duration::from_secs(1), "no wait past the snapshot end");
+    assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "one cancel, not repeated on drop");
+}
+
 #[test]
 fn drain_without_request_id_cancels_and_returns_unconfirmed() {
     let (sender, receiver) = channel::unbounded::<RoutedItem>();
