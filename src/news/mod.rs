@@ -39,8 +39,7 @@ pub struct NewsProvider {
 pub struct NewsBulletin {
     /// The unique identifier of the news bulletin.
     pub message_id: i32,
-    /// The type of the news bulletin: a regular bulletin, or a notice that an exchange is
-    /// unavailable or available for trading.
+    /// The bulletin's type.
     pub message_type: BulletinType,
     /// The text of the news bulletin.
     pub message: String,
@@ -58,7 +57,7 @@ pub enum BulletinType {
     ExchangeUnavailable,
     /// Exchange available for trading. Wire code `3`.
     ExchangeAvailable,
-    /// Bulletin type code not modeled by this version of the API.
+    /// Bulletin type code not modeled by this version of the API. `Unknown(0)` when TWS omits the field.
     Unknown(i32),
 }
 
