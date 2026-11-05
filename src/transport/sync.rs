@@ -568,6 +568,10 @@ impl<S: Stream> TcpMessageBus<S> {
                 // session, and the reconnect can run for minutes.
                 self.reset();
 
+                // Fail any write still on the dead connection, so the gate
+                // below need not wait for a peer that stopped reading.
+                self.connection.socket.sever();
+
                 // Waits out writes whose state check passed before the flip
                 // (a write stuck on the dead socket must not delay the
                 // failures above); every later one is refused until the
@@ -1294,6 +1298,8 @@ struct CloseHandle {
     /// Latched by `close`; `reconnect` re-checks it under the same lock, so a
     /// stream it installs is either refused or closed after it.
     closed: bool,
+    /// Set by `sever`, cleared by the `reconnect` that replaces the stream.
+    severed: bool,
 }
 
 #[derive(Debug)]
@@ -1318,6 +1324,7 @@ impl TcpSocket {
         let close_handle = CloseHandle {
             stream: stream.try_clone()?,
             closed: false,
+            severed: false,
         };
 
         stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
@@ -1333,10 +1340,14 @@ impl TcpSocket {
         })
     }
 
-    /// An I/O failure after `close` is the close, not the peer.
+    /// An I/O failure after `close` is the close, and after `sever` the
+    /// abandoned connection, not the peer.
     fn closed_or(&self, err: Error) -> Error {
-        if lock(&self.close_handle).closed {
+        let handle = lock(&self.close_handle);
+        if handle.closed {
             Error::Shutdown
+        } else if handle.severed {
+            Error::ConnectionReset
         } else {
             err
         }
@@ -1360,6 +1371,7 @@ impl Reconnect for TcpSocket {
         *reader = stream.try_clone()?;
         *writer = stream.try_clone()?;
         handle.stream = stream;
+        handle.severed = false;
 
         // One capture file per TCP stream: splicing two of them would
         // read back as a desync at the seam that never happened.
@@ -1370,6 +1382,19 @@ impl Reconnect for TcpSocket {
     fn sleep(&self, duration: std::time::Duration, shutdown: &ShutdownSignal) {
         shutdown.wait_timeout(duration)
     }
+
+    /// Takes only the close handle, so it gets through while a write holds
+    /// the writer; see `CloseHandle` for the order.
+    fn sever(&self) {
+        let mut handle = lock(&self.close_handle);
+        if handle.closed {
+            return;
+        }
+        handle.severed = true;
+        if let Err(e) = handle.stream.shutdown(std::net::Shutdown::Both) {
+            debug!("socket shutdown returned: {e:?}");
+        }
+    }
 }
 
 pub(crate) trait Reconnect {
@@ -1379,6 +1404,13 @@ pub(crate) trait Reconnect {
     /// Wait out the reconnect backoff, returning early once `shutdown` is
     /// requested. In-memory test streams return immediately.
     fn sleep(&self, duration: std::time::Duration, shutdown: &ShutdownSignal);
+    /// Abandon the current connection: pending and later reads and writes on
+    /// it fail with [`Error::ConnectionReset`] until `reconnect` replaces it.
+    /// Unlike [`Io::close`], not terminal. The dispatcher calls it on a lost
+    /// connection, so a write stuck on a peer that stopped reading cannot
+    /// hold up the reconnect (a TCP write has no timeout). The default does
+    /// nothing, for in-memory streams, whose writes never block.
+    fn sever(&self) {}
 }
 
 pub(crate) trait Stream: Io + Reconnect + Sync + Send + 'static + std::fmt::Debug {}

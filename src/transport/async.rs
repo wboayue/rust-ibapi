@@ -686,6 +686,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                 // reconnect can run for minutes.
                                 message_bus.reset_channels().await;
 
+                                // Fail any write still on the dead
+                                // connection, so the gate below need not wait
+                                // for a peer that stopped reading.
+                                message_bus.connection.socket.sever();
+
                                 // Waits out writes whose state check passed
                                 // before the flip (a write stuck on the dead
                                 // socket must not delay the failures above);

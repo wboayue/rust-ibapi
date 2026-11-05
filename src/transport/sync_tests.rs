@@ -3380,8 +3380,13 @@ struct Handoff {
     writes: Vec<(usize, Vec<u8>)>,
 }
 
-/// Bounds every wait in `HandoffSocket`, so a broken gate fails, not hangs.
-const HANDOFF_WAIT: Duration = Duration::from_secs(5);
+/// Bounds every wait in the test sockets below, so a broken gate fails, not hangs.
+const TEST_SOCKET_WAIT: Duration = Duration::from_secs(5);
+
+/// Whether `buf` holds the frame a test socket singles out by `marker`.
+fn carries(buf: &[u8], marker: &[u8]) -> bool {
+    buf.windows(marker.len()).any(|w| w == marker)
+}
 
 impl HandoffSocket {
     fn new(stream: MemoryStream, marker: &'static [u8]) -> Self {
@@ -3410,12 +3415,7 @@ impl HandoffSocket {
     fn sender_generations(&self) -> Vec<usize> {
         let state = self.state.0.lock().unwrap();
         let marker = self.marker;
-        state
-            .writes
-            .iter()
-            .filter(|(_, w)| w.windows(marker.len()).any(|x| x == marker))
-            .map(|(g, _)| *g)
-            .collect()
+        state.writes.iter().filter(|(_, w)| carries(w, marker)).map(|(g, _)| *g).collect()
     }
 }
 
@@ -3427,12 +3427,12 @@ impl Io for HandoffSocket {
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let (mutex, changed) = &*self.state;
         let mut state = mutex.lock().unwrap();
-        let is_sender = buf.windows(self.marker.len()).any(|w| w == self.marker);
+        let is_sender = carries(buf, self.marker);
         if is_sender {
             state.sender_queued = true;
             changed.notify_all();
             state = changed
-                .wait_timeout_while(state, HANDOFF_WAIT, |s| s.generation == 0 && !s.released)
+                .wait_timeout_while(state, TEST_SOCKET_WAIT, |s| s.generation == 0 && !s.released)
                 .unwrap()
                 .0;
         }
@@ -3460,7 +3460,7 @@ impl Reconnect for HandoffSocket {
         changed.notify_all();
         // The swap is done; a sender still queued takes the writer next,
         // ahead of the handshake.
-        let _ = changed.wait_timeout_while(state, HANDOFF_WAIT, |s| !s.sender_wrote).unwrap();
+        let _ = changed.wait_timeout_while(state, TEST_SOCKET_WAIT, |s| !s.sender_wrote).unwrap();
         Ok(())
     }
 
@@ -3489,7 +3489,7 @@ fn queued_send_is_not_written_into_the_reconnect_handshake() {
         let bus = bus.clone();
         move || bus.send_request(RequestId::nth(100), MARKER).map(|_| ())
     });
-    assert!(socket.wait(HANDOFF_WAIT, |s| s.sender_queued), "the sender never reached the writer");
+    assert!(socket.wait(TEST_SOCKET_WAIT, |s| s.sender_queued), "the sender never reached the writer");
 
     // The session breaks while the peer keeps the socket open: InvalidFrame.
     stream.push_inbound(b"xx".to_vec());
@@ -3528,6 +3528,115 @@ fn queued_send_is_not_written_into_the_reconnect_handshake() {
         Err(Error::ConnectionReset) => assert!(generations.is_empty(), "a refused send must write nothing"),
         other => panic!("expected Ok or ConnectionReset, got {other:?}"),
     }
+}
+
+/// Writes carrying `marker` block until `sever`, then fail: a write stuck on a
+/// peer that stopped reading. Everything else delegates to a `MemoryStream`.
+#[derive(Clone, Debug)]
+struct StuckWriteSocket {
+    stream: MemoryStream,
+    marker: &'static [u8],
+    state: Arc<(Mutex<StuckWrite>, std::sync::Condvar)>,
+}
+
+#[derive(Debug, Default)]
+struct StuckWrite {
+    stuck: bool,
+    severed: bool,
+}
+
+impl StuckWriteSocket {
+    fn new(stream: MemoryStream, marker: &'static [u8]) -> Self {
+        Self {
+            stream,
+            marker,
+            state: Arc::default(),
+        }
+    }
+
+    fn wait_stuck(&self) {
+        let (mutex, changed) = &*self.state;
+        let guard = mutex.lock().unwrap();
+        let (_guard, result) = changed.wait_timeout_while(guard, TEST_SOCKET_WAIT, |s| !s.stuck).unwrap();
+        assert!(!result.timed_out(), "the write never got stuck");
+    }
+}
+
+impl Io for StuckWriteSocket {
+    fn read_message(&self) -> Result<Vec<u8>, Error> {
+        self.stream.read_message()
+    }
+
+    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        if !carries(buf, self.marker) {
+            return self.stream.write_all(buf);
+        }
+        let (mutex, changed) = &*self.state;
+        let mut state = mutex.lock().unwrap();
+        state.stuck = true;
+        changed.notify_all();
+        let (state, _) = changed.wait_timeout_while(state, TEST_SOCKET_WAIT, |s| !s.severed).unwrap();
+        if state.severed {
+            Err(Error::ConnectionReset)
+        } else {
+            Err(Error::Io(std::io::Error::new(ErrorKind::TimedOut, "stuck write never severed")))
+        }
+    }
+
+    fn close(&self) {
+        self.stream.close()
+    }
+}
+
+impl Reconnect for StuckWriteSocket {
+    fn reconnect(&self) -> Result<(), Error> {
+        self.stream.reconnect()
+    }
+
+    fn sleep(&self, _duration: Duration, _shutdown: &ShutdownSignal) {}
+
+    fn sever(&self) {
+        let (mutex, changed) = &*self.state;
+        mutex.lock().unwrap().severed = true;
+        changed.notify_all();
+    }
+}
+
+impl Stream for StuckWriteSocket {}
+
+/// The reconnect does not wait for a write stuck on a peer that stopped
+/// reading: the dispatcher severs the lost connection before it takes the
+/// session gate, which fails the write and releases the gate.
+#[test]
+fn reconnect_does_not_wait_behind_a_stuck_write() {
+    const MARKER: &[u8] = b"request-stuck-on-the-wire";
+
+    let stream = MemoryStream::default();
+    let socket = StuckWriteSocket::new(stream.clone(), MARKER);
+    let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(TcpMessageBus::new(connection));
+
+    let sender = thread::spawn({
+        let bus = bus.clone();
+        move || bus.send_request(RequestId::nth(100), MARKER).map(|_| ())
+    });
+    socket.wait_stuck();
+
+    stream.push_inbound(b"xx".to_vec());
+    for frame in helpers::handshake_frames(crate::server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+    let started = Instant::now();
+    bus.dispatch().expect("the reconnect should succeed");
+    assert!(started.elapsed() < Duration::from_secs(1), "the reconnect waited behind the stuck write");
+    assert!(bus.is_connected());
+
+    let sent = sender.join().expect("sender thread panicked");
+    assert!(
+        matches!(sent, Err(Error::ConnectionReset)),
+        "the stuck write must fail as reset, got {sent:?}"
+    );
 }
 
 /// A cancel that cannot be sent is not an error the caller has to handle:
@@ -4321,6 +4430,41 @@ fn close_during_reconnect_closes_the_new_connection() {
     let reconnected = reconnect.join().unwrap();
     assert!(matches!(reconnected, Err(Error::Shutdown)), "reconnect: {reconnected:?}");
     assert_peer_sees_eof(new_peer);
+}
+
+/// `sever` fails a write stuck on a peer that stopped reading, without waiting
+/// for the writer it holds; later writes fail too, until a reconnect replaces
+/// the connection.
+#[test]
+fn sever_fails_a_stuck_write_until_reconnect() {
+    use std::io::Read;
+
+    let (socket, _peer, listener) = tcp_socket_pair();
+    let socket = Arc::new(socket);
+    let (done_send, done) = std::sync::mpsc::channel();
+    std::thread::spawn({
+        let socket = socket.clone();
+        // Larger than loopback send + receive buffers: stalls, as the peer
+        // is not reading.
+        move || done_send.send(socket.write_all(&vec![0xAA; 32 * 1024 * 1024])).unwrap()
+    });
+    helpers::wait_for("the write to take the writer", || socket.writer.try_lock().is_err());
+
+    socket.sever();
+    let written = done.recv_timeout(Duration::from_secs(1)).expect("sever left the write stuck");
+    assert!(matches!(written, Err(Error::ConnectionReset)), "write: {written:?}");
+    assert!(matches!(socket.write_all(&[1]), Err(Error::ConnectionReset)));
+
+    let reconnect = std::thread::spawn({
+        let socket = socket.clone();
+        move || socket.reconnect()
+    });
+    let (mut new_peer, _) = listener.accept().unwrap();
+    reconnect.join().unwrap().expect("reconnect after sever");
+    socket.write_all(b"live").expect("the new connection must take writes");
+    let mut received = [0u8; 4];
+    new_peer.read_exact(&mut received).unwrap();
+    assert_eq!(&received, b"live");
 }
 
 /// A blocking client on a dispatching bus over loopback TCP, and the peer end.
