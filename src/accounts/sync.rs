@@ -325,16 +325,15 @@ impl Client {
     /// # Arguments
     /// * `account`        - Account values can be requested for a particular account.
     /// * `model_code`     - Account values can also be requested for a model.
-    /// * `ledger_and_nlv` - which keys arrive. `true`: only the per-currency `$LEDGER-*` keys
-    ///   (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ..., one set per currency and
-    ///   for `BASE`), TWS's light-weight request. `false`: those same keys plus the account-level
-    ///   keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...).
+    /// * `ledger_only`    - Which keys arrive: [`LedgerOnly::Yes`] for only the per-currency
+    ///   `$LEDGER-*` keys, [`LedgerOnly::No`] for those plus the account-level keys
+    ///   (`NetLiquidation`, `BuyingPower`, ...).
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
-    /// use ibapi::accounts::AccountUpdateMulti;
+    /// use ibapi::accounts::{AccountUpdateMulti, LedgerOnly};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -342,7 +341,7 @@ impl Client {
     ///
     /// let account = AccountId("U1234567".to_string());
     ///
-    /// let subscription = client.account_updates_multi(Some(&account), None, false).expect("error requesting account updates multi");
+    /// let subscription = client.account_updates_multi(Some(&account), None, LedgerOnly::No).expect("error requesting account updates multi");
     /// for update in subscription.iter_data() {
     ///     let update = update?;
     ///     println!("{update:?}");
@@ -358,9 +357,10 @@ impl Client {
         &self,
         account: Option<&AccountId>,
         model_code: Option<&ModelCode>,
-        ledger_and_nlv: bool,
+        ledger_only: LedgerOnly,
     ) -> Result<Subscription<AccountUpdateMulti>, Error> {
         let builder = self.request();
+        let ledger_and_nlv = matches!(ledger_only, LedgerOnly::Yes);
         let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code, ledger_and_nlv)?;
 
         builder.send(request)

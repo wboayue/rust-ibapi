@@ -323,21 +323,23 @@ if row.is_smart_depth { /* ... */ }
 
 The compiler finds every use. It does not catch the serialized form: `MarketDepthL2` derives `Serialize` / `Deserialize`, so its JSON key is now `is_smart_depth`, and rows written by 5.x no longer deserialize. `Execution` has no serde derive. The `utoipa` schemas rename all three properties, and `is_liquidation` becomes a boolean.
 
-### 16. `account_updates_multi` takes `ledger_and_nlv`
+### 16. `account_updates_multi` takes a `LedgerOnly`
 
-`Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_and_nlv: bool`, the flag of TWS's account-updates-by-model request. `true` delivers only the per-currency `$LEDGER-*` keys (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ...), TWS's light-weight request; `false` delivers those plus the account-level keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). 5.x always sent `true`, so the account-level keys could not be requested.
+`Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_only: accounts::LedgerOnly`, TWS's `ledgerAndNLV` flag for the account-updates-by-model request. `LedgerOnly::Yes` delivers only the per-currency `$LEDGER-*` keys (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ...), TWS's light-weight request; `LedgerOnly::No` delivers those plus the account-level keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). 5.x always sent `Yes`, so the account-level keys could not be requested.
 
 ```rust,ignore
+use ibapi::accounts::LedgerOnly;
+
 // 5.x
 let updates = client.account_updates_multi(Some(&account), None)?;
 
-// 6.0: `true` keeps the 5.x request
-let updates = client.account_updates_multi(Some(&account), None, true)?;
+// 6.0: `LedgerOnly::Yes` keeps the 5.x request
+let updates = client.account_updates_multi(Some(&account), None, LedgerOnly::Yes)?;
 // or ask for the account-level keys as well
-let updates = client.account_updates_multi(Some(&account), None, false)?;
+let updates = client.account_updates_multi(Some(&account), None, LedgerOnly::No)?;
 ```
 
-Add the argument. The compiler finds every call that lacks it. It does not choose the value for you: pass `true` to receive what 5.x received, or `false` to receive the account-level keys as well, as verified against a live gateway (`docs/wire-facts/accounts.md`).
+Add the argument. The compiler finds every call that lacks it. It does not choose the value for you, and `LedgerOnly` has no default: pass `Yes` to receive what 5.x received, or `No` to receive the account-level keys as well, as verified against a live gateway (`docs/wire-facts/accounts.md`).
 
 ### 17. `Order::fa_profile`, `basis_points` and `basis_points_type` are removed
 

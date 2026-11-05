@@ -420,6 +420,23 @@ pub struct UserInfo {
     pub white_branding_id: String,
 }
 
+/// Which keys an [`account_updates_multi`](crate::Client::account_updates_multi) subscription delivers.
+///
+/// `Yes` delivers only the per-currency `$LEDGER-*` keys (`$LEDGER-CashBalance`,
+/// `$LEDGER-NetLiquidationByCurrency`, ..., one set per currency and for `BASE`), TWS's
+/// light-weight request. `No` delivers those same keys plus the account-level keys without the
+/// prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...).
+///
+/// Sent as TWS's `ledgerAndNLV` flag: `Yes` is `true`. There is no default; 5.x always sent `Yes`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LedgerOnly {
+    /// Only the `$LEDGER-*` keys.
+    Yes,
+    /// The `$LEDGER-*` keys plus the account-level keys.
+    No,
+}
+
 /// Financial Advisor configuration data type.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

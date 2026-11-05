@@ -15,7 +15,7 @@ Positions, PnL and account updates by model. End-marker behavior for account str
   first).
 - **Not probed:** PortfolioValue (forex is not in the portfolio; needs STK in RTH).
 
-### `ledger_and_nlv` selects the `$LEDGER-` keys only
+### `ledgerAndNLV = true` selects the `$LEDGER-` keys only
 
 *Live 2026-11-05 off-hours, live account through a read-only Gateway, server 226; #1183.*
 

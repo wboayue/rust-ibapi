@@ -129,7 +129,7 @@ async fn account_updates_multi() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
     let mut subscription = client
-        .account_updates_multi(Some(&account), None, true)
+        .account_updates_multi(Some(&account), None, ibapi::accounts::LedgerOnly::Yes)
         .await
         .expect("account_updates_multi failed");
 

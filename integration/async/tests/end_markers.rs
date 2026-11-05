@@ -177,7 +177,7 @@ async fn end_markers_after_initial_dump() {
         .expect("account_summary failed");
     let updates = client.account_updates(&account).await.expect("account_updates failed");
     let updates_multi = client
-        .account_updates_multi(Some(&account), None, true)
+        .account_updates_multi(Some(&account), None, ibapi::accounts::LedgerOnly::Yes)
         .await
         .expect("account_updates_multi failed");
     let positions = client.positions().await.expect("positions failed");
