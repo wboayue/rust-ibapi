@@ -4,10 +4,10 @@
 //! without losing server-side state (e.g., managed_accounts, server_time).
 //! Do NOT use for subscriptions or stateful operations.
 //!
-//! A retry waits for the reconnect the reset announces before its next
-//! attempt (the bus refuses sends while the session is down, so retrying
-//! straight away would spend every attempt on a request that never reaches
-//! TWS).
+//! A retry waits for the reconnect the reset announces, up to the caller's
+//! deadline, before its next attempt (the bus refuses sends while the
+//! session is down, so retrying straight away would spend every attempt on a
+//! request that never reaches TWS).
 
 use crate::Error;
 

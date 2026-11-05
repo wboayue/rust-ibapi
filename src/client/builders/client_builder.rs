@@ -243,9 +243,10 @@ pub mod sync_impl {
         /// such as `historical_data(..).fetch()`, `head_timestamp` and the
         /// option calculations, wait without a limit; the rest fail after 30 s.
         ///
-        /// The clock starts when the call does and keeps running across the
-        /// resends after a connection reset; a reconnect in progress is waited
-        /// out, not cut short. A request TWS can cancel is cancelled on timeout.
+        /// The clock starts when the call does and keeps running across a
+        /// reconnect and the resends after it: a reconnect that outlasts the
+        /// timeout ends the call with [`Error::Timeout`]. A request TWS can
+        /// cancel is cancelled on timeout.
         /// Subscriptions are not affected: bound those with
         /// `collect_to_end_within`. `timeout` must be longer than zero, or the
         /// connect fails with [`Error::InvalidArgument`].
@@ -539,9 +540,10 @@ pub mod async_impl {
         /// such as `historical_data(..).fetch()`, `head_timestamp` and the
         /// option calculations, wait without a limit; the rest fail after 30 s.
         ///
-        /// The clock starts when the call does and keeps running across the
-        /// resends after a connection reset; a reconnect in progress is waited
-        /// out, not cut short. A request TWS can cancel is cancelled on timeout.
+        /// The clock starts when the call does and keeps running across a
+        /// reconnect and the resends after it: a reconnect that outlasts the
+        /// timeout ends the call with [`Error::Timeout`]. A request TWS can
+        /// cancel is cancelled on timeout.
         /// Subscriptions are not affected: bound those with
         /// `collect_to_end_within`. `timeout` must be longer than zero, or the
         /// connect fails with [`Error::InvalidArgument`].
