@@ -121,13 +121,6 @@ fn is_active_and_is_terminal_agree_on_known_variants() {
 }
 
 #[test]
-fn liquidity_preserves_unknown_wire_code() {
-    assert_eq!(Liquidity::from(0), Liquidity::None);
-    assert_eq!(Liquidity::from(4), Liquidity::Unknown(4));
-    assert_eq!(Liquidity::from(-1), Liquidity::Unknown(-1));
-}
-
-#[test]
 fn time_in_force_round_trips_every_wire_value() {
     check_wire_enum_round_trip(ALL_TIFS);
 
@@ -307,6 +300,7 @@ fn liquidity_round_trips_every_wire_code() {
     );
 }
 
+/// Table from Execution.cs `COptionExerciseType`.
 #[test]
 fn option_exercise_type_round_trips_every_wire_code() {
     check_wire_code_round_trip(

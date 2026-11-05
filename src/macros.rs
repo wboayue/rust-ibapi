@@ -121,3 +121,7 @@ macro_rules! impl_wire_code {
         }
     };
 }
+
+#[cfg(test)]
+#[path = "macros_tests.rs"]
+mod tests;

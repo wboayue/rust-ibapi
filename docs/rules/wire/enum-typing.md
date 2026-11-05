@@ -85,9 +85,10 @@ the blanket impl.
 reader takes for the source of truth, and `#[repr(i32)]` is an ABI commitment buying nothing. The
 macro writes both directions from one `Variant = code` list, so they cannot disagree; a variant
 missing from it is a non-exhaustive-match error. Document the code on each variant
-(``Wire code `0`.``). A table too large to keep in step by hand (`TickType`, 112 codes, also
-carrying a field name and display text) is one private `macro_rules!` table that generates the
-enum, both `From` impls and the rest, with the wire-code doc appended per variant (#1071).
+(``Wire code `0`.``); `wire_code_docs_match_impl_wire_code_tables` (`src/macros_tests.rs`) fails
+when a doc and its table row disagree. A table too large to keep in step by hand (`TickType`,
+112 codes, also carrying a field name and display text) is one private `macro_rules!` table that
+generates the enum, both `From` impls and the rest, with the wire-code doc appended per variant (#1071).
 
 **Check `Order.proto` for the field before giving it this shape.** `AuctionStrategy` was typed "for
 uniformity" in #825 on a field the proto `Order` does not carry (IBKR's `Order.proto` has no
@@ -144,5 +145,6 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
   #822-style exception: requiring it would end every stream carrying a contract without one (the
   failure #840 fixed). The `ContractData` decoder takes `required` (`src/proto/decoders.rs`) for
   both submessages, as `EDecoder.cs` drops such a frame.
-- #1180 — `impl_wire_code!` replaced 11 hand-written `From<i32>` / `From<T> for i32` pairs, each
-  listing its table twice, with one `Variant = code` table per enum.
+- #1180 — `impl_wire_code!` replaced the hand-written `From` impls on 13 integer-coded enums (11
+  two-way pairs, each listing its table twice, and 2 one-way) with one `Variant = code` table per
+  enum; `wire_code_docs_match_impl_wire_code_tables` keeps the variant docs in step.
