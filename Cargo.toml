@@ -245,6 +245,11 @@ path = "examples/async/historical_data.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_historical_data_subscribe"
+path = "examples/async/historical_data_subscribe.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_historical_ticks"
 path = "examples/async/historical_ticks.rs"
 required-features = ["async"]
@@ -524,6 +529,11 @@ required-features = ["sync"]
 [[example]]
 name = "historical_data"
 path = "examples/sync/historical_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_data_subscribe"
+path = "examples/sync/historical_data_subscribe.rs"
 required-features = ["sync"]
 
 [[example]]

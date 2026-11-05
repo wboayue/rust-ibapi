@@ -78,14 +78,20 @@ mod sync_tests {
     use std::sync::Arc;
     use time::macros::datetime;
 
+    use std::time::{Duration as StdDuration, Instant};
+
     use super::historical_data_response_pair;
     use crate::client::blocking::Client;
-    use crate::common::test_utils::helpers::{assert_request, create_blocking_test_client_with_version, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{
+        assert_request, count_proto_msgs, create_blocking_test_client_with_version, proto_error_response, request_message_count, TEST_REQ_ID_FIRST,
+    };
     use crate::contracts::Contract;
-    use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
+    use crate::market_data::historical::{BarSize, Duration, HistoricalDataFrame, ToDuration, WhatToShow};
     use crate::market_data::TradingHours;
+    use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
+    use crate::subscriptions::{Drained, SubscriptionItem};
     use crate::testdata::builders::market_data::historical_data_request;
     use crate::Error;
 
@@ -265,6 +271,113 @@ mod sync_tests {
 
         super::assert_stream_invalid_argument_sync(result);
     }
+
+    // ---- subscribe ----
+
+    fn bars_only_client() -> (Client, Arc<MessageBusStub>) {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(historical_data_response_pair()[..1].to_vec()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        (client, bus)
+    }
+
+    fn cancels(bus: &MessageBusStub) -> usize {
+        count_proto_msgs(&bus.request_messages(), OutgoingMessages::CancelHistoricalData)
+    }
+
+    #[test]
+    fn subscribe_sends_once_under_request_id() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+        let (start, end) = (datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC));
+
+        let request = client.historical_data(&contract, BarSize::Hour).between(start, end).buffer_limit(8);
+        let request_id = request.request_id();
+        assert_eq!(request_message_count(&bus), 0, "building the request sends nothing");
+
+        let _subscription = request.subscribe().expect("subscribe failed");
+        assert_eq!(request_message_count(&bus), 1);
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .request_id(request_id)
+                .contract(&contract)
+                .end_date(Some(end))
+                .duration(Duration::days(8))
+                .bar_size(BarSize::Hour)
+                .what_to_show(WhatToShow::Trades)
+                .use_rth(true)
+                .keep_up_to_date(false),
+        );
+        assert_eq!(*bus.buffer_limits.read().unwrap(), vec![8]);
+    }
+
+    #[test]
+    fn subscribe_yields_bars_then_end_without_cancel() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+
+        let subscription = client.historical_data(&contract, BarSize::Hour).duration(1.days()).subscribe().unwrap();
+
+        let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(data)))) = subscription.next() else {
+            panic!("expected bars first");
+        };
+        assert_eq!(data.bars.len(), 1);
+        assert!(matches!(
+            subscription.next(),
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { start, end }))) if end > start
+        ));
+        assert!(subscription.next().is_none(), "nothing follows End");
+
+        drop(subscription);
+        assert_eq!(cancels(&bus), 0, "no cancel after End");
+    }
+
+    #[test]
+    fn subscribe_dropped_before_end_cancels() {
+        let (client, bus) = bars_only_client();
+        let contract = Contract::stock("AAPL").build();
+
+        let subscription = client.historical_data(&contract, BarSize::Hour).duration(1.days()).subscribe().unwrap();
+        assert!(matches!(
+            subscription.next(),
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(_))))
+        ));
+        drop(subscription);
+
+        assert_eq!(cancels(&bus), 1);
+    }
+
+    #[test]
+    fn subscribe_rejection_read_then_drained_writes_no_cancel() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+            TEST_REQ_ID_FIRST,
+            162,
+            "Historical Market Data Service error message:HMDS query returned no data",
+        )]));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let subscription = client.historical_data(&contract, BarSize::Hour).duration(1.days()).subscribe().unwrap();
+        assert!(matches!(subscription.next(), Some(Err(Error::Notice(notice))) if notice.code == 162));
+        let outcome = subscription.cancel_and_drain(Instant::now() + StdDuration::from_secs(2)).unwrap();
+
+        assert!(matches!(outcome, Drained::Rejected(notice) if notice.code == 162));
+        assert_eq!(cancels(&bus), 0, "the rejection ended the request at TWS");
+    }
+
+    #[test]
+    fn subscribe_connection_reset_is_not_resent() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(historical_data_response_pair()).with_connection_resets(1));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let subscription = client.historical_data(&contract, BarSize::Hour).duration(1.days()).subscribe().unwrap();
+
+        assert!(matches!(subscription.next(), Some(Err(Error::ConnectionReset))));
+        assert!(subscription.next().is_none());
+        assert_eq!(request_message_count(&bus), 1, "subscribe never resends");
+    }
 }
 
 #[cfg(feature = "async")]
@@ -272,13 +385,21 @@ mod async_tests {
     use std::sync::Arc;
     use time::macros::datetime;
 
+    use futures::StreamExt;
+    use std::time::Duration as StdDuration;
+    use tokio::time::Instant;
+
     use super::historical_data_response_pair;
     use crate::client::r#async::Client;
-    use crate::common::test_utils::helpers::{assert_request, create_test_client_with_version, TEST_REQ_ID_FIRST};
+    use crate::common::test_utils::helpers::{
+        assert_request, count_proto_msgs, create_test_client_with_version, proto_error_response, request_message_count, TEST_REQ_ID_FIRST,
+    };
     use crate::contracts::Contract;
-    use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
+    use crate::market_data::historical::{BarSize, Duration, HistoricalDataFrame, ToDuration, WhatToShow};
+    use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
+    use crate::subscriptions::{Drained, SubscriptionItem};
     use crate::testdata::builders::market_data::historical_data_request;
     use crate::Error;
 
@@ -398,6 +519,141 @@ mod async_tests {
             .await;
 
         super::assert_stream_invalid_argument_async(result);
+    }
+
+    // ---- subscribe ----
+
+    fn bars_only_client() -> (Client, Arc<MessageBusStub>) {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(historical_data_response_pair()[..1].to_vec()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        (client, bus)
+    }
+
+    /// Let a drop's spawned cancel run.
+    async fn settle() {
+        tokio::time::sleep(StdDuration::from_millis(20)).await;
+    }
+
+    fn cancels(bus: &MessageBusStub) -> usize {
+        count_proto_msgs(&bus.request_messages(), OutgoingMessages::CancelHistoricalData)
+    }
+
+    #[tokio::test]
+    async fn subscribe_sends_once_under_request_id() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+        let (start, end) = (datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC));
+
+        let request = client.historical_data(&contract, BarSize::Hour).between(start, end).buffer_limit(8);
+        let request_id = request.request_id();
+        assert_eq!(request_message_count(&bus), 0, "building the request sends nothing");
+
+        let _subscription = request.subscribe().await.expect("subscribe failed");
+        assert_eq!(request_message_count(&bus), 1);
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .request_id(request_id)
+                .contract(&contract)
+                .end_date(Some(end))
+                .duration(Duration::days(8))
+                .bar_size(BarSize::Hour)
+                .what_to_show(WhatToShow::Trades)
+                .use_rth(true)
+                .keep_up_to_date(false),
+        );
+        assert_eq!(*bus.buffer_limits.read().unwrap(), vec![8]);
+    }
+
+    #[tokio::test]
+    async fn subscribe_yields_bars_then_end_without_cancel() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+
+        let mut subscription = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .subscribe()
+            .await
+            .unwrap();
+
+        let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(data)))) = subscription.next().await else {
+            panic!("expected bars first");
+        };
+        assert_eq!(data.bars.len(), 1);
+        assert!(matches!(
+            subscription.next().await,
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { start, end }))) if end > start
+        ));
+        assert!(subscription.next().await.is_none(), "nothing follows End");
+
+        drop(subscription);
+        settle().await;
+        assert_eq!(cancels(&bus), 0, "no cancel after End");
+    }
+
+    #[tokio::test]
+    async fn subscribe_dropped_before_end_cancels() {
+        let (client, bus) = bars_only_client();
+        let contract = Contract::stock("AAPL").build();
+
+        let mut subscription = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .subscribe()
+            .await
+            .unwrap();
+        assert!(matches!(
+            subscription.next().await,
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(_))))
+        ));
+        drop(subscription);
+        settle().await;
+
+        assert_eq!(cancels(&bus), 1);
+    }
+
+    #[tokio::test]
+    async fn subscribe_rejection_read_then_drained_writes_no_cancel() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+            TEST_REQ_ID_FIRST,
+            162,
+            "Historical Market Data Service error message:HMDS query returned no data",
+        )]));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let mut subscription = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .subscribe()
+            .await
+            .unwrap();
+        assert!(matches!(subscription.next().await, Some(Err(Error::Notice(notice))) if notice.code == 162));
+        let outcome = subscription.cancel_and_drain(Instant::now() + StdDuration::from_secs(2)).await.unwrap();
+
+        assert!(matches!(outcome, Drained::Rejected(notice) if notice.code == 162));
+        settle().await;
+        assert_eq!(cancels(&bus), 0, "the rejection ended the request at TWS");
+    }
+
+    #[tokio::test]
+    async fn subscribe_connection_reset_is_not_resent() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(historical_data_response_pair()).with_connection_resets(1));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let mut subscription = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .subscribe()
+            .await
+            .unwrap();
+
+        assert!(matches!(subscription.next().await, Some(Err(Error::ConnectionReset))));
+        assert!(subscription.next().await.is_none());
+        assert_eq!(request_message_count(&bus), 1, "subscribe never resends");
     }
 }
 
