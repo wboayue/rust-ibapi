@@ -161,6 +161,7 @@ fn decode_execution_data_proto_works() {
             shares: Some("50".into()),
             price: Some(152.5),
             perm_id: Some(99999),
+            is_price_revision_pending: Some(true),
             ..Default::default()
         }),
     };
@@ -173,6 +174,8 @@ fn decode_execution_data_proto_works() {
     assert_eq!(result.execution.price, 152.5);
     assert_eq!(result.execution.perm_id, 99999);
     assert_eq!(result.execution.side, crate::orders::ExecutionSide::Bought);
+    assert!(!result.execution.is_liquidation, "absent is_liquidation decodes as false");
+    assert!(result.execution.is_price_revision_pending);
 }
 
 #[test]
@@ -325,6 +328,7 @@ fn decode_execution_data_proto_via_builder() {
         .shares(50.0)
         .price(152.5)
         .perm_id(99999)
+        .liquidation(true)
         .to_proto();
 
     let result = super::decode_execution_data_proto(p).unwrap();
@@ -335,6 +339,7 @@ fn decode_execution_data_proto_via_builder() {
     assert_eq!(result.execution.price, 152.5);
     assert_eq!(result.execution.perm_id, 99999);
     assert_eq!(result.execution.side, crate::orders::ExecutionSide::Bought);
+    assert!(result.execution.is_liquidation);
 }
 
 // =============================================================================

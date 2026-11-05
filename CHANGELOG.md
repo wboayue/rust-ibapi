@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Missing`, the typestate marker for an unset required builder field, moves from `ibapi::contracts` to the new `ibapi::builder` module; no alias is kept. See `docs/migration-6.0.md` §11 (#1119).
 - `PriceConditionBuilder`, `TimeConditionBuilder`, `MarginConditionBuilder`, `VolumeConditionBuilder` and `PercentChangeConditionBuilder` are typestate builders: `build()` and `From<..> for OrderCondition` exist only after `greater_than()` or `less_than()`, so a missing comparison is a compile error instead of a panic, and a second comparison no longer compiles. See `docs/migration-6.0.md` §12 (#1119).
 - `OptionBuilder::build()` (`Contract::call(..)` / `Contract::put(..)`) returns `Result<Contract, Error>`: `Error::InvalidArgument` for a strike that isn't positive and finite, where `strike()` panicked. After `strike()` the builder's strike type parameter is `f64` instead of `Strike`. See `docs/migration-6.0.md` §13 (#1119).
+- `Execution::liquidation: i32` is now `is_liquidation: bool`, matching TWS's bool; `Execution::pending_price_revision` is now `is_price_revision_pending` and `MarketDepthL2::smart_depth` is now `is_smart_depth`, so bool fields keep their protobuf `is_` prefix. `MarketDepthL2` serializes the new key. See `docs/migration-6.0.md` §14 (#1174).
 
 ### Removed
 
@@ -38,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A one-shot request (such as `managed_accounts()`) or a historical `fetch()` made while the connection is down returns `Error::Timeout` at its deadline (`one_shot_timeout`, or 30 seconds for shared one-shots) instead of waiting out the whole reconnect. A blocking call could hold its thread for minutes. Sync and async (#1168).
 - A request whose connection check passed just as the connection dropped could be written to the new connection before its handshake had finished. It now either completes on the old connection or is refused with `Error::ConnectionReset`, and requests made during the handshake are refused too (sync and async) (#1171).
 - A reconnect no longer waits behind a write stuck on a peer that stopped reading. The dispatcher severs the lost connection first, so the stuck write fails with `Error::ConnectionReset` and the reconnect goes ahead (sync and async) (#1179).
+- `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
 
 ## [5.6.0] - 2026-11-03
 

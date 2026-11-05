@@ -299,6 +299,30 @@ Every option `build()` call gains `?` (or handling of the error); the compiler f
 
 After `strike()`, the builder's strike type parameter is `f64`, where it was the validated `Strike`. Code that names the type writes `OptionBuilder<Symbol, f64, ExpirationDate>`. `Strike` and `Strike::new` are unchanged.
 
+### 14. Bool fields keep the protobuf `is_` prefix
+
+Public bool fields take their protobuf field's name. Three dropped its `is_` prefix and now keep it:
+
+| 5.x | 6.0 |
+|---|---|
+| `Execution::liquidation: i32` | `Execution::is_liquidation: bool` |
+| `Execution::pending_price_revision` | `Execution::is_price_revision_pending` |
+| `MarketDepthL2::smart_depth` | `MarketDepthL2::is_smart_depth` |
+
+`liquidation` also changes type. It was an `i32` that was only ever `0` or `1`, a holdover from the text wire format; TWS sends a bool. An absent value is `false`, as `0` was before.
+
+```rust,ignore
+// 5.x
+if execution.liquidation != 0 || execution.pending_price_revision { /* ... */ }
+if row.smart_depth { /* ... */ }
+
+// 6.0
+if execution.is_liquidation || execution.is_price_revision_pending { /* ... */ }
+if row.is_smart_depth { /* ... */ }
+```
+
+The compiler finds every use. It does not catch the serialized form: `MarketDepthL2` derives `Serialize` / `Deserialize`, so its JSON key is now `is_smart_depth`, and rows written by 5.x no longer deserialize. `Execution` has no serde derive. The `utoipa` schemas rename all three properties, and `is_liquidation` becomes a boolean.
+
 ### 17. `Order::fa_profile`, `basis_points` and `basis_points_type` are removed
 
 All three are text-protocol fields: `faProfile` went out in the text `placeOrder` until IB desupported FA profiles at server 177, and `basisPoints` / `basisPointsType` came back in the text `openOrder` for EFP orders ("download only" in IB's client). IB's protobuf `Order` message, the only shape the crate has spoken since 3.0, has no field for any of them, so nothing has sent or read them since. They are removed. Deleting an assignment changes nothing TWS sees. For a Financial Advisor allocation, use `fa_group` and `fa_method`, which are transmitted.

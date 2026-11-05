@@ -1574,7 +1574,7 @@ pub struct Execution {
     /// The TWS order identifier. The PermId can be 0 for trades originating outside IB.
     pub perm_id: i64,
     /// Identifies whether an execution occurred because of an IB-initiated liquidation.
-    pub liquidation: i32,
+    pub is_liquidation: bool,
     /// Cumulative quantity.
     // Used in regular trades, combo trades and legs of the combo.
     pub cumulative_quantity: f64,
@@ -1594,7 +1594,7 @@ pub struct Execution {
     /// Liquidity type of the execution (requires TWS 968+ / API v973.05+).
     pub last_liquidity: Liquidity,
     /// Indicates whether a price revision is pending.
-    pub pending_price_revision: bool,
+    pub is_price_revision_pending: bool,
     /// Identifies the submitter of the execution.
     pub submitter: String,
     /// Option exercise or lapse type (TWS `optExerciseOrLapseType`); [`OptionExerciseType::None`]
