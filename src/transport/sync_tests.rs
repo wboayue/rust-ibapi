@@ -3316,7 +3316,9 @@ fn sends_are_refused_while_disconnected() {
 /// A send is refused for as long as the reconnect handshake is in flight,
 /// even when its state check passed: the dispatcher holds the session gate
 /// across the reconnect. Without the gate the request would land on the new
-/// socket between the handshake and its acknowledgement.
+/// socket between the handshake and its acknowledgement. Forcing the state
+/// live stands in for a check that passed; the send already past the gate
+/// when the session breaks is `queued_send_is_not_written_into_the_reconnect_handshake`.
 #[test]
 fn sends_are_refused_during_the_reconnect_handshake() -> Result<(), Error> {
     let (stream, bus) = make_bus();

@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A request made while the client is reconnecting is refused with `Error::ConnectionReset` for the whole reconnect, the handshake on the new connection included (sync and async). Previously a request made just as the connection dropped could be written to the new connection before its handshake had finished (#1171).
+- A request whose connection check passed just as the connection dropped could be written to the new connection before its handshake had finished. It now either completes on the old connection or is refused with `Error::ConnectionReset`, and requests made during the handshake are refused too (sync and async) (#1171).
 
 ## [5.6.0] - 2026-11-03
 
