@@ -1346,6 +1346,37 @@ async fn drain_after_snapshot_end_writes_nothing() {
     assert!(f.bus.request_messages().is_empty());
 }
 
+/// A snapshot end queued before the drain, but unread, settles it.
+#[tokio::test]
+async fn drain_sees_queued_snapshot_end() {
+    let f = subscription_with::<CancellableSnapshotItem>(Some(123), None, DecoderContext::default());
+    f.tx.send(int_frame(1)).unwrap();
+    f.tx.send(int_frame(-1)).unwrap();
+
+    let started = std::time::Instant::now();
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
+    assert!(started.elapsed() < Duration::from_secs(1), "no wait past the snapshot end");
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel, not repeated on drop");
+}
+
+/// A snapshot end arriving after the cancel settles the drain.
+#[tokio::test]
+async fn drain_sees_snapshot_end_after_cancel() {
+    let f = subscription_with::<CancellableSnapshotItem>(Some(123), None, DecoderContext::default());
+    let tx = f.tx.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        tx.send(int_frame(-1)).unwrap();
+    });
+
+    let started = std::time::Instant::now();
+    assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
+    assert!(started.elapsed() < Duration::from_secs(1), "no wait past the snapshot end");
+    settle().await;
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel, not repeated on drop");
+}
+
 #[tokio::test]
 async fn drain_without_request_id_returns_unconfirmed() {
     let f = subscription_with::<CancellableEndItem>(None, None, DecoderContext::default());
