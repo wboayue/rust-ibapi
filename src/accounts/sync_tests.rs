@@ -1,6 +1,6 @@
 use super::{AccountSummarySnapshot, AccountSummarySnapshots, SnapshotBuilder, Subscription};
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
-use crate::accounts::{AccountSummaryTags, AccountUpdateMulti};
+use crate::accounts::{AccountSummaryTags, AccountUpdateMulti, LedgerOnly};
 use crate::client::ids::RequestId;
 use crate::common::test_utils::helpers::*;
 use crate::messages::IncomingMessages;
@@ -363,7 +363,7 @@ fn account_updates_multi() {
 
     let account = Some(AccountId(TEST_ACCOUNT.to_string()));
     let subscription = client
-        .account_updates_multi(account.as_ref(), None)
+        .account_updates_multi(account.as_ref(), None, LedgerOnly::No)
         .expect("request account updates multi failed");
 
     let expected_keys = &["CashBalance", "Currency", "StockMarketValue"];
@@ -392,7 +392,7 @@ fn account_updates_multi() {
         &request_account_updates_multi()
             .request_id(TEST_REQ_ID_FIRST)
             .account(TEST_ACCOUNT)
-            .ledger_and_nlv(true),
+            .ledger_and_nlv(false),
     );
     assert_request(&message_bus, 1, &cancel_account_updates_multi().request_id(TEST_REQ_ID_FIRST));
 }

@@ -10,7 +10,7 @@ behind a decoder, encoder, or rustdoc decision.
 | [orders.md](orders.md) | Order placement, echoes, status, executions, completed orders |
 | [contracts.md](contracts.md) | Contract details, option chains |
 | [market-data.md](market-data.md) | Generic ticks, option computations, tick types |
-| [accounts.md](accounts.md) | Positions, PnL |
+| [accounts.md](accounts.md) | Positions, PnL, account updates by model |
 | [news.md](news.md) | Historical news, articles |
 
 ## Entry format

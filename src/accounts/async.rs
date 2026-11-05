@@ -355,12 +355,15 @@ impl Client {
     /// # Arguments
     /// * `account`        - Account values can be requested for a particular account.
     /// * `model_code`     - Account values can also be requested for a model.
+    /// * `ledger_only`    - Which keys arrive: [`LedgerOnly::Yes`] for only the per-currency
+    ///   `$LEDGER-*` keys, [`LedgerOnly::No`] for those plus the account-level keys
+    ///   (`NetLiquidation`, `BuyingPower`, ...).
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::accounts::AccountUpdateMulti;
+    /// use ibapi::accounts::{AccountUpdateMulti, LedgerOnly};
     /// use ibapi::accounts::types::AccountId;
     /// use ibapi::subscriptions::SubscriptionItem;
     /// use futures::StreamExt;
@@ -371,7 +374,7 @@ impl Client {
     ///
     ///     let account = AccountId("U1234567".to_string());
     ///
-    ///     let mut subscription = client.account_updates_multi(Some(&account), None).await.expect("error requesting account updates multi");
+    ///     let mut subscription = client.account_updates_multi(Some(&account), None, LedgerOnly::No).await.expect("error requesting account updates multi");
     ///
     ///     while let Some(item) = subscription.next().await {
     ///         match item {
@@ -391,9 +394,10 @@ impl Client {
         &self,
         account: Option<&AccountId>,
         model_code: Option<&ModelCode>,
+        ledger_only: LedgerOnly,
     ) -> Result<Subscription<AccountUpdateMulti>, Error> {
         let builder = self.request();
-        let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code)?;
+        let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code, ledger_only)?;
 
         builder.send::<AccountUpdateMulti>(request).await
     }

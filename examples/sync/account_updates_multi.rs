@@ -6,7 +6,7 @@
 //! cargo run --no-default-features --features sync --example account_updates_multi
 //! ```
 
-use ibapi::accounts::{types::AccountId, AccountUpdateMulti};
+use ibapi::accounts::{types::AccountId, AccountUpdateMulti, LedgerOnly};
 use ibapi::client::blocking::Client;
 
 fn main() {
@@ -17,7 +17,7 @@ fn main() {
     let account = Some(AccountId("DU1234567".to_string()));
 
     let subscription = client
-        .account_updates_multi(account.as_ref(), None)
+        .account_updates_multi(account.as_ref(), None, LedgerOnly::No)
         .expect("error requesting account updates multi");
     for update in subscription.iter_data() {
         let update = match update {

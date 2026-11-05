@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
+use ibapi::accounts::LedgerOnly;
 use ibapi::contracts::Contract;
 use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
@@ -129,7 +130,7 @@ async fn account_updates_multi() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
     let mut subscription = client
-        .account_updates_multi(Some(&account), None)
+        .account_updates_multi(Some(&account), None, LedgerOnly::Yes)
         .await
         .expect("account_updates_multi failed");
 

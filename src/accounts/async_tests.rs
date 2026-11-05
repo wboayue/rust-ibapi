@@ -354,7 +354,7 @@ async fn account_updates_multi() {
 
     let account = Some(AccountId(TEST_ACCOUNT.to_string()));
     let mut subscription = client
-        .account_updates_multi(account.as_ref(), None)
+        .account_updates_multi(account.as_ref(), None, LedgerOnly::Yes)
         .await
         .expect("request account_updates_multi failed");
 
