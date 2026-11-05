@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
+- `Execution::option_exercise_type` (`OptionExerciseType`) reports whether an execution came from an option exercise, lapse, assignment, expiry or similar event; `None` for an ordinary trade. A struct literal of `Execution` without `..Default::default()` must add the field (#1175).
 
 ### Changed
 

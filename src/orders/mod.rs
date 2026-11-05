@@ -1611,6 +1611,52 @@ impl From<i32> for Liquidity {
     }
 }
 
+/// How an option execution came about: an exercise, lapse, assignment or similar event.
+///
+/// [`Execution::option_exercise_type`] is [`OptionExerciseType::None`] for an ordinary trade.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum OptionExerciseType {
+    /// Not an exercise or lapse. Wire code `-1`; also used when TWS omits the field.
+    #[default]
+    None,
+    /// The option was exercised. Wire code `1`.
+    Exercise,
+    /// The option was lapsed. Wire code `2`.
+    Lapse,
+    /// No action was taken. Wire code `3`.
+    DoNothing,
+    /// The option was assigned. Wire code `100`.
+    Assigned,
+    /// Automatic exercise by the clearing house. Wire code `101`.
+    AutoexerciseClearing,
+    /// The option expired. Wire code `102`.
+    Expired,
+    /// Automatic exercise by trading. Wire code `200`.
+    AutoexerciseTrading,
+    /// Netting. Wire code `203`.
+    Netting,
+    /// Code not modeled by this version of the API.
+    Unknown(i32),
+}
+
+impl From<i32> for OptionExerciseType {
+    fn from(val: i32) -> Self {
+        match val {
+            -1 => OptionExerciseType::None,
+            1 => OptionExerciseType::Exercise,
+            2 => OptionExerciseType::Lapse,
+            3 => OptionExerciseType::DoNothing,
+            100 => OptionExerciseType::Assigned,
+            101 => OptionExerciseType::AutoexerciseClearing,
+            102 => OptionExerciseType::Expired,
+            200 => OptionExerciseType::AutoexerciseTrading,
+            203 => OptionExerciseType::Netting,
+            value => OptionExerciseType::Unknown(value),
+        }
+    }
+}
+
 /// Describes an order's execution.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default)]
@@ -1662,6 +1708,8 @@ pub struct Execution {
     pub pending_price_revision: bool,
     /// Identifies the submitter of the execution.
     pub submitter: String,
+    /// Whether this execution came from an option exercise, lapse, assignment or similar event.
+    pub option_exercise_type: OptionExerciseType,
 }
 
 /// Contains execution information including the request ID, contract, and execution details.
