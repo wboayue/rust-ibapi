@@ -354,13 +354,21 @@ fn routed_subscription<T: StreamDecoder<T>>(
     builder: SubscriptionBuilder,
     items: Vec<RoutedItem>,
 ) -> (Subscription<T>, Arc<MessageBusStub>, channel::Receiver<Signal>) {
+    routed_subscription_on(MessageBusStub::default(), builder, items)
+}
+
+fn routed_subscription_on<T: StreamDecoder<T>>(
+    stub: MessageBusStub,
+    builder: SubscriptionBuilder,
+    items: Vec<RoutedItem>,
+) -> (Subscription<T>, Arc<MessageBusStub>, channel::Receiver<Signal>) {
     let (sender, receiver) = channel::unbounded::<RoutedItem>();
     let (signaler, signals) = channel::unbounded();
     for item in items {
         sender.send(item).unwrap();
     }
     let internal = builder.receiver(receiver).sender(sender).signaler(signaler).lease(Lease::new()).build();
-    let stub = Arc::new(MessageBusStub::default());
+    let stub = Arc::new(stub);
     (Subscription::new(stub.clone(), internal, DecoderContext::default()), stub, signals)
 }
 
@@ -840,18 +848,45 @@ fn drain_after_collect_timeout() {
 }
 
 #[test]
-fn drain_after_error_is_unconfirmed_and_cancels_on_drop() {
+fn drain_after_error_is_unconfirmed_and_writes_cancel() {
     let (sub, bus, _signals) = request_subscription::<DrainItem>(vec![RoutedItem::Error(Error::BufferLimitExceeded { limit: 1 })]);
     assert!(matches!(sub.next(), Some(Err(Error::BufferLimitExceeded { .. }))));
 
     let started = Instant::now();
     assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Unconfirmed);
     assert!(started.elapsed() < Duration::from_secs(1), "no wait for evidence that can't arrive");
-    assert_eq!(bus.request_messages().len(), 1, "the drop writes the cancel");
+    assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "one cancel, not repeated on drop");
+}
+
+#[test]
+fn drain_returns_cancel_write_error() {
+    let (sub, bus, _signals) = routed_subscription_on::<DrainItem>(
+        MessageBusStub::default().with_failing_sends(),
+        SubscriptionBuilder::new().request_id(RequestId::nth(1)),
+        vec![],
+    );
+
+    assert!(matches!(sub.cancel_and_drain(deadline()), Err(Error::ConnectionReset)));
+    assert_eq!(bus.request_messages().len(), 1, "no second write on drop");
+}
+
+/// A local error doesn't end the request at TWS: the cancel is still due, and
+/// its failure reaches the caller rather than the drop's log.
+#[test]
+fn drain_after_error_returns_cancel_write_error() {
+    let (sub, bus, _signals) = routed_subscription_on::<DrainItem>(
+        MessageBusStub::default().with_failing_sends(),
+        SubscriptionBuilder::new().request_id(RequestId::nth(1)),
+        vec![RoutedItem::Error(Error::BufferLimitExceeded { limit: 1 })],
+    );
+    assert!(matches!(sub.next(), Some(Err(Error::BufferLimitExceeded { .. }))));
+
+    assert!(matches!(sub.cancel_and_drain(deadline()), Err(Error::ConnectionReset)));
+    assert_eq!(bus.request_messages().len(), 1, "no second write on drop");
 }
 
 /// A rejection read before the drain is still TWS's answer; the decoder
-/// doesn't opt into `rejection_ends_request`, so the drop writes the cancel.
+/// doesn't opt into `rejection_ends_request`, so the cancel is written.
 #[test]
 fn drain_after_read_rejection_is_rejected() {
     let notice = crate::messages::Notice::synthesized(200, "No security definition".to_string());
@@ -859,7 +894,7 @@ fn drain_after_read_rejection_is_rejected() {
     assert!(matches!(sub.next(), Some(Err(Error::Notice(_)))));
 
     assert_eq!(sub.cancel_and_drain(deadline()).unwrap(), Drained::Rejected(notice));
-    assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "the drop writes the cancel");
+    assert_eq!(bus.request_messages(), vec![drain_cancel_frame()], "one cancel, not repeated on drop");
 }
 
 /// Without a request id the error may be a request-less one fanned out to

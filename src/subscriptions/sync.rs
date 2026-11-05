@@ -221,7 +221,13 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// | [`Drained::Ended`] | TWS sent the end marker or a snapshot's end, before or after the cancel. Nothing is written if it had already been read. |
     /// | [`Drained::Rejected`] | TWS answered with an error for the request, before or during the drain. |
     /// | [`Drained::Unconfirmed`] | The deadline passed, or the stream had already ended with an error on our side (such as [`Error::BufferLimitExceeded`]). Treat the id as possibly live. |
-    /// | `Err` | The connection reset or the client shut down meanwhile. |
+    /// | `Err` | The cancel write failed, or the connection reset or the client shut down meanwhile. TWS's state is unknown. |
+    ///
+    /// The cancel is written whenever TWS may still be running the request,
+    /// after an error on our side too. A successful write means only that the
+    /// bytes went out: not that TWS acknowledged the cancel, nor that a pacing
+    /// slot is free. The write blocks until the transport takes it; `deadline`
+    /// bounds only the wait after it.
     ///
     /// The cancel is TWS's native one, where the request type has one (contract
     /// details: server 215+); otherwise nothing is written and the drain waits
@@ -260,18 +266,19 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         if self.ended_natively() || self.snapshot_ended.load(Ordering::Relaxed) {
             return Ok(Drained::Ended);
         }
-        // TWS answered with an error, read before this call. Drop writes the
-        // cancel unless the type knows the error ends the request at TWS.
-        if let Some(notice) = self.rejected.get() {
-            return Ok(Drained::Rejected(notice.clone()));
-        }
-        // Ended with an error on our side already: nothing more can arrive to
-        // confirm TWS's state. Drop writes the cancel, as for any such stream.
-        if self.stream_ended.load(Ordering::Relaxed) {
-            return Ok(Drained::Unconfirmed);
-        }
+        // Settled before this call: TWS answered with an error, or the stream
+        // ended with an error on our side, after which nothing more can
+        // arrive to confirm TWS's state. The cancel is still written below
+        // where one is due, so a failed write reaches the caller.
+        let settled = match self.rejected.get() {
+            Some(notice) => Some(Drained::Rejected(notice.clone())),
+            None => self.stream_ended.load(Ordering::Relaxed).then_some(Drained::Unconfirmed),
+        };
         if self.request_id.is_none() {
-            self.cancel();
+            // A stream that already ended leaves its cancel to the drop.
+            if settled.is_none() {
+                self.cancel();
+            }
             return Ok(Drained::Unconfirmed);
         }
 
@@ -280,10 +287,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         // not reach us. The route goes when the subscription drops.
         if !self.cancelled.swap(true, Ordering::Relaxed) {
             if let Some(message) = self.pending_cancel() {
-                if let Err(e) = self.message_bus.send_message(&message) {
-                    log_cancel_error("subscription", &e);
-                }
+                self.message_bus.send_message(&message)?;
             }
+        }
+        if let Some(outcome) = settled {
+            return Ok(outcome);
         }
 
         loop {
