@@ -90,3 +90,38 @@ macro_rules! impl_wire_enum {
         }
     };
 }
+
+/// Generates both `From<i32> for $name` and `From<$name> for i32` for an
+/// integer-coded wire enum from one `Variant = code` table.
+///
+/// The enum must carry an `Unknown(i32)` variant: `From<i32>` is total,
+/// returning `Unknown(code)` for a code outside the table, and
+/// `From<$name> for i32` hands that code back. One table means the two
+/// directions cannot disagree; a variant missing from it is a
+/// non-exhaustive-match error, and a duplicated code an unreachable-pattern
+/// warning. See `docs/rules/wire/enum-typing.md`.
+macro_rules! impl_wire_code {
+    ($name:ident { $($variant:ident = $code:literal),+ $(,)? }) => {
+        impl From<$name> for i32 {
+            fn from(value: $name) -> i32 {
+                match value {
+                    $($name::$variant => $code,)+
+                    $name::Unknown(code) => code,
+                }
+            }
+        }
+
+        impl From<i32> for $name {
+            fn from(value: i32) -> Self {
+                match value {
+                    $($code => $name::$variant,)+
+                    code => $name::Unknown(code),
+                }
+            }
+        }
+    };
+}
+
+#[cfg(test)]
+#[path = "macros_tests.rs"]
+mod tests;

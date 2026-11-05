@@ -121,13 +121,6 @@ fn is_active_and_is_terminal_agree_on_known_variants() {
 }
 
 #[test]
-fn liquidity_preserves_unknown_wire_code() {
-    assert_eq!(Liquidity::from(0), Liquidity::None);
-    assert_eq!(Liquidity::from(4), Liquidity::Unknown(4));
-    assert_eq!(Liquidity::from(-1), Liquidity::Unknown(-1));
-}
-
-#[test]
 fn time_in_force_round_trips_every_wire_value() {
     check_wire_enum_round_trip(ALL_TIFS);
 
@@ -289,6 +282,42 @@ fn what_if_type_round_trips_every_wire_code() {
             (WhatIfType::Unknown(-1), -1),
         ],
         WhatIfType::Unknown,
+    );
+}
+
+#[test]
+fn liquidity_round_trips_every_wire_code() {
+    check_wire_code_round_trip(
+        &[
+            (Liquidity::None, 0),
+            (Liquidity::AddedLiquidity, 1),
+            (Liquidity::RemovedLiquidity, 2),
+            (Liquidity::LiquidityRoutedOut, 3),
+            (Liquidity::Unknown(4), 4),
+            (Liquidity::Unknown(-1), -1),
+        ],
+        Liquidity::Unknown,
+    );
+}
+
+/// Table from Execution.cs `COptionExerciseType`.
+#[test]
+fn option_exercise_type_round_trips_every_wire_code() {
+    check_wire_code_round_trip(
+        &[
+            (OptionExerciseType::None, -1),
+            (OptionExerciseType::Exercise, 1),
+            (OptionExerciseType::Lapse, 2),
+            (OptionExerciseType::DoNothing, 3),
+            (OptionExerciseType::Assigned, 100),
+            (OptionExerciseType::AutoexerciseClearing, 101),
+            (OptionExerciseType::Expired, 102),
+            (OptionExerciseType::AutoexerciseTrading, 200),
+            (OptionExerciseType::Netting, 203),
+            (OptionExerciseType::Unknown(0), 0),
+            (OptionExerciseType::Unknown(4), 4),
+        ],
+        OptionExerciseType::Unknown,
     );
 }
 
