@@ -3313,6 +3313,223 @@ fn sends_are_refused_while_disconnected() {
     assert!(!stream.captured().is_empty());
 }
 
+/// A send is refused for as long as the reconnect handshake is in flight,
+/// even when its state check passed: the dispatcher holds the session gate
+/// across the reconnect. Without the gate the request would land on the new
+/// socket between the handshake and its acknowledgement. Forcing the state
+/// live stands in for a check that passed; the send already past the gate
+/// when the session breaks is `queued_send_is_not_written_into_the_reconnect_handshake`.
+#[test]
+fn sends_are_refused_during_the_reconnect_handshake() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notices = bus.connection.notice_broadcaster.subscribe();
+    let handler = &bus.connection.connection_handler;
+
+    // Connection lost, then nothing: the reconnect blocks on the handshake ack.
+    stream.push_inbound(b"xx".to_vec());
+    let dispatcher = thread::spawn({
+        let bus = bus.clone();
+        move || bus.dispatch()
+    });
+    helpers::wait_for("the handshake to be written", || stream.captured() == handler.format_handshake());
+
+    // Stands in for a sender whose check passed before the dispatcher flipped
+    // the state: with the signal saying live, only the gate refuses the write.
+    bus.connection_state.set_connected();
+    assert!(matches!(bus.send_request(RequestId::nth(100), b"req-bytes"), Err(Error::ConnectionReset)));
+    assert_eq!(bus.requests.len(), 0, "a refused request must register nothing");
+    assert_eq!(
+        stream.captured(),
+        handler.format_handshake(),
+        "the request must not reach the socket mid-handshake"
+    );
+
+    for frame in helpers::handshake_frames(crate::server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+    dispatcher.join().expect("dispatcher thread panicked")?;
+    let notice = notices.recv_timeout(TICK).expect("no reconnect notice on the notice fan-out");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+
+    // The gate is open again once the session is live.
+    assert!(bus.send_request(RequestId::nth(100), b"req-bytes").is_ok());
+    Ok(())
+}
+
+/// Stands in for `TcpSocket`'s writer mutex. A write carrying `marker` models
+/// a sender that passed its state check and is queued on the writer behind a
+/// stalled write: it waits until the test releases it or the reconnect swaps
+/// the stream, and the reconnect hands the writer to it before the handshake,
+/// a handoff order std's `Mutex` permits.
+#[derive(Clone, Debug)]
+struct HandoffSocket {
+    stream: MemoryStream,
+    marker: &'static [u8],
+    state: Arc<(Mutex<Handoff>, std::sync::Condvar)>,
+}
+
+#[derive(Debug, Default)]
+struct Handoff {
+    /// Bumped by `reconnect`: 0 is the session the sender checked, 1 the new one.
+    generation: usize,
+    sender_queued: bool,
+    /// The stalled write ahead of the sender finished.
+    released: bool,
+    sender_wrote: bool,
+    /// Every write, tagged with the generation it landed on.
+    writes: Vec<(usize, Vec<u8>)>,
+}
+
+/// Bounds every wait in `HandoffSocket`, so a broken gate fails, not hangs.
+const HANDOFF_WAIT: Duration = Duration::from_secs(5);
+
+impl HandoffSocket {
+    fn new(stream: MemoryStream, marker: &'static [u8]) -> Self {
+        Self {
+            stream,
+            marker,
+            state: Arc::default(),
+        }
+    }
+
+    /// Wait up to `timeout` for `done`; whether it held.
+    fn wait(&self, timeout: Duration, done: impl Fn(&Handoff) -> bool) -> bool {
+        let (mutex, changed) = &*self.state;
+        let guard = mutex.lock().unwrap();
+        let (_guard, result) = changed.wait_timeout_while(guard, timeout, |s| !done(s)).unwrap();
+        !result.timed_out()
+    }
+
+    fn release(&self) {
+        let (mutex, changed) = &*self.state;
+        mutex.lock().unwrap().released = true;
+        changed.notify_all();
+    }
+
+    /// The generations the sender's frame landed on.
+    fn sender_generations(&self) -> Vec<usize> {
+        let state = self.state.0.lock().unwrap();
+        let marker = self.marker;
+        state
+            .writes
+            .iter()
+            .filter(|(_, w)| w.windows(marker.len()).any(|x| x == marker))
+            .map(|(g, _)| *g)
+            .collect()
+    }
+}
+
+impl Io for HandoffSocket {
+    fn read_message(&self) -> Result<Vec<u8>, Error> {
+        self.stream.read_message()
+    }
+
+    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        let (mutex, changed) = &*self.state;
+        let mut state = mutex.lock().unwrap();
+        let is_sender = buf.windows(self.marker.len()).any(|w| w == self.marker);
+        if is_sender {
+            state.sender_queued = true;
+            changed.notify_all();
+            state = changed
+                .wait_timeout_while(state, HANDOFF_WAIT, |s| s.generation == 0 && !s.released)
+                .unwrap()
+                .0;
+        }
+        let generation = state.generation;
+        state.writes.push((generation, buf.to_vec()));
+        if is_sender {
+            state.sender_wrote = true;
+            changed.notify_all();
+        }
+        drop(state);
+        self.stream.write_all(buf)
+    }
+
+    fn close(&self) {
+        self.stream.close()
+    }
+}
+
+impl Reconnect for HandoffSocket {
+    fn reconnect(&self) -> Result<(), Error> {
+        self.stream.reconnect()?;
+        let (mutex, changed) = &*self.state;
+        let mut state = mutex.lock().unwrap();
+        state.generation += 1;
+        changed.notify_all();
+        // The swap is done; a sender still queued takes the writer next,
+        // ahead of the handshake.
+        let _ = changed.wait_timeout_while(state, HANDOFF_WAIT, |s| !s.sender_wrote).unwrap();
+        Ok(())
+    }
+
+    fn sleep(&self, _duration: Duration, _shutdown: &ShutdownSignal) {}
+}
+
+impl Stream for HandoffSocket {}
+
+/// A send whose state check passed before the connection broke, and whose
+/// write is still queued on the writer when the reconnect starts, finishes on
+/// the old socket or is refused: it never lands on the new socket inside its
+/// handshake (#1171). Unlike `sends_are_refused_during_the_reconnect_handshake`,
+/// the send is already past the gate when the session breaks.
+#[test]
+fn queued_send_is_not_written_into_the_reconnect_handshake() {
+    const MARKER: &[u8] = b"request-queued-on-writer";
+
+    let stream = MemoryStream::default();
+    let socket = HandoffSocket::new(stream.clone(), MARKER);
+    let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(TcpMessageBus::new(connection));
+
+    // Passes its check on the live session, then queues on the writer.
+    let sender = thread::spawn({
+        let bus = bus.clone();
+        move || bus.send_request(RequestId::nth(100), MARKER).map(|_| ())
+    });
+    assert!(socket.wait(HANDOFF_WAIT, |s| s.sender_queued), "the sender never reached the writer");
+
+    // The session breaks while the peer keeps the socket open: InvalidFrame.
+    stream.push_inbound(b"xx".to_vec());
+    for frame in helpers::handshake_frames(crate::server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+    let dispatcher = thread::spawn({
+        let bus = bus.clone();
+        move || bus.dispatch()
+    });
+    // Without the gate the reconnect swaps the stream under the queued sender
+    // right away, and can be done before a poll sees the session down; with
+    // it, the dispatcher waits the write out with the session down. Either
+    // way, give the swap a tick before the stalled write ahead of the sender
+    // finishes.
+    helpers::wait_for("the dispatcher to take the broken session", || {
+        !bus.is_connected() || socket.wait(Duration::ZERO, |s| s.generation > 0)
+    });
+    socket.wait(TICK, |s| s.generation > 0);
+    socket.release();
+
+    dispatcher
+        .join()
+        .expect("dispatcher thread panicked")
+        .expect("the reconnect should succeed");
+    assert!(bus.is_connected());
+    let sent = sender.join().expect("sender thread panicked");
+
+    let generations = socket.sender_generations();
+    assert!(
+        !generations.contains(&1),
+        "the request was written to the new socket before its handshake finished; send returned {sent:?}"
+    );
+    match sent {
+        Ok(()) => assert_eq!(generations, [0], "a send that succeeded must have finished on the old socket"),
+        Err(Error::ConnectionReset) => assert!(generations.is_empty(), "a refused send must write nothing"),
+        other => panic!("expected Ok or ConnectionReset, got {other:?}"),
+    }
+}
+
 /// A cancel that cannot be sent is not an error the caller has to handle:
 /// the session that held the subscription is gone. The local registration goes
 /// either way, so nothing is left behind.
@@ -3361,9 +3578,9 @@ fn wait_connected_returns_shutdown_when_the_bus_shuts_down() {
     assert!(start.elapsed() < Duration::from_secs(5), "wait_connected did not return on shutdown");
 }
 
-/// Writes fail, reads delegate to a `MemoryStream`. Stands in for the window
-/// the send gate cannot close: the write is refused after the registration
-/// went in.
+/// Writes fail, reads delegate to a `MemoryStream`. Stands in for a write
+/// refused after the registration went in: the session went down between the
+/// registering call's first state check and its write.
 #[derive(Clone, Debug)]
 struct FailingWriteStream(MemoryStream);
 
@@ -3394,9 +3611,9 @@ impl Reconnect for FailingWriteStream {
 impl Stream for FailingWriteStream {}
 
 /// A send whose write fails takes its registration with it, so no channel is
-/// left waiting on a response that was never requested. Covers the window the
-/// `ensure_connected` check cannot close, where the session goes down between
-/// the check and the write.
+/// left waiting on a response that was never requested. Covers the session
+/// going down between the registering call's first `ensure_connected` check
+/// and its write.
 #[test]
 fn failed_write_leaves_no_registration() {
     let connection = Connection::stubbed(FailingWriteStream(MemoryStream::default()), 28);

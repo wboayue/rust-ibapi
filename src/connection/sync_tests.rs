@@ -9,7 +9,7 @@ use super::*;
 use crate::client::ids::RequestId;
 use crate::client::sync::Client;
 use crate::common::test_utils::helpers::{
-    binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, TEST_ACCOUNT,
+    binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, wait_for, TEST_ACCOUNT,
 };
 use crate::market_data::realtime::common::encode_request_market_data_type;
 use crate::market_data::MarketDataType;
@@ -479,15 +479,6 @@ impl Reconnect for TestSocket {
 }
 
 impl Stream for TestSocket {}
-
-/// Poll `condition` until it holds, failing rather than hanging.
-fn wait_for(label: &str, condition: impl Fn() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while !condition() {
-        assert!(Instant::now() < deadline, "timed out waiting for {label}");
-        thread::sleep(Duration::from_millis(5));
-    }
-}
 
 /// A shutdown requested while `reconnect` is waiting out its backoff must end
 /// the wait and return `Error::Shutdown`, not run the whole Fibonacci

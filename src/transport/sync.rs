@@ -6,7 +6,7 @@ use std::collections::{hash_map, HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -335,6 +335,13 @@ pub struct TcpMessageBus<S: Stream> {
     order_taps: OrderTaps<Sender<RoutedItem>>,
     /// Session state, and what `wait_connected` blocks on.
     connection_state: ConnectionSignal,
+    /// The session gate. The dispatcher holds it for write from failing the
+    /// channels of a lost connection until the replayed handshake has the
+    /// session live again; `write_now` holds it for read across its state
+    /// check and its write. So a write either finishes before the reconnect
+    /// starts, or is refused: none reaches the socket the reconnect installs
+    /// until the handshake on it is done.
+    session: RwLock<()>,
 }
 
 impl<S: Stream> TcpMessageBus<S> {
@@ -361,6 +368,7 @@ impl<S: Stream> TcpMessageBus<S> {
             rate_limiter: OnceLock::new(),
             order_taps,
             connection_state: ConnectionSignal::default(),
+            session: RwLock::new(()),
         }
     }
 
@@ -421,10 +429,12 @@ impl<S: Stream> TcpMessageBus<S> {
     /// would never be reset again, so its caller would block forever. Callers
     /// wait the reconnect out through `wait_connected` instead.
     ///
-    /// The check-then-write window is not closed: a caller that passes here
-    /// just before the dispatcher flips the state can still write, and in
-    /// principle race the socket swap inside `reconnect`. Closing that needs a
-    /// session-level gate held across the handshake.
+    /// On its own this check is a snapshot that races the dispatcher: a caller
+    /// that passes here just before the state flips could still write, and that
+    /// write could land in the handshake the reconnect is running on the new
+    /// socket (#1171). `write_now` runs it under the `session` gate, which the
+    /// dispatcher holds across the reconnect, so there the check and the write
+    /// are one step and the race is closed.
     fn ensure_connected(&self) -> Result<(), Error> {
         self.connection_state.check()?;
         if self.is_shutting_down() {
@@ -458,8 +468,17 @@ impl<S: Stream> TcpMessageBus<S> {
         }
     }
 
-    /// Writes without throttling; the connected check runs after any wait.
+    /// Writes without throttling; the connected check runs after any wait,
+    /// under the `session` gate. The gate held for write is a reconnect in
+    /// progress, whatever the state signal says yet, so the write is refused
+    /// as `ensure_connected` would refuse it once the signal catches up.
     fn write_now(&self, message: &[u8]) -> Result<(), Error> {
+        let _session = match self.session.try_read() {
+            Ok(guard) => guard,
+            // Poison recovery, as `common::lock`: the guard holds nothing.
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => return Err(self.ended_reason(Error::ConnectionReset)),
+        };
         self.ensure_connected()?;
         self.connection.write_message(message)
     }
@@ -549,6 +568,12 @@ impl<S: Stream> TcpMessageBus<S> {
                 // session, and the reconnect can run for minutes.
                 self.reset();
 
+                // Waits out writes whose state check passed before the flip
+                // (a write stuck on the dead socket must not delay the
+                // failures above); every later one is refused until the
+                // session is live again.
+                let session = write_lock(&self.session);
+
                 match self.connection.reconnect() {
                     Ok(()) => {}
                     // Shutdown was requested while reconnecting: not a failure,
@@ -582,6 +607,10 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
 
                 info!("successfully reconnected to TWS/Gateway");
+                // Released before the state flips: `set_connected` wakes
+                // `wait_connected`, and a woken caller's send must not be
+                // refused. Until the flip, `ensure_connected` still refuses.
+                drop(session);
                 self.connection_state.set_connected();
 
                 // TWS never frames the socket reconnect itself and does not replay
