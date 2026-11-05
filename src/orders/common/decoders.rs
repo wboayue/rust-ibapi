@@ -1,8 +1,8 @@
 use crate::messages::ResponseMessage;
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
-    Action, Execution, ExecutionSide, Liquidity, OcaType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin, OrderState,
-    ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
+    Action, Execution, ExecutionSide, Liquidity, OcaType, OptionExerciseType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin,
+    OrderState, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
 };
 use crate::orders::{CommissionAndFeesReport, ExecutionData, OrderBound, OrderData, OrderStatus};
 use crate::proto;
@@ -467,6 +467,7 @@ pub(crate) fn decode_execution(proto: &proto::Execution) -> Result<Execution, Er
         last_liquidity: Liquidity::from(proto.last_liquidity.unwrap_or_default()),
         pending_price_revision: proto.is_price_revision_pending.unwrap_or_default(),
         submitter: s(&proto.submitter),
+        option_exercise_type: proto.opt_exercise_or_lapse_type.map(OptionExerciseType::from).unwrap_or_default(),
     })
 }
 

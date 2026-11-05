@@ -451,6 +451,27 @@ pub mod helpers {
             other => panic!("expected Error::UnexpectedWireFormat for a text-framed {expected:?}, got {other:?}"),
         }
     }
+
+    /// Poll `condition` until it holds, failing rather than hanging.
+    pub fn wait_for(label: &str, condition: impl Fn() -> bool) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !condition() {
+            assert!(std::time::Instant::now() < deadline, "timed out waiting for {label}");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+
+    /// [`wait_for`] for async tests: sleeps on the runtime, not the thread.
+    #[cfg(feature = "async")]
+    pub async fn wait_for_async(label: &str, condition: impl Fn() -> bool) {
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            while !condition() {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("timed out waiting for {label}"));
+    }
 }
 
 /// Generic round-trip / reject-unknown helpers for typed wire enums built with `impl_wire_enum!`.

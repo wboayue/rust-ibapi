@@ -10,7 +10,6 @@ triggers:
 symbols: [cfg(test), path-attribute]
 related: [coverage-floor, exercise-production-code, modernize-touched-modules]
 precedents: ["#657", "#726", "#1042"]
-memory: [feedback_sed_inline_test_extraction]
 ---
 
 Never write an inline `#[cfg(test)] mod tests { ... }` block in an implementation file. Tests
@@ -41,8 +40,10 @@ and do not treat them as precedent.
 This does **not** mean flattening helper modules: `<domain>/<side>.rs` with
 `<domain>/<side>/foo.rs` helpers underneath stays. Only test-file placement is governed here.
 
-When sweeping ten or more inline blocks at once, `sed`-based extraction beats per-file
-Read + Write + Edit.
+When sweeping ten or more inline blocks at once, slice by line range with `sed` (the block is
+the file's last item, body at four-space indent) rather than matching each body in an editor
+replace, then `cargo build --tests --all-features` once. Matching 200-line bodies left orphaned
+half-blocks behind in #657.
 
 ## Precedents
 

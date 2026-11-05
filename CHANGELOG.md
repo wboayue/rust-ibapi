@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
+- `Execution::option_exercise_type` (`OptionExerciseType`) exposes TWS `optExerciseOrLapseType`; `None` when TWS sends `-1` or omits it. A struct literal of `Execution` without `..Default::default()` must add the field (#1175).
 
 ### Changed
 
@@ -18,12 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Contract::spread(symbol)` takes the combo symbol, which TWS requires (error 321 without it); `SpreadBuilder::new` takes it too. `SpreadBuilder::symbol(..)` and `Default for SpreadBuilder` are removed, and `build()` rejects an empty symbol with `Error::InvalidArgument`. See `docs/migration-6.0.md` §5 (#1131).
 - `TickType::Unknown` carries the tick id as `Unknown(i32)`, so a tick IBKR adds later keeps its id; `TickType` gains `From<TickType> for i32` (`tick_type as i32` no longer compiles). `From<&str> for TickType` is replaced by `TickType::from_name`, which returns `Option`, and its inverse `name()`. `Display` of an unknown tick is `Unknown(<id>)`. See `docs/migration-6.0.md` §6 (#1071).
 - `ContractDetails::fund_asset_type` and `fund_distribution_policy_indicator` are now `Option<FundAssetType>` and `Option<FundDistributionPolicyIndicator>`, `None` when TWS sends no value. Both enums lose their `None` variant and `Default`, keep an unrecognized value as `Unknown(String)` instead of reading it as unset, and replace `From<&str>` with `FromStr`, `as_str()` and `Display`. See `docs/migration-6.0.md` §7 (#1071).
-- `MarketDepth::operation`, `MarketDepth::side`, `MarketDepthL2::operation` and `MarketDepthL2::side` are enums instead of `i32`: `DepthOperation` (`Insert`, `Update`, `Delete`) and `DepthSide` (`Ask`, `Bid`), each with `Unknown(i32)` for a code this version does not model. Serialized, each is a variant name (`"Insert"`, `"Bid"`) or `{"Unknown": n}` rather than a number, and the `utoipa` schemas change to match. See `docs/migration-6.0.md` §8 (#1164).
+- `NewsArticle::time` is now `Option<OffsetDateTime>`: `None` when TWS sends no time or one the client can't parse (logged as a warning), for `historical_news`, `contract_news` and `broad_tape_news`. Such an article was dated 1970-01-01, and a tick news timestamp out of range ended the subscription with `Error::Parse`. See `docs/migration-6.0.md` §8 (#1154).
+- `MarketDepth::operation`, `MarketDepth::side`, `MarketDepthL2::operation` and `MarketDepthL2::side` are enums instead of `i32`: `DepthOperation` (`Insert`, `Update`, `Delete`) and `DepthSide` (`Ask`, `Bid`), each with `Unknown(i32)` for a code this version does not model. Serialized, each is a variant name (`"Insert"`, `"Bid"`) or `{"Unknown": n}` rather than a number, and the `utoipa` schemas change to match. See `docs/migration-6.0.md` §9 (#1164).
 
 ### Removed
 
 - `ibapi::protocol` is crate-private. Its 53 constants deprecated in 5.1 (at or below the server version 213 connection floor, so a check always passed) are deleted, along with `is_supported` and `include_if_supported`, which nothing called. The three remaining gates (`CANCEL_CONTRACT_DATA`, `CONFIG`, `UPDATE_CONFIG`) are checked by the requests themselves, which return `Error::ServerVersion` from a server too old for them. See `docs/migration-6.0.md` §1 (#990, #1157).
 - `From<i32> for ArticleType` is removed: it read any unknown code as `Text`. See `docs/migration-6.0.md` §3 (#1071).
+
+### Fixed
+
+- A one-shot request (such as `managed_accounts()`) or a historical `fetch()` made while the connection is down returns `Error::Timeout` at its deadline (`one_shot_timeout`, or 30 seconds for shared one-shots) instead of waiting out the whole reconnect. A blocking call could hold its thread for minutes. Sync and async (#1168).
+- A request whose connection check passed just as the connection dropped could be written to the new connection before its handshake had finished. It now either completes on the old connection or is refused with `Error::ConnectionReset`, and requests made during the handshake are refused too (sync and async) (#1171).
 
 ## [5.6.0] - 2026-11-03
 

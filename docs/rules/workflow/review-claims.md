@@ -11,7 +11,6 @@ triggers:
 symbols: [InternalSubscription, SubscriptionBuilder, fail_all, MessageBusStub]
 related: [exercise-production-code, plans-and-issues, timezone-free-timestamps]
 precedents: ["#1141", "#1147", "#1148", "#1152", "#1154"]
-memory: []
 ---
 
 Before a review claim goes into a review, issue or rule, check it against what production

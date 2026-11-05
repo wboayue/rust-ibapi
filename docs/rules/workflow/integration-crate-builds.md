@@ -10,7 +10,6 @@ triggers:
 symbols: [ibapi-integration-sync, ibapi-integration-async, ibapi-test, default-members]
 related: [pre-pr-checks, restrict-after-callers, proto-only-decoding]
 precedents: ["#593"]
-memory: [feedback_minimal_test_helper_deps, feedback_integration_test_tws_encoding]
 ---
 
 The `integration/` crates — `ibapi-integration-sync`, `ibapi-integration-async`, and the
@@ -37,7 +36,12 @@ unnoticed until someone next runs them against a gateway. Deliberately caller-br
 (`#[must_use]`, a removed field, narrowed visibility) are most exposed: their diff looks
 complete because `cargo clippy --all-targets` is green.
 
+`ibapi-test` depends on `time` / `time-tz` only. An `ibapi` dependency there, to share a helper
+needing `Order` or `Contract`, would unify features and build `ibapi` with `sync` under
+`-p ibapi-integration-async`; duplicate such helpers per crate instead.
+
 ## Precedents
 
+- #507 — created the integration workspace; kept `ibapi` out of `ibapi-test`.
 - #593 — `#[must_use]` on 31 builders and 8 subscription types; eight of the nine callsites needing
   `let _ = ...` were integration-test cleanup paths, reachable only via `-p ibapi-integration-*`.

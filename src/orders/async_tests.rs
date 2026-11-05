@@ -378,6 +378,7 @@ async fn executions() {
                 .price(5800.0)
                 .perm_id(2126726143)
                 .last_liquidity(1)
+                .option_exercise_type(100)
                 .encode_proto(),
         ),
         proto_response(
@@ -401,11 +402,12 @@ async fn executions() {
     );
 
     let exec_data = subscription.next().await;
-    assert!(
-        matches!(exec_data, Some(Ok(SubscriptionItem::Data(Executions::ExecutionData(_))))),
-        "Expected Executions::ExecutionData, got {:?}",
-        exec_data
-    );
+    match exec_data {
+        Some(Ok(SubscriptionItem::Data(Executions::ExecutionData(data)))) => {
+            assert_eq!(data.execution.option_exercise_type, crate::orders::OptionExerciseType::Assigned);
+        }
+        other => panic!("Expected Executions::ExecutionData, got {other:?}"),
+    }
 
     let commission = subscription.next().await;
     assert!(

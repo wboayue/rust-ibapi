@@ -118,7 +118,7 @@ async fn historical_news_works() {
     assert_eq!(article.article_id, "DJ-N$19985fef");
     assert_eq!(article.headline, headline);
     assert_eq!(article.extra_data, "");
-    assert_eq!(article.time.unix_timestamp(), 1734983100);
+    assert_eq!(article.time.unwrap().unix_timestamp(), 1734983100);
 }
 
 #[tokio::test]
@@ -187,7 +187,7 @@ async fn contract_news() {
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");
     assert_eq!(article.extra_data, "TSLA:123");
-    assert_eq!(article.time.unix_timestamp(), 1_672_531_200);
+    assert_eq!(article.time.unwrap().unix_timestamp(), 1_672_531_200);
 }
 
 #[tokio::test]
@@ -225,7 +225,7 @@ async fn broad_tape_news() {
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");
     assert_eq!(article.extra_data, "TSLA:123");
-    assert_eq!(article.time.unix_timestamp(), 1_672_531_200);
+    assert_eq!(article.time.unwrap().unix_timestamp(), 1_672_531_200);
 }
 
 #[tokio::test]

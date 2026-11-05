@@ -209,7 +209,7 @@ mod sync_impl {
     ) -> Result<R, Error> {
         let deadline = Instant::now() + client.one_shot_timeout().unwrap_or(super::ONE_SHOT_TIMEOUT);
 
-        crate::common::retry::blocking::retry_on_connection_reset(client, || {
+        crate::common::retry::blocking::retry_on_connection_reset(client, Some(deadline), || {
             check_deadline(Some(deadline))?;
             let request = encoder()?;
             let subscription = client.shared_request(message_type).send_raw(request)?;
@@ -235,7 +235,7 @@ mod sync_impl {
     ) -> Result<R, Error> {
         let deadline = one_shot_deadline(client);
 
-        crate::common::retry::blocking::retry_on_connection_reset(client, || {
+        crate::common::retry::blocking::retry_on_connection_reset(client, deadline, || {
             check_deadline(deadline)?;
             let request_id = client.mint_request_id();
             let request = encoder(request_id.raw())?;
@@ -257,7 +257,7 @@ mod sync_impl {
     pub fn one_shot_cancelling<K: CancellableOneShot>(client: &Client, encoder: impl Fn(i32) -> Result<Vec<u8>, Error>) -> Result<K::Output, Error> {
         let deadline = one_shot_deadline(client);
 
-        crate::common::retry::blocking::retry_on_connection_reset(client, || {
+        crate::common::retry::blocking::retry_on_connection_reset(client, deadline, || {
             check_deadline(deadline)?;
             let builder = client.request();
             let request = encoder(builder.request_id())?;
@@ -349,7 +349,7 @@ mod async_impl {
     ) -> Result<R, Error> {
         let deadline = Instant::now() + client.one_shot_timeout().unwrap_or(super::ONE_SHOT_TIMEOUT);
 
-        crate::common::retry::retry_on_connection_reset(client, || async {
+        crate::common::retry::retry_on_connection_reset(client, Some(deadline), || async {
             check_deadline(Some(deadline))?;
             let request = encoder()?;
             let mut subscription = client.shared_request(message_type).send_raw(request).await?;
@@ -376,7 +376,7 @@ mod async_impl {
     ) -> Result<R, Error> {
         let deadline = one_shot_deadline(client);
 
-        crate::common::retry::retry_on_connection_reset(client, || async {
+        crate::common::retry::retry_on_connection_reset(client, deadline, || async {
             check_deadline(deadline)?;
             let request_id = client.mint_request_id();
             let request = encoder(request_id.raw())?;
@@ -401,7 +401,7 @@ mod async_impl {
     ) -> Result<K::Output, Error> {
         let deadline = one_shot_deadline(client);
 
-        crate::common::retry::retry_on_connection_reset(client, || async {
+        crate::common::retry::retry_on_connection_reset(client, deadline, || async {
             check_deadline(deadline)?;
             let builder = client.request();
             let request = encoder(builder.request_id())?;

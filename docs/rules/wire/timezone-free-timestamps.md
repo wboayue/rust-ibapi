@@ -12,7 +12,6 @@ triggers:
 symbols: [find_timezone, resolve_local, parse_connection_time, parse_historical_data_end_timestamp, parse_schedule_date_time, try_parse_time_as_utc, ToField, OffsetDateTime, formatDate]
 related: [enum-typing, proto-only-decoding]
 precedents: ["#808", "#904", "#1148"]
-memory: []
 ---
 
 Don't add code whose result depends on knowing a time zone: no zone-name lookup, no
