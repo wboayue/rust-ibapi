@@ -6,6 +6,7 @@ use log::error;
 use time::OffsetDateTime;
 
 use crate::client::blocking::ClientRequestBuilders;
+use crate::client::ids::RequestId;
 use crate::common::request_helpers::{self, empty_on_end_of_stream};
 use crate::common::retry::blocking::retry_on_connection_reset;
 use crate::contracts::Contract;
@@ -19,8 +20,8 @@ use crate::{client::sync::Client, Error};
 use super::common::tick::{classify, TickAction};
 use super::common::{self, encoders};
 use super::{
-    BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, Schedule,
-    ScheduleRequest, TickDecoder, WhatToShow,
+    BarRequest, BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame,
+    Schedule, ScheduleRequest, TickDecoder, WhatToShow,
 };
 use crate::market_data::TradingHours;
 
@@ -92,7 +93,7 @@ impl Client {
     /// # let _ = bars;
     /// ```
     pub fn historical_data<'a>(&'a self, contract: &'a Contract, bar_size: BarSize) -> super::HistoricalDataBuilder<'a, Self> {
-        super::HistoricalDataBuilder::new(self, contract, bar_size)
+        super::HistoricalDataBuilder::new(self, contract, bar_size, self.mint_request_id())
     }
 
     /// Build a request for [`Schedule`] data over the given duration.
@@ -252,38 +253,26 @@ impl Client {
     }
 }
 
-pub(crate) fn historical_data(
-    client: &Client,
-    contract: &Contract,
-    end_date: Option<OffsetDateTime>,
-    duration: Duration,
-    bar_size: BarSize,
-    what_to_show: WhatToShow,
-    trading_hours: TradingHours,
-) -> Result<HistoricalData, Error> {
-    common::validate_historical_data(end_date, what_to_show)?;
+pub(crate) fn historical_data(client: &Client, request: BarRequest, request_id: RequestId) -> Result<HistoricalData, Error> {
+    common::validate_historical_data(request.end_date, request.what_to_show)?;
     // One deadline for both reads and every resend.
     let deadline = request_helpers::blocking::one_shot_deadline(client);
+    let mut first_id = Some(request_id);
 
     retry_on_connection_reset(client, deadline, || {
         request_helpers::blocking::check_deadline(deadline)?;
-        let builder = client.request();
-        let request = encoders::encode_request_historical_data(
-            builder.request_id(),
-            contract,
-            end_date,
-            duration,
-            bar_size,
-            what_to_show,
-            trading_hours.use_rth(),
-            false,
-        )?;
+        // The first attempt uses the builder's id; a resend takes a new one.
+        let builder = match first_id.take() {
+            Some(id) => client.request_with_id(id),
+            None => client.request(),
+        };
+        let message = request.encode(builder.request_id(), false)?;
 
         // The window frame is a second read, which is why this is not a
         // one-shot and cannot use the helpers in `common::request_helpers`.
         // Dropping the subscription before it, on any error below, sends
         // TWS's cancel; after it, nothing is sent.
-        let subscription = builder.send::<HistoricalDataFrame>(request)?;
+        let subscription = builder.send::<HistoricalDataFrame>(message)?;
 
         let mut data = request_helpers::blocking::next_frame(&subscription, deadline)?.into_bars()?;
         // Only the window frame proves the download is complete, so a close
@@ -294,28 +283,28 @@ pub(crate) fn historical_data(
     })
 }
 
+/// `request.end_date` is `None`: IBKR requires it with `keep_up_to_date`.
 pub(crate) fn historical_data_stream(
     client: &Client,
-    contract: &Contract,
-    duration: Duration,
-    bar_size: BarSize,
-    what_to_show: WhatToShow,
-    trading_hours: TradingHours,
+    request: BarRequest,
+    request_id: RequestId,
     buffer_limit: Option<usize>,
 ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
-    let builder = client.request();
-    let request = encoders::encode_request_historical_data(
-        builder.request_id(),
-        contract,
-        None, // IBKR requires end_date=None when keep_up_to_date=true
-        duration,
-        bar_size,
-        what_to_show,
-        trading_hours.use_rth(),
-        true, // keep_up_to_date — the whole point of .stream()
-    )?;
+    let message = request.encode(request_id.raw(), true)?;
+    client.request_with_id(request_id).send_capped(message, buffer_limit)
+}
 
-    builder.send_capped::<HistoricalBarUpdate>(request, buffer_limit)
+/// Sent once, never resent: the caller owns the request. Reached through
+/// [`HistoricalDataBuilder::subscribe`](super::HistoricalDataBuilder::subscribe).
+pub(crate) fn historical_data_subscription(
+    client: &Client,
+    request: BarRequest,
+    request_id: RequestId,
+    buffer_limit: Option<usize>,
+) -> Result<Subscription<HistoricalDataFrame>, Error> {
+    common::validate_historical_data(request.end_date, request.what_to_show)?;
+    let message = request.encode(request_id.raw(), false)?;
+    client.request_with_id(request_id).send_capped(message, buffer_limit)
 }
 
 // pub(crate) internal plumbing called from `HistoricalTicksBuilder`; the

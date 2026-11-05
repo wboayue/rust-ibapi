@@ -553,15 +553,53 @@ fn cancel_historical_data(request_id: Option<i32>) -> Result<Vec<u8>, Error> {
     common::encoders::encode_cancel_historical_data(request_id)
 }
 
-/// The frames of a one-shot historical data request: the bars, then the window.
+/// The frames of a historical bar request that doesn't stream updates: the
+/// bars, then the window.
 ///
-/// Unlike [`HistoricalBarUpdate`], the window frame ends the request, so it is
-/// a snapshot end: a subscription that saw it sends no cancel at drop, and one
-/// dropped before it (timeout, local error, dropped future) does.
-#[derive(Debug)]
-pub(crate) enum HistoricalDataFrame {
+/// Yielded by [`HistoricalDataBuilder::subscribe`], in that order. `End` ends the
+/// request at TWS: a subscription that has read it sends no cancel when
+/// dropped, and one dropped before it does. Unlike [`HistoricalBarUpdate`],
+/// nothing follows `End`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum HistoricalDataFrame {
+    /// Every bar of the request, in one frame. Its `start` and `end` are the
+    /// Unix epoch: the window comes in `End`.
     Bars(HistoricalData),
-    End { start: OffsetDateTime, end: OffsetDateTime },
+    /// The window TWS served. The request is complete.
+    End {
+        /// Start of the window.
+        start: OffsetDateTime,
+        /// End of the window.
+        end: OffsetDateTime,
+    },
+}
+
+/// A historical bar request's parameters, as its builder resolved them.
+#[derive(Clone, Copy)]
+pub(crate) struct BarRequest<'a> {
+    pub(crate) contract: &'a crate::contracts::Contract,
+    pub(crate) end_date: Option<OffsetDateTime>,
+    pub(crate) duration: Duration,
+    pub(crate) bar_size: BarSize,
+    pub(crate) what_to_show: WhatToShow,
+    pub(crate) trading_hours: crate::market_data::TradingHours,
+}
+
+impl BarRequest<'_> {
+    /// The request message. With `keep_up_to_date`, TWS streams updates after
+    /// the initial bars.
+    pub(crate) fn encode(&self, request_id: i32, keep_up_to_date: bool) -> Result<Vec<u8>, Error> {
+        common::encoders::encode_request_historical_data(
+            request_id,
+            self.contract,
+            self.end_date,
+            self.duration,
+            self.bar_size,
+            self.what_to_show,
+            self.trading_hours.use_rth(),
+            keep_up_to_date,
+        )
+    }
 }
 
 impl HistoricalDataFrame {
