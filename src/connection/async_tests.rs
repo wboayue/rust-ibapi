@@ -10,7 +10,7 @@ use super::*;
 use crate::client::ids::RequestId;
 use crate::client::r#async::Client;
 use crate::common::test_utils::helpers::{
-    binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, TEST_ACCOUNT,
+    binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, wait_for_async, TEST_ACCOUNT,
 };
 use crate::market_data::realtime::common::encode_request_market_data_type;
 use crate::market_data::MarketDataType;
@@ -450,17 +450,6 @@ impl AsyncReconnect for TestSocket {
 
 impl AsyncStream for TestSocket {}
 
-/// Poll `condition` until it holds, failing rather than hanging.
-async fn wait_for(label: &str, condition: impl Fn() -> bool) {
-    tokio::time::timeout(Duration::from_secs(10), async {
-        while !condition() {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-    })
-    .await
-    .unwrap_or_else(|_| panic!("timed out waiting for {label}"));
-}
-
 /// A shutdown requested while `reconnect` is waiting out its backoff must end
 /// the wait and return `Error::Shutdown`, not run the whole Fibonacci
 /// schedule. With `max_reconnect_attempts = None` the pre-fix loop never
@@ -478,7 +467,7 @@ async fn reconnect_returns_shutdown_while_waiting_out_backoff() {
     let reconnect_task = tokio::spawn(async move { conn_for_task.reconnect().await });
 
     // The first backoff delay is a second; request shutdown well inside it.
-    wait_for("reconnect backoff to start", || socket.sleep_started()).await;
+    wait_for_async("reconnect backoff to start", || socket.sleep_started()).await;
     let requested_at = Instant::now();
     shutdown.request();
 
@@ -519,7 +508,7 @@ async fn dispatcher_task_finishes_when_shutdown_requested_during_reconnect() {
     // Break the read: the dispatcher enters reconnect, waits out its backoff
     // and blocks on the gated connect.
     stream.hang_up();
-    wait_for("reconnect to start", || socket.reconnect_started()).await;
+    wait_for_async("reconnect to start", || socket.reconnect_started()).await;
 
     // Request shutdown the way `Client::drop` does, then let the connect and
     // its handshake replay succeed.
@@ -564,7 +553,7 @@ async fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
     // Break the read: the dispatcher enters reconnect and blocks on the gated
     // connect, which only `release` below completes.
     stream.hang_up();
-    wait_for("reconnect to start", || socket.reconnect_started()).await;
+    wait_for_async("reconnect to start", || socket.reconnect_started()).await;
 
     let item = tokio::time::timeout(Duration::from_secs(5), subscription.next())
         .await
@@ -578,7 +567,7 @@ async fn in_flight_subscription_is_reset_before_the_reconnect_completes() {
     push_handshake(&stream);
     socket.release();
 
-    wait_for("session to report connected", || message_bus.is_connected()).await;
+    wait_for_async("session to report connected", || message_bus.is_connected()).await;
 
     message_bus.request_shutdown_sync();
     tokio::time::timeout(Duration::from_secs(10), message_bus.ensure_shutdown())
@@ -614,11 +603,11 @@ async fn one_shot_request_is_retried_after_the_reconnect() {
     let caller = Arc::clone(&client);
     let call = tokio::spawn(async move { caller.managed_accounts().await });
 
-    wait_for("the first request", || count_writes(&stream, &request) == 1).await;
+    wait_for_async("the first request", || count_writes(&stream, &request) == 1).await;
 
     // Break the connection while the one-shot is waiting for its answer.
     stream.hang_up();
-    wait_for("reconnect to start", || socket.reconnect_started()).await;
+    wait_for_async("reconnect to start", || socket.reconnect_started()).await;
 
     // Nothing was resent into the reconnect: the retry is parked in
     // `wait_connected`.
@@ -628,7 +617,7 @@ async fn one_shot_request_is_retried_after_the_reconnect() {
     push_handshake(&stream);
     socket.release();
 
-    wait_for("the retried request", || count_writes(&stream, &request) == 2).await;
+    wait_for_async("the retried request", || count_writes(&stream, &request) == 2).await;
     stream.push_inbound(managed_accounts_frame(TEST_ACCOUNT));
 
     let accounts = tokio::time::timeout(Duration::from_secs(10), call)
