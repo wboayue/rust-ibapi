@@ -262,7 +262,8 @@ pub struct PnLSingle {
     /// `None` when TWS omits the figure or sends `f64::MAX` (unset).
     pub daily_pnl: Option<f64>,
     /// UnrealizedPnL is the total unrealized PnL for the position (since inception) updating in real time.
-    /// `None` when TWS omits the figure or sends `f64::MAX` (unset).
+    /// `None` when TWS omits the figure or sends `f64::MAX` (unset). TWS omits it for a flat
+    /// position (live 2026-11-05, see `docs/wire-facts/accounts.md`).
     pub unrealized_pnl: Option<f64>,
     /// RealizedPnL is the realized PnL for the position.
     /// `None` when TWS omits the figure or sends `f64::MAX` (unset).

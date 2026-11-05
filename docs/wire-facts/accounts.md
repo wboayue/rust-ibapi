@@ -14,3 +14,17 @@ Positions and PnL. End-marker behavior for account streams is in
 - `pnl_single` for a never-held conid sends no frame at all (held ones get a 2150 notice
   first).
 - **Not probed:** PortfolioValue (forex is not in the portfolio; needs STK in RTH).
+
+### Unset PnL figures are omitted, not `f64::MAX`
+
+*Live 2026-11-05 off-hours (16:51 ET), paper, server 226; #1170.*
+
+- `pnl` on the account: the PnL frame carried all three figures (tags 2–4); `unrealizedPnL`
+  was an explicit `0.0`.
+- `pnl_single` on two flat futures positions (NQ, ES; `position = "0"`): each PnLSingle frame
+  carried tags 1, 2, 3, 5, 6 and no tag 4, so `unrealizedPnL` is left out of the frame. `value`
+  was an explicit `0.0`. Each frame came after a 2150 notice.
+- No frame carried `f64::MAX`. The C# decoder substitutes `double.MaxValue` for a missing
+  field (`HasUnrealizedPnL` false), so the sentinel C# callers see is the client's, not TWS's.
+- **Not probed:** an open (non-flat) position, and RTH updates. Which figures TWS omits for a
+  held position is unknown.
