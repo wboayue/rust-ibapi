@@ -270,7 +270,7 @@ pub(crate) fn decode_market_depth_l2_proto(msg: crate::proto::MarketDepthL2) -> 
         side: data.side.unwrap_or_default().into(),
         price: data.price.unwrap_or_default(),
         size: parse_decimal_or_zero(data.size.as_deref())?,
-        smart_depth: data.is_smart_depth.unwrap_or_default(),
+        is_smart_depth: data.is_smart_depth.unwrap_or_default(),
     })
 }
 
