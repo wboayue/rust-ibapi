@@ -43,7 +43,7 @@ The macros in `src/` today (`grep -rn 'macro_rules!' src --include=*.rs`):
 |---|---|---|
 | `impl_str_partial_eq!` | `macros.rs` | Case 1: `impl PartialEq<Symbol> for str` cannot be blanket. 3 newtypes × 4 directions |
 | `impl_wire_enum!` | `macros.rs` | Case 1: `Display` / `FromStr` / `ToField` are foreign traits. The `as_str` / `from_wire` tables stay in plain Rust; only the plumbing expands |
-| `impl_wire_code!` | `macros.rs` | Case 1: `From<T> for i32` cannot be blanket (orphan rule). 13 integer enums (11 two-way pairs + 2 one-way); one `Variant = code` table writes both directions, which hand-written pairs kept twice |
+| `impl_wire_code!` | `macros.rs` | Case 1: `From<T> for i32` cannot be blanket (orphan rule). 14 integer enums (12 two-way pairs + 2 one-way); one `Variant = code` table writes both directions, which hand-written pairs kept twice |
 | `string_newtype_surface!` | `contracts/types_tests.rs` | Case 2: calls inherent `<$t>::new` and `.as_str()` |
 | `single_req_id_request_builder!`, `request_id_response_builder!`, `empty_request_builder!` | `testdata/builders/mod.rs` | Case 3: a new named struct per fixture |
 | `encode_cancel_by_id!`, `encode_empty_proto!` | `proto/encoders.rs` | Case 3: a distinct `proto::` struct literal per call; no trait covers "prost message with a `req_id` field" |

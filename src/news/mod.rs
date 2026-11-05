@@ -61,27 +61,11 @@ pub enum BulletinType {
     Unknown(i32),
 }
 
-impl From<BulletinType> for i32 {
-    fn from(value: BulletinType) -> i32 {
-        match value {
-            BulletinType::Regular => 1,
-            BulletinType::ExchangeUnavailable => 2,
-            BulletinType::ExchangeAvailable => 3,
-            BulletinType::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for BulletinType {
-    fn from(value: i32) -> Self {
-        match value {
-            1 => BulletinType::Regular,
-            2 => BulletinType::ExchangeUnavailable,
-            3 => BulletinType::ExchangeAvailable,
-            code => BulletinType::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(BulletinType {
+    Regular = 1,
+    ExchangeUnavailable = 2,
+    ExchangeAvailable = 3,
+});
 
 /// Returns news headlines for requested contracts.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
