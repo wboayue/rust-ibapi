@@ -325,7 +325,7 @@ The compiler finds every use. It does not catch the serialized form: `MarketDept
 
 ### 15. PnL figures are `Option<f64>`
 
-`PnLSingle::daily_pnl`, `unrealized_pnl`, `realized_pnl` and `value`, and `PnL::daily_pnl`, were `f64`. A figure TWS did not send decoded as `0.0`, and a figure TWS sent as IB's unset sentinel came through as `1.7976931348623157e308` (`f64::MAX`), so neither could be distinguished from a real value. They are now `Option<f64>`, `None` in both cases, as `PnL::unrealized_pnl` and `realized_pnl` already were.
+`PnLSingle::daily_pnl`, `unrealized_pnl`, `realized_pnl` and `value`, and `PnL::daily_pnl`, were `f64`. A figure TWS left out of the frame decoded as `0.0`, indistinguishable from a real zero. TWS leaves out `unrealized_pnl` for a flat position, for one. They are now `Option<f64>`, `None` for a figure TWS left out, as `PnL::unrealized_pnl` and `realized_pnl` already were.
 
 ```rust,ignore
 // 5.x
@@ -340,7 +340,7 @@ let daily = pnl.daily_pnl.unwrap_or(0.0); // where the old numeric reading is wa
 
 Handle `None`, or call `unwrap_or(0.0)` where the old reading of an unset figure as `0.0` is wanted. The compiler finds every use of the five fields as `f64`.
 
-The compiler does not catch the serialized form. `PnL` and `PnLSingle` derive `Serialize` / `Deserialize`, and an unset figure now serializes as `null`, where it was a number; the `utoipa` schemas mark the five fields nullable. JSON written by 5.x still deserializes, but an unset figure stored as `0` or `1.7976931348623157e308` reads back as `Some(0.0)` or `Some(f64::MAX)`, not `None`.
+The compiler does not catch the serialized form. `PnL` and `PnLSingle` derive `Serialize` / `Deserialize`, and an unset figure now serializes as `null`, where it was a number; the `utoipa` schemas mark the five fields nullable. JSON written by 5.x still deserializes, but an unset figure stored as `0` reads back as `Some(0.0)`, not `None`.
 
 ### 17. `Order::fa_profile`, `basis_points` and `basis_points_type` are removed
 
