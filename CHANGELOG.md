@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
 - `Execution::option_exercise_type` (`OptionExerciseType`) exposes TWS `optExerciseOrLapseType`; `None` when TWS sends `-1` or omits it. A struct literal of `Execution` without `..Default::default()` must add the field (#1175).
 - `Liquidity` and `OptionExerciseType` implement `From<T> for i32`, like the other integer-coded enums; `Liquidity` is now `Copy` and `Eq`.
-- `HistoricalData::trim_to(start, end)` keeps the bars in `[start, end)` and reports that range as the window, the trimming `fetch()` applies after `between()`. For bars read some other way, such as from a subscription.
+- `HistoricalData::trim_to(start, end)` keeps the bars in `[start, end)` and reports that range as the window, the trimming `fetch()` applies after `between()`. For bars read some other way, such as from a subscription (#1188).
 
 ### Changed
 
