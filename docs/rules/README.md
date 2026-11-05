@@ -66,7 +66,9 @@ when a future change could reopen the arc.
 - `related` holds ids; the validator resolves them.
 - **No private notes.** A node never cites an agent's memory files or a `plans/` file as
   evidence: only one machine can resolve the reference, so it is dead for every other reader and
-  no gate can check it. Evidence that matters goes into `## Why` or `## Precedents`. Links run
+  no gate can check it. Naming a `plans/` file as where a process keeps its working list
+  (`plans/live-checks.md` in [plans and issues](workflow/plans-and-issues.md)) is not evidence
+  and is fine. Evidence that matters goes into `## Why` or `## Precedents`. Links run
   the other way: private notes may cite node ids. The validator rejects a `memory:` key.
 
 ### ⚠️ `AGENTS.md` must never `@`-import these files
@@ -81,12 +83,10 @@ avoid. Use plain markdown links. `just rules-check` enforces this.
 just rules-check
 ```
 
-Checks that every markdown link resolves, every `id` matches its filename, every `related`
-id names a real node, that `AGENTS.md` contains no `@`-imports, that no node cites a
-`file.rs:NNN` line number, and that no node carries a `memory:` key.
-
-Link resolution covers `AGENTS.md` and `docs/rules/**`. `plans/` is untracked and out of
-scope; see [plans and issues](workflow/plans-and-issues.md).
+What it checks, and which files it scans, is listed once, in the header of
+[`tools/check-rules-graph.sh`](../../tools/check-rules-graph.sh); add a check there and the
+list grows with it. `plans/` is untracked and out of scope; see
+[plans and issues](workflow/plans-and-issues.md).
 
 **Cite names, not line numbers.** `src/protocol_tests.rs:5` is accurate until the next edit
 to that file and nothing recomputes it — the same silent decay that made rule numbers
