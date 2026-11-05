@@ -42,12 +42,21 @@ pub(crate) trait AsyncReconnect {
     /// Wait out the reconnect backoff, returning early once `shutdown` is
     /// requested. In-memory test streams return immediately.
     async fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal);
+    /// Abandon the current connection: pending and later reads and writes on
+    /// it fail with [`Error::ConnectionReset`] until `reconnect` replaces it.
+    /// Unlike [`AsyncIo::close`], not terminal. The dispatcher calls it on a
+    /// lost connection, so a write stuck on a peer that stopped reading cannot
+    /// hold up the reconnect (a TCP write has no timeout). The default does
+    /// nothing, for in-memory streams, whose writes never block. Twin of the
+    /// blocking `Reconnect::sever`.
+    fn sever(&self) {}
 }
 
 pub(crate) trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static + std::fmt::Debug {}
 
 /// Where an [`AsyncTcpSocket`] stands. `Live` and `Broken` alternate: a write
-/// cut off mid-frame breaks the socket, `reconnect` makes it live again.
+/// cut off mid-frame or a `sever` breaks the socket, `reconnect` makes it live
+/// again.
 /// `Closed` is terminal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SocketState {
@@ -77,8 +86,9 @@ pub(crate) struct AsyncTcpSocket {
     writer: Mutex<Option<OwnedWriteHalf>>,
     /// Anything but `Live` wakes pending reads and writes and turns away
     /// whoever acquires a half after it. `Broken` once a write stops mid-frame
-    /// (see [`FrameProgress`]), so reads fail and the dispatcher reconnects;
-    /// `Closed` wakes the I/O holding the locks so `close` can take them.
+    /// (see [`FrameProgress`]), so reads fail and the dispatcher reconnects,
+    /// or once the dispatcher severs a lost connection; `Closed` wakes the I/O
+    /// holding the locks so `close` can take them.
     state: watch::Sender<SocketState>,
     connection_url: String,
     tcp_no_delay: bool,
@@ -256,6 +266,12 @@ impl AsyncReconnect for AsyncTcpSocket {
 
     async fn sleep(&self, duration: Duration, shutdown: &ShutdownSignal) {
         shutdown.sleep(duration).await
+    }
+
+    /// `Broken` wakes a write pending on the writer, as a cut-off frame
+    /// does; `reconnect` sets `Live` again.
+    fn sever(&self) {
+        self.set_state(SocketState::Broken);
     }
 }
 
