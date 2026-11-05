@@ -1,6 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::messages::IncomingMessages;
+use crate::news::BulletinType;
 use time::macros::datetime;
 
 #[test]
@@ -14,9 +15,23 @@ fn decode_news_bulletin_proto_works() {
 
     let result = decode_news_bulletin_proto(proto_msg).unwrap();
     assert_eq!(result.message_id, 42);
-    assert_eq!(result.message_type, 1);
+    assert_eq!(result.message_type, BulletinType::Regular);
     assert_eq!(result.message, "Market closed early");
     assert_eq!(result.exchange, "NYSE");
+}
+
+/// TWS may omit the type; like the reference client (`EDecoder.cs`), it reads as code 0.
+#[test]
+fn decode_news_bulletin_omitted_type_is_unknown_zero() {
+    let proto_msg = crate::proto::NewsBulletin {
+        news_msg_id: Some(42),
+        news_msg_type: None,
+        news_message: Some("Market closed early".into()),
+        originating_exch: Some("NYSE".into()),
+    };
+
+    let result = decode_news_bulletin_proto(proto_msg).unwrap();
+    assert_eq!(result.message_type, BulletinType::Unknown(0));
 }
 
 #[test]

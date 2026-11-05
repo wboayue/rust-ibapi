@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::news::ArticleType;
+use crate::news::{ArticleType, BulletinType};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::market_data_request;
@@ -65,7 +65,7 @@ async fn news_bulletins() {
         panic!("expected news bulletin");
     };
     assert_eq!(bulletin.message_id, 1);
-    assert_eq!(bulletin.message_type, 2);
+    assert_eq!(bulletin.message_type, BulletinType::ExchangeUnavailable);
     assert_eq!(bulletin.message, "Message text");
     assert_eq!(bulletin.exchange, "NASDAQ");
 }
