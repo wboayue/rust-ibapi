@@ -162,7 +162,18 @@ fn subscription_with_capacity<T: StreamDecoder<T>>(
     order_id: Option<i32>,
     context: DecoderContext,
 ) -> Fixture<T> {
-    let bus = Arc::new(MessageBusStub::default());
+    subscription_on(MessageBusStub::default(), capacity, request_id, order_id, context)
+}
+
+/// [`subscription_with_capacity`] over `bus`.
+fn subscription_on<T: StreamDecoder<T>>(
+    bus: MessageBusStub,
+    capacity: usize,
+    request_id: Option<i32>,
+    order_id: Option<i32>,
+    context: DecoderContext,
+) -> Fixture<T> {
+    let bus = Arc::new(bus);
     let (tx, rx) = broadcast::channel(capacity);
     let internal = AsyncInternalSubscription::new(rx);
     Fixture {
@@ -1177,6 +1188,11 @@ fn drain_fixture() -> Fixture<CancellableEndItem> {
     subscription_with::<CancellableEndItem>(Some(123), None, DecoderContext::default())
 }
 
+/// [`drain_fixture`] over `bus`.
+fn drain_fixture_on(bus: MessageBusStub) -> Fixture<CancellableEndItem> {
+    subscription_on(bus, 100, Some(123), None, DecoderContext::default())
+}
+
 #[tokio::test]
 async fn drain_after_end_writes_nothing() {
     let mut f = drain_fixture();
@@ -1242,7 +1258,7 @@ async fn drain_deadline_is_unconfirmed() {
 }
 
 #[tokio::test]
-async fn drain_after_error_is_unconfirmed_and_cancels_on_drop() {
+async fn drain_after_error_is_unconfirmed_and_writes_cancel() {
     let mut f = drain_fixture();
     f.tx.send(RoutedItem::Error(Error::BufferLimitExceeded { limit: 1 })).unwrap();
     assert!(matches!(f.subscription.next().await, Some(Err(Error::BufferLimitExceeded { .. }))));
@@ -1251,11 +1267,52 @@ async fn drain_after_error_is_unconfirmed_and_cancels_on_drop() {
     assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Unconfirmed);
     assert!(started.elapsed() < Duration::from_secs(1), "no wait for evidence that can't arrive");
     settle().await;
-    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "the drop writes the cancel");
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel, not repeated on drop");
+}
+
+#[tokio::test]
+async fn drain_returns_cancel_write_error() {
+    let f = drain_fixture_on(MessageBusStub::default().with_failing_sends());
+
+    assert!(matches!(
+        f.subscription.cancel_and_drain(drain_deadline()).await,
+        Err(Error::ConnectionReset)
+    ));
+    settle().await;
+    assert_eq!(f.bus.request_messages().len(), 1, "no second write on drop");
+}
+
+/// A local error doesn't end the request at TWS: the cancel is still due, and
+/// its failure reaches the caller rather than the drop's log.
+#[tokio::test]
+async fn drain_after_error_returns_cancel_write_error() {
+    let mut f = drain_fixture_on(MessageBusStub::default().with_failing_sends());
+    f.tx.send(RoutedItem::Error(Error::BufferLimitExceeded { limit: 1 })).unwrap();
+    assert!(matches!(f.subscription.next().await, Some(Err(Error::BufferLimitExceeded { .. }))));
+
+    assert!(matches!(
+        f.subscription.cancel_and_drain(drain_deadline()).await,
+        Err(Error::ConnectionReset)
+    ));
+    settle().await;
+    assert_eq!(f.bus.request_messages().len(), 1, "no second write on drop");
+}
+
+/// The deadline bounds a stuck cancel write too.
+#[tokio::test]
+async fn drain_deadline_bounds_cancel_write() {
+    let f = drain_fixture_on(MessageBusStub::default().with_stalled_sends());
+
+    let started = std::time::Instant::now();
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(50);
+    assert_eq!(f.subscription.cancel_and_drain(deadline).await.unwrap(), Drained::Unconfirmed);
+    assert!(started.elapsed() < Duration::from_secs(1), "no wait past the deadline");
+    settle().await;
+    assert_eq!(f.bus.request_messages().len(), 1, "no second write on drop");
 }
 
 /// A rejection read before the drain is still TWS's answer; the decoder
-/// doesn't opt into `rejection_ends_request`, so the drop writes the cancel.
+/// doesn't opt into `rejection_ends_request`, so the cancel is written.
 #[tokio::test]
 async fn drain_after_read_rejection_is_rejected() {
     let mut f = drain_fixture();
@@ -1268,7 +1325,7 @@ async fn drain_after_read_rejection_is_rejected() {
         Drained::Rejected(notice)
     );
     settle().await;
-    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "the drop writes the cancel");
+    assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel, not repeated on drop");
 }
 
 /// Without a request id the error may be a request-less one fanned out to

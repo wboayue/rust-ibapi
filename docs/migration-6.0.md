@@ -343,3 +343,9 @@ let order = Order {
 ```
 
 The compiler finds every use of the three fields. It does not catch the serialized form: a serialized `Order` no longer has the `fa_profile`, `basis_points` and `basis_points_type` keys. `Order` does not use `deny_unknown_fields`, so an `Order` serialized by 5.x still deserializes and the three keys are ignored.
+
+### 19. `cancel_and_drain` returns a failed cancel write as `Err`
+
+`Subscription::cancel_and_drain` (sync and async) logged a failed cancel write and went on draining, so the failure showed up later, if at all, as `Drained::Unconfirmed` or a connection reset. It now returns the write's error. The cancel is also written when the stream had already ended with an error on our side (a decode error, `Error::BufferLimitExceeded`), where 5.x left it to the drop and its log. A `Drained::Unconfirmed` arm that stood for "the write may have failed" now gets those cases as `Err`; treat the request id as possibly live there too.
+
+In async, the deadline now bounds the write as well. A write still pending when it passes gives `Drained::Unconfirmed` and finishes in its own task, where a failure is only logged. `cancel()` still returns `()`.
