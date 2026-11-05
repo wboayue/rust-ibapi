@@ -74,11 +74,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match depth_update? {
             MarketDepths::MarketDepth(depth) => {
                 println!(
-                    "Update #{}: {} {} at position {}",
-                    update_count,
-                    operation_label(depth.operation),
-                    side_label(depth.side),
-                    depth.position
+                    "Update #{}: {:?} {:?} at position {}",
+                    update_count, depth.operation, depth.side, depth.position
                 );
 
                 // Update our order book
@@ -124,12 +121,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             MarketDepths::MarketDepthL2(depth) => {
                 println!(
-                    "L2 Update: {} {} at {} - ${:.2} x {:.0}",
-                    depth.market_maker,
-                    side_label(depth.side),
-                    depth.position,
-                    depth.price,
-                    depth.size
+                    "L2 Update: {} {:?} at {} - ${:.2} x {:.0}",
+                    depth.market_maker, depth.side, depth.position, depth.price, depth.size
                 );
             }
             MarketDepths::Reset => {
@@ -143,21 +136,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nReceived {update_count} updates. Example completed!");
     Ok(())
-}
-
-fn side_label(side: DepthSide) -> &'static str {
-    match side {
-        DepthSide::Bid => "Bid",
-        DepthSide::Ask => "Ask",
-        DepthSide::Unknown(_) => "Unknown",
-    }
-}
-
-fn operation_label(operation: DepthOperation) -> &'static str {
-    match operation {
-        DepthOperation::Insert => "Insert",
-        DepthOperation::Update => "Update",
-        DepthOperation::Delete => "Delete",
-        DepthOperation::Unknown(_) => "Unknown",
-    }
 }

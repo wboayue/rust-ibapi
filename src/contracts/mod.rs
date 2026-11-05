@@ -566,27 +566,11 @@ pub enum ComboLegOpenClose {
     Unknown(i32),
 }
 
-impl From<ComboLegOpenClose> for i32 {
-    fn from(value: ComboLegOpenClose) -> i32 {
-        match value {
-            ComboLegOpenClose::Same => 0,
-            ComboLegOpenClose::Open => 1,
-            ComboLegOpenClose::Close => 2,
-            ComboLegOpenClose::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for ComboLegOpenClose {
-    fn from(value: i32) -> Self {
-        match value {
-            0 => Self::Same,
-            1 => Self::Open,
-            2 => Self::Close,
-            code => Self::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(ComboLegOpenClose {
+    Same = 0,
+    Open = 1,
+    Close = 2,
+});
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

@@ -1054,29 +1054,12 @@ pub enum OcaType {
     Unknown(i32),
 }
 
-impl From<OcaType> for i32 {
-    fn from(value: OcaType) -> i32 {
-        match value {
-            OcaType::None => 0,
-            OcaType::CancelWithBlock => 1,
-            OcaType::ReduceWithBlock => 2,
-            OcaType::ReduceWithoutBlock => 3,
-            OcaType::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for OcaType {
-    fn from(value: i32) -> Self {
-        match value {
-            0 => OcaType::None,
-            1 => OcaType::CancelWithBlock,
-            2 => OcaType::ReduceWithBlock,
-            3 => OcaType::ReduceWithoutBlock,
-            code => OcaType::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(OcaType {
+    None = 0,
+    CancelWithBlock = 1,
+    ReduceWithBlock = 2,
+    ReduceWithoutBlock = 3,
+});
 
 /// The order's origin. Identifies the type of customer from which the order originated.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -1091,25 +1074,10 @@ pub enum OrderOrigin {
     Unknown(i32),
 }
 
-impl From<OrderOrigin> for i32 {
-    fn from(value: OrderOrigin) -> i32 {
-        match value {
-            OrderOrigin::Customer => 0,
-            OrderOrigin::Firm => 1,
-            OrderOrigin::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for OrderOrigin {
-    fn from(value: i32) -> Self {
-        match value {
-            0 => OrderOrigin::Customer,
-            1 => OrderOrigin::Firm,
-            code => OrderOrigin::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(OrderOrigin {
+    Customer = 0,
+    Firm = 1,
+});
 
 /// Specifies the short sale slot (for institutional short sales).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -1126,27 +1094,11 @@ pub enum ShortSaleSlot {
     Unknown(i32),
 }
 
-impl From<ShortSaleSlot> for i32 {
-    fn from(value: ShortSaleSlot) -> i32 {
-        match value {
-            ShortSaleSlot::None => 0,
-            ShortSaleSlot::Broker => 1,
-            ShortSaleSlot::ThirdParty => 2,
-            ShortSaleSlot::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for ShortSaleSlot {
-    fn from(value: i32) -> Self {
-        match value {
-            0 => ShortSaleSlot::None,
-            1 => ShortSaleSlot::Broker,
-            2 => ShortSaleSlot::ThirdParty,
-            code => ShortSaleSlot::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(ShortSaleSlot {
+    None = 0,
+    Broker = 1,
+    ThirdParty = 2,
+});
 
 /// Volatility type for VOL orders.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -1160,25 +1112,10 @@ pub enum VolatilityType {
     Unknown(i32),
 }
 
-impl From<VolatilityType> for i32 {
-    fn from(value: VolatilityType) -> i32 {
-        match value {
-            VolatilityType::Daily => 1,
-            VolatilityType::Annual => 2,
-            VolatilityType::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for VolatilityType {
-    fn from(value: i32) -> Self {
-        match value {
-            1 => VolatilityType::Daily,
-            2 => VolatilityType::Annual,
-            code => VolatilityType::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(VolatilityType {
+    Daily = 1,
+    Annual = 2,
+});
 
 /// Reference price type for VOL orders.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -1192,25 +1129,10 @@ pub enum ReferencePriceType {
     Unknown(i32),
 }
 
-impl From<ReferencePriceType> for i32 {
-    fn from(value: ReferencePriceType) -> i32 {
-        match value {
-            ReferencePriceType::AverageOfNBBO => 1,
-            ReferencePriceType::NBBO => 2,
-            ReferencePriceType::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for ReferencePriceType {
-    fn from(value: i32) -> Self {
-        match value {
-            1 => ReferencePriceType::AverageOfNBBO,
-            2 => ReferencePriceType::NBBO,
-            code => ReferencePriceType::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(ReferencePriceType {
+    AverageOfNBBO = 1,
+    NBBO = 2,
+});
 
 /// What a what-if order checks ([`Order::what_if_type`]).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -1225,25 +1147,10 @@ pub enum WhatIfType {
     Unknown(i32),
 }
 
-impl From<WhatIfType> for i32 {
-    fn from(value: WhatIfType) -> i32 {
-        match value {
-            WhatIfType::FullOrderCheck => 0,
-            WhatIfType::MarginRequirements => 1,
-            WhatIfType::Unknown(code) => code,
-        }
-    }
-}
-
-impl From<i32> for WhatIfType {
-    fn from(value: i32) -> Self {
-        match value {
-            0 => WhatIfType::FullOrderCheck,
-            1 => WhatIfType::MarginRequirements,
-            code => WhatIfType::Unknown(code),
-        }
-    }
-}
+impl_wire_code!(WhatIfType {
+    FullOrderCheck = 0,
+    MarginRequirements = 1,
+});
 
 /// NYSE Rule 80A designations for institutional trading.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -1584,7 +1491,7 @@ pub struct CommissionAndFeesReport {
 
 /// Liquidity types for executions.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Liquidity {
     /// No liquidity information. Wire code `0`.
     #[default]
@@ -1599,17 +1506,12 @@ pub enum Liquidity {
     Unknown(i32),
 }
 
-impl From<i32> for Liquidity {
-    fn from(val: i32) -> Self {
-        match val {
-            0 => Liquidity::None,
-            1 => Liquidity::AddedLiquidity,
-            2 => Liquidity::RemovedLiquidity,
-            3 => Liquidity::LiquidityRoutedOut,
-            value => Liquidity::Unknown(value),
-        }
-    }
-}
+impl_wire_code!(Liquidity {
+    None = 0,
+    AddedLiquidity = 1,
+    RemovedLiquidity = 2,
+    LiquidityRoutedOut = 3,
+});
 
 /// Option exercise or lapse type of an execution (TWS `optExerciseOrLapseType`).
 ///
@@ -1641,22 +1543,17 @@ pub enum OptionExerciseType {
     Unknown(i32),
 }
 
-impl From<i32> for OptionExerciseType {
-    fn from(val: i32) -> Self {
-        match val {
-            -1 => OptionExerciseType::None,
-            1 => OptionExerciseType::Exercise,
-            2 => OptionExerciseType::Lapse,
-            3 => OptionExerciseType::DoNothing,
-            100 => OptionExerciseType::Assigned,
-            101 => OptionExerciseType::AutoexerciseClearing,
-            102 => OptionExerciseType::Expired,
-            200 => OptionExerciseType::AutoexerciseTrading,
-            203 => OptionExerciseType::Netting,
-            value => OptionExerciseType::Unknown(value),
-        }
-    }
-}
+impl_wire_code!(OptionExerciseType {
+    None = -1,
+    Exercise = 1,
+    Lapse = 2,
+    DoNothing = 3,
+    Assigned = 100,
+    AutoexerciseClearing = 101,
+    Expired = 102,
+    AutoexerciseTrading = 200,
+    Netting = 203,
+});
 
 /// Describes an order's execution.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
