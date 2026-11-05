@@ -640,7 +640,7 @@ fn order_update_stream() {
             IncomingMessages::OrderStatus,
             order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_proto(),
         ),
-        proto_response(IncomingMessages::ExecutionData, execution_data().encode_proto()),
+        proto_response(IncomingMessages::ExecutionData, execution_data().option_exercise_type(102).encode_proto()),
         proto_response(IncomingMessages::CommissionsReport, commission_report().encode_proto()),
     ]));
 
@@ -675,6 +675,11 @@ fn order_update_stream() {
         assert_eq!(exec_data.execution.shares, 100.0, "execution.shares");
         assert_eq!(exec_data.execution.price, 196.52, "execution.price");
         assert_eq!(exec_data.execution.side, ExecutionSide::Bought, "execution.side");
+        assert_eq!(
+            exec_data.execution.option_exercise_type,
+            crate::orders::OptionExerciseType::Expired,
+            "execution.option_exercise_type"
+        );
     } else {
         assert!(false, "expected execution data notification");
     }

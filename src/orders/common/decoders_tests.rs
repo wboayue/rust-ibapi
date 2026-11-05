@@ -4,7 +4,7 @@ use super::*;
 use crate::common::test_utils::helpers::{assert_missing_field, assert_rejects_text_framing};
 use crate::contracts::Symbol;
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, OrderStatusKind, UnknownCondition};
+use crate::orders::{Action, OptionExerciseType, OrderStatusKind, UnknownCondition};
 use crate::testdata::builders::orders::{order_bound, OrderBoundResponse};
 use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -1011,6 +1011,37 @@ fn decode_execution_rejects_malformed_shares() {
         ..Default::default()
     };
     assert_decimal_parse_error(decode_execution(&proto_exec), "abc");
+}
+
+#[test]
+fn decode_execution_option_exercise_type() {
+    let decode = |code: Option<i32>| {
+        let proto_exec = proto::Execution {
+            side: Some("BOT".into()),
+            opt_exercise_or_lapse_type: code,
+            ..Default::default()
+        };
+        decode_execution(&proto_exec).unwrap().option_exercise_type
+    };
+
+    // Table from Execution.cs `COptionExerciseType`.
+    let cases = [
+        (-1, OptionExerciseType::None),
+        (1, OptionExerciseType::Exercise),
+        (2, OptionExerciseType::Lapse),
+        (3, OptionExerciseType::DoNothing),
+        (100, OptionExerciseType::Assigned),
+        (101, OptionExerciseType::AutoexerciseClearing),
+        (102, OptionExerciseType::Expired),
+        (200, OptionExerciseType::AutoexerciseTrading),
+        (203, OptionExerciseType::Netting),
+        (0, OptionExerciseType::Unknown(0)),
+        (999, OptionExerciseType::Unknown(999)),
+    ];
+    for (code, expected) in cases {
+        assert_eq!(decode(Some(code)), expected, "code {code}");
+    }
+    assert_eq!(decode(None), OptionExerciseType::None, "absent field");
 }
 
 #[test]
