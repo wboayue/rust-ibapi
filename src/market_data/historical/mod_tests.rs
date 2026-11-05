@@ -245,3 +245,73 @@ fn bar_timestamp_sort() {
     assert_eq!(timestamps[1], BarTimestamp::Date(time::macros::date!(2023 - 04 - 10)));
     assert_eq!(timestamps[2], BarTimestamp::DateTime(time::macros::datetime!(2023-04-11 12:00:00 UTC)));
 }
+
+fn trim_bar(date: BarTimestamp) -> Bar {
+    Bar {
+        date,
+        open: 1.0,
+        high: 1.0,
+        low: 1.0,
+        close: 1.0,
+        volume: 0.0,
+        wap: 0.0,
+        count: 0,
+    }
+}
+
+fn trim_data(dates: &[BarTimestamp]) -> HistoricalData {
+    HistoricalData {
+        start: time::macros::datetime!(2026-04-01 0:00 UTC),
+        end: time::macros::datetime!(2026-05-01 0:00 UTC),
+        bars: dates.iter().copied().map(trim_bar).collect(),
+    }
+}
+
+fn bar_dates(data: &HistoricalData) -> Vec<BarTimestamp> {
+    data.bars.iter().map(|bar| bar.date).collect()
+}
+
+#[test]
+fn trim_to_keeps_start_and_drops_end() {
+    use time::macros::datetime;
+    let (start, end) = (datetime!(2026-04-15 0:00 UTC), datetime!(2026-04-16 0:00 UTC));
+    let dates = [datetime!(2026-04-14 23:59 UTC), start, datetime!(2026-04-15 13:30 UTC), end].map(BarTimestamp::from);
+
+    let trimmed = trim_data(&dates).trim_to(start, end);
+
+    assert_eq!(bar_dates(&trimmed), vec![BarTimestamp::from(start), dates[2]]);
+    assert_eq!((trimmed.start, trimmed.end), (start, end));
+}
+
+#[test]
+fn trim_to_outside_every_bar_is_empty() {
+    use time::macros::datetime;
+    let (start, end) = (datetime!(2026-04-20 0:00 UTC), datetime!(2026-04-21 0:00 UTC));
+
+    let trimmed = trim_data(&[BarTimestamp::from(datetime!(2026-04-15 13:30 UTC))]).trim_to(start, end);
+
+    assert!(trimmed.bars.is_empty());
+    assert_eq!((trimmed.start, trimmed.end), (start, end));
+}
+
+#[test]
+fn trim_to_containing_every_bar_keeps_them() {
+    use time::macros::datetime;
+    let dates = [datetime!(2026-04-15 13:30 UTC), datetime!(2026-04-15 19:00 UTC)].map(BarTimestamp::from);
+    let data = trim_data(&dates);
+
+    let trimmed = data.clone().trim_to(data.start, data.end);
+
+    assert_eq!(trimmed, data);
+}
+
+/// A daily bar's date counts as midnight UTC.
+#[test]
+fn trim_to_daily_bars() {
+    use time::macros::{date, datetime};
+    let dates = [date!(2026 - 04 - 14), date!(2026 - 04 - 15), date!(2026 - 04 - 16)].map(BarTimestamp::from);
+
+    let trimmed = trim_data(&dates).trim_to(datetime!(2026-04-15 0:00 UTC), datetime!(2026-04-16 0:00 UTC));
+
+    assert_eq!(bar_dates(&trimmed), vec![BarTimestamp::from(date!(2026 - 04 - 15))]);
+}

@@ -445,6 +445,41 @@ pub struct HistoricalData {
     pub bars: Vec<Bar>,
 }
 
+impl HistoricalData {
+    /// Keeps the bars in `[start, end)` and reports that range as the window.
+    ///
+    /// IBKR counts a request's duration in trading time, so a range request
+    /// returns bars from before `start` too. [`fetch`](HistoricalDataBuilder::fetch)
+    /// after [`between`](HistoricalDataBuilder::between) trims for you; use
+    /// this on bars read from a subscription. A daily bar's
+    /// [`Date`](BarTimestamp::Date) counts as midnight UTC.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::market_data::historical::{Bar, BarTimestamp, HistoricalData};
+    /// use time::macros::datetime;
+    ///
+    /// let bar = |at| Bar { date: BarTimestamp::DateTime(at), open: 1.0, high: 1.0, low: 1.0, close: 1.0, volume: 0.0, wap: 0.0, count: 0 };
+    /// let data = HistoricalData {
+    ///     start: datetime!(2026-04-14 0:00 UTC),
+    ///     end: datetime!(2026-04-16 0:00 UTC),
+    ///     bars: vec![bar(datetime!(2026-04-14 19:00 UTC)), bar(datetime!(2026-04-15 13:30 UTC))],
+    /// };
+    ///
+    /// let trimmed = data.trim_to(datetime!(2026-04-15 0:00 UTC), datetime!(2026-04-16 0:00 UTC));
+    /// assert_eq!(trimmed.bars.len(), 1);
+    /// assert_eq!(trimmed.start, datetime!(2026-04-15 0:00 UTC));
+    /// ```
+    pub fn trim_to(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
+        let (first, last) = (BarTimestamp::from(start), BarTimestamp::from(end));
+        self.bars.retain(|bar| bar.date >= first && bar.date < last);
+        self.start = start;
+        self.end = end;
+        self
+    }
+}
+
 /// Update from historical data streaming with keepUpToDate=true.
 ///
 /// When requesting historical data with `keepUpToDate=true`, IBKR first sends
