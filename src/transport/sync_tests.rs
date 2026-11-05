@@ -982,7 +982,7 @@ fn dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     assert!(matches!(resp, Err(Error::ConnectionReset)), "got: {resp:?}");
     assert!(sub.try_next().is_none(), "subscription received a second notification");
 
-    assert!(matches!(bus.wait_connected(), Err(Error::ConnectionFailed)));
+    assert!(matches!(bus.wait_connected(None), Err(Error::ConnectionFailed)));
     let sent = bus.send_request(RequestId::nth(101), &[]).err();
     assert!(matches!(sent, Some(Error::ConnectionFailed)), "send_request: {sent:?}");
     // Streams that skip the send gate report the same reason.
@@ -1428,7 +1428,7 @@ fn send_after_shutdown_fails_with_shutdown() {
 
     let sent = bus.send_request(RequestId::nth(1), &[]).err();
     assert!(matches!(sent, Some(Error::Shutdown)), "send_request: {sent:?}");
-    assert!(matches!(bus.wait_connected(), Err(Error::Shutdown)));
+    assert!(matches!(bus.wait_connected(None), Err(Error::Shutdown)));
 }
 
 /// A notice stream opened after shutdown is already at end-of-stream, like
@@ -3573,7 +3573,7 @@ fn wait_connected_returns_shutdown_when_the_bus_shuts_down() {
     });
 
     let start = Instant::now();
-    let result = MessageBus::wait_connected(&*bus);
+    let result = MessageBus::wait_connected(&*bus, None);
     assert!(matches!(result, Err(Error::Shutdown)), "got: {result:?}");
     assert!(start.elapsed() < Duration::from_secs(5), "wait_connected did not return on shutdown");
 }

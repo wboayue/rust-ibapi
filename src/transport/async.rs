@@ -240,9 +240,10 @@ pub trait AsyncMessageBus: Send + Sync {
     fn request_shutdown_sync(&self);
 
     /// Resolve once the session is connected again, returning
-    /// [`Error::ConnectionFailed`] if the reconnect gave up, or
-    /// [`Error::Shutdown`] after a shutdown.
-    async fn wait_connected(&self) -> Result<(), Error>;
+    /// [`Error::ConnectionFailed`] if the reconnect gave up,
+    /// [`Error::Shutdown`] after a shutdown, or [`Error::Timeout`] if
+    /// `deadline` passes first.
+    async fn wait_connected(&self, deadline: Option<tokio::time::Instant>) -> Result<(), Error>;
 
     fn is_connected(&self) -> bool;
 
@@ -1257,8 +1258,8 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         self.request_shutdown();
     }
 
-    async fn wait_connected(&self) -> Result<(), Error> {
-        self.connection_state.wait_connected().await
+    async fn wait_connected(&self, deadline: Option<tokio::time::Instant>) -> Result<(), Error> {
+        self.connection_state.wait_connected(deadline).await
     }
 
     fn is_connected(&self) -> bool {

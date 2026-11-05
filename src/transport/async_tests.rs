@@ -2373,7 +2373,7 @@ async fn wait_connected_returns_shutdown_when_the_bus_shuts_down() {
         closer.request_shutdown_sync();
     });
 
-    let result = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected())
+    let result = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected(None))
         .await
         .expect("wait_connected did not return on shutdown");
     assert!(matches!(result, Err(Error::Shutdown)), "got: {result:?}");
@@ -3126,7 +3126,7 @@ async fn exhausted_reconnect_refuses_later_sends_with_connection_failed() {
         .expect("in-flight channel closed early");
     assert!(matches!(item, RoutedItem::Error(Error::ConnectionReset)), "in-flight: {item:?}");
 
-    let waited = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected())
+    let waited = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected(None))
         .await
         .expect("wait_connected did not return after the reconnect gave up");
     assert!(matches!(waited, Err(Error::ConnectionFailed)), "wait_connected: {waited:?}");
@@ -3151,7 +3151,7 @@ async fn send_after_shutdown_fails_with_shutdown() {
 
     let sent = bus.send_request(RequestId::nth(1), vec![]).await.err();
     assert!(matches!(sent, Some(Error::Shutdown)), "send_request: {sent:?}");
-    let waited = bus.wait_connected().await;
+    let waited = bus.wait_connected(None).await;
     assert!(matches!(waited, Err(Error::Shutdown)), "wait_connected: {waited:?}");
 }
 
