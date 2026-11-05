@@ -444,8 +444,14 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     /// | --- | --- |
     /// | [`Drained::Ended`] | TWS sent the end marker or a snapshot's end, before or after the cancel. Nothing is written if it had already been read. |
     /// | [`Drained::Rejected`] | TWS answered with an error for the request, before or during the drain. |
-    /// | [`Drained::Unconfirmed`] | The deadline passed, or the stream had already ended with an error on our side (such as [`Error::BufferLimitExceeded`]). Treat the id as possibly live. |
-    /// | `Err` | The connection reset or the client shut down meanwhile. |
+    /// | [`Drained::Unconfirmed`] | The deadline passed, even while the cancel was still being written, or the stream had already ended with an error on our side (such as [`Error::BufferLimitExceeded`]). Treat the id as possibly live. |
+    /// | `Err` | The cancel write failed, or the connection reset or the client shut down meanwhile. TWS's state is unknown. |
+    ///
+    /// The cancel is written whenever TWS may still be running the request,
+    /// after an error on our side too. A successful write means only that the
+    /// bytes went out: not that TWS acknowledged the cancel, nor that a pacing
+    /// slot is free. The deadline bounds the write as well; if it passes
+    /// first, the write finishes in its own task.
     ///
     /// The cancel is TWS's native one, where the request type has one (contract
     /// details: server 215+); otherwise nothing is written and the drain waits
@@ -460,7 +466,8 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     ///
     /// Dropping the returned future mid-drain is safe: the cancel write runs in
     /// its own task and completes, the subscription drops, and nothing is
-    /// written twice.
+    /// written twice. A write that fails once no one is waiting for it, there
+    /// or after the deadline, is only logged.
     ///
     /// # Examples
     ///
@@ -489,35 +496,29 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
         if self.ended_natively() || self.request.snapshot_ended.load(Ordering::Relaxed) {
             return Ok(Drained::Ended);
         }
-        // TWS answered with an error, read before this call. Drop writes the
-        // cancel unless the type knows the error ends the request at TWS.
-        if let Some(notice) = self.request.rejected.get() {
-            return Ok(Drained::Rejected(notice.clone()));
-        }
-        // Ended with an error on our side already: nothing more can arrive to
-        // confirm TWS's state. Drop writes the cancel, as for any such stream.
-        if self.stream_ended.load(Ordering::Relaxed) {
-            return Ok(Drained::Unconfirmed);
-        }
+        // Settled before this call: TWS answered with an error, or the stream
+        // ended with an error on our side, after which nothing more can
+        // arrive to confirm TWS's state. The cancel is still written below
+        // where one is due, so a failed write reaches the caller.
+        let settled = match self.request.rejected.get() {
+            Some(notice) => Some(Drained::Rejected(notice.clone())),
+            None => self.stream_ended.load(Ordering::Relaxed).then_some(Drained::Unconfirmed),
+        };
         if self.request.request_id.is_none() {
-            self.cancel().await;
+            // A stream that already ended leaves its cancel to the drop.
+            if settled.is_none() {
+                self.cancel().await;
+            }
             return Ok(Drained::Unconfirmed);
         }
 
         // Write the cancel and keep reading: the route stays until the
-        // subscription drops, so TWS's end marker can still reach us. The
-        // write runs in its own task, as `Drop`'s does, so dropping this
-        // future mid-write can't lose it: `cancelled` is already set.
-        if !self.request.cancelled.swap(true, Ordering::Relaxed) {
-            if let Some(message) = self.request.pending_cancel(self.request.request_id) {
-                let message_bus = self.request.message_bus.clone();
-                let write = self.request.message_bus.runtime_handle().spawn(async move {
-                    if let Err(e) = message_bus.send_message(message).await {
-                        log_cancel_error("subscription", &e);
-                    }
-                });
-                let _ = write.await;
-            }
+        // subscription drops, so TWS's end marker can still reach us.
+        if !self.write_cancel(deadline).await? {
+            return Ok(Drained::Unconfirmed);
+        }
+        if let Some(outcome) = settled {
+            return Ok(outcome);
         }
 
         loop {
@@ -536,6 +537,33 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
                 // The channel closed without an end marker.
                 Ok(None) => return Ok(Drained::Unconfirmed),
             }
+        }
+    }
+
+    /// Writes the cancel, once, if one is due. `Ok(false)` when `deadline`
+    /// passes first. The write runs in its own task, as `Drop`'s does, so
+    /// ending the wait early (the deadline, or a dropped future) can't lose
+    /// it: `cancelled` is already set. The task logs an error no one is left
+    /// to receive.
+    async fn write_cancel(&self, deadline: tokio::time::Instant) -> Result<bool, Error> {
+        if self.request.cancelled.swap(true, Ordering::Relaxed) {
+            return Ok(true);
+        }
+        let Some(message) = self.request.pending_cancel(self.request.request_id) else {
+            return Ok(true);
+        };
+        let (result_tx, result_rx) = tokio::sync::oneshot::channel();
+        let message_bus = self.request.message_bus.clone();
+        self.request.message_bus.runtime_handle().spawn(async move {
+            if let Err(Err(e)) = result_tx.send(message_bus.send_message(message).await) {
+                log_cancel_error("subscription", &e);
+            }
+        });
+        match tokio::time::timeout_at(deadline, result_rx).await {
+            Ok(Ok(result)) => result.map(|()| true),
+            // The task was dropped unfinished: the runtime is shutting down.
+            Ok(Err(_)) => Err(Error::Shutdown),
+            Err(_elapsed) => Ok(false),
         }
     }
 }

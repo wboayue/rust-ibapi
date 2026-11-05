@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PriceConditionBuilder`, `TimeConditionBuilder`, `MarginConditionBuilder`, `VolumeConditionBuilder` and `PercentChangeConditionBuilder` are typestate builders: `build()` and `From<..> for OrderCondition` exist only after `greater_than()` or `less_than()`, so a missing comparison is a compile error instead of a panic, and a second comparison no longer compiles. See `docs/migration-6.0.md` §12 (#1119).
 - `OptionBuilder::build()` (`Contract::call(..)` / `Contract::put(..)`) returns `Result<Contract, Error>`: `Error::InvalidArgument` for a strike that isn't positive and finite, where `strike()` panicked. After `strike()` the builder's strike type parameter is `f64` instead of `Strike`. See `docs/migration-6.0.md` §13 (#1119).
 - `Execution::liquidation: i32` is now `is_liquidation: bool`, matching TWS's bool; `Execution::pending_price_revision` is now `is_price_revision_pending` and `MarketDepthL2::smart_depth` is now `is_smart_depth`, so bool fields keep their protobuf `is_` prefix. `MarketDepthL2` serializes the new key. See `docs/migration-6.0.md` §14 (#1174).
+- `Subscription::cancel_and_drain` returns a failed cancel write as `Err`, where it logged it and went on draining. It also writes the cancel when the stream had already ended with an error on our side, rather than leaving it to the drop, and in async the deadline bounds the write. Sync and async. See `docs/migration-6.0.md` §19.
 
 ### Removed
 

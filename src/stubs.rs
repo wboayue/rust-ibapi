@@ -69,10 +69,21 @@ pub(crate) struct MessageBusStub {
     reconnect_delay: Duration,
     /// `wait_connected` reports the reconnect gave up. See [`MessageBusStub::with_failed_reconnect`].
     reconnect_fails: bool,
+    /// What `send_message` does after recording the message. See [`MessageBusStub::with_failing_sends`].
+    send_mode: SendMode,
     #[cfg(feature = "sync")]
     open_sync_senders: Mutex<Vec<channel::Sender<RoutedItem>>>,
     #[cfg(feature = "async")]
     open_async_senders: Mutex<Vec<broadcast::Sender<RoutedItem>>>,
+}
+
+/// What `send_message` does after recording the message.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SendMode {
+    Succeed,
+    Fail,
+    #[cfg(feature = "async")]
+    Stall,
 }
 
 // Separate tracking for order update subscriptions to maintain backward compatibility
@@ -105,6 +116,7 @@ impl Default for MessageBusStub {
             keep_open: AtomicBool::new(false),
             reconnect_delay: Duration::ZERO,
             reconnect_fails: false,
+            send_mode: SendMode::Succeed,
             #[cfg(feature = "sync")]
             open_sync_senders: Mutex::default(),
             #[cfg(feature = "async")]
@@ -173,6 +185,21 @@ impl MessageBusStub {
     /// does once the reconnect gave up.
     pub fn with_failed_reconnect(mut self) -> Self {
         self.reconnect_fails = true;
+        self
+    }
+
+    /// Make each `send_message` fail with [`Error::ConnectionReset`] after
+    /// recording it, as a write to a lost connection does.
+    pub fn with_failing_sends(mut self) -> Self {
+        self.send_mode = SendMode::Fail;
+        self
+    }
+
+    /// Make each async `send_message` record its message, then never
+    /// complete, as a write stuck on a peer that stopped reading does.
+    #[cfg(feature = "async")]
+    pub fn with_stalled_sends(mut self) -> Self {
+        self.send_mode = SendMode::Stall;
         self
     }
 
@@ -280,7 +307,10 @@ impl MessageBus for MessageBusStub {
 
     fn send_message(&self, message: &[u8]) -> Result<(), Error> {
         self.request_messages.write().unwrap().push(message.to_vec());
-        Ok(())
+        match self.send_mode {
+            SendMode::Fail => Err(Error::ConnectionReset),
+            _ => Ok(()),
+        }
     }
 
     fn send_market_data_type(&self, message: &[u8]) -> Result<(), Error> {
@@ -443,7 +473,11 @@ impl AsyncMessageBus for MessageBusStub {
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
         self.request_messages.write().unwrap().push(message);
-        Ok(())
+        match self.send_mode {
+            SendMode::Succeed => Ok(()),
+            SendMode::Fail => Err(Error::ConnectionReset),
+            SendMode::Stall => std::future::pending().await,
+        }
     }
 
     async fn send_market_data_type(&self, message: Vec<u8>) -> Result<(), Error> {
