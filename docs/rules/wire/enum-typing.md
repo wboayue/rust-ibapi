@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -72,7 +72,8 @@ missing/empty half; the proto default is a real code. **`From<i32>` never coerce
 code to a known variant**: add an `Unknown(i32)` variant and make `From<i32>` total, returning
 `Unknown(code)` outside the table. Each also implements `From<T> for i32`, since `value as i32`
 no longer compiles with a payload variant. `impl_wire_code!` (`src/macros.rs`) generates both from
-one table. `Unknown(i32)` keeps `Copy` and derived serde. There is no closed `TryFrom<i32>` form for streaming paths.
+one table (#1180). `Unknown(i32)` keeps `Copy` and derived serde. There is no closed
+`TryFrom<i32>` form for streaming paths.
 
 **A one-shot integer field decodes closed.** `ArticleType` (`news_article`, #1070) maps the table
 in a private decoder fn and returns `Error::Parse` for any other code. Its coercing public
@@ -143,3 +144,5 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
   #822-style exception: requiring it would end every stream carrying a contract without one (the
   failure #840 fixed). The `ContractData` decoder takes `required` (`src/proto/decoders.rs`) for
   both submessages, as `EDecoder.cs` drops such a frame.
+- #1180 — `impl_wire_code!` replaced 11 hand-written `From<i32>` / `From<T> for i32` pairs, each
+  listing its table twice, with one `Variant = code` table per enum.
