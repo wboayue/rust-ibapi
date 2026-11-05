@@ -18,6 +18,7 @@ pub const DEFAULT_MAX_RETRIES: u32 = 3;
 #[cfg(feature = "sync")]
 mod sync_impl {
     use super::*;
+    use std::time::Instant;
 
     /// What a retry waits on between attempts.
     pub trait ReconnectWaiter {
@@ -26,17 +27,24 @@ mod sync_impl {
         /// `Error::Shutdown` (during shutdown) if it never will be; the retry
         /// passes that on as-is, since a
         /// `ConnectionReset` would invite the caller to retry a client that is gone.
-        fn wait_connected(&self) -> Result<(), Error>;
+        /// Returns `Error::Timeout` if `deadline` passes first.
+        fn wait_connected(&self, deadline: Option<Instant>) -> Result<(), Error>;
     }
 
     impl ReconnectWaiter for crate::client::sync::Client {
-        fn wait_connected(&self) -> Result<(), Error> {
-            self.message_bus.wait_connected()
+        fn wait_connected(&self, deadline: Option<Instant>) -> Result<(), Error> {
+            self.message_bus.wait_connected(deadline)
         }
     }
 
-    /// Retry logic for sync one-shot operations with configurable retry limit
-    pub fn retry_on_connection_reset_with_limit<T, F>(waiter: &impl ReconnectWaiter, mut operation: F, max_retries: u32) -> Result<T, Error>
+    /// Retry logic for sync one-shot operations with configurable retry limit.
+    /// `deadline` bounds each wait for the reconnect.
+    pub fn retry_on_connection_reset_with_limit<T, F>(
+        waiter: &impl ReconnectWaiter,
+        deadline: Option<Instant>,
+        mut operation: F,
+        max_retries: u32,
+    ) -> Result<T, Error>
     where
         F: FnMut() -> Result<T, Error>,
     {
@@ -47,7 +55,7 @@ mod sync_impl {
                     attempts += 1;
                     // The send gate refuses a retry until the replacement
                     // connection is ready, so wait for it first.
-                    waiter.wait_connected()?;
+                    waiter.wait_connected(deadline)?;
                     continue;
                 }
                 other => return other,
@@ -55,12 +63,13 @@ mod sync_impl {
         }
     }
 
-    /// Retry logic for sync one-shot operations with default retry limit
-    pub fn retry_on_connection_reset<T, F>(waiter: &impl ReconnectWaiter, operation: F) -> Result<T, Error>
+    /// Retry logic for sync one-shot operations with default retry limit.
+    /// `deadline` bounds each wait for the reconnect.
+    pub fn retry_on_connection_reset<T, F>(waiter: &impl ReconnectWaiter, deadline: Option<Instant>, operation: F) -> Result<T, Error>
     where
         F: FnMut() -> Result<T, Error>,
     {
-        retry_on_connection_reset_with_limit(waiter, operation, DEFAULT_MAX_RETRIES)
+        retry_on_connection_reset_with_limit(waiter, deadline, operation, DEFAULT_MAX_RETRIES)
     }
 }
 
@@ -70,6 +79,7 @@ mod async_impl {
     use super::*;
     use async_trait::async_trait;
     use futures::Future;
+    use tokio::time::Instant;
 
     /// What a retry waits on between attempts.
     #[async_trait]
@@ -79,19 +89,22 @@ mod async_impl {
         /// `Error::Shutdown` (during shutdown) if it never will be; the retry
         /// passes that on as-is, since a
         /// `ConnectionReset` would invite the caller to retry a client that is gone.
-        async fn wait_connected(&self) -> Result<(), Error>;
+        /// Returns `Error::Timeout` if `deadline` passes first.
+        async fn wait_connected(&self, deadline: Option<Instant>) -> Result<(), Error>;
     }
 
     #[async_trait]
     impl ReconnectWaiter for crate::client::r#async::Client {
-        async fn wait_connected(&self) -> Result<(), Error> {
-            self.message_bus.wait_connected().await
+        async fn wait_connected(&self, deadline: Option<Instant>) -> Result<(), Error> {
+            self.message_bus.wait_connected(deadline).await
         }
     }
 
-    /// Retry logic for async one-shot operations with configurable retry limit
+    /// Retry logic for async one-shot operations with configurable retry limit.
+    /// `deadline` bounds each wait for the reconnect.
     pub async fn retry_on_connection_reset_with_limit<T, F, Fut>(
         waiter: &impl ReconnectWaiter,
+        deadline: Option<Instant>,
         mut operation: F,
         max_retries: u32,
     ) -> Result<T, Error>
@@ -106,7 +119,7 @@ mod async_impl {
                     attempts += 1;
                     // The send gate refuses a retry until the replacement
                     // connection is ready, so wait for it first.
-                    waiter.wait_connected().await?;
+                    waiter.wait_connected(deadline).await?;
                     continue;
                 }
                 other => return other,
@@ -114,13 +127,14 @@ mod async_impl {
         }
     }
 
-    /// Retry logic for async one-shot operations with default retry limit
-    pub async fn retry_on_connection_reset<T, F, Fut>(waiter: &impl ReconnectWaiter, operation: F) -> Result<T, Error>
+    /// Retry logic for async one-shot operations with default retry limit.
+    /// `deadline` bounds each wait for the reconnect.
+    pub async fn retry_on_connection_reset<T, F, Fut>(waiter: &impl ReconnectWaiter, deadline: Option<Instant>, operation: F) -> Result<T, Error>
     where
         F: FnMut() -> Fut,
         Fut: Future<Output = Result<T, Error>>,
     {
-        retry_on_connection_reset_with_limit(waiter, operation, DEFAULT_MAX_RETRIES).await
+        retry_on_connection_reset_with_limit(waiter, deadline, operation, DEFAULT_MAX_RETRIES).await
     }
 }
 
