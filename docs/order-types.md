@@ -1509,6 +1509,8 @@ match result {
 }
 ```
 
+`submit()`, `analyze()` and `build_order()` return this `ValidationError` wrapped in `Error::Validation`.
+
 ## Custom Order Construction
 
 While the fluent API provides a convenient interface for creating common order types, you can also manually construct `Order` objects for more advanced or specialized scenarios. Orders can be submitted using either `place_order` or `submit_order` methods. This is the BYO-id / advanced path; reach for it when you need to set order fields not exposed by the fluent builder.

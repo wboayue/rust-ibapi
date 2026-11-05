@@ -344,6 +344,32 @@ let order = Order {
 
 The compiler finds every use of the three fields. It does not catch the serialized form: a serialized `Order` no longer has the `fa_profile`, `basis_points` and `basis_points_type` keys. `Order` does not use `deny_unknown_fields`, so an `Order` serialized by 5.x still deserializes and the three keys are ignored.
 
+### 18. `Error::Validation` replaces `Error::InvalidArgument` for builder failures
+
+`OrderBuilder::submit`, `analyze` and `build_order`, the bracket and attached-order submits and `ExerciseOptionsBuilder::submit` check their inputs before sending anything. When that check failed they returned `Error::InvalidArgument` with the message text. They now return `Error::Validation(ValidationError)`, which carries the `ibapi::orders::builder::ValidationError` that `OrderBuilder::build` already returned: `InvalidQuantity`, `InvalidPrice`, `MissingRequiredField`, `InvalidCombination`, `InvalidStopPrice`, `InvalidLimitPrice`, `InvalidBracketOrder` or `InvalidPercentage`. `?` on a `ValidationError` in a function returning `Result<_, ibapi::Error>` gives the same variant.
+
+```rust,ignore
+// 5.x
+match client.order(&contract).buy(0).market().submit() {
+    Ok(order_id) => println!("placed {order_id}"),
+    Err(Error::InvalidArgument(msg)) if msg.starts_with("Invalid quantity") => fix_quantity(),
+    Err(e) => return Err(e),
+}
+
+// 6.0
+use ibapi::orders::builder::ValidationError;
+
+match client.order(&contract).buy(0).market().submit() {
+    Ok(order_id) => println!("placed {order_id}"),
+    Err(Error::Validation(ValidationError::InvalidQuantity(_))) => fix_quantity(),
+    Err(e) => return Err(e),
+}
+```
+
+Match `Error::Validation` and its `ValidationError` variant instead of `Error::InvalidArgument` and the message text.
+
+The compiler does not catch any of this. `Error` is `#[non_exhaustive]`, so every match on it already has a wildcard arm: the old `Error::InvalidArgument` arm still compiles, no longer fires for these methods, and their failures fall through to the wildcard. The `Display` text changes from `InvalidArgument: Invalid quantity: 0` to `validation error: Invalid quantity: 0`, which matters to code that compares or parses it. `std::error::Error::source()` returns the `ValidationError`, where it returned `None`.
+
 ### 19. `cancel_and_drain` returns a failed cancel write as `Err`
 
 `Subscription::cancel_and_drain` (sync and async) logged a failed cancel write and went on draining, so the failure showed up later, if at all, as `Drained::Unconfirmed` or a connection reset. It now returns the write's error. The cancel is also written when the stream had already ended with an error on our side (a decode error, `Error::BufferLimitExceeded`), where 5.x left it to the drop and its log. A `Drained::Unconfirmed` arm that stood for "the write may have failed" now gets those cases as `Err`; treat the request id as possibly live there too.

@@ -47,6 +47,10 @@ fn error_display() {
         ),
         (Error::Simple("simple error".to_string()), "error occurred: simple error"),
         (Error::InvalidArgument("bad arg".to_string()), "InvalidArgument: bad arg"),
+        (
+            Error::Validation(ValidationError::InvalidQuantity(-1.0)),
+            "validation error: Invalid quantity: -1",
+        ),
         (Error::ConnectionFailed, "ConnectionFailed"),
         (Error::ConnectionReset, "ConnectionReset"),
         (Error::Cancelled, "Cancelled"),
@@ -202,46 +206,30 @@ fn from_decoded_error_moves_into_notice_variant() {
 }
 
 #[test]
-fn from_validation_error_covers_every_variant() {
-    let cases: Vec<(ValidationError, &str)> = vec![
-        (ValidationError::InvalidQuantity(-1.0), "Invalid quantity: -1"),
-        (ValidationError::InvalidPrice(f64::NAN), "Invalid price: NaN"),
-        (ValidationError::MissingRequiredField("contract"), "Missing required field: contract"),
-        (
-            ValidationError::InvalidCombination("opposing legs".to_string()),
-            "Invalid combination: opposing legs",
-        ),
-        (
-            ValidationError::InvalidStopPrice { stop: 99.0, current: 100.0 },
-            "Invalid stop price 99 for current price 100",
-        ),
-        (
-            ValidationError::InvalidLimitPrice {
-                limit: 101.0,
-                current: 100.0,
-            },
-            "Invalid limit price 101 for current price 100",
-        ),
-        (
-            ValidationError::InvalidBracketOrder("missing parent".to_string()),
-            "Invalid bracket order: missing parent",
-        ),
-        (
-            ValidationError::InvalidPercentage {
-                field: "max_pct_vol",
-                value: 0.05,
-                min: 0.1,
-                max: 0.5,
-            },
-            "Invalid max_pct_vol: 0.05 (must be between 0.1 and 0.5)",
-        ),
+fn from_validation_error_keeps_the_variant() {
+    let cases = [
+        ValidationError::InvalidQuantity(-1.0),
+        ValidationError::InvalidPrice(f64::INFINITY),
+        ValidationError::MissingRequiredField("contract"),
+        ValidationError::InvalidCombination("opposing legs".to_string()),
+        ValidationError::InvalidStopPrice { stop: 99.0, current: 100.0 },
+        ValidationError::InvalidLimitPrice {
+            limit: 101.0,
+            current: 100.0,
+        },
+        ValidationError::InvalidBracketOrder("missing parent".to_string()),
+        ValidationError::InvalidPercentage {
+            field: "max_pct_vol",
+            value: 0.05,
+            min: 0.1,
+            max: 0.5,
+        },
     ];
 
-    for (validation, expected_suffix) in cases {
-        let error: Error = validation.into();
-        match error {
-            Error::InvalidArgument(msg) => assert_eq!(msg, expected_suffix),
-            other => panic!("expected InvalidArgument, got {other:?}"),
+    for validation in cases {
+        match Error::from(validation.clone()) {
+            Error::Validation(inner) => assert_eq!(inner, validation),
+            other => panic!("expected Validation({validation:?}), got {other:?}"),
         }
     }
 }
@@ -276,6 +264,7 @@ fn clone_preserves_payloaded_variants() {
         Error::ServerVersion(10, 5, "feat".into()),
         Error::Simple("s".into()),
         Error::InvalidArgument("a".into()),
+        Error::Validation(ValidationError::MissingRequiredField("action")),
         Error::UnsupportedTimeZone("US/Foo".into()),
         Error::unexpected_response(&response),
         Error::unexpected_wire_format(&response),

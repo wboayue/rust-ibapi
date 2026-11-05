@@ -7,6 +7,11 @@ use crate::orders::PlaceOrder;
 impl OrderBuilder<ClientBound<'_, Client>> {
     /// Submit the order synchronously
     /// Returns the order ID assigned to the submitted order
+    ///
+    /// # Errors
+    /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
+    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
+    /// (reserved for request ids).
     pub fn submit(self) -> Result<OrderId, Error> {
         let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
@@ -16,6 +21,12 @@ impl OrderBuilder<ClientBound<'_, Client>> {
     }
 
     /// Analyze order for margin/commission (what-if)
+    ///
+    /// # Errors
+    /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
+    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
+    /// (reserved for request ids); the error TWS returns if it rejects the what-if order;
+    /// [`Error::UnexpectedEndOfStream`] if the reply ends without the order's state.
     pub fn analyze(mut self) -> Result<crate::orders::OrderState, Error> {
         self.what_if = true;
         let ClientBound { client, contract } = self.target;
@@ -43,6 +54,11 @@ impl OrderBuilder<ClientBound<'_, Client>> {
 impl BracketOrderBuilder<'_, Client> {
     /// Submit bracket orders synchronously
     /// Returns BracketOrderIds containing all three order IDs
+    ///
+    /// # Errors
+    /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
+    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
+    /// (reserved for request ids).
     pub fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let ClientBound { client, contract } = self.parent_builder.target;
         let orders = self.build()?;
@@ -80,6 +96,11 @@ impl AttachedOrdersBuilder<'_, Client> {
     /// Allocates the parent id, then one id per requested child, and sends a single
     /// place-order request. Fire-and-forget: whether TWS attached the children shows up only
     /// on the order update stream — see [`Order::preset_stop_loss_order_id`](crate::orders::Order::preset_stop_loss_order_id).
+    ///
+    /// # Errors
+    /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
+    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
+    /// (reserved for request ids).
     ///
     /// # Examples
     ///

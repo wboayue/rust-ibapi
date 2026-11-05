@@ -103,7 +103,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
     /// Note: a TWS setting decides whether an exercise request must be finalized before it is sent.
     ///
     /// # Errors
-    /// [`Error::InvalidArgument`] if neither [`exercise`](Self::exercise) nor [`lapse`](Self::lapse)
+    /// [`Error::Validation`] if neither [`exercise`](Self::exercise) nor [`lapse`](Self::lapse)
     /// was called, or the quantity is not positive; [`Error::OrderIdInRequestRange`] if the client's
     /// next order id has reached 1,500,000,000 (reserved for request ids).
     ///
@@ -150,7 +150,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
     /// Note: a TWS setting decides whether an exercise request must be finalized before it is sent.
     ///
     /// # Errors
-    /// [`Error::InvalidArgument`] if neither [`exercise`](Self::exercise) nor [`lapse`](Self::lapse)
+    /// [`Error::Validation`] if neither [`exercise`](Self::exercise) nor [`lapse`](Self::lapse)
     /// was called, or the quantity is not positive; [`Error::OrderIdInRequestRange`] if the client's
     /// next order id has reached 1,500,000,000 (reserved for request ids).
     ///

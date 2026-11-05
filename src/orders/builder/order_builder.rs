@@ -188,6 +188,9 @@ impl<'a, C> OrderBuilder<ClientBound<'a, C>> {
 
     /// Build the order and return it without submitting
     /// Useful for batch operations or custom submission logic
+    ///
+    /// # Errors
+    /// [`Error::Validation`](crate::Error::Validation) if the builder's inputs fail validation.
     pub fn build_order(self) -> Result<Order, crate::Error> {
         self.build().map_err(Into::into)
     }
