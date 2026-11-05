@@ -221,3 +221,33 @@ async fn physical_close_wakes_a_backpressured_write() {
     // The woken write was cut off mid-frame; that must not undo the close.
     assert!(matches!(socket.reconnect().await, Err(Error::Shutdown)));
 }
+
+/// `sever` fails a write stuck on a peer that stopped reading; later writes
+/// fail too, until a reconnect replaces the connection.
+#[tokio::test]
+async fn sever_fails_a_stuck_write_until_reconnect() {
+    use tokio::io::AsyncReadExt;
+
+    let (socket, _peer, listener) = socket_pair().await;
+    let stuck = tokio::spawn({
+        let socket = socket.clone();
+        async move { socket.write_all(&vec![0xAA; LARGE]).await }
+    });
+    until_writer_held(&socket).await;
+
+    socket.sever();
+    let written = tokio::time::timeout(Duration::from_secs(1), stuck)
+        .await
+        .expect("sever left the write stuck")
+        .unwrap();
+    assert!(matches!(written, Err(Error::ConnectionReset)), "write: {written:?}");
+    assert!(matches!(socket.write_all(&[1]).await, Err(Error::ConnectionReset)));
+
+    let (reconnected, accepted) = tokio::join!(socket.reconnect(), listener.accept());
+    reconnected.expect("reconnect after sever");
+    let (mut new_peer, _) = accepted.unwrap();
+    socket.write_all(b"live").await.expect("the new connection must take writes");
+    let mut received = [0u8; 4];
+    new_peer.read_exact(&mut received).await.unwrap();
+    assert_eq!(&received, b"live");
+}
