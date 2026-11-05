@@ -104,6 +104,8 @@ mod macros;
 /// Describes items present in an account.
 pub mod accounts;
 
+pub mod builder;
+
 /// TWS API Client.
 ///
 /// The Client establishes the connection to TWS or the Gateway.

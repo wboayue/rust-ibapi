@@ -604,10 +604,6 @@ impl LegAction {
 
 impl_wire_enum!(LegAction);
 
-/// Marker type for missing required fields in type-state builders
-#[derive(Debug, Clone, Copy)]
-pub struct Missing;
-
 /// Marker type for a futures builder with an unspecified contract month (open query).
 ///
 /// Reached via [`FuturesBuilder::any_month`](crate::contracts::FuturesBuilder::any_month) to build
