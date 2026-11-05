@@ -44,7 +44,7 @@ and option rights:
 use ibapi::contracts::Contract;
 
 let stock = Contract::stock("AAPL").build();
-let option = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build();
+let option = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build()?;
 ```
 
 The full per-asset-type reference (stocks, options, futures, forex, crypto,

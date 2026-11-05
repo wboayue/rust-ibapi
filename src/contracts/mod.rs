@@ -274,7 +274,8 @@ impl Contract {
     /// let call = Contract::call("AAPL")
     ///     .strike(150.0)
     ///     .expires_on(2024, 12, 20)
-    ///     .build();
+    ///     .build()?;
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn call(symbol: impl Into<Symbol>) -> OptionBuilder<Symbol, Missing, Missing> {
         OptionBuilder::call(symbol)
@@ -290,7 +291,8 @@ impl Contract {
     /// let put = Contract::put("SPY")
     ///     .strike(450.0)
     ///     .expires_on(2024, 12, 20)
-    ///     .build();
+    ///     .build()?;
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn put(symbol: impl Into<Symbol>) -> OptionBuilder<Symbol, Missing, Missing> {
         OptionBuilder::put(symbol)

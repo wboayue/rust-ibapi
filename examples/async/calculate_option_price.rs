@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
     // Create an option contract — AAPL Call $150 expiring 2025-01-17
-    let contract = Contract::call("AAPL").strike(150.0).expires_on(2025, 1, 17).build();
+    let contract = Contract::call("AAPL").strike(150.0).expires_on(2025, 1, 17).build()?;
 
     // Calculate option price given volatility and underlying price
     let volatility = 0.25; // 25% implied volatility

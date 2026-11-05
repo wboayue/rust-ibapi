@@ -17,7 +17,7 @@ fn v2_builders() {
     assert_eq!(toyota.currency, Currency::from("JPY"));
 
     // Test call option builder
-    let call = Contract::call("AAPL").strike(150.0).expires_on(2023, 12, 15).build();
+    let call = Contract::call("AAPL").strike(150.0).expires_on(2023, 12, 15).build().unwrap();
     assert_eq!(call.symbol, Symbol::from("AAPL"));
     assert_eq!(call.security_type, SecurityType::Option);
     assert_eq!(call.strike, 150.0);
@@ -25,7 +25,7 @@ fn v2_builders() {
     assert_eq!(call.last_trade_date_or_contract_month, "20231215");
 
     // Test put option builder
-    let put = Contract::put("SPY").strike(450.0).expires_on(2024, 1, 19).build();
+    let put = Contract::put("SPY").strike(450.0).expires_on(2024, 1, 19).build().unwrap();
     assert_eq!(put.symbol, Symbol::from("SPY"));
     assert_eq!(put.right, Some(OptionRight::Put));
     assert_eq!(put.strike, 450.0);

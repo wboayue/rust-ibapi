@@ -105,7 +105,7 @@ Required fields are checked at compile time for all contract types:
 let option = Contract::call("AAPL")
     .strike(150.0)
     .expires_on(2024, 12, 20)
-    .build();
+    .build()?; // Err if the strike isn't positive and finite
 
 // Futures with convenience methods
 let futures = Contract::futures("ES")

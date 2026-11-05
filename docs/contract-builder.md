@@ -99,16 +99,16 @@ let direct_route = Contract::stock("BMW")
 
 ### Options
 
-Options require strike price and expiration date. The builder enforces these at compile time.
+Options require strike price and expiration date. The builder enforces these at compile time; `build()` returns `Error::InvalidArgument` for a strike that isn't positive and finite.
 
 ```rust
 use ibapi::contracts::{Contract, ExpirationDate};
 
 // Call option
 let call = Contract::call("AAPL")
-    .strike(150.0)  // Validates positive strike price
+    .strike(150.0)  // build() checks it is positive and finite
     .expires_on(2024, 12, 20)
-    .build();
+    .build()?;
 
 // Put option with custom exchange
 let put = Contract::put("SPY")
@@ -116,19 +116,19 @@ let put = Contract::put("SPY")
     .expires(ExpirationDate::new(2024, 3, 15))
     .on_exchange("CBOE")
     .multiplier(100)
-    .build();
+    .build()?;
 
 // Weekly options (expires next Friday)
 let weekly_call = Contract::call("QQQ")
     .strike(400.0)
     .expires_weekly()
-    .build();
+    .build()?;
 
 // Monthly options (third Friday of the month)
 let monthly_put = Contract::put("IWM")
     .strike(200.0)
     .expires_monthly()
-    .build();
+    .build()?;
 
 // Note: These won't compile (type safety!)
 // let invalid = Contract::call("AAPL").build();  // Missing strike and expiry
@@ -406,13 +406,13 @@ The builders use Rust's type system to track required fields:
 
 ```rust
 use ibapi::builder::Missing;
-use ibapi::contracts::{Contract, Symbol, Strike, ExpirationDate};
+use ibapi::contracts::{Contract, ExpirationDate, OptionBuilder, Symbol};
 
-// The option builder tracks which fields are set using phantom types
+// The option builder tracks which fields are set in its type parameters
 let builder1: OptionBuilder<Symbol, Missing, Missing> = Contract::call("AAPL");
-let builder2: OptionBuilder<Symbol, Strike, Missing> = builder1.strike(150.0);
-let builder3: OptionBuilder<Symbol, Strike, ExpirationDate> = builder2.expires_on(2024, 12, 20);
-let contract = builder3.build();  // Build only available when all required fields are set
+let builder2: OptionBuilder<Symbol, f64, Missing> = builder1.strike(150.0);
+let builder3: OptionBuilder<Symbol, f64, ExpirationDate> = builder2.expires_on(2024, 12, 20);
+let contract = builder3.build()?;  // Build only available when all required fields are set
 ```
 
 ## Error Handling
@@ -430,7 +430,11 @@ assert!(result.is_err());  // Negative strikes are invalid
 let empty_spread = Contract::spread("AAPL").build();
 assert!(empty_spread.is_err());  // Spreads need at least one leg
 
-// Option validation happens at compile time
+// Option strike validation happens in build()
+let bad_strike = Contract::call("AAPL").strike(-10.0).expires_on(2024, 12, 20).build();
+assert!(bad_strike.is_err());  // Strikes must be positive and finite
+
+// Missing option fields are caught at compile time
 // This won't compile:
 // let invalid = Contract::call("AAPL").build();  // Missing required fields
 ```
