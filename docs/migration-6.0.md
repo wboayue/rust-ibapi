@@ -226,3 +226,32 @@ let code = i32::from(row.operation); // where the wire code is needed
 Match on the variants, or call `i32::from(..)` where the wire code is needed. The compiler finds every comparison with an integer.
 
 The compiler does not catch the serialized form. `MarketDepth` and `MarketDepthL2` derive `Serialize` / `Deserialize`, and `operation` and `side` now serialize in the enums' derived externally tagged form: `"Insert"`, `"Update"`, `"Delete"`, `"Ask"`, `"Bid"`, or `{"Unknown":9}`, where they were numbers. Stored or transmitted rows written by 5.x carry the numbers and no longer deserialize; the `utoipa` schemas change the same way.
+
+### 10. `Missing` moves to `ibapi::builder`
+
+`Missing`, the marker a typestate builder carries for a required field it has not been given, was `ibapi::contracts::Missing`. The order condition builders use it too now (§11), so it lives in a shared module, `ibapi::builder`. No other path is kept.
+
+```rust,ignore
+// 5.x
+use ibapi::contracts::Missing;
+
+// 6.0
+use ibapi::builder::Missing;
+```
+
+Only code that names a builder's type needs the import, such as `OptionBuilder<Symbol, Missing, Missing>` in a signature.
+
+### 11. Condition builders require a comparison before `build()`
+
+`PriceConditionBuilder`, `TimeConditionBuilder`, `MarginConditionBuilder`, `VolumeConditionBuilder` and `PercentChangeConditionBuilder` panicked in `build()` when neither `greater_than()` nor `less_than()` had been called. They are now typestate builders: `build()`, and the `From<..> for OrderCondition` conversion that `OrderBuilder::condition`, `and_condition` and `or_condition` use, exist only after a comparison. A missing comparison is a compile error rather than a panic.
+
+Code that sets a comparison before building compiles unchanged, through the builders and through the helpers in `orders::builder` (`price()`, `time()`, `margin()`, `volume()`, `percent_change()`):
+
+```rust,ignore
+let condition = price(265598, "SMART").greater_than(150.0).build(); // 5.x and 6.0
+let condition = price(265598, "SMART").build();                     // 5.x: panicked; 6.0: does not compile
+```
+
+Each builder now takes a type parameter for its threshold, `Missing` until a comparison sets it (§10): `PriceConditionBuilder<f64>`, `TimeConditionBuilder<String>`, `MarginConditionBuilder<i32>`, `VolumeConditionBuilder<i32>`, `PercentChangeConditionBuilder<f64>`. Code that names a builder's type after the comparison writes it with the parameter; the bare name means the state before one.
+
+`greater_than()` and `less_than()` can be called once per builder. A second call, which used to replace the first, no longer compiles.

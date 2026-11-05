@@ -989,6 +989,15 @@ impl<T> OrderBuilder<T> {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// A condition builder becomes a condition only once its comparison is set:
+    ///
+    /// ```compile_fail,E0277
+    /// use ibapi::orders::builder::price;
+    /// use ibapi::orders::OrderCondition;
+    ///
+    /// let condition: OrderCondition = price(265598, "SMART").into();
+    /// ```
     pub fn condition(mut self, condition: impl Into<OrderCondition>) -> Self {
         let mut cond = condition.into();
         set_conjunction(&mut cond, true);

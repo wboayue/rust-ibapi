@@ -405,7 +405,8 @@ let right = OptionRight::Put;   // Converts to "P"
 The builders use Rust's type system to track required fields:
 
 ```rust
-use ibapi::contracts::{Contract, Missing, Symbol, Strike, ExpirationDate};
+use ibapi::builder::Missing;
+use ibapi::contracts::{Contract, Symbol, Strike, ExpirationDate};
 
 // The option builder tracks which fields are set using phantom types
 let builder1: OptionBuilder<Symbol, Missing, Missing> = Contract::call("AAPL");

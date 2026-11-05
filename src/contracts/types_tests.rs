@@ -363,11 +363,3 @@ fn bond_identifier_variants_equality_and_match() {
         BondIdentifier::Isin(_) => panic!("expected Cusip"),
     }
 }
-
-#[test]
-fn missing_marker_is_copyable_and_debug() {
-    let m = Missing;
-    let copy = m;
-    let _ = copy;
-    assert_eq!(format!("{:?}", Missing), "Missing");
-}

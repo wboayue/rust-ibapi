@@ -25,6 +25,8 @@ pub use contract_details_builder::ContractDetailsBuilder;
 pub use option_chain_builder::OptionChainBuilder;
 pub use types::*;
 
+use crate::builder::Missing;
+
 // Common implementation modules
 mod common;
 mod contract_details_builder;

@@ -16,6 +16,44 @@ fn price_condition_builder() {
     assert!(!condition.is_conjunction);
 }
 
+/// Setters called before the comparison survive the move to the complete state.
+#[test]
+fn setters_before_the_comparison_carry_over() {
+    let price = PriceCondition::builder(12345, "NASDAQ")
+        .trigger_method(TriggerMethod::Last)
+        .conjunction(false)
+        .less_than(150.0)
+        .build();
+    assert_eq!(
+        (
+            price.contract_id,
+            price.exchange.as_str(),
+            price.trigger_method,
+            price.is_more,
+            price.is_conjunction
+        ),
+        (12345, "NASDAQ", TriggerMethod::Last, false, false)
+    );
+
+    let time = TimeCondition::builder().conjunction(false).greater_than("20251230 23:59:59 UTC").build();
+    assert_eq!((time.is_more, time.is_conjunction), (true, false));
+
+    let margin = MarginCondition::builder().conjunction(false).greater_than(30).build();
+    assert_eq!((margin.is_more, margin.is_conjunction), (true, false));
+
+    let volume = VolumeCondition::builder(12345, "NASDAQ").conjunction(false).greater_than(1000).build();
+    assert_eq!(
+        (volume.contract_id, volume.exchange.as_str(), volume.is_more, volume.is_conjunction),
+        (12345, "NASDAQ", true, false)
+    );
+
+    let percent = PercentChangeCondition::builder(12345, "NASDAQ").conjunction(false).less_than(5.0).build();
+    assert_eq!(
+        (percent.contract_id, percent.exchange.as_str(), percent.is_more, percent.is_conjunction),
+        (12345, "NASDAQ", false, false)
+    );
+}
+
 #[test]
 fn time_condition_builder() {
     let condition = TimeCondition::builder().less_than("20251230 23:59:59 UTC").build();
@@ -76,36 +114,6 @@ fn default_values() {
     assert_eq!(condition.trigger_method, TriggerMethod::Default);
     assert!(condition.is_more);
     assert!(condition.is_conjunction);
-}
-
-#[test]
-#[should_panic(expected = "PriceConditionBuilder requires a price threshold")]
-fn price_condition_builder_missing_threshold_panics() {
-    let _ = PriceCondition::builder(12345, "NASDAQ").build();
-}
-
-#[test]
-#[should_panic(expected = "TimeConditionBuilder requires a time value")]
-fn time_condition_builder_missing_time_panics() {
-    let _ = TimeCondition::builder().build();
-}
-
-#[test]
-#[should_panic(expected = "MarginConditionBuilder requires a percentage threshold")]
-fn margin_condition_builder_missing_threshold_panics() {
-    let _ = MarginCondition::builder().build();
-}
-
-#[test]
-#[should_panic(expected = "VolumeConditionBuilder requires a volume threshold")]
-fn volume_condition_builder_missing_threshold_panics() {
-    let _ = VolumeCondition::builder(12345, "NASDAQ").build();
-}
-
-#[test]
-#[should_panic(expected = "PercentChangeConditionBuilder requires a threshold")]
-fn percent_change_condition_builder_missing_threshold_panics() {
-    let _ = PercentChangeCondition::builder(12345, "NASDAQ").build();
 }
 
 #[test]

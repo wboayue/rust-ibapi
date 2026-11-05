@@ -4,6 +4,7 @@
 //! with type safety and validation.
 
 use crate::accounts::types::ContractId;
+use crate::builder::Missing;
 use serde::{Deserialize, Serialize};
 
 /// Price evaluation method for price conditions.
@@ -410,10 +411,10 @@ pub struct UnknownCondition {
 /// ```
 #[derive(Debug, Clone)]
 #[must_use = "PriceConditionBuilder does nothing until you call .build()"]
-pub struct PriceConditionBuilder {
+pub struct PriceConditionBuilder<Threshold = Missing> {
     contract_id: i32,
     exchange: String,
-    price: Option<f64>,
+    price: Threshold,
     trigger_method: TriggerMethod,
     is_more: bool,
     is_conjunction: bool,
@@ -431,7 +432,7 @@ impl PriceCondition {
     }
 }
 
-impl PriceConditionBuilder {
+impl PriceConditionBuilder<Missing> {
     /// Create a new price condition builder.
     ///
     /// # Parameters
@@ -442,27 +443,37 @@ impl PriceConditionBuilder {
         Self {
             contract_id: contract_id.into().value(),
             exchange: exchange.into(),
-            price: None,                            // Must be set by greater_than/less_than
+            price: Missing,
             trigger_method: TriggerMethod::Default, // Default trigger method
-            is_more: true,                          // Default: trigger when price goes above
+            is_more: true,                          // Set by greater_than/less_than
             is_conjunction: true,                   // Default: AND condition
         }
     }
 
     /// Set trigger when price is greater than the specified value.
-    pub fn greater_than(mut self, price: f64) -> Self {
-        self.price = Some(price);
-        self.is_more = true;
-        self
+    pub fn greater_than(self, price: f64) -> PriceConditionBuilder<f64> {
+        self.threshold(price, true)
     }
 
     /// Set trigger when price is less than the specified value.
-    pub fn less_than(mut self, price: f64) -> Self {
-        self.price = Some(price);
-        self.is_more = false;
-        self
+    pub fn less_than(self, price: f64) -> PriceConditionBuilder<f64> {
+        self.threshold(price, false)
     }
 
+    /// Move to the complete state with the comparison set.
+    fn threshold(self, price: f64, is_more: bool) -> PriceConditionBuilder<f64> {
+        PriceConditionBuilder {
+            contract_id: self.contract_id,
+            exchange: self.exchange,
+            trigger_method: self.trigger_method,
+            price,
+            is_more,
+            is_conjunction: self.is_conjunction,
+        }
+    }
+}
+
+impl<Threshold> PriceConditionBuilder<Threshold> {
     /// Set the trigger method for price evaluation.
     ///
     /// # Examples
@@ -487,19 +498,23 @@ impl PriceConditionBuilder {
         self.is_conjunction = is_conjunction;
         self
     }
+}
 
+impl PriceConditionBuilder<f64> {
     /// Build the price condition.
     ///
-    /// # Panics
+    /// Only reachable once `greater_than()` or `less_than()` set the comparison:
     ///
-    /// If neither `greater_than()` nor `less_than()` was called.
+    /// ```compile_fail,E0599
+    /// use ibapi::orders::conditions::PriceCondition;
+    ///
+    /// let condition = PriceCondition::builder(12345, "NASDAQ").build();
+    /// ```
     pub fn build(self) -> PriceCondition {
         PriceCondition {
             contract_id: self.contract_id,
             exchange: self.exchange,
-            price: self
-                .price
-                .expect("PriceConditionBuilder requires a price threshold; call greater_than() or less_than() before build()"),
+            price: self.price,
             trigger_method: self.trigger_method,
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
@@ -520,8 +535,8 @@ impl PriceConditionBuilder {
 /// ```
 #[derive(Debug, Clone)]
 #[must_use = "TimeConditionBuilder does nothing until you call .build()"]
-pub struct TimeConditionBuilder {
-    time: Option<String>,
+pub struct TimeConditionBuilder<Threshold = Missing> {
+    time: Threshold,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -533,12 +548,12 @@ impl TimeCondition {
     }
 }
 
-impl TimeConditionBuilder {
+impl TimeConditionBuilder<Missing> {
     /// Create a new time condition builder.
     pub fn new() -> Self {
         Self {
-            time: None,           // Must be set by greater_than/less_than
-            is_more: true,        // Default: trigger after time
+            time: Missing,
+            is_more: true,        // Set by greater_than/less_than
             is_conjunction: true, // Default: AND condition
         }
     }
@@ -548,10 +563,8 @@ impl TimeConditionBuilder {
     /// # Parameters
     ///
     /// - `time`: Time in format "YYYYMMDD HH:MM:SS TZ"
-    pub fn greater_than(mut self, time: impl Into<String>) -> Self {
-        self.time = Some(time.into());
-        self.is_more = true;
-        self
+    pub fn greater_than(self, time: impl Into<String>) -> TimeConditionBuilder<String> {
+        self.threshold(time.into(), true)
     }
 
     /// Set trigger when time is less than (before) the specified time.
@@ -559,12 +572,21 @@ impl TimeConditionBuilder {
     /// # Parameters
     ///
     /// - `time`: Time in format "YYYYMMDD HH:MM:SS TZ"
-    pub fn less_than(mut self, time: impl Into<String>) -> Self {
-        self.time = Some(time.into());
-        self.is_more = false;
-        self
+    pub fn less_than(self, time: impl Into<String>) -> TimeConditionBuilder<String> {
+        self.threshold(time.into(), false)
     }
 
+    /// Move to the complete state with the comparison set.
+    fn threshold(self, time: String, is_more: bool) -> TimeConditionBuilder<String> {
+        TimeConditionBuilder {
+            time,
+            is_more,
+            is_conjunction: self.is_conjunction,
+        }
+    }
+}
+
+impl<Threshold> TimeConditionBuilder<Threshold> {
     /// Set whether this is an AND (conjunction) or OR (disjunction) condition.
     ///
     /// Default is `true` (AND).
@@ -572,17 +594,21 @@ impl TimeConditionBuilder {
         self.is_conjunction = is_conjunction;
         self
     }
+}
 
+impl TimeConditionBuilder<String> {
     /// Build the time condition.
     ///
-    /// # Panics
+    /// Only reachable once `greater_than()` or `less_than()` set the comparison:
     ///
-    /// If neither `greater_than()` nor `less_than()` was called.
+    /// ```compile_fail,E0599
+    /// use ibapi::orders::conditions::TimeCondition;
+    ///
+    /// let condition = TimeCondition::builder().build();
+    /// ```
     pub fn build(self) -> TimeCondition {
         TimeCondition {
-            time: self
-                .time
-                .expect("TimeConditionBuilder requires a time value; call greater_than() or less_than() before build()"),
+            time: self.time,
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
@@ -608,8 +634,8 @@ impl Default for TimeConditionBuilder {
 /// ```
 #[derive(Debug, Clone)]
 #[must_use = "MarginConditionBuilder does nothing until you call .build()"]
-pub struct MarginConditionBuilder {
-    percent: Option<i32>,
+pub struct MarginConditionBuilder<Threshold = Missing> {
+    percent: Threshold,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -621,30 +647,37 @@ impl MarginCondition {
     }
 }
 
-impl MarginConditionBuilder {
+impl MarginConditionBuilder<Missing> {
     /// Create a new margin condition builder.
     pub fn new() -> Self {
         Self {
-            percent: None,        // Must be set by greater_than/less_than
-            is_more: true,        // Default: trigger when above threshold
+            percent: Missing,
+            is_more: true,        // Set by greater_than/less_than
             is_conjunction: true, // Default: AND condition
         }
     }
 
     /// Set trigger when margin cushion is greater than the specified percentage.
-    pub fn greater_than(mut self, percent: i32) -> Self {
-        self.percent = Some(percent);
-        self.is_more = true;
-        self
+    pub fn greater_than(self, percent: i32) -> MarginConditionBuilder<i32> {
+        self.threshold(percent, true)
     }
 
     /// Set trigger when margin cushion is less than the specified percentage.
-    pub fn less_than(mut self, percent: i32) -> Self {
-        self.percent = Some(percent);
-        self.is_more = false;
-        self
+    pub fn less_than(self, percent: i32) -> MarginConditionBuilder<i32> {
+        self.threshold(percent, false)
     }
 
+    /// Move to the complete state with the comparison set.
+    fn threshold(self, percent: i32, is_more: bool) -> MarginConditionBuilder<i32> {
+        MarginConditionBuilder {
+            percent,
+            is_more,
+            is_conjunction: self.is_conjunction,
+        }
+    }
+}
+
+impl<Threshold> MarginConditionBuilder<Threshold> {
     /// Set whether this is an AND (conjunction) or OR (disjunction) condition.
     ///
     /// Default is `true` (AND).
@@ -652,17 +685,21 @@ impl MarginConditionBuilder {
         self.is_conjunction = is_conjunction;
         self
     }
+}
 
+impl MarginConditionBuilder<i32> {
     /// Build the margin condition.
     ///
-    /// # Panics
+    /// Only reachable once `greater_than()` or `less_than()` set the comparison:
     ///
-    /// If neither `greater_than()` nor `less_than()` was called.
+    /// ```compile_fail,E0599
+    /// use ibapi::orders::conditions::MarginCondition;
+    ///
+    /// let condition = MarginCondition::builder().build();
+    /// ```
     pub fn build(self) -> MarginCondition {
         MarginCondition {
-            percent: self
-                .percent
-                .expect("MarginConditionBuilder requires a percentage threshold; call greater_than() or less_than() before build()"),
+            percent: self.percent,
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
@@ -757,10 +794,10 @@ impl ExecutionConditionBuilder {
 /// ```
 #[derive(Debug, Clone)]
 #[must_use = "VolumeConditionBuilder does nothing until you call .build()"]
-pub struct VolumeConditionBuilder {
+pub struct VolumeConditionBuilder<Threshold = Missing> {
     contract_id: i32,
     exchange: String,
-    volume: Option<i32>,
+    volume: Threshold,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -777,7 +814,7 @@ impl VolumeCondition {
     }
 }
 
-impl VolumeConditionBuilder {
+impl VolumeConditionBuilder<Missing> {
     /// Create a new volume condition builder.
     ///
     /// # Parameters
@@ -788,26 +825,35 @@ impl VolumeConditionBuilder {
         Self {
             contract_id: contract_id.into().value(),
             exchange: exchange.into(),
-            volume: None,         // Must be set by greater_than/less_than
-            is_more: true,        // Default: trigger when above threshold
+            volume: Missing,
+            is_more: true,        // Set by greater_than/less_than
             is_conjunction: true, // Default: AND condition
         }
     }
 
     /// Set trigger when volume is greater than the specified value.
-    pub fn greater_than(mut self, volume: i32) -> Self {
-        self.volume = Some(volume);
-        self.is_more = true;
-        self
+    pub fn greater_than(self, volume: i32) -> VolumeConditionBuilder<i32> {
+        self.threshold(volume, true)
     }
 
     /// Set trigger when volume is less than the specified value.
-    pub fn less_than(mut self, volume: i32) -> Self {
-        self.volume = Some(volume);
-        self.is_more = false;
-        self
+    pub fn less_than(self, volume: i32) -> VolumeConditionBuilder<i32> {
+        self.threshold(volume, false)
     }
 
+    /// Move to the complete state with the comparison set.
+    fn threshold(self, volume: i32, is_more: bool) -> VolumeConditionBuilder<i32> {
+        VolumeConditionBuilder {
+            contract_id: self.contract_id,
+            exchange: self.exchange,
+            volume,
+            is_more,
+            is_conjunction: self.is_conjunction,
+        }
+    }
+}
+
+impl<Threshold> VolumeConditionBuilder<Threshold> {
     /// Set whether this is an AND (conjunction) or OR (disjunction) condition.
     ///
     /// Default is `true` (AND).
@@ -815,19 +861,23 @@ impl VolumeConditionBuilder {
         self.is_conjunction = is_conjunction;
         self
     }
+}
 
+impl VolumeConditionBuilder<i32> {
     /// Build the volume condition.
     ///
-    /// # Panics
+    /// Only reachable once `greater_than()` or `less_than()` set the comparison:
     ///
-    /// If neither `greater_than()` nor `less_than()` was called.
+    /// ```compile_fail,E0599
+    /// use ibapi::orders::conditions::VolumeCondition;
+    ///
+    /// let condition = VolumeCondition::builder(12345, "NASDAQ").build();
+    /// ```
     pub fn build(self) -> VolumeCondition {
         VolumeCondition {
             contract_id: self.contract_id,
             exchange: self.exchange,
-            volume: self
-                .volume
-                .expect("VolumeConditionBuilder requires a volume threshold; call greater_than() or less_than() before build()"),
+            volume: self.volume,
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
@@ -847,10 +897,10 @@ impl VolumeConditionBuilder {
 /// ```
 #[derive(Debug, Clone)]
 #[must_use = "PercentChangeConditionBuilder does nothing until you call .build()"]
-pub struct PercentChangeConditionBuilder {
+pub struct PercentChangeConditionBuilder<Threshold = Missing> {
     contract_id: i32,
     exchange: String,
-    percent: Option<f64>,
+    percent: Threshold,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -867,7 +917,7 @@ impl PercentChangeCondition {
     }
 }
 
-impl PercentChangeConditionBuilder {
+impl PercentChangeConditionBuilder<Missing> {
     /// Create a new percent change condition builder.
     ///
     /// # Parameters
@@ -878,26 +928,35 @@ impl PercentChangeConditionBuilder {
         Self {
             contract_id: contract_id.into().value(),
             exchange: exchange.into(),
-            percent: None,        // Must be set by greater_than/less_than
-            is_more: true,        // Default: trigger when above threshold
+            percent: Missing,
+            is_more: true,        // Set by greater_than/less_than
             is_conjunction: true, // Default: AND condition
         }
     }
 
     /// Set trigger when percent change is greater than the specified value.
-    pub fn greater_than(mut self, percent: f64) -> Self {
-        self.percent = Some(percent);
-        self.is_more = true;
-        self
+    pub fn greater_than(self, percent: f64) -> PercentChangeConditionBuilder<f64> {
+        self.threshold(percent, true)
     }
 
     /// Set trigger when percent change is less than the specified value.
-    pub fn less_than(mut self, percent: f64) -> Self {
-        self.percent = Some(percent);
-        self.is_more = false;
-        self
+    pub fn less_than(self, percent: f64) -> PercentChangeConditionBuilder<f64> {
+        self.threshold(percent, false)
     }
 
+    /// Move to the complete state with the comparison set.
+    fn threshold(self, percent: f64, is_more: bool) -> PercentChangeConditionBuilder<f64> {
+        PercentChangeConditionBuilder {
+            contract_id: self.contract_id,
+            exchange: self.exchange,
+            percent,
+            is_more,
+            is_conjunction: self.is_conjunction,
+        }
+    }
+}
+
+impl<Threshold> PercentChangeConditionBuilder<Threshold> {
     /// Set whether this is an AND (conjunction) or OR (disjunction) condition.
     ///
     /// Default is `true` (AND).
@@ -905,19 +964,23 @@ impl PercentChangeConditionBuilder {
         self.is_conjunction = is_conjunction;
         self
     }
+}
 
+impl PercentChangeConditionBuilder<f64> {
     /// Build the percent change condition.
     ///
-    /// # Panics
+    /// Only reachable once `greater_than()` or `less_than()` set the comparison:
     ///
-    /// If neither `greater_than()` nor `less_than()` was called.
+    /// ```compile_fail,E0599
+    /// use ibapi::orders::conditions::PercentChangeCondition;
+    ///
+    /// let condition = PercentChangeCondition::builder(12345, "NASDAQ").build();
+    /// ```
     pub fn build(self) -> PercentChangeCondition {
         PercentChangeCondition {
             contract_id: self.contract_id,
             exchange: self.exchange,
-            percent: self
-                .percent
-                .expect("PercentChangeConditionBuilder requires a threshold; call greater_than() or less_than() before build()"),
+            percent: self.percent,
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
@@ -925,32 +988,32 @@ impl PercentChangeConditionBuilder {
 }
 
 // From implementations to convert builders to OrderCondition
-impl From<PriceConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: PriceConditionBuilder) -> Self {
+impl From<PriceConditionBuilder<f64>> for crate::orders::OrderCondition {
+    fn from(builder: PriceConditionBuilder<f64>) -> Self {
         crate::orders::OrderCondition::Price(builder.build())
     }
 }
 
-impl From<TimeConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: TimeConditionBuilder) -> Self {
+impl From<TimeConditionBuilder<String>> for crate::orders::OrderCondition {
+    fn from(builder: TimeConditionBuilder<String>) -> Self {
         crate::orders::OrderCondition::Time(builder.build())
     }
 }
 
-impl From<MarginConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: MarginConditionBuilder) -> Self {
+impl From<MarginConditionBuilder<i32>> for crate::orders::OrderCondition {
+    fn from(builder: MarginConditionBuilder<i32>) -> Self {
         crate::orders::OrderCondition::Margin(builder.build())
     }
 }
 
-impl From<VolumeConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: VolumeConditionBuilder) -> Self {
+impl From<VolumeConditionBuilder<i32>> for crate::orders::OrderCondition {
+    fn from(builder: VolumeConditionBuilder<i32>) -> Self {
         crate::orders::OrderCondition::Volume(builder.build())
     }
 }
 
-impl From<PercentChangeConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: PercentChangeConditionBuilder) -> Self {
+impl From<PercentChangeConditionBuilder<f64>> for crate::orders::OrderCondition {
+    fn from(builder: PercentChangeConditionBuilder<f64>) -> Self {
         crate::orders::OrderCondition::PercentChange(builder.build())
     }
 }
