@@ -1,5 +1,5 @@
 use crate::accounts::types::{AccountGroup, AccountId, ContractId};
-use crate::accounts::{FaDataType, ServerLogLevel};
+use crate::accounts::{FaDataType, LedgerOnly, ServerLogLevel};
 use crate::common::test_utils::helpers::assert_proto_msg_id;
 use crate::messages::OutgoingMessages;
 use crate::testdata::builders::accounts::{
@@ -135,8 +135,8 @@ fn encode_request_account_updates_multi_works() {
     let account = AccountId("DU1234567".to_string());
     let model_code = ModelCode("MODEL_X".to_string());
     use prost::Message;
-    for (ledger_and_nlv, expected) in [(true, Some(true)), (false, None)] {
-        let bytes = super::encode_request_account_updates_multi(9000, Some(&account), Some(&model_code), ledger_and_nlv).unwrap();
+    for (ledger_only, expected) in [(LedgerOnly::Yes, Some(true)), (LedgerOnly::No, None)] {
+        let bytes = super::encode_request_account_updates_multi(9000, Some(&account), Some(&model_code), ledger_only).unwrap();
         assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountUpdatesMulti);
 
         let req = crate::proto::AccountUpdatesMultiRequest::decode(&bytes[4..]).unwrap();

@@ -427,7 +427,7 @@ pub struct UserInfo {
 /// light-weight request. `No` delivers those same keys plus the account-level keys without the
 /// prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...).
 ///
-/// Sent as TWS's `ledgerAndNLV` flag: `Yes` is `true`. There is no default; 5.x always sent `Yes`.
+/// Sent as TWS's `ledgerAndNLV` flag: `Yes` is `true`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LedgerOnly {

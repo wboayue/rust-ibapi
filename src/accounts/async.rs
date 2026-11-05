@@ -397,8 +397,7 @@ impl Client {
         ledger_only: LedgerOnly,
     ) -> Result<Subscription<AccountUpdateMulti>, Error> {
         let builder = self.request();
-        let ledger_and_nlv = matches!(ledger_only, LedgerOnly::Yes);
-        let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code, ledger_and_nlv)?;
+        let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code, ledger_only)?;
 
         builder.send::<AccountUpdateMulti>(request).await
     }

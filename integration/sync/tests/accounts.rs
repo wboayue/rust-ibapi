@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
+use ibapi::accounts::LedgerOnly;
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};
@@ -124,7 +125,7 @@ fn account_updates_multi() {
     let (client, account, _client_id) = connect_and_get_account();
 
     let subscription = client
-        .account_updates_multi(Some(&account), None, ibapi::accounts::LedgerOnly::Yes)
+        .account_updates_multi(Some(&account), None, LedgerOnly::Yes)
         .expect("account_updates_multi failed");
 
     let _item = subscription.next_timeout(Duration::from_secs(10));
