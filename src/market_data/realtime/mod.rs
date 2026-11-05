@@ -330,7 +330,7 @@ pub struct MarketDepth {
 pub struct MarketDepthL2 {
     /// The order book's row being updated
     pub position: i32,
-    /// The exchange holding the order if isSmartDepth is True, otherwise the MPID of the market maker
+    /// The exchange holding the order if `is_smart_depth` is `true`, otherwise the MPID of the market maker
     pub market_maker: String,
     /// How to refresh the row.
     pub operation: DepthOperation,
@@ -341,7 +341,7 @@ pub struct MarketDepthL2 {
     /// The order's size.
     pub size: f64,
     /// Flag indicating if this is smart depth response (aggregate data from multiple exchanges, v974+)
-    pub smart_depth: bool,
+    pub is_smart_depth: bool,
 }
 
 impl StreamDecoder<MarketDepths> for MarketDepths {

@@ -298,3 +298,27 @@ let option = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build
 Every option `build()` call gains `?` (or handling of the error); the compiler finds each one where a `Contract` is expected.
 
 After `strike()`, the builder's strike type parameter is `f64`, where it was the validated `Strike`. Code that names the type writes `OptionBuilder<Symbol, f64, ExpirationDate>`. `Strike` and `Strike::new` are unchanged.
+
+### 14. Bool fields keep the protobuf `is_` prefix
+
+Public bool fields take their protobuf field's name. Three dropped its `is_` prefix and now keep it:
+
+| 5.x | 6.0 |
+|---|---|
+| `Execution::liquidation: i32` | `Execution::is_liquidation: bool` |
+| `Execution::pending_price_revision` | `Execution::is_price_revision_pending` |
+| `MarketDepthL2::smart_depth` | `MarketDepthL2::is_smart_depth` |
+
+`liquidation` also changes type. It was an `i32` that was only ever `0` or `1`, a holdover from the text wire format; TWS sends a bool. An absent value is `false`, as `0` was before.
+
+```rust,ignore
+// 5.x
+if execution.liquidation != 0 || execution.pending_price_revision { /* ... */ }
+if row.smart_depth { /* ... */ }
+
+// 6.0
+if execution.is_liquidation || execution.is_price_revision_pending { /* ... */ }
+if row.is_smart_depth { /* ... */ }
+```
+
+The compiler finds every use. It does not catch the serialized form: `MarketDepthL2` derives `Serialize` / `Deserialize`, so its JSON key is now `is_smart_depth`, and rows written by 5.x no longer deserialize. `Execution` has no serde derive. The `utoipa` schemas rename all three properties, and `is_liquidation` becomes a boolean.

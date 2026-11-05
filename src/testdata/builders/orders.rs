@@ -272,7 +272,7 @@ pub struct ExecutionDataResponse {
     pub price: f64,
     pub perm_id: i64,
     pub client_id: i32,
-    pub liquidation: i32,
+    pub is_liquidation: bool,
     pub cumulative_quantity: f64,
     pub average_price: f64,
     pub order_reference: String,
@@ -304,7 +304,7 @@ impl Default for ExecutionDataResponse {
             price: 196.52,
             perm_id: TEST_PERM_ID,
             client_id: 100,
-            liquidation: 0,
+            is_liquidation: false,
             cumulative_quantity: 100.0,
             average_price: 196.52,
             order_reference: String::new(),
@@ -366,6 +366,10 @@ impl ExecutionDataResponse {
         self.perm_id = v;
         self
     }
+    pub fn liquidation(mut self, v: bool) -> Self {
+        self.is_liquidation = v;
+        self
+    }
     pub fn last_liquidity(mut self, v: i32) -> Self {
         self.last_liquidity = v;
         self
@@ -403,7 +407,7 @@ impl ResponseProtoEncoder for ExecutionDataResponse {
                 price: Some(self.price),
                 perm_id: Some(self.perm_id),
                 client_id: Some(self.client_id),
-                is_liquidation: Some(self.liquidation != 0),
+                is_liquidation: Some(self.is_liquidation),
                 cum_qty: Some(self.cumulative_quantity.to_string()),
                 avg_price: Some(self.average_price),
                 order_ref: some_str(&self.order_reference),

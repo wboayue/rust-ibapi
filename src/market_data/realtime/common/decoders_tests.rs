@@ -290,7 +290,7 @@ mod market_depth_tests {
         assert_eq!(depth.side, DepthSide::Bid);
         assert_eq!(depth.price, 185.50);
         assert_eq!(depth.size, 100.0);
-        assert!(depth.smart_depth);
+        assert!(depth.is_smart_depth);
     }
 
     #[test]
@@ -308,7 +308,7 @@ mod market_depth_tests {
             }),
         };
         let depth = decode_market_depth_l2_proto(proto_msg).expect("decode failed");
-        assert!(!depth.smart_depth, "missing smart_depth flag should default to false");
+        assert!(!depth.is_smart_depth, "missing is_smart_depth flag should default to false");
     }
 
     #[test]

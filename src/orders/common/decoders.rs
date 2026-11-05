@@ -457,7 +457,7 @@ pub(crate) fn decode_execution(proto: &proto::Execution) -> Result<Execution, Er
         shares: parse_decimal_or_zero(proto.shares.as_deref())?,
         price: proto.price.unwrap_or_default(),
         perm_id: proto.perm_id.unwrap_or_default(),
-        liquidation: if proto.is_liquidation.unwrap_or_default() { 1 } else { 0 },
+        is_liquidation: proto.is_liquidation.unwrap_or_default(),
         cumulative_quantity: parse_decimal_or_zero(proto.cum_qty.as_deref())?,
         average_price: proto.avg_price.unwrap_or_default(),
         order_reference: s(&proto.order_ref),
@@ -465,7 +465,7 @@ pub(crate) fn decode_execution(proto: &proto::Execution) -> Result<Execution, Er
         ev_multiplier: optional_f64(proto.ev_multiplier),
         model_code: s(&proto.model_code),
         last_liquidity: Liquidity::from(proto.last_liquidity.unwrap_or_default()),
-        pending_price_revision: proto.is_price_revision_pending.unwrap_or_default(),
+        is_price_revision_pending: proto.is_price_revision_pending.unwrap_or_default(),
         submitter: s(&proto.submitter),
         option_exercise_type: proto.opt_exercise_or_lapse_type.map(OptionExerciseType::from).unwrap_or_default(),
     })
