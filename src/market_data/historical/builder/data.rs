@@ -1,7 +1,7 @@
 use time::OffsetDateTime;
 
 use crate::contracts::Contract;
-use crate::market_data::historical::{BarSize, BarTimestamp, Duration, HistoricalBarUpdate, HistoricalData, WhatToShow};
+use crate::market_data::historical::{BarSize, Duration, HistoricalBarUpdate, HistoricalData, WhatToShow};
 use crate::market_data::TradingHours;
 use crate::Error;
 
@@ -244,15 +244,11 @@ fn covering_duration(span: time::Duration) -> Duration {
 }
 
 /// Drop bars outside `[start, end)` when the request came from [`between`](HistoricalDataBuilder::between).
-fn trim_to_range(mut data: HistoricalData, range: Option<(OffsetDateTime, OffsetDateTime)>) -> HistoricalData {
-    let Some((start, end)) = range else {
-        return data;
-    };
-    let (first, last) = (BarTimestamp::from(start), BarTimestamp::from(end));
-    data.bars.retain(|bar| bar.date >= first && bar.date < last);
-    data.start = start;
-    data.end = end;
-    data
+fn trim_to_range(data: HistoricalData, range: Option<(OffsetDateTime, OffsetDateTime)>) -> HistoricalData {
+    match range {
+        Some((start, end)) => data.trim_to(start, end),
+        None => data,
+    }
 }
 
 #[cfg(feature = "sync")]
