@@ -11,7 +11,6 @@ triggers:
 symbols: [non_exhaustive, must_use, private_interfaces, pub(crate)]
 related: [integration-crate-builds, modernize-touched-modules, floor-ratchet-splits]
 precedents: ["#547", "#548", "#581", "#665", "#1081"]
-memory: [feedback_narrowing_transparency_audit, feedback_non_exhaustive_caseby_case]
 ---
 
 A PR that adds a compile-time restriction to a public type — `#[non_exhaustive]`, `#[must_use]`,
@@ -51,6 +50,12 @@ trips `-D warnings`.
 `#[non_exhaustive]` takes exhaustive matching and struct-literal construction away from callers
 permanently. Justify each application; one added "for headroom" is the likeliest to be reverted.
 
+The deciding question: **where does an unrecognized input land?** If it maps to `None` or an
+`Unknown` / `Other` variant, the set is closed from the caller's side however the wire grows,
+and the attribute only forces a dead `_` arm. `ConnectivityStatus::from_code` returns `None` for
+unknown codes, so `ConnectivityStatus` stays exhaustive (#689) though its sibling
+`NoticeCategory` is not. Sibling consistency is not a reason.
+
 ## Precedents
 
 - #547 → #548 — the canonical split. #547 moved 15 example sites and a README snippet to the
@@ -66,5 +71,7 @@ permanently. Justify each application; one added "for headroom" is the likeliest
 - #581 — narrowing `ResponseMessage` to `pub(crate)`, planned as transparent, surfaced five
   `private_interfaces` warnings (`TickDecoder::decode`, three impls, `Error::UnexpectedResponse`)
   plus five `dead_code` warnings mid-flight.
+- #689 — `ConnectivityStatus` left exhaustive; the plan had defaulted to `#[non_exhaustive]` to
+  match `NoticeCategory`.
 - #1081 — removed `#[non_exhaustive]` from `ExecutionFilterSide`, `OptionRight`, `LegAction`:
   closed TWS vocabularies; the one stated reason (on `ExecutionFilterSide`) was headroom.

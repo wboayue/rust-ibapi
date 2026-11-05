@@ -10,7 +10,6 @@ triggers:
 symbols: [Examples, no_run]
 related: [doc-parity-audit, param-budget, user-docs-sync]
 precedents: ["#657", "#659", "#751"]
-memory: [feedback_doc_example_user_trace]
 ---
 
 Every `pub fn`, `pub` constructor, and public builder entry point gets a `# Examples` heading
@@ -31,8 +30,10 @@ breaks the build), and is the first thing a user sees on docs.rs.
 
 Write it from what the user *observes*. `drop(subscription)` and an `Ok(_) => {}` catch-all are
 the canary anti-patterns — both compile, neither shows anything. An example that subscribes
-should print or match on what arrives. Pair it with the same method's sync/async counterpart;
-see [doc parity audit](doc-parity-audit.md).
+should print or match on what arrives. `#[must_use]` will not catch the drop for you: doctests
+compile under `#![allow(unused)]`, which silences it. Count a `match`'s arms against the enum's
+variants; a trailing `_ => {}` hiding variants that carry payload hides half the API. Pair it
+with the same method's sync/async counterpart; see [doc parity audit](doc-parity-audit.md).
 
 ## Coverage today
 
@@ -43,5 +44,9 @@ reappear: `grep -rnE '^\s*//[/!] # Example\s*$' src | grep -v _tests.rs` prints 
 
 ## Precedents
 
-- #657 / #659 — brought the async side up to the sync side's example coverage.
+- #657 / #659 — brought the async side up to the sync side's example coverage. #657 copied
+  sync bodies and added `.await`, shipping four examples that compiled and showed nothing:
+  `drop(subscription)` after `cancel_order` / `exercise_options`, an `Ok(_) => {}` swallowing two
+  of `order_update_stream`'s four variants, a `DisplayGroupSubscription` dropped after
+  `.update(..)`.
 - #751 — closed the backfill on the last eight `Client` methods.

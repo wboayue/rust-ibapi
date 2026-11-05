@@ -8,9 +8,8 @@ triggers:
   - a decoder falls back to T::default() on a missing field
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, Error::Parse, Unknown]
-related: [proto-only-decoding, fixture-builders]
+related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
 precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071"]
-memory: [feedback_helper_signature_precursor_pr, feedback_test_fixture_display_cruft, feedback_live_diagnostic_tests]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -59,7 +58,12 @@ decoder that rejects valid data.
 
 When a new strict decoder rejects an existing test fixture, **don't broaden `FromStr` to accept
 the literal.** Check `/Users/wboayue/projects/tws-api/samples/` first: #559's `right: "?"` was a
-VB sample app's display fallback, never real wire.
+VB sample app's display fallback (`appendNonEmptyString(.., contract.Right, "?")`), never real
+wire. Display helpers and `*_PLACEHOLDER` constants say nothing about the wire; decoder reads
+(`ReadString`, `decodeString`) do. No wire evidence for the literal → fix the fixture.
+
+If a decode helper's signature doesn't fit the new call site, change it in a precursor PR first;
+see [modernize touched modules](../workflow/modernize-touched-modules.md).
 
 ## Integer-coded enums
 
@@ -111,6 +115,7 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
 
 - #518 — established the pattern (`OrderStatus.status` → `OrderStatusKind`).
 - #556, #558 — the generic `parse_required` / `parse_optional` shape.
+- #558 — precursor: the helpers took `Option<&str>` before their first text-side consumer.
 - #559 — the `right: "?"` fixture-vs-wire lesson.
 - #647 — `FundamentalReportType`: docs listed six values, TWS accepted four (module since removed,
   migration-3.0 §34).

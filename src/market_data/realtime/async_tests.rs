@@ -4,6 +4,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
+use crate::market_data::realtime::{DepthOperation, DepthSide};
 use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
@@ -442,22 +443,22 @@ async fn market_depth() {
 
     assert_eq!(received_depth.len(), 2, "Should receive 2 depth updates");
 
-    // Verify first update (insert bid)
+    // Verify first update (insert ask)
     if let MarketDepths::MarketDepth(depth) = &received_depth[0] {
         assert_eq!(depth.position, 0, "Wrong position for first update");
-        assert_eq!(depth.operation, 0, "Wrong operation for first update");
-        assert_eq!(depth.side, 0, "Wrong side for first update");
+        assert_eq!(depth.operation, DepthOperation::Insert, "Wrong operation for first update");
+        assert_eq!(depth.side, DepthSide::Ask, "Wrong side for first update");
         assert_eq!(depth.price, 4028.75, "Wrong price for first update");
         assert_eq!(depth.size, 100.0, "Wrong size for first update");
     } else {
         panic!("Expected MarketDepth, got {:?}", received_depth[0]);
     }
 
-    // Verify second update (update ask)
+    // Verify second update (update bid)
     if let MarketDepths::MarketDepth(depth) = &received_depth[1] {
         assert_eq!(depth.position, 1, "Wrong position for second update");
-        assert_eq!(depth.operation, 1, "Wrong operation for second update");
-        assert_eq!(depth.side, 1, "Wrong side for second update");
+        assert_eq!(depth.operation, DepthOperation::Update, "Wrong operation for second update");
+        assert_eq!(depth.side, DepthSide::Bid, "Wrong side for second update");
         assert_eq!(depth.price, 4028.50, "Wrong price for second update");
         assert_eq!(depth.size, 200.0, "Wrong size for second update");
     } else {

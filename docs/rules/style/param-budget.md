@@ -11,7 +11,6 @@ triggers:
 symbols: [too_many_arguments]
 related: [domain-module-layout, macros-last-resort, doc-parity-audit]
 precedents: ["#549", "#573", "#660", "#752", "#792", "#901", "#1079", "#1123"]
-memory: [feedback_magic_none_split_to_builder]
 ---
 
 Three parameters is the budget for the **public API** (anything rustdoc shows). The receiver
@@ -43,7 +42,9 @@ a 4- to 7-arg public signature passes CI. This is review-time only.
 An `Option`-heavy public signature is often two problems. Before adding a setter for an
 `Option<T>`, check whether the `Option` should exist: if every real caller passes `Some(x)`, drop
 it. A magic-`None` split, `foo(Option<T>)` → `foo(T)` + `foo_default()` → builder, is a waypoint,
-not the destination. Both live in [doc parity audit](../docs/doc-parity-audit.md).
+not the destination; the builder that later absorbs the split is not undoing it. Both live in
+[doc parity audit](../docs/doc-parity-audit.md). Name the optional's setter to read in the
+chain: `.ending(date)`, not `.end_date(date)`.
 
 Public signatures over budget are all-required and kept flat with a reason: `historical_news`
 (five arguments), `Contract::option` (superseded by `Contract::call()` / `put()`), and the

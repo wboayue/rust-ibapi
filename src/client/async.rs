@@ -294,7 +294,7 @@ impl Client {
     /// }
     /// ```
     pub async fn wait_connected(&self) -> Result<(), Error> {
-        self.message_bus.wait_connected().await
+        self.message_bus.wait_connected(None).await
     }
 
     /// Streams items from the subscription `open` returns, resubscribing after

@@ -30,7 +30,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match result {
             Ok(article) => {
                 println!("\n--- Breaking News ---");
-                println!("Time: {}", article.time);
+                match article.time {
+                    Some(time) => println!("Time: {time}"),
+                    None => println!("Time: unknown"),
+                }
                 println!("Provider: {}", article.provider_code);
                 println!("Article ID: {}", article.article_id);
                 println!("Headline: {}", article.headline);

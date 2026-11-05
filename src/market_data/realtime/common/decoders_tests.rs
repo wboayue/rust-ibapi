@@ -1,6 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::proto_response;
 use crate::common::test_utils::helpers::{assert_missing_field, assert_rejects_text_framing};
+use crate::market_data::realtime::{DepthOperation, DepthSide};
 use crate::messages::IncomingMessages;
 use crate::messages::ResponseMessage;
 use crate::server_versions;
@@ -218,27 +219,32 @@ mod market_depth_tests {
             .to_proto();
         let depth = decode_market_depth_proto(p).expect("decode failed");
         assert_eq!(depth.position, 0);
-        assert_eq!(depth.operation, 1);
-        assert_eq!(depth.side, 1);
+        assert_eq!(depth.operation, DepthOperation::Update);
+        assert_eq!(depth.side, DepthSide::Bid);
         assert_eq!(depth.price, 185.50);
         assert_eq!(depth.size, 100.0);
     }
 
     #[test]
     fn decode_market_depth_proto_operations() {
-        for op in [0, 1, 2] {
+        for (op, expected) in [
+            (0, DepthOperation::Insert),
+            (1, DepthOperation::Update),
+            (2, DepthOperation::Delete),
+            (9, DepthOperation::Unknown(9)),
+        ] {
             let p = market_depth_response().operation(op).side(1).price(185.50).size(100.0).to_proto();
             let depth = decode_market_depth_proto(p).expect("decode failed");
-            assert_eq!(depth.operation, op);
+            assert_eq!(depth.operation, expected, "operation {op}");
         }
     }
 
     #[test]
     fn decode_market_depth_proto_sides() {
-        for side in [0, 1] {
+        for (side, expected) in [(0, DepthSide::Ask), (1, DepthSide::Bid), (9, DepthSide::Unknown(9))] {
             let p = market_depth_response().side(side).price(185.50).size(100.0).to_proto();
             let depth = decode_market_depth_proto(p).expect("decode failed");
-            assert_eq!(depth.side, side);
+            assert_eq!(depth.side, expected, "side {side}");
         }
     }
 
@@ -280,8 +286,8 @@ mod market_depth_tests {
 
         assert_eq!(depth.position, 0);
         assert_eq!(depth.market_maker, "ISLAND");
-        assert_eq!(depth.operation, 1);
-        assert_eq!(depth.side, 1);
+        assert_eq!(depth.operation, DepthOperation::Update);
+        assert_eq!(depth.side, DepthSide::Bid);
         assert_eq!(depth.price, 185.50);
         assert_eq!(depth.size, 100.0);
         assert!(depth.smart_depth);
@@ -303,6 +309,21 @@ mod market_depth_tests {
         };
         let depth = decode_market_depth_l2_proto(proto_msg).expect("decode failed");
         assert!(!depth.smart_depth, "missing smart_depth flag should default to false");
+    }
+
+    #[test]
+    fn decode_market_depth_l2_proto_preserves_unknown_integer_codes() {
+        let proto_msg = crate::proto::MarketDepthL2 {
+            req_id: Some(9000),
+            market_depth_data: Some(crate::proto::MarketDepthData {
+                operation: Some(9),
+                side: Some(9),
+                ..Default::default()
+            }),
+        };
+        let depth = decode_market_depth_l2_proto(proto_msg).expect("decode failed");
+        assert_eq!(depth.operation, DepthOperation::Unknown(9));
+        assert_eq!(depth.side, DepthSide::Unknown(9));
     }
 
     #[test]

@@ -10,7 +10,6 @@ triggers:
 symbols: [Option, Arguments, Examples]
 related: [public-api-examples, dual-feature-types, modernize-touched-modules, param-budget]
 precedents: ["#573"]
-memory: [feedback_doc_parity_signature_audit, feedback_remove_option_when_all_callers_wrap, feedback_magic_none_split_to_builder]
 ---
 
 "Make the async docs match the sync ones" is the trigger, not the job. Audit three layers and

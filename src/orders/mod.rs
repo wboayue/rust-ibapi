@@ -1611,6 +1611,53 @@ impl From<i32> for Liquidity {
     }
 }
 
+/// Option exercise or lapse type of an execution (TWS `optExerciseOrLapseType`).
+///
+/// Variant names and codes follow the IBKR reference client, which does not define them
+/// further.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum OptionExerciseType {
+    /// No exercise or lapse type. Wire code `-1`; also used when TWS omits the field.
+    #[default]
+    None,
+    /// Exercise. Wire code `1`.
+    Exercise,
+    /// Lapse. Wire code `2`.
+    Lapse,
+    /// Do nothing. Wire code `3`.
+    DoNothing,
+    /// Assigned. Wire code `100`.
+    Assigned,
+    /// Auto-exercise (clearing). Wire code `101`.
+    AutoexerciseClearing,
+    /// Expired. Wire code `102`.
+    Expired,
+    /// Auto-exercise (trading). Wire code `200`.
+    AutoexerciseTrading,
+    /// Netting. Wire code `203`.
+    Netting,
+    /// Code not modeled by this version of the API.
+    Unknown(i32),
+}
+
+impl From<i32> for OptionExerciseType {
+    fn from(val: i32) -> Self {
+        match val {
+            -1 => OptionExerciseType::None,
+            1 => OptionExerciseType::Exercise,
+            2 => OptionExerciseType::Lapse,
+            3 => OptionExerciseType::DoNothing,
+            100 => OptionExerciseType::Assigned,
+            101 => OptionExerciseType::AutoexerciseClearing,
+            102 => OptionExerciseType::Expired,
+            200 => OptionExerciseType::AutoexerciseTrading,
+            203 => OptionExerciseType::Netting,
+            value => OptionExerciseType::Unknown(value),
+        }
+    }
+}
+
 /// Describes an order's execution.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default)]
@@ -1662,6 +1709,9 @@ pub struct Execution {
     pub pending_price_revision: bool,
     /// Identifies the submitter of the execution.
     pub submitter: String,
+    /// Option exercise or lapse type (TWS `optExerciseOrLapseType`); [`OptionExerciseType::None`]
+    /// when TWS sends `-1` or omits the field.
+    pub option_exercise_type: OptionExerciseType,
 }
 
 /// Contains execution information including the request ID, contract, and execution details.

@@ -16,7 +16,8 @@ use super::*;
 use crate::client::ids::{OrderId, RequestId};
 use crate::common::test_utils::helpers;
 use crate::common::test_utils::helpers::{
-    binary_proto, body, error_frame, execution_data_frame, farm_ok_frame_42, farm_ok_frame_unrouted, handshake_frames, NoticeTestData, FARM_OK_MSG,
+    binary_proto, body, error_frame, execution_data_frame, farm_ok_frame_42, farm_ok_frame_unrouted, handshake_frames, wait_for_async,
+    NoticeTestData, FARM_OK_MSG,
 };
 use crate::connection::common::ConnectionProtocol;
 use crate::connection::r#async::AsyncConnection;
@@ -1229,7 +1230,7 @@ async fn subscription_10091_preserves_later_option_computation() {
 /// `MarketDepths::Reset` so `filter_data()` keeps it (#899).
 #[tokio::test]
 async fn subscription_317_yields_reset_then_rows() {
-    use crate::market_data::realtime::MarketDepths;
+    use crate::market_data::realtime::{DepthOperation, DepthSide, MarketDepths};
     use crate::testdata::builders::{market_data::market_depth_response, ResponseProtoEncoder};
 
     let (stream, bus) = make_bus();
@@ -1265,8 +1266,8 @@ async fn subscription_317_yields_reset_then_rows() {
     match depths.next().await {
         Some(Ok(MarketDepths::MarketDepth(depth))) => {
             assert_eq!(depth.position, 0);
-            assert_eq!(depth.operation, 0);
-            assert_eq!(depth.side, 1);
+            assert_eq!(depth.operation, DepthOperation::Insert);
+            assert_eq!(depth.side, DepthSide::Bid);
             assert_eq!(depth.price, 101.5);
             assert_eq!(depth.size, 3.0);
         }
@@ -2146,6 +2147,330 @@ async fn sends_are_refused_while_disconnected() {
     assert!(!stream.captured().is_empty());
 }
 
+/// A send is refused for as long as the reconnect handshake is in flight,
+/// even when its state check passed: the dispatcher holds the session gate
+/// across the reconnect. Without the gate the request would land on the new
+/// socket between the handshake and its acknowledgement. Forcing the state
+/// live stands in for a check that passed; the send already past the gate
+/// when the session breaks is `queued_send_is_not_written_into_the_reconnect_handshake`.
+#[tokio::test]
+async fn sends_are_refused_during_the_reconnect_handshake() {
+    let (stream, bus) = make_bus();
+    let mut notices = bus.connection.notice_broadcaster.subscribe();
+    let handler = &bus.connection.connection_handler;
+
+    // Connection lost, then nothing: the reconnect blocks on the handshake ack.
+    stream.push_inbound(b"xx".to_vec());
+    bus.clone().process_messages().expect("process_messages");
+    wait_for_async("the handshake to be written", || stream.captured() == handler.format_handshake()).await;
+
+    // Stands in for a sender whose check passed before the dispatcher flipped
+    // the state: with the signal saying live, only the gate refuses the write.
+    bus.connection_state.set_connected();
+    assert!(matches!(
+        bus.send_request(RequestId::nth(100), b"req-bytes".to_vec()).await,
+        Err(Error::ConnectionReset)
+    ));
+    assert!(bus.requests.is_empty(), "a refused request must register nothing");
+    assert_eq!(
+        stream.captured(),
+        handler.format_handshake(),
+        "the request must not reach the socket mid-handshake"
+    );
+
+    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+    let notice = tokio::time::timeout(Duration::from_secs(2), notices.recv())
+        .await
+        .expect("no reconnect notice on the notice stream")
+        .expect("notice stream closed");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+
+    // The gate is open again once the session is live.
+    assert!(bus.send_request(RequestId::nth(100), b"req-bytes".to_vec()).await.is_ok());
+}
+
+/// Stands in for `AsyncTcpSocket`'s writer lock. A write carrying `marker`
+/// models a sender that passed its state check and is queued on the writer
+/// behind a stalled write: it waits until the test releases it or the
+/// reconnect swaps the stream, and the reconnect hands the writer to it before
+/// the handshake. Tokio's FIFO lock would not hand off in that order today;
+/// the test pins that the session gate, not the lock, keeps the send off.
+#[derive(Clone, Debug)]
+struct HandoffSocket {
+    stream: MemoryStream,
+    marker: &'static [u8],
+    state: Arc<tokio::sync::watch::Sender<Handoff>>,
+}
+
+#[derive(Debug, Default)]
+struct Handoff {
+    /// Bumped by `reconnect`: 0 is the session the sender checked, 1 the new one.
+    generation: usize,
+    sender_queued: bool,
+    /// The stalled write ahead of the sender finished.
+    released: bool,
+    sender_wrote: bool,
+    /// Every write, tagged with the generation it landed on.
+    writes: Vec<(usize, Vec<u8>)>,
+}
+
+/// Bounds every wait in the test sockets below, so a broken gate fails, not hangs.
+const TEST_SOCKET_WAIT: Duration = Duration::from_secs(5);
+
+/// Whether `buf` holds the frame a test socket singles out by `marker`.
+fn carries(buf: &[u8], marker: &[u8]) -> bool {
+    buf.windows(marker.len()).any(|w| w == marker)
+}
+
+impl HandoffSocket {
+    fn new(stream: MemoryStream, marker: &'static [u8]) -> Self {
+        Self {
+            stream,
+            marker,
+            state: Arc::new(tokio::sync::watch::Sender::new(Handoff::default())),
+        }
+    }
+
+    /// Wait up to `timeout` for `done`; whether it held.
+    async fn wait(&self, timeout: Duration, done: impl Fn(&Handoff) -> bool) -> bool {
+        let mut rx = self.state.subscribe();
+        // The `Ref` `wait_for` resolves to borrows `rx`: drop it before `rx`.
+        let held = matches!(tokio::time::timeout(timeout, rx.wait_for(|s| done(s))).await, Ok(Ok(_)));
+        held
+    }
+
+    fn holds(&self, condition: impl Fn(&Handoff) -> bool) -> bool {
+        condition(&self.state.borrow())
+    }
+
+    fn release(&self) {
+        self.state.send_modify(|s| s.released = true);
+    }
+
+    /// The generations the sender's frame landed on.
+    fn sender_generations(&self) -> Vec<usize> {
+        let state = self.state.borrow();
+        state.writes.iter().filter(|(_, w)| carries(w, self.marker)).map(|(g, _)| *g).collect()
+    }
+}
+
+#[async_trait::async_trait]
+impl AsyncIo for HandoffSocket {
+    async fn read_message(&self) -> Result<Vec<u8>, Error> {
+        self.stream.read_message().await
+    }
+
+    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        let is_sender = carries(buf, self.marker);
+        if is_sender {
+            self.state.send_modify(|s| s.sender_queued = true);
+            self.wait(TEST_SOCKET_WAIT, |s| s.generation > 0 || s.released).await;
+        }
+        self.state.send_modify(|s| {
+            let generation = s.generation;
+            s.writes.push((generation, buf.to_vec()));
+            s.sender_wrote |= is_sender;
+        });
+        self.stream.write_all(buf).await
+    }
+
+    async fn close(&self) {
+        self.stream.close().await;
+    }
+}
+
+#[async_trait::async_trait]
+impl AsyncReconnect for HandoffSocket {
+    async fn reconnect(&self) -> Result<(), Error> {
+        self.stream.reconnect().await?;
+        self.state.send_modify(|s| s.generation += 1);
+        // The swap is done; a sender still queued takes the writer next,
+        // ahead of the handshake.
+        self.wait(TEST_SOCKET_WAIT, |s| s.sender_wrote).await;
+        Ok(())
+    }
+
+    async fn sleep(&self, _duration: Duration, _shutdown: &ShutdownSignal) {}
+}
+
+impl AsyncStream for HandoffSocket {}
+
+/// A send whose state check passed before the connection broke, and whose
+/// write is still queued on the writer when the reconnect starts, finishes on
+/// the old socket or is refused: it never lands on the new socket inside its
+/// handshake (#1171). Unlike `sends_are_refused_during_the_reconnect_handshake`,
+/// the send is already past the gate when the session breaks.
+#[tokio::test]
+async fn queued_send_is_not_written_into_the_reconnect_handshake() {
+    const MARKER: &[u8] = b"request-queued-on-writer";
+
+    let stream = MemoryStream::default();
+    let socket = HandoffSocket::new(stream.clone(), MARKER);
+    let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+    let mut notices = bus.connection.notice_broadcaster.subscribe();
+
+    // Passes its check on the live session, then queues on the writer.
+    let sender = tokio::spawn({
+        let bus = bus.clone();
+        async move { bus.send_request(RequestId::nth(100), MARKER.to_vec()).await.map(|_| ()) }
+    });
+    assert!(
+        socket.wait(TEST_SOCKET_WAIT, |s| s.sender_queued).await,
+        "the sender never reached the writer"
+    );
+
+    // The session breaks while the peer keeps the socket open: InvalidFrame.
+    stream.push_inbound(b"xx".to_vec());
+    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+    bus.clone().process_messages().expect("process_messages");
+
+    // Without the gate the reconnect swaps the stream under the queued sender
+    // right away, and can be done before a poll sees the session down; with
+    // it, the dispatcher waits the write out with the session down. Either
+    // way, give the swap a tick before the stalled write ahead of the sender
+    // finishes.
+    wait_for_async("the dispatcher to take the broken session", || {
+        !bus.connection_state.is_connected() || socket.holds(|s| s.generation > 0)
+    })
+    .await;
+    socket.wait(TICK, |s| s.generation > 0).await;
+    socket.release();
+
+    let notice = tokio::time::timeout(TEST_SOCKET_WAIT, notices.recv())
+        .await
+        .expect("no reconnect notice on the notice stream")
+        .expect("notice stream closed");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+    let sent = sender.await.expect("sender task panicked");
+
+    let generations = socket.sender_generations();
+    assert!(
+        !generations.contains(&1),
+        "the request was written to the new socket before its handshake finished; send returned {sent:?}"
+    );
+    match sent {
+        Ok(()) => assert_eq!(generations, [0], "a send that succeeded must have finished on the old socket"),
+        Err(Error::ConnectionReset) => assert!(generations.is_empty(), "a refused send must write nothing"),
+        other => panic!("expected Ok or ConnectionReset, got {other:?}"),
+    }
+}
+
+/// Writes carrying `marker` block until `sever`, then fail: a write stuck on a
+/// peer that stopped reading. Everything else delegates to a `MemoryStream`.
+#[derive(Clone, Debug)]
+struct StuckWriteSocket {
+    stream: MemoryStream,
+    marker: &'static [u8],
+    state: Arc<tokio::sync::watch::Sender<StuckWrite>>,
+}
+
+#[derive(Debug, Default)]
+struct StuckWrite {
+    stuck: bool,
+    severed: bool,
+}
+
+impl StuckWriteSocket {
+    fn new(stream: MemoryStream, marker: &'static [u8]) -> Self {
+        Self {
+            stream,
+            marker,
+            state: Arc::new(tokio::sync::watch::Sender::new(StuckWrite::default())),
+        }
+    }
+
+    /// Wait up to `TEST_SOCKET_WAIT` for `done`; whether it held.
+    async fn wait(&self, done: impl Fn(&StuckWrite) -> bool) -> bool {
+        let mut rx = self.state.subscribe();
+        // The `Ref` `wait_for` resolves to borrows `rx`: drop it before `rx`.
+        let held = matches!(tokio::time::timeout(TEST_SOCKET_WAIT, rx.wait_for(|s| done(s))).await, Ok(Ok(_)));
+        held
+    }
+}
+
+#[async_trait::async_trait]
+impl AsyncIo for StuckWriteSocket {
+    async fn read_message(&self) -> Result<Vec<u8>, Error> {
+        self.stream.read_message().await
+    }
+
+    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        if !carries(buf, self.marker) {
+            return self.stream.write_all(buf).await;
+        }
+        self.state.send_modify(|s| s.stuck = true);
+        if self.wait(|s| s.severed).await {
+            Err(Error::ConnectionReset)
+        } else {
+            Err(Error::Io(std::io::Error::new(std::io::ErrorKind::TimedOut, "stuck write never severed")))
+        }
+    }
+
+    async fn close(&self) {
+        self.stream.close().await;
+    }
+}
+
+#[async_trait::async_trait]
+impl AsyncReconnect for StuckWriteSocket {
+    async fn reconnect(&self) -> Result<(), Error> {
+        self.stream.reconnect().await
+    }
+
+    async fn sleep(&self, _duration: Duration, _shutdown: &ShutdownSignal) {}
+
+    fn sever(&self) {
+        self.state.send_modify(|s| s.severed = true);
+    }
+}
+
+impl AsyncStream for StuckWriteSocket {}
+
+/// The reconnect does not wait for a write stuck on a peer that stopped
+/// reading: the dispatcher severs the lost connection before it takes the
+/// session gate, which fails the write and releases the gate.
+#[tokio::test]
+async fn reconnect_does_not_wait_behind_a_stuck_write() {
+    const MARKER: &[u8] = b"request-stuck-on-the-wire";
+
+    let stream = MemoryStream::default();
+    let socket = StuckWriteSocket::new(stream.clone(), MARKER);
+    let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+    let mut notices = bus.connection.notice_broadcaster.subscribe();
+
+    let sender = tokio::spawn({
+        let bus = bus.clone();
+        async move { bus.send_request(RequestId::nth(100), MARKER.to_vec()).await.map(|_| ()) }
+    });
+    assert!(socket.wait(|s| s.stuck).await, "the write never got stuck");
+
+    stream.push_inbound(b"xx".to_vec());
+    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+    bus.clone().process_messages().expect("process_messages");
+
+    let notice = tokio::time::timeout(Duration::from_secs(1), notices.recv())
+        .await
+        .expect("the reconnect waited behind the stuck write")
+        .expect("notice stream closed");
+    assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+
+    let sent = sender.await.expect("sender task panicked");
+    assert!(
+        matches!(sent, Err(Error::ConnectionReset)),
+        "the stuck write must fail as reset, got {sent:?}"
+    );
+}
+
 /// `wait_connected` holds the one-shot retry until the session is back, and a
 /// shutdown releases it rather than leaving the caller there for good.
 #[tokio::test]
@@ -2159,15 +2484,15 @@ async fn wait_connected_returns_shutdown_when_the_bus_shuts_down() {
         closer.request_shutdown_sync();
     });
 
-    let result = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected())
+    let result = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected(None))
         .await
         .expect("wait_connected did not return on shutdown");
     assert!(matches!(result, Err(Error::Shutdown)), "got: {result:?}");
 }
 
-/// Writes fail, reads delegate to a `MemoryStream`. Stands in for the window
-/// the send gate cannot close: the write is refused after the registration
-/// went in.
+/// Writes fail, reads delegate to a `MemoryStream`. Stands in for a write
+/// refused after the registration went in: the session went down between the
+/// registering call's first state check and its write.
 #[derive(Clone, Debug, Default)]
 struct FailingWriteStream(MemoryStream);
 
@@ -2200,9 +2525,9 @@ impl AsyncReconnect for FailingWriteStream {
 impl AsyncStream for FailingWriteStream {}
 
 /// A send whose write fails takes its registration with it, so no channel is
-/// left waiting on a response that was never requested. Covers the window the
-/// `ensure_connected` check cannot close, where the session goes down between
-/// the check and the write.
+/// left waiting on a response that was never requested. Covers the session
+/// going down between the registering call's first `ensure_connected` check
+/// and its write.
 #[tokio::test]
 async fn failed_write_leaves_no_registration() {
     let connection = AsyncConnection::stubbed(FailingWriteStream::default(), 28);
@@ -2912,7 +3237,7 @@ async fn exhausted_reconnect_refuses_later_sends_with_connection_failed() {
         .expect("in-flight channel closed early");
     assert!(matches!(item, RoutedItem::Error(Error::ConnectionReset)), "in-flight: {item:?}");
 
-    let waited = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected())
+    let waited = tokio::time::timeout(Duration::from_secs(5), bus.wait_connected(None))
         .await
         .expect("wait_connected did not return after the reconnect gave up");
     assert!(matches!(waited, Err(Error::ConnectionFailed)), "wait_connected: {waited:?}");
@@ -2937,7 +3262,7 @@ async fn send_after_shutdown_fails_with_shutdown() {
 
     let sent = bus.send_request(RequestId::nth(1), vec![]).await.err();
     assert!(matches!(sent, Some(Error::Shutdown)), "send_request: {sent:?}");
-    let waited = bus.wait_connected().await;
+    let waited = bus.wait_connected(None).await;
     assert!(matches!(waited, Err(Error::Shutdown)), "wait_connected: {waited:?}");
 }
 

@@ -8,7 +8,6 @@ triggers:
 symbols: []
 related: [changelog-entry]
 precedents: ["#707", "#708"]
-memory: []
 ---
 
 **Moved.** Release procedure and the release-notes format live in the `/release` skill:

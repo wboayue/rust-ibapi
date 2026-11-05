@@ -6,9 +6,9 @@ use std::collections::{hash_map, HashMap, HashSet};
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info, trace, warn};
@@ -335,6 +335,13 @@ pub struct TcpMessageBus<S: Stream> {
     order_taps: OrderTaps<Sender<RoutedItem>>,
     /// Session state, and what `wait_connected` blocks on.
     connection_state: ConnectionSignal,
+    /// The session gate. The dispatcher holds it for write from failing the
+    /// channels of a lost connection until the replayed handshake has the
+    /// session live again; `write_now` holds it for read across its state
+    /// check and its write. So a write either finishes before the reconnect
+    /// starts, or is refused: none reaches the socket the reconnect installs
+    /// until the handshake on it is done.
+    session: RwLock<()>,
 }
 
 impl<S: Stream> TcpMessageBus<S> {
@@ -361,6 +368,7 @@ impl<S: Stream> TcpMessageBus<S> {
             rate_limiter: OnceLock::new(),
             order_taps,
             connection_state: ConnectionSignal::default(),
+            session: RwLock::new(()),
         }
     }
 
@@ -421,10 +429,12 @@ impl<S: Stream> TcpMessageBus<S> {
     /// would never be reset again, so its caller would block forever. Callers
     /// wait the reconnect out through `wait_connected` instead.
     ///
-    /// The check-then-write window is not closed: a caller that passes here
-    /// just before the dispatcher flips the state can still write, and in
-    /// principle race the socket swap inside `reconnect`. Closing that needs a
-    /// session-level gate held across the handshake.
+    /// On its own this check is a snapshot that races the dispatcher: a caller
+    /// that passes here just before the state flips could still write, and that
+    /// write could land in the handshake the reconnect is running on the new
+    /// socket (#1171). `write_now` runs it under the `session` gate, which the
+    /// dispatcher holds across the reconnect, so there the check and the write
+    /// are one step and the race is closed.
     fn ensure_connected(&self) -> Result<(), Error> {
         self.connection_state.check()?;
         if self.is_shutting_down() {
@@ -458,8 +468,17 @@ impl<S: Stream> TcpMessageBus<S> {
         }
     }
 
-    /// Writes without throttling; the connected check runs after any wait.
+    /// Writes without throttling; the connected check runs after any wait,
+    /// under the `session` gate. The gate held for write is a reconnect in
+    /// progress, whatever the state signal says yet, so the write is refused
+    /// as `ensure_connected` would refuse it once the signal catches up.
     fn write_now(&self, message: &[u8]) -> Result<(), Error> {
+        let _session = match self.session.try_read() {
+            Ok(guard) => guard,
+            // Poison recovery, as `common::lock`: the guard holds nothing.
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => return Err(self.ended_reason(Error::ConnectionReset)),
+        };
         self.ensure_connected()?;
         self.connection.write_message(message)
     }
@@ -549,6 +568,16 @@ impl<S: Stream> TcpMessageBus<S> {
                 // session, and the reconnect can run for minutes.
                 self.reset();
 
+                // Fail any write still on the dead connection, so the gate
+                // below need not wait for a peer that stopped reading.
+                self.connection.socket.sever();
+
+                // Waits out writes whose state check passed before the flip
+                // (a write stuck on the dead socket must not delay the
+                // failures above); every later one is refused until the
+                // session is live again.
+                let session = write_lock(&self.session);
+
                 match self.connection.reconnect() {
                     Ok(()) => {}
                     // Shutdown was requested while reconnecting: not a failure,
@@ -582,6 +611,10 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
 
                 info!("successfully reconnected to TWS/Gateway");
+                // Released before the state flips: `set_connected` wakes
+                // `wait_connected`, and a woken caller's send must not be
+                // refused. Until the flip, `ensure_connected` still refuses.
+                drop(session);
                 self.connection_state.set_connected();
 
                 // TWS never frames the socket reconnect itself and does not replay
@@ -1042,8 +1075,8 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         self.join();
     }
 
-    fn wait_connected(&self) -> Result<(), Error> {
-        self.connection_state.wait_connected()
+    fn wait_connected(&self, deadline: Option<Instant>) -> Result<(), Error> {
+        self.connection_state.wait_connected(deadline)
     }
 
     fn is_connected(&self) -> bool {
@@ -1265,6 +1298,8 @@ struct CloseHandle {
     /// Latched by `close`; `reconnect` re-checks it under the same lock, so a
     /// stream it installs is either refused or closed after it.
     closed: bool,
+    /// Set by `sever`, cleared by the `reconnect` that replaces the stream.
+    severed: bool,
 }
 
 #[derive(Debug)]
@@ -1289,6 +1324,7 @@ impl TcpSocket {
         let close_handle = CloseHandle {
             stream: stream.try_clone()?,
             closed: false,
+            severed: false,
         };
 
         stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
@@ -1304,10 +1340,14 @@ impl TcpSocket {
         })
     }
 
-    /// An I/O failure after `close` is the close, not the peer.
+    /// An I/O failure after `close` is the close, and after `sever` the
+    /// abandoned connection, not the peer.
     fn closed_or(&self, err: Error) -> Error {
-        if lock(&self.close_handle).closed {
+        let handle = lock(&self.close_handle);
+        if handle.closed {
             Error::Shutdown
+        } else if handle.severed {
+            Error::ConnectionReset
         } else {
             err
         }
@@ -1331,6 +1371,7 @@ impl Reconnect for TcpSocket {
         *reader = stream.try_clone()?;
         *writer = stream.try_clone()?;
         handle.stream = stream;
+        handle.severed = false;
 
         // One capture file per TCP stream: splicing two of them would
         // read back as a desync at the seam that never happened.
@@ -1341,6 +1382,19 @@ impl Reconnect for TcpSocket {
     fn sleep(&self, duration: std::time::Duration, shutdown: &ShutdownSignal) {
         shutdown.wait_timeout(duration)
     }
+
+    /// Takes only the close handle, so it gets through while a write holds
+    /// the writer; see `CloseHandle` for the order.
+    fn sever(&self) {
+        let mut handle = lock(&self.close_handle);
+        if handle.closed {
+            return;
+        }
+        handle.severed = true;
+        if let Err(e) = handle.stream.shutdown(std::net::Shutdown::Both) {
+            debug!("socket shutdown returned: {e:?}");
+        }
+    }
 }
 
 pub(crate) trait Reconnect {
@@ -1350,6 +1404,13 @@ pub(crate) trait Reconnect {
     /// Wait out the reconnect backoff, returning early once `shutdown` is
     /// requested. In-memory test streams return immediately.
     fn sleep(&self, duration: std::time::Duration, shutdown: &ShutdownSignal);
+    /// Abandon the current connection: pending and later reads and writes on
+    /// it fail with [`Error::ConnectionReset`] until `reconnect` replaces it.
+    /// Unlike [`Io::close`], not terminal. The dispatcher calls it on a lost
+    /// connection, so a write stuck on a peer that stopped reading cannot
+    /// hold up the reconnect (a TCP write has no timeout). The default does
+    /// nothing, for in-memory streams, whose writes never block.
+    fn sever(&self) {}
 }
 
 pub(crate) trait Stream: Io + Reconnect + Sync + Send + 'static + std::fmt::Debug {}

@@ -99,7 +99,7 @@ impl Client {
     /// println!("Requested historical news articles:");
     /// for article in articles_subscription.iter_data().take(total_results as usize) {
     ///     let article = article?;
-    ///     println!("- Headline: {}, ID: {}, Provider: {}, Time: {}",
+    ///     println!("- Headline: {}, ID: {}, Provider: {}, Time: {:?}",
     ///              article.headline, article.article_id, article.provider_code, article.time);
     /// }
     /// # Ok::<(), ibapi::Error>(())

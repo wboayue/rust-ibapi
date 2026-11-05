@@ -18,4 +18,5 @@ News providers, historical news, articles. Format: [README](README.md).
 - Settles `news::common::decoders::try_parse_time_as_utc`'s UTC assumption: it is correct.
 - **Not probed:** a gateway logged in under a non-US zone, or set to the UTC Historical Date
   Format (the article time may or may not follow that setting); `tickNews` (epoch ms, not
-  affected); unparseable `time` values, which the decoder turns into the Unix epoch silently.
+  affected); a missing or unparseable `time`. The decoder leaves such an article's `time` as
+  `None`, logging a warning for unparseable text (#1154).

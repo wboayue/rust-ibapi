@@ -10,7 +10,6 @@ triggers:
 symbols: [compile_fail, FuturesBuilder, Missing]
 related: [exercise-production-code]
 precedents: ["#548", "#845"]
-memory: []
 ---
 
 Always pin a `compile_fail` doc-test to the specific error code. A bare `compile_fail` passes

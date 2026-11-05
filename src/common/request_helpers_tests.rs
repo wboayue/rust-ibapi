@@ -166,6 +166,8 @@ mod bounded_wait {
     use crate::{common::test_utils::helpers::proto_response, server_versions, Error};
 
     const SHORT: Duration = Duration::from_millis(20);
+    /// Far past `SHORT`: a call that waits it out has ignored its deadline.
+    const RECONNECT: Duration = Duration::from_secs(10);
 
     fn frame() -> ResponseMessage {
         proto_response(IncomingMessages::CurrentTime, current_time().encode_proto())
@@ -182,7 +184,7 @@ mod bounded_wait {
         Arc::new(
             MessageBusStub::with_ordered_responses(vec![frame()])
                 .with_connection_resets(1)
-                .with_reconnect_delay(SHORT * 2)
+                .with_reconnect_delay(RECONNECT)
                 .keeping_channels_open(),
         )
     }
@@ -249,8 +251,10 @@ mod bounded_wait {
         fn shared_deadline_spans_resends() {
             let bus = reset_past_the_deadline();
             let client = client(bus.clone(), SHORT);
+            let start = std::time::Instant::now();
             let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, encoder, |_| Ok(())).unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert!(start.elapsed() < RECONNECT / 2, "the reconnect wait must end at the deadline");
             assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
 
@@ -263,8 +267,10 @@ mod bounded_wait {
         #[test]
         fn by_request_id_deadline_spans_resends() {
             let bus = reset_past_the_deadline();
+            let start = std::time::Instant::now();
             let error = one_shot_by_request_id(&client(bus.clone(), SHORT), |_| encoder(), |_| Ok(())).unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert!(start.elapsed() < RECONNECT / 2, "the reconnect wait must end at the deadline");
             assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
     }
@@ -327,10 +333,12 @@ mod bounded_wait {
         async fn shared_deadline_spans_resends() {
             let bus = reset_past_the_deadline();
             let client = client(bus.clone(), SHORT);
+            let start = std::time::Instant::now();
             let error = one_shot_shared(&client, OutgoingMessages::RequestCurrentTime, encoder, |_| Ok(()))
                 .await
                 .unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert!(start.elapsed() < RECONNECT / 2, "the reconnect wait must end at the deadline");
             assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
 
@@ -345,10 +353,12 @@ mod bounded_wait {
         #[tokio::test]
         async fn by_request_id_deadline_spans_resends() {
             let bus = reset_past_the_deadline();
+            let start = std::time::Instant::now();
             let error = one_shot_by_request_id(&client(bus.clone(), SHORT), |_| encoder(), |_| Ok(()))
                 .await
                 .unwrap_err();
             assert!(matches!(error, Error::Timeout), "got {error:?}");
+            assert!(start.elapsed() < RECONNECT / 2, "the reconnect wait must end at the deadline");
             assert_eq!(bus.request_messages().len(), 1, "no resend past the deadline");
         }
     }
@@ -429,13 +439,17 @@ mod cancelling {
         bus.request_messages().iter().filter(|m| m.as_slice() == REQUEST).count()
     }
 
+    /// Far past the 20 ms `one_shot_timeout`: a call that waits it out has
+    /// ignored its deadline.
+    const RECONNECT: std::time::Duration = std::time::Duration::from_secs(10);
+
     /// The first request is reset, and the reconnect outlasts a 20 ms
     /// `one_shot_timeout`; the resend would be answered at once.
     fn reset_past_the_deadline() -> Arc<MessageBusStub> {
         Arc::new(
             MessageBusStub::with_ordered_responses(vec![answer()])
                 .with_connection_resets(1)
-                .with_reconnect_delay(std::time::Duration::from_millis(40)),
+                .with_reconnect_delay(RECONNECT),
         )
     }
 
@@ -592,8 +606,10 @@ mod cancelling {
         let client =
             Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3).with_one_shot_timeout(std::time::Duration::from_millis(20));
 
+        let start = std::time::Instant::now();
         let error = one_shot_cancelling::<Answered>(&client, |_| Ok(REQUEST.to_vec())).unwrap_err();
         assert!(matches!(error, Error::Timeout), "got {error:?}");
+        assert!(start.elapsed() < RECONNECT / 2, "the reconnect wait must end at the deadline");
         assert_eq!(requests(&bus), 1, "no resend past the deadline");
     }
 
@@ -607,8 +623,10 @@ mod cancelling {
         let client =
             Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3).with_one_shot_timeout(std::time::Duration::from_millis(20));
 
+        let start = std::time::Instant::now();
         let error = one_shot_cancelling::<Answered>(&client, |_| Ok(REQUEST.to_vec())).await.unwrap_err();
         assert!(matches!(error, Error::Timeout), "got {error:?}");
+        assert!(start.elapsed() < RECONNECT / 2, "the reconnect wait must end at the deadline");
         assert_eq!(requests(&bus), 1, "no resend past the deadline");
     }
 

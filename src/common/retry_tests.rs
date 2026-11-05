@@ -4,6 +4,7 @@ use super::*;
 mod sync_tests {
     use super::*;
     use std::cell::RefCell;
+    use std::time::Instant;
 
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -31,7 +32,7 @@ mod sync_tests {
     }
 
     impl ReconnectWaiter for TestWaiter {
-        fn wait_connected(&self) -> Result<(), Error> {
+        fn wait_connected(&self, _deadline: Option<Instant>) -> Result<(), Error> {
             self.waits.fetch_add(1, Ordering::SeqCst);
             if self.reconnects {
                 Ok(())
@@ -45,7 +46,7 @@ mod sync_tests {
     fn retry_on_connection_reset_succeeds_first_try() {
         let mut call_count = 0;
         let waiter = TestWaiter::reconnecting();
-        let result = blocking::retry_on_connection_reset(&waiter, || {
+        let result = blocking::retry_on_connection_reset(&waiter, None, || {
             call_count += 1;
             Ok::<i32, Error>(42)
         });
@@ -59,7 +60,7 @@ mod sync_tests {
     fn retry_on_connection_reset_succeeds_after_retry() {
         let call_count = RefCell::new(0);
         let waiter = TestWaiter::reconnecting();
-        let result = blocking::retry_on_connection_reset(&waiter, || {
+        let result = blocking::retry_on_connection_reset(&waiter, None, || {
             *call_count.borrow_mut() += 1;
             if *call_count.borrow() < 3 {
                 Err(Error::ConnectionReset)
@@ -77,7 +78,7 @@ mod sync_tests {
     fn retry_on_connection_reset_exceeds_max_retries() {
         let mut call_count = 0;
         let waiter = TestWaiter::reconnecting();
-        let result = blocking::retry_on_connection_reset(&waiter, || {
+        let result = blocking::retry_on_connection_reset(&waiter, None, || {
             call_count += 1;
             Err::<i32, Error>(Error::ConnectionReset)
         });
@@ -91,7 +92,7 @@ mod sync_tests {
     fn retry_on_connection_reset_other_error() {
         let mut call_count = 0;
         let waiter = TestWaiter::reconnecting();
-        let result = blocking::retry_on_connection_reset(&waiter, || {
+        let result = blocking::retry_on_connection_reset(&waiter, None, || {
             call_count += 1;
             Err::<i32, Error>(Error::Simple("Other error".to_string()))
         });
@@ -108,6 +109,7 @@ mod sync_tests {
         let waiter = TestWaiter::reconnecting();
         let result = blocking::retry_on_connection_reset_with_limit(
             &waiter,
+            None,
             || {
                 *call_count.borrow_mut() += 1;
                 Err::<i32, Error>(Error::ConnectionReset)
@@ -127,7 +129,7 @@ mod sync_tests {
     fn retry_waits_for_the_reconnect_between_attempts() {
         let waiter = TestWaiter::reconnecting();
         let call_count = RefCell::new(0);
-        let result = blocking::retry_on_connection_reset(&waiter, || {
+        let result = blocking::retry_on_connection_reset(&waiter, None, || {
             *call_count.borrow_mut() += 1;
             if *call_count.borrow() < 3 {
                 Err(Error::ConnectionReset)
@@ -146,7 +148,7 @@ mod sync_tests {
     fn retry_gives_up_when_the_session_is_gone() {
         let waiter = TestWaiter::default();
         let mut call_count = 0;
-        let result = blocking::retry_on_connection_reset(&waiter, || {
+        let result = blocking::retry_on_connection_reset(&waiter, None, || {
             call_count += 1;
             Err::<i32, Error>(Error::ConnectionReset)
         });
@@ -161,6 +163,7 @@ mod sync_tests {
 mod async_tests {
     use super::*;
     use std::sync::{Arc, Mutex};
+    use tokio::time::Instant;
 
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -189,7 +192,7 @@ mod async_tests {
 
     #[async_trait::async_trait]
     impl ReconnectWaiter for TestWaiter {
-        async fn wait_connected(&self) -> Result<(), Error> {
+        async fn wait_connected(&self, _deadline: Option<Instant>) -> Result<(), Error> {
             self.waits.fetch_add(1, Ordering::SeqCst);
             if self.reconnects {
                 Ok(())
@@ -205,7 +208,7 @@ mod async_tests {
         let count_clone = call_count.clone();
 
         let waiter = TestWaiter::reconnecting();
-        let result = retry_on_connection_reset(&waiter, || {
+        let result = retry_on_connection_reset(&waiter, None, || {
             let count = count_clone.clone();
             async move {
                 *count.lock().unwrap() += 1;
@@ -225,7 +228,7 @@ mod async_tests {
         let count_clone = call_count.clone();
 
         let waiter = TestWaiter::reconnecting();
-        let result = retry_on_connection_reset(&waiter, || {
+        let result = retry_on_connection_reset(&waiter, None, || {
             let count = count_clone.clone();
             async move {
                 let mut guard = count.lock().unwrap();
@@ -250,7 +253,7 @@ mod async_tests {
         let count_clone = call_count.clone();
 
         let waiter = TestWaiter::reconnecting();
-        let result = retry_on_connection_reset(&waiter, || {
+        let result = retry_on_connection_reset(&waiter, None, || {
             let count = count_clone.clone();
             async move {
                 *count.lock().unwrap() += 1;
@@ -270,7 +273,7 @@ mod async_tests {
         let count_clone = call_count.clone();
 
         let waiter = TestWaiter::reconnecting();
-        let result = retry_on_connection_reset(&waiter, || {
+        let result = retry_on_connection_reset(&waiter, None, || {
             let count = count_clone.clone();
             async move {
                 *count.lock().unwrap() += 1;
@@ -293,6 +296,7 @@ mod async_tests {
         let waiter = TestWaiter::reconnecting();
         let result = retry_on_connection_reset_with_limit(
             &waiter,
+            None,
             || {
                 let count = count_clone.clone();
                 async move {
@@ -318,7 +322,7 @@ mod async_tests {
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = call_count.clone();
 
-        let result = retry_on_connection_reset(&waiter, || {
+        let result = retry_on_connection_reset(&waiter, None, || {
             let count = count_clone.clone();
             async move {
                 let mut guard = count.lock().unwrap();
@@ -344,7 +348,7 @@ mod async_tests {
         let call_count = Arc::new(Mutex::new(0));
         let count_clone = call_count.clone();
 
-        let result = retry_on_connection_reset(&waiter, || {
+        let result = retry_on_connection_reset(&waiter, None, || {
             let count = count_clone.clone();
             async move {
                 *count.lock().unwrap() += 1;

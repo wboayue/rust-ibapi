@@ -269,16 +269,86 @@ pub enum MarketDepths {
     Reset,
 }
 
+/// How a `MarketDepth` / `MarketDepthL2` row changes the book.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DepthOperation {
+    /// Insert a new row at `position`. Wire code `0`.
+    #[default]
+    Insert,
+    /// Update the row at `position`. Wire code `1`.
+    Update,
+    /// Delete the row at `position`. Wire code `2`.
+    Delete,
+    /// Operation code not modeled by this version of the API.
+    Unknown(i32),
+}
+
+impl From<DepthOperation> for i32 {
+    fn from(value: DepthOperation) -> i32 {
+        match value {
+            DepthOperation::Insert => 0,
+            DepthOperation::Update => 1,
+            DepthOperation::Delete => 2,
+            DepthOperation::Unknown(code) => code,
+        }
+    }
+}
+
+impl From<i32> for DepthOperation {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => DepthOperation::Insert,
+            1 => DepthOperation::Update,
+            2 => DepthOperation::Delete,
+            code => DepthOperation::Unknown(code),
+        }
+    }
+}
+
+/// Which side of the book a `MarketDepth` / `MarketDepthL2` row belongs to.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DepthSide {
+    /// Ask side. Wire code `0`.
+    #[default]
+    Ask,
+    /// Bid side. Wire code `1`.
+    Bid,
+    /// Side code not modeled by this version of the API.
+    Unknown(i32),
+}
+
+impl From<DepthSide> for i32 {
+    fn from(value: DepthSide) -> i32 {
+        match value {
+            DepthSide::Ask => 0,
+            DepthSide::Bid => 1,
+            DepthSide::Unknown(code) => code,
+        }
+    }
+}
+
+impl From<i32> for DepthSide {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => DepthSide::Ask,
+            1 => DepthSide::Bid,
+            code => DepthSide::Unknown(code),
+        }
+    }
+}
+
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 /// Returns the order book.
 pub struct MarketDepth {
     /// The order book's row being updated
     pub position: i32,
-    /// How to refresh the row: 0 - insert (insert this new order into the row identified by 'position')· 1 - update (update the existing order in the row identified by 'position')· 2 - delete (delete the existing order at the row identified by 'position').
-    pub operation: i32,
-    /// 0 for ask, 1 for bid
-    pub side: i32,
+    /// How to refresh the row.
+    pub operation: DepthOperation,
+    /// Which side of the book the row is on.
+    pub side: DepthSide,
     /// The order's price.
     pub price: f64,
     /// The order's size.
@@ -293,10 +363,10 @@ pub struct MarketDepthL2 {
     pub position: i32,
     /// The exchange holding the order if isSmartDepth is True, otherwise the MPID of the market maker
     pub market_maker: String,
-    /// How to refresh the row: 0 - insert (insert this new order into the row identified by 'position')· 1 - update (update the existing order in the row identified by 'position')· 2 - delete (delete the existing order at the row identified by 'position').
-    pub operation: i32,
-    /// 0 for ask, 1 for bid
-    pub side: i32,
+    /// How to refresh the row.
+    pub operation: DepthOperation,
+    /// Which side of the book the row is on.
+    pub side: DepthSide,
     /// The order's price.
     pub price: f64,
     /// The order's size.
