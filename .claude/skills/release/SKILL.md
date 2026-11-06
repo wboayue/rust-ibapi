@@ -1,13 +1,15 @@
 ---
 name: release
-description: Cut an ibapi release from main — version bump PR, dated changelog, annotated tag, draft GitHub release. Stops before publishing; the owner publishes the GitHub release and runs cargo publish.
+description: Cut an ibapi release from main, or a backport release from a release/N.x maintenance branch — version bump PR, dated changelog, annotated tag, draft GitHub release. Stops before publishing; the owner publishes the GitHub release and runs cargo publish.
 argument-hint: "[X.Y.Z]"
 disable-model-invocation: true
 ---
 
 # Release ibapi
 
-Releases are cut from `main` only. `v2-stable` / `v1-stable` are out of scope.
+Releases are cut from `main`, except while `main` develops the next major: then minor and patch
+releases of the current major come from its `release/N.x` branch (see
+[Maintenance releases](#maintenance-releases-releasenx)). `v2-stable` / `v1-stable` are out of scope.
 
 Every outward-facing step (merge, tag push, draft release) is **asked before it runs**. The
 owner publishes the GitHub release and runs `cargo publish`; this skill never does either.
@@ -131,3 +133,31 @@ which can take a few minutes:
 curl -s -A "rust-ibapi-release-check" https://crates.io/api/v1/crates/ibapi | jq -r .crate.max_version
 curl -s -A "rust-ibapi-release-check" https://docs.rs/crate/ibapi/X.Y.Z/status.json   # {"doc_status":true,...}
 ```
+
+## Maintenance releases (`release/N.x`)
+
+Used while `main` is on the next major (for example 5.7.0 from `release/5.x` while `main` is
+6.0-dev, #1192). The steps above apply, with these differences:
+
+- **Branch.** `release/N.x` is cut from the last N.x tag on `main` and pushed once. A new one
+  needs its name added to the `pull_request` and `push` branches in
+  `.github/workflows/ci.yml`, as the branch's first commit; otherwise PRs into it get no CI.
+  Worktree from `origin/release/N.x`, not `origin/main`; `PREV` is the last tag on that branch.
+- **Pick list.** Candidates are `git log $PREV..origin/main`. Skip the breaking ones (subject
+  prefix `N+1.0:`), commits that depend on them, and `docs/rules/` / skill changes (contributor
+  guidance lives on `main`). New variants on an exhaustive enum or new fields on a
+  non-`#[non_exhaustive]` struct have shipped in minors (3.3.0, 4.1.0); the changelog bullet
+  must say what breaks.
+- **Bump PR.** `release-X.Y.Z` off `release/N.x`: `git cherry-pick -x` each pick, then the bump
+  commit. Resolve conflicts to the N.x names, and drop the CHANGELOG hunks a pick drags in for
+  commits that weren't picked. The changelog audit (§2) covers the picked PRs, not
+  `gh pr list --base main`. Open the PR with `--base release/N.x`.
+- **Merge.** `gh pr merge N --rebase --match-head-commit <sha>`, not squash, so each pick
+  keeps its own commit and `(cherry picked from ...)` trailer. Tag the `release/N.x` head
+  after the merge (§4 assumes a squash commit on `main`).
+- **Notes.** Link the changelog at the tag (`blob/vX.Y.Z/CHANGELOG.md#...`), since `main`
+  doesn't have the section yet. Say in the notes which branch the release is from.
+- **Sync `main` after publishing.** One PR: move the picked bullets out of `[Unreleased]`
+  into a `[X.Y.Z]` section (same text as the tag), add its compare link, bump the install
+  snippets. `[Unreleased]` keeps comparing from the last tag on `main`: `vX.Y.Z` isn't an
+  ancestor of it.
