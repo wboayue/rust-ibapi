@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.7.0] - 2026-11-05
+
 ### Added
 
 - Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
@@ -503,7 +505,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
-[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.6.0...HEAD
+[Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.7.0...HEAD
+[5.7.0]: https://github.com/wboayue/rust-ibapi/compare/v5.6.0...v5.7.0
 [5.6.0]: https://github.com/wboayue/rust-ibapi/compare/v5.5.0...v5.6.0
 [5.5.0]: https://github.com/wboayue/rust-ibapi/compare/v5.4.0...v5.5.0
 [5.4.0]: https://github.com/wboayue/rust-ibapi/compare/v5.3.0...v5.4.0
