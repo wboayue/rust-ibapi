@@ -54,6 +54,21 @@ longer occurs for them.
   global skip was rejected: a code we treat as terminal may not end the request at TWS (10197
   market data; scanner 165), and skipping would leak TWS resources.
 
+### Cancel of a running historical bar request (162)
+
+*Live 2026-11-05 off-hours, paper, server 226; #1167.*
+
+- `historical_data(..).between(..).subscribe()` (keepUpToDate false, 300 days of hourly SPY
+  bars, end date set), then `cancelHistoricalData` right after the request: within ~50 ms TWS
+  sends Error 162 for the request id, "Historical Market Data Service error message:API
+  historical data query cancelled: <id>". No bars and no HistoricalDataEnd. 3/3 runs, sync
+  and async.
+- So TWS confirms the cancel, and `cancel_and_drain` returns `Drained::Rejected` (162): the
+  request is over at TWS. A cancel after the request already ended draws 366 instead (see
+  [Cancel after a request-bound terminal error](#cancel-after-a-request-bound-terminal-error)).
+- **Not probed:** a cancel that crosses bars already in flight, and RTH. Whether the 162 still
+  follows when the bars were sent first is unverified.
+
 ### One-shot requests answer once
 
 *Live 2026-10-26, paper Gateway, off-hours; #1107.*

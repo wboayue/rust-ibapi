@@ -1,5 +1,5 @@
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
-use crate::accounts::{FaDataType, ServerLogLevel};
+use crate::accounts::{FaDataType, LedgerOnly, ServerLogLevel};
 use crate::messages::OutgoingMessages;
 use crate::Error;
 
@@ -122,14 +122,16 @@ pub(in crate::accounts) fn encode_request_account_updates_multi(
     request_id: i32,
     account: Option<&AccountId>,
     model_code: Option<&ModelCode>,
+    ledger_only: LedgerOnly,
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::some_bool;
     use prost::Message;
     let request = crate::proto::AccountUpdatesMultiRequest {
         req_id: Some(request_id),
         account: account.map(|a| a.to_string()),
         model_code: model_code.map(|m| m.to_string()),
-        ledger_and_nlv: Some(true),
+        ledger_and_nlv: some_bool(matches!(ledger_only, LedgerOnly::Yes)),
     };
     Ok(encode_protobuf_message(
         OutgoingMessages::RequestAccountUpdatesMulti as i32,

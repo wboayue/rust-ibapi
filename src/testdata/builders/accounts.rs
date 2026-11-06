@@ -6,7 +6,7 @@ use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_CONTRACT_ID, TEST_MODEL_CODE, TEST_TICKER_ID};
 use crate::messages::OutgoingMessages;
 use crate::proto;
-use crate::proto::encoders::{some_f64_ne, some_i32_ne, some_str};
+use crate::proto::encoders::{some_bool, some_f64_ne, some_i32_ne, some_str};
 
 // =============================================================================
 // Response builders
@@ -715,7 +715,7 @@ impl RequestEncoder for AccountUpdatesMultiRequestBuilder {
             req_id: Some(self.request_id),
             account: self.account.clone(),
             model_code: self.model_code.clone(),
-            ledger_and_nlv: Some(self.ledger_and_nlv),
+            ledger_and_nlv: some_bool(self.ledger_and_nlv),
         }
     }
 }

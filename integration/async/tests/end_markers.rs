@@ -19,7 +19,7 @@ use std::sync::Arc;
 use futures::stream::{select_all, Stream};
 use futures::StreamExt;
 use ibapi::accounts::types::{AccountGroup, AccountId};
-use ibapi::accounts::{AccountSummaryResult, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, PositionUpdate, PositionUpdateMulti};
+use ibapi::accounts::{AccountSummaryResult, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, LedgerOnly, PositionUpdate, PositionUpdateMulti};
 use ibapi::contracts::Contract;
 use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
@@ -177,7 +177,7 @@ async fn end_markers_after_initial_dump() {
         .expect("account_summary failed");
     let updates = client.account_updates(&account).await.expect("account_updates failed");
     let updates_multi = client
-        .account_updates_multi(Some(&account), None)
+        .account_updates_multi(Some(&account), None, LedgerOnly::Yes)
         .await
         .expect("account_updates_multi failed");
     let positions = client.positions().await.expect("positions failed");

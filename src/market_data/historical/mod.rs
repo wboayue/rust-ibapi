@@ -445,6 +445,50 @@ pub struct HistoricalData {
     pub bars: Vec<Bar>,
 }
 
+impl HistoricalData {
+    /// Keeps the bars in `[start, end)` and reports that range as the window.
+    ///
+    /// IBKR counts a request's duration in trading time, so a range request
+    /// returns bars from before `start` too. [`fetch`](HistoricalDataBuilder::fetch)
+    /// after [`between`](HistoricalDataBuilder::between) trims for you; use
+    /// this on bars read from a subscription. A daily bar's
+    /// [`Date`](BarTimestamp::Date) counts as midnight UTC.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::market_data::historical::{Bar, BarTimestamp, HistoricalData};
+    /// use time::macros::datetime;
+    ///
+    /// let bar = |at| Bar {
+    ///     date: BarTimestamp::DateTime(at),
+    ///     open: 1.0,
+    ///     high: 1.0,
+    ///     low: 1.0,
+    ///     close: 1.0,
+    ///     volume: 0.0,
+    ///     wap: 0.0,
+    ///     count: 0,
+    /// };
+    /// let data = HistoricalData {
+    ///     start: datetime!(2026-04-14 0:00 UTC),
+    ///     end: datetime!(2026-04-16 0:00 UTC),
+    ///     bars: vec![bar(datetime!(2026-04-14 19:00 UTC)), bar(datetime!(2026-04-15 13:30 UTC))],
+    /// };
+    ///
+    /// let trimmed = data.trim_to(datetime!(2026-04-15 0:00 UTC), datetime!(2026-04-16 0:00 UTC));
+    /// assert_eq!(trimmed.bars.len(), 1);
+    /// assert_eq!(trimmed.start, datetime!(2026-04-15 0:00 UTC));
+    /// ```
+    pub fn trim_to(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
+        let (first, last) = (BarTimestamp::from(start), BarTimestamp::from(end));
+        self.bars.retain(|bar| bar.date >= first && bar.date < last);
+        self.start = start;
+        self.end = end;
+        self
+    }
+}
+
 /// Update from historical data streaming with keepUpToDate=true.
 ///
 /// When requesting historical data with `keepUpToDate=true`, IBKR first sends
@@ -509,15 +553,53 @@ fn cancel_historical_data(request_id: Option<i32>) -> Result<Vec<u8>, Error> {
     common::encoders::encode_cancel_historical_data(request_id)
 }
 
-/// The frames of a one-shot historical data request: the bars, then the window.
+/// The frames of a historical bar request that doesn't stream updates: the
+/// bars, then the window.
 ///
-/// Unlike [`HistoricalBarUpdate`], the window frame ends the request, so it is
-/// a snapshot end: a subscription that saw it sends no cancel at drop, and one
-/// dropped before it (timeout, local error, dropped future) does.
-#[derive(Debug)]
-pub(crate) enum HistoricalDataFrame {
+/// Yielded by [`HistoricalDataBuilder::subscribe`], in that order. `End` ends the
+/// request at TWS: a subscription that has read it sends no cancel when
+/// dropped, and one dropped before it does. Unlike [`HistoricalBarUpdate`],
+/// nothing follows `End`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum HistoricalDataFrame {
+    /// Every bar of the request, in one frame. Its `start` and `end` are the
+    /// Unix epoch: the window comes in `End`.
     Bars(HistoricalData),
-    End { start: OffsetDateTime, end: OffsetDateTime },
+    /// The window TWS served. The request is complete.
+    End {
+        /// Start of the window.
+        start: OffsetDateTime,
+        /// End of the window.
+        end: OffsetDateTime,
+    },
+}
+
+/// A historical bar request's parameters, as its builder resolved them.
+#[derive(Clone, Copy)]
+pub(crate) struct BarRequest<'a> {
+    pub(crate) contract: &'a crate::contracts::Contract,
+    pub(crate) end_date: Option<OffsetDateTime>,
+    pub(crate) duration: Duration,
+    pub(crate) bar_size: BarSize,
+    pub(crate) what_to_show: WhatToShow,
+    pub(crate) trading_hours: crate::market_data::TradingHours,
+}
+
+impl BarRequest<'_> {
+    /// The request message. With `keep_up_to_date`, TWS streams updates after
+    /// the initial bars.
+    pub(crate) fn encode(&self, request_id: i32, keep_up_to_date: bool) -> Result<Vec<u8>, Error> {
+        common::encoders::encode_request_historical_data(
+            request_id,
+            self.contract,
+            self.end_date,
+            self.duration,
+            self.bar_size,
+            self.what_to_show,
+            self.trading_hours.use_rth(),
+            keep_up_to_date,
+        )
+    }
 }
 
 impl HistoricalDataFrame {
