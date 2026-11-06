@@ -330,6 +330,60 @@ fn decode_contract_details_rejects_malformed_min_tick() {
     assert_decimal_parse_error(decode_contract_and_details(&stk_contract(), &details), "abc");
 }
 
+// === parse_market_rule_ids ===
+
+#[test]
+#[allow(clippy::type_complexity)]
+fn parse_market_rule_ids_table() {
+    // Ok rows decode; Err rows name the offending token.
+    let cases: [(Option<&str>, Result<Vec<i32>, &str>); 9] = [
+        (None, Ok(vec![])),
+        (Some(""), Ok(vec![])),
+        (Some("26"), Ok(vec![26])),
+        (Some("26,26,239"), Ok(vec![26, 26, 239])),
+        (Some("26, 239"), Ok(vec![26, 239])),
+        (Some("abc"), Err("abc")),
+        (Some("26,,239"), Err("")),
+        (Some("26,2147483648"), Err("2147483648")),
+        (Some("26.0"), Err("26.0")),
+    ];
+    for (input, expected) in cases {
+        match (parse_market_rule_ids(input), expected) {
+            (Ok(ids), Ok(want)) => assert_eq!(ids, want, "input {input:?}"),
+            (Err(Error::Parse(_, value, msg)), Err(token)) => {
+                assert_eq!(value, token, "input {input:?}");
+                assert!(msg.contains("invalid market rule id"), "input {input:?}: {msg}");
+            }
+            (got, want) => panic!("input {input:?}: expected {want:?}, got {got:?}"),
+        }
+    }
+}
+
+#[test]
+fn decode_contract_details_parses_market_rule_ids() {
+    let details = proto::ContractDetails {
+        valid_exchanges: Some("SMART,NYSE".into()),
+        market_rule_ids: Some("26,239".into()),
+        ..Default::default()
+    };
+    let decoded = decode_contract_and_details(&stk_contract(), &details).unwrap();
+
+    assert_eq!(decoded.valid_exchanges, vec!["SMART", "NYSE"]);
+    assert_eq!(decoded.market_rule_ids, vec![26, 239]);
+}
+
+#[test]
+fn decode_contract_details_rejects_malformed_market_rule_id() {
+    let details = proto::ContractDetails {
+        market_rule_ids: Some("26,abc".into()),
+        ..Default::default()
+    };
+    assert!(matches!(
+        decode_contract_and_details(&stk_contract(), &details),
+        Err(Error::Parse(_, value, _)) if value == "abc"
+    ));
+}
+
 // === ContractDetails size rules are optional (issue #716) ===
 
 #[test]
