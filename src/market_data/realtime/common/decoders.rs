@@ -4,7 +4,7 @@ use crate::proto::decoders::{optional_f64, parse_decimal_or_zero, parse_optional
 use crate::Error;
 
 use crate::market_data::realtime::{
-    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickAttribute, TickGeneric, TickPrice,
+    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, Reroute, TickAttribute, TickGeneric, TickPrice,
     TickPriceSize, TickRequestParameters, TickSize, TickString, TickType, TickTypes, Trade, TradeAttribute,
 };
 use crate::market_data::MarketDataType;
@@ -59,6 +59,14 @@ pub(crate) fn decode_tick_request_parameters(message: &ResponseMessage) -> Resul
 
 pub(crate) fn decode_market_data_type(message: &ResponseMessage) -> Result<MarketDataType, Error> {
     decode_market_data_type_proto(message.proto()?)
+}
+
+pub(crate) fn decode_reroute_market_data(message: &ResponseMessage) -> Result<Reroute, Error> {
+    decode_reroute_market_data_proto(message.proto()?)
+}
+
+pub(crate) fn decode_reroute_market_depth(message: &ResponseMessage) -> Result<Reroute, Error> {
+    decode_reroute_market_depth_proto(message.proto()?)
 }
 
 // === Protobuf decoders ===
@@ -149,6 +157,20 @@ pub(crate) fn decode_market_depth_exchanges_proto(p: crate::proto::MarketDepthEx
 
 pub(crate) fn decode_market_data_type_proto(msg: crate::proto::MarketDataType) -> Result<MarketDataType, Error> {
     Ok(MarketDataType::from(msg.market_data_type.unwrap_or_default()))
+}
+
+pub(crate) fn decode_reroute_market_data_proto(msg: crate::proto::RerouteMarketDataRequest) -> Result<Reroute, Error> {
+    Ok(Reroute {
+        contract_id: msg.con_id.unwrap_or_default(),
+        exchange: msg.exchange.unwrap_or_default(),
+    })
+}
+
+pub(crate) fn decode_reroute_market_depth_proto(msg: crate::proto::RerouteMarketDepthRequest) -> Result<Reroute, Error> {
+    Ok(Reroute {
+        contract_id: msg.con_id.unwrap_or_default(),
+        exchange: msg.exchange.unwrap_or_default(),
+    })
 }
 
 pub(crate) fn decode_tick_request_parameters_proto(msg: crate::proto::TickReqParams) -> Result<TickRequestParameters, Error> {

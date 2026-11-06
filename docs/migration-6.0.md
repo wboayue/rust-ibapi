@@ -469,3 +469,26 @@ match update? {
 ```
 
 Bind the `Vec<Bar>` in the `Historical` arm, and take the window from `End`. The compiler finds every arm that reads `data.bars`, `data.start` or `data.end`. It does not catch the serialized form: `HistoricalBarUpdate` derives `Serialize` / `Deserialize`, and the `Historical` payload is now an array of bars (`{"Historical":[..]}`) where it was a `{start, end, bars}` object, so JSON written by 5.x does not deserialize. The `utoipa` schema is updated the same way. `historical_data(..).subscribe()`, new in 6.0, yields `HistoricalDataFrame::Bars(Vec<Bar>)` the same way; to trim with `HistoricalData::trim_to`, build `HistoricalData { start, end, bars }` from its `Bars` and `End` frames, as the `historical_data_subscribe` examples do.
+
+### 23. `TickTypes` and `MarketDepths` gain `Reroute`
+
+TWS answers a market data or market depth request for a CFD with the underlying contract to request in its place. Those frames reached no subscription and were dropped with an info-level log. A `market_data` subscription now yields them as `TickTypes::Reroute(Reroute)` and a `market_depth` subscription as `MarketDepths::Reroute(Reroute)`, where `market_data::realtime::Reroute` carries the underlying's `contract_id` and `exchange`. The subscription does not end on it. `Quote::apply` ignores `TickTypes::Reroute`.
+
+```rust,ignore
+// 5.x
+match depth? {
+    MarketDepths::MarketDepth(row) => apply(&mut book, row),
+    MarketDepths::MarketDepthL2(row) => apply_l2(&mut book, row),
+    MarketDepths::Reset => book.clear(),
+}
+
+// 6.0
+match depth? {
+    MarketDepths::MarketDepth(row) => apply(&mut book, row),
+    MarketDepths::MarketDepthL2(row) => apply_l2(&mut book, row),
+    MarketDepths::Reset => book.clear(),
+    MarketDepths::Reroute(reroute) => resubscribe(reroute.contract_id, &reroute.exchange),
+}
+```
+
+Add a `Reroute` arm to exhaustive matches on `TickTypes` and `MarketDepths`; on it, request the named contract on the named exchange. The compiler finds every exhaustive match, since neither enum is `#[non_exhaustive]`. It does not catch a match with a wildcard arm (`_ => {}`): that compiles unchanged and drops the reroute as silently as 5.x did. `MarketDepths` derives `Serialize` / `Deserialize`, and the new variant serializes as `{"Reroute":{"contract_id":..,"exchange":".."}}`, which a 5.x reader does not deserialize.
