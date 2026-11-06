@@ -143,9 +143,16 @@ Used while `main` is on the next major (for example 5.7.0 from `release/5.x` whi
   needs its name added to the `pull_request` and `push` branches in
   `.github/workflows/ci.yml`, as the branch's first commit; otherwise PRs into it get no CI.
   Worktree from `origin/release/N.x`, not `origin/main`; `PREV` is the last tag on that branch.
-- **Pick list.** Candidates are `git log $PREV..origin/main`. Skip the breaking ones (subject
-  prefix `N+1.0:`), commits that depend on them, and `docs/rules/` / skill changes (contributor
-  guidance lives on `main`). New variants on an exhaustive enum or new fields on a
+- **Pick list.** Candidates are the commits on `main` since the branch point, minus those
+  already picked. Cherry-picks get new SHAs, so match the `-x` lines, not `$PREV..main`:
+  ```bash
+  BASE=$(git merge-base origin/release/N.x origin/main)   # the N.x tag the branch was cut from
+  git log --format=%b "$BASE..origin/release/N.x" \
+    | sed -nE 's/.*cherry picked from commit ([0-9a-f]{40}).*/\1/p' > "$S/picked.txt"
+  git log --format='%H %s' "$BASE..origin/main" | grep -vFf "$S/picked.txt"
+  ```
+  Skip the breaking ones (subject prefix `N+1.0:`), commits that depend on them, and
+  `docs/rules/` / skill changes (contributor guidance lives on `main`). New variants on an exhaustive enum or new fields on a
   non-`#[non_exhaustive]` struct have shipped in minors (3.3.0, 4.1.0); the changelog bullet
   must say what breaks.
 - **Bump PR.** `release-X.Y.Z` off `release/N.x`: `git cherry-pick -x` each pick, then the bump
