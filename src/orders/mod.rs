@@ -465,6 +465,10 @@ pub struct Order {
     /// `Some(false)` turns it off explicitly.
     ///
     /// Requires TWS/Gateway server version 217 (`ADDITIONAL_ORDER_PARAMS_2`) or later when `Some`.
+    ///
+    /// `Some(true)` is rejected with error 10353 while the Gateway's Precautionary Settings
+    /// restrict it, and open-order reports carry `Some(false)` when it was sent as `None`
+    /// (live: 2026-11-05, server 226; `docs/wire-facts/orders.md`).
     pub route_marketable_to_bbo: Option<bool>,
     /// Whether to seek a better price than the one submitted with the order. `None` sends
     /// nothing, leaving TWS's default. Open-order reports carry TWS's value, so an order
@@ -533,7 +537,9 @@ pub struct Order {
     /// Set to true to convert order of type 'Primary Peg' to 'D-Peg'.
     pub discretionary_up_to_limit_price: bool,
     /// Specifies whether to use Price Management Algo. CTCI users only. `None` leaves the TWS
-    /// default in place; `Some(false)` turns it off explicitly.
+    /// default in place; `Some(false)` turns it off explicitly. Open-order reports carry
+    /// `Some(false)` when it was sent as `None` (live: 2026-11-05, server 226;
+    /// `docs/wire-facts/orders.md`).
     pub use_price_mgmt_algo: Option<bool>,
     /// Indicates the duration of the order in seconds.
     pub duration: Option<i32>,
