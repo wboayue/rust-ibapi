@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
-- `Execution::option_exercise_type` (`OptionExerciseType`) exposes TWS `optExerciseOrLapseType`; `None` when TWS sends `-1` or omits it. A struct literal of `Execution` without `..Default::default()` must add the field (#1175).
 - `Liquidity` and `OptionExerciseType` implement `From<T> for i32`, like the other integer-coded enums; `Liquidity` is now `Copy` and `Eq`.
 - `HistoricalData::trim_to(start, end)` keeps the bars in `[start, end)` and reports that range as the window: the trim `fetch()` applies after `between()`, for bars read another way, such as from a subscription (#1188).
 - `historical_data(..).request_id()` and `historical_data(..).subscribe()` (sync and async): a historical bar request the caller owns. Its id is known before anything is sent, it is sent once and never resent, `ending`/`between` and `buffer_limit` apply, and its frames come as the now-public `HistoricalDataFrame`: `Bars`, then `End`. Unlike `fetch()`, a dropped wait loses no bars read so far, and `cancel_and_drain` reports when TWS is done (a cancel of a running request is confirmed with 162). Examples `historical_data_subscribe` and `async_historical_data_subscribe` (#1189).
@@ -41,10 +39,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
+
+## [5.7.0] - 2026-11-05
+
+### Added
+
+- Combo implied bid/ask: `TickType::ComboImpliedBid` (112) and `TickType::ComboImpliedAsk` (113), requested on combo (BAG) contracts with generic tick `generic_tick::COMBO_IMPLIED_BID_ASK` (`"760"`). The client now advertises server version 227 (`server_versions::COMBO_IMPLIED_BID_ASK`).
+- `Execution::option_exercise_type` (`OptionExerciseType`) exposes TWS `optExerciseOrLapseType`; `None` when TWS sends `-1` or omits it. A struct literal of `Execution` without `..Default::default()` must add the field (#1175).
+
+### Fixed
+
 - A one-shot request (such as `managed_accounts()`) or a historical `fetch()` made while the connection is down returns `Error::Timeout` at its deadline (`one_shot_timeout`, or 30 seconds for shared one-shots) instead of waiting out the whole reconnect. A blocking call could hold its thread for minutes. Sync and async (#1168).
 - A request whose connection check passed just as the connection dropped could be written to the new connection before its handshake had finished. It now either completes on the old connection or is refused with `Error::ConnectionReset`, and requests made during the handshake are refused too (sync and async) (#1171).
 - A reconnect no longer waits behind a write stuck on a peer that stopped reading. The dispatcher severs the lost connection first, so the stuck write fails with `Error::ConnectionReset` and the reconnect goes ahead (sync and async) (#1179).
-- `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
 
 ## [5.6.0] - 2026-11-03
 
@@ -532,6 +540,7 @@ Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
 [Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.6.0...HEAD
+[5.7.0]: https://github.com/wboayue/rust-ibapi/compare/v5.6.0...v5.7.0
 [5.6.0]: https://github.com/wboayue/rust-ibapi/compare/v5.5.0...v5.6.0
 [5.5.0]: https://github.com/wboayue/rust-ibapi/compare/v5.4.0...v5.5.0
 [5.4.0]: https://github.com/wboayue/rust-ibapi/compare/v5.3.0...v5.4.0
