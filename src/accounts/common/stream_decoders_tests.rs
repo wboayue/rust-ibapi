@@ -78,7 +78,7 @@ mod pnl_tests {
         let message = proto_response(
             IncomingMessages::PnL,
             pnl()
-                .daily_pnl(1234.56)
+                .daily_pnl(Some(1234.56))
                 .unrealized_pnl(Some(2345.67))
                 .realized_pnl(Some(3456.78))
                 .encode_proto(),
@@ -86,7 +86,7 @@ mod pnl_tests {
 
         let result = PnL::decode(&test_context(), &message).unwrap();
 
-        assert_eq!(result.daily_pnl, 1234.56);
+        assert_eq!(result.daily_pnl, Some(1234.56));
         assert_eq!(result.unrealized_pnl, Some(2345.67));
         assert_eq!(result.realized_pnl, Some(3456.78));
     }
@@ -120,20 +120,20 @@ mod pnl_single_tests {
             IncomingMessages::PnLSingle,
             pnl_single()
                 .position(100.0)
-                .daily_pnl(1234.56)
-                .unrealized_pnl(2345.67)
-                .realized_pnl(3456.78)
-                .value(4567.89)
+                .daily_pnl(Some(1234.56))
+                .unrealized_pnl(Some(2345.67))
+                .realized_pnl(Some(3456.78))
+                .value(Some(4567.89))
                 .encode_proto(),
         );
 
         let result = PnLSingle::decode(&test_context(), &message).unwrap();
 
         assert_eq!(result.position, 100.0);
-        assert_eq!(result.daily_pnl, 1234.56);
-        assert_eq!(result.unrealized_pnl, 2345.67);
-        assert_eq!(result.realized_pnl, 3456.78);
-        assert_eq!(result.value, 4567.89);
+        assert_eq!(result.daily_pnl, Some(1234.56));
+        assert_eq!(result.unrealized_pnl, Some(2345.67));
+        assert_eq!(result.realized_pnl, Some(3456.78));
+        assert_eq!(result.value, Some(4567.89));
     }
 
     #[test]

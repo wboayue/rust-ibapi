@@ -90,9 +90,9 @@ fn decode_pnl_proto_works() {
     };
 
     let result = super::decode_pnl_proto(proto_msg).unwrap();
-    assert_eq!(result.daily_pnl, 1234.56);
+    assert_eq!(result.daily_pnl, Some(1234.56));
     assert_eq!(result.unrealized_pnl, Some(500.0));
-    assert_eq!(result.realized_pnl, None); // f64::MAX filtered out
+    assert_eq!(result.realized_pnl, None); // f64::MAX (C#'s unset sentinel) reads as unset
 }
 
 #[test]
@@ -149,10 +149,41 @@ fn decode_pnl_single_proto_works() {
 
     let result = super::decode_pnl_single_proto(proto_msg).unwrap();
     assert_eq!(result.position, 500.0);
-    assert_eq!(result.daily_pnl, 1000.0);
-    assert_eq!(result.unrealized_pnl, 2000.0);
-    assert_eq!(result.realized_pnl, 500.0);
-    assert_eq!(result.value, 75000.0);
+    assert_eq!(result.daily_pnl, Some(1000.0));
+    assert_eq!(result.unrealized_pnl, Some(2000.0));
+    assert_eq!(result.realized_pnl, Some(500.0));
+    assert_eq!(result.value, Some(75000.0));
+}
+
+/// TWS omits a figure it has no value for (live 2026-11-05, `docs/wire-facts/accounts.md`).
+/// `f64::MAX`, the C# client's own sentinel for an omitted figure, is never sent by TWS but is
+/// read as unset too, defensively. Both decode as `None`.
+#[test]
+fn decode_pnl_unset_values() {
+    use crate::testdata::builders::accounts::{pnl, pnl_single};
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    for unset in [None, Some(f64::MAX)] {
+        let p = pnl().daily_pnl(unset).unrealized_pnl(unset).realized_pnl(unset).to_proto();
+        let pnl = super::decode_pnl_proto(p).unwrap();
+        assert_eq!(pnl.daily_pnl, None, "{unset:?}");
+        assert_eq!(pnl.unrealized_pnl, None, "{unset:?}");
+        assert_eq!(pnl.realized_pnl, None, "{unset:?}");
+
+        let p = pnl_single()
+            .position(500.0)
+            .daily_pnl(unset)
+            .unrealized_pnl(unset)
+            .realized_pnl(unset)
+            .value(unset)
+            .to_proto();
+        let single = super::decode_pnl_single_proto(p).unwrap();
+        assert_eq!(single.position, 500.0);
+        assert_eq!(single.daily_pnl, None, "{unset:?}");
+        assert_eq!(single.unrealized_pnl, None, "{unset:?}");
+        assert_eq!(single.realized_pnl, None, "{unset:?}");
+        assert_eq!(single.value, None, "{unset:?}");
+    }
 }
 
 #[test]
@@ -316,11 +347,15 @@ fn decode_pnl_proto_via_builder() {
     use crate::testdata::builders::accounts::pnl;
     use crate::testdata::builders::ResponseProtoEncoder;
 
-    let p = pnl().daily_pnl(1234.56).unrealized_pnl(Some(500.0)).realized_pnl(Some(250.0)).to_proto();
+    let p = pnl()
+        .daily_pnl(Some(1234.56))
+        .unrealized_pnl(Some(500.0))
+        .realized_pnl(Some(250.0))
+        .to_proto();
 
     let result = super::decode_pnl_proto(p).unwrap();
 
-    assert_eq!(result.daily_pnl, 1234.56);
+    assert_eq!(result.daily_pnl, Some(1234.56));
     assert_eq!(result.unrealized_pnl, Some(500.0));
     assert_eq!(result.realized_pnl, Some(250.0));
 }
@@ -332,19 +367,19 @@ fn decode_pnl_single_proto_via_builder() {
 
     let p = pnl_single()
         .position(500.0)
-        .daily_pnl(1000.0)
-        .unrealized_pnl(2000.0)
-        .realized_pnl(500.0)
-        .value(75000.0)
+        .daily_pnl(Some(1000.0))
+        .unrealized_pnl(Some(2000.0))
+        .realized_pnl(Some(500.0))
+        .value(Some(75000.0))
         .to_proto();
 
     let result = super::decode_pnl_single_proto(p).unwrap();
 
     assert_eq!(result.position, 500.0);
-    assert_eq!(result.daily_pnl, 1000.0);
-    assert_eq!(result.unrealized_pnl, 2000.0);
-    assert_eq!(result.realized_pnl, 500.0);
-    assert_eq!(result.value, 75000.0);
+    assert_eq!(result.daily_pnl, Some(1000.0));
+    assert_eq!(result.unrealized_pnl, Some(2000.0));
+    assert_eq!(result.realized_pnl, Some(500.0));
+    assert_eq!(result.value, Some(75000.0));
 }
 
 #[test]

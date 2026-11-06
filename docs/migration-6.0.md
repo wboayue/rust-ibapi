@@ -323,6 +323,25 @@ if row.is_smart_depth { /* ... */ }
 
 The compiler finds every use. It does not catch the serialized form: `MarketDepthL2` derives `Serialize` / `Deserialize`, so its JSON key is now `is_smart_depth`, and rows written by 5.x no longer deserialize. `Execution` has no serde derive. The `utoipa` schemas rename all three properties, and `is_liquidation` becomes a boolean.
 
+### 15. PnL figures are `Option<f64>`
+
+`PnLSingle::daily_pnl`, `unrealized_pnl`, `realized_pnl` and `value`, and `PnL::daily_pnl`, were `f64`. A figure TWS left out of the frame decoded as `0.0`, indistinguishable from a real zero. TWS leaves out `unrealized_pnl` for a flat position, for one. They are now `Option<f64>`, `None` for a figure TWS left out, as `PnL::unrealized_pnl` and `realized_pnl` already were.
+
+```rust,ignore
+// 5.x
+println!("daily {:.2}", pnl.daily_pnl);
+
+// 6.0
+if let Some(daily) = pnl.daily_pnl {
+    println!("daily {daily:.2}");
+}
+let daily = pnl.daily_pnl.unwrap_or(0.0); // where the old numeric reading is wanted
+```
+
+Handle `None`, or call `unwrap_or(0.0)` where the old reading of an unset figure as `0.0` is wanted. The compiler finds every use of the five fields as `f64`.
+
+The compiler does not catch the serialized form. `PnL` and `PnLSingle` derive `Serialize` / `Deserialize`, and an unset figure now serializes as `null`, where it was a number; the `utoipa` schemas mark the five fields nullable. JSON written by 5.x still deserializes, but an unset figure stored as `0` reads back as `Some(0.0)`, not `None`.
+
 ### 16. `account_updates_multi` takes a `LedgerOnly`
 
 `Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_only: accounts::LedgerOnly`, TWS's `ledgerAndNLV` flag for the account-updates-by-model request. `LedgerOnly::Yes` delivers only the per-currency `$LEDGER-*` keys (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ...), TWS's light-weight request; `LedgerOnly::No` delivers those plus the account-level keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). 5.x always sent `Yes`, so the account-level keys could not be requested.
