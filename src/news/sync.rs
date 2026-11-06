@@ -69,7 +69,8 @@ impl Client {
     /// * `provider_codes` - A list of provider codes.
     /// * `start_time`     - Marks the (exclusive) start of the date range.
     /// * `end_time`       - Marks the (inclusive) end of the date range.
-    /// * `total_results`  - The maximum number of headlines to fetch (1 – 300)
+    /// * `total_results`  - The maximum number of headlines to fetch (1 – 300). TWS returns at most 300 for a
+    ///   larger value, without a notice, and rejects 0 with error 321 (live: 2026-11-05).
     ///
     /// # Examples
     ///
@@ -86,7 +87,7 @@ impl Client {
     /// // Define a past date range for the news query
     /// let start_time = datetime!(2023-01-01 0:00 UTC);
     /// let end_time = datetime!(2023-01-02 0:00 UTC);
-    /// let total_results = 5u8; // Request a small number of articles for the example
+    /// let total_results = 5; // Request a small number of articles for the example
     ///
     /// let articles_subscription = client.historical_news(
     ///     contract_id,
@@ -112,7 +113,7 @@ impl Client {
         provider_codes: &[&str],
         start_time: OffsetDateTime,
         end_time: OffsetDateTime,
-        total_results: u8,
+        total_results: u16,
     ) -> Result<Subscription<NewsArticle>, Error> {
         let builder = self.request();
         let request =

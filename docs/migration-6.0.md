@@ -431,3 +431,19 @@ order.route_marketable_to_bbo = Some(false); // turn it off
 Replace `true` with `Some(true)` and `false` with `None`, and use `Some(false)` where the feature must be off. The compiler finds every use of the two fields as `bool`.
 
 The compiler does not catch two things. `route_marketable_to_bbo: Some(false)` is sent, so it needs server version 217 (`ADDITIONAL_ORDER_PARAMS_2`), as `Some(true)` always did; against an older server the order now fails with `Error::ServerVersion` where `false` used to pass. `Order` derives `Serialize` / `Deserialize`, and an unset field now serializes as `null`; JSON written by 5.x, which has `true` or `false`, still deserializes, as `Some(true)` or `Some(false)`, so a stored `false` that meant "leave the default" now sends `0`.
+
+### 21. `historical_news` takes `total_results: u16`
+
+`Client::historical_news` (async and blocking) took `total_results: u8`, which capped a request at 255 headlines. IB documents the maximum as 300. The parameter is now `u16`.
+
+```rust,ignore
+// 5.x
+let total_results: u8 = 255;
+let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total_results)?;
+
+// 6.0
+let total_results: u16 = 300;
+let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total_results)?;
+```
+
+Integer literals and untyped bindings compile unchanged. Where the argument is a typed `u8`, the compiler reports it; convert with `.into()` or declare it `u16`. The compiler does not check the range: the crate sends any `u16` as given. TWS returns at most 300 headlines for a larger value, without a notice, and rejects 0 with error 321 ([wire facts](wire-facts/news.md#historical-news-total_results-range)).

@@ -96,7 +96,7 @@ async fn historical_news_works() {
     let end_time = datetime!(2023-01-02 0:00 UTC);
 
     let mut subscription = client
-        .historical_news(TEST_CONTRACT_ID, &["BZ", "DJ"], start_time, end_time, 10)
+        .historical_news(TEST_CONTRACT_ID, &["BZ", "DJ"], start_time, end_time, 300)
         .await
         .expect("request historical news failed");
 
@@ -108,7 +108,7 @@ async fn historical_news_works() {
             .provider_codes(&["BZ", "DJ"])
             .start_time(start_time)
             .end_time(end_time)
-            .total_results(10),
+            .total_results(300),
     );
 
     let Some(Ok(SubscriptionItem::Data(article))) = subscription.next().await else {

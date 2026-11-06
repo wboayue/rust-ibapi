@@ -27,7 +27,7 @@ pub(in crate::news) fn encode_request_historical_news(
     provider_codes: &[&str],
     start_time: OffsetDateTime,
     end_time: OffsetDateTime,
-    total_results: u8,
+    total_results: u16,
 ) -> Result<Vec<u8>, crate::Error> {
     use crate::messages::{encode_protobuf_message, OutgoingMessages};
     use crate::ToField;
@@ -38,7 +38,7 @@ pub(in crate::news) fn encode_request_historical_news(
         provider_codes: Some(provider_codes.join("+")),
         start_date_time: Some(start_time.to_field()),
         end_date_time: Some(end_time.to_field()),
-        total_results: Some(total_results as i32),
+        total_results: Some(i32::from(total_results)),
         historical_news_options: Default::default(),
     };
     Ok(encode_protobuf_message(

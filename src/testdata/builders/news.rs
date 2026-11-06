@@ -50,7 +50,7 @@ pub struct HistoricalNewsRequestBuilder {
     pub provider_codes: Vec<String>,
     pub start_time: OffsetDateTime,
     pub end_time: OffsetDateTime,
-    pub total_results: u8,
+    pub total_results: u16,
 }
 
 impl Default for HistoricalNewsRequestBuilder {
@@ -83,7 +83,7 @@ impl HistoricalNewsRequestBuilder {
         self.end_time = v;
         self
     }
-    pub fn total_results(mut self, v: u8) -> Self {
+    pub fn total_results(mut self, v: u16) -> Self {
         self.total_results = v;
         self
     }
