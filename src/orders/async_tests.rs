@@ -147,31 +147,12 @@ async fn place_order_encodes_hedge_max_size() {
     assert_eq!(proto_order.hedge_max_size, Some(500));
 }
 
-// Placing an order with hedge_max_size against a server below the gate is rejected
-// before anything is sent (docs/rules/testing/exercise-production-code.md — real verify path).
-#[tokio::test]
-async fn place_order_rejects_hedge_max_size_below_gate() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
-    let client = Client::stubbed(message_bus.clone(), server_versions::HEDGE_MAX_SIZE - 1);
-
-    let contract = Contract::stock("TSLA").build();
-    let mut order = order_builder::market_order(Action::Buy, 100.0);
-    order.hedge_max_size = Some(500);
-
-    match client.place_order(20, &contract, &order).await {
-        Err(crate::Error::ServerVersion(required, _, _)) => assert_eq!(required, server_versions::HEDGE_MAX_SIZE),
-        Err(other) => panic!("expected ServerVersion error, got {other:?}"),
-        Ok(_) => panic!("expected place_order to be rejected below the hedge_max_size gate"),
-    }
-    assert_eq!(request_message_count(&message_bus), 0);
-}
-
 // Each flag is rejected below its gate before anything is sent, and sent at it.
 #[tokio::test]
-async fn place_order_gates_additional_order_params() {
-    use crate::orders::common::test_tables::ADDITIONAL_PARAM_GATES;
+async fn place_order_gates_order_params() {
+    use crate::orders::common::test_tables::ORDER_PARAM_GATES;
 
-    for gate in ADDITIONAL_PARAM_GATES {
+    for gate in ORDER_PARAM_GATES {
         let name = gate.name;
         let contract = Contract::stock("TSLA").build();
         let mut order = order_builder::market_order(Action::Buy, 100.0);
