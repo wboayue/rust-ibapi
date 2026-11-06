@@ -61,7 +61,16 @@ impl Client {
         self.subscription().send_shared(OutgoingMessages::RequestNewsBulletins, request).await
     }
 
-    /// Historical News Headlines
+    /// Requests historical news headlines.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_id`    - Contract ID of ticker. See [contract_details](Client::contract_details) for how to retrieve contract ID.
+    /// * `provider_codes` - A list of provider codes.
+    /// * `start_time`     - Marks the (exclusive) start of the date range.
+    /// * `end_time`       - Marks the (inclusive) end of the date range.
+    /// * `total_results`  - The maximum number of headlines to fetch (1 – 300). TWS returns at most 300 for a
+    ///   larger value, without a notice, and rejects 0 with error 321 (live: 2026-11-05).
     ///
     /// # Examples
     ///

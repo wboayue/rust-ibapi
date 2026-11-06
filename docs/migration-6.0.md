@@ -408,4 +408,4 @@ let total_results: u16 = 300;
 let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total_results)?;
 ```
 
-Integer literals and untyped bindings compile unchanged. Where the argument is a typed `u8`, the compiler reports it; convert with `.into()` or declare it `u16`. The compiler does not check the range: the crate sends any `u16` as given and does not enforce IB's limit of 300.
+Integer literals and untyped bindings compile unchanged. Where the argument is a typed `u8`, the compiler reports it; convert with `.into()` or declare it `u16`. The compiler does not check the range: the crate sends any `u16` as given. TWS returns at most 300 headlines for a larger value, without a notice, and rejects 0 with error 321 ([wire facts](wire-facts/news.md#historical-news-total_results-range)).

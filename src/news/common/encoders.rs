@@ -38,7 +38,7 @@ pub(in crate::news) fn encode_request_historical_news(
         provider_codes: Some(provider_codes.join("+")),
         start_date_time: Some(start_time.to_field()),
         end_date_time: Some(end_time.to_field()),
-        total_results: Some(total_results as i32),
+        total_results: Some(i32::from(total_results)),
         historical_news_options: Default::default(),
     };
     Ok(encode_protobuf_message(
