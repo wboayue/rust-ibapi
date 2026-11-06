@@ -48,16 +48,21 @@ fn encode_order_deactivate() {
     assert_eq!(proto.deactivate, Some(true));
 }
 
+/// The tri-state flags: unset is absent, explicit off is 0, on is 1.
 #[test]
-fn encode_order_route_marketable_to_bbo() {
-    let order = Order {
-        route_marketable_to_bbo: true,
-        ..Default::default()
-    };
+fn encode_order_tri_state_flags() {
+    for (value, expected) in [(None, None), (Some(false), Some(0)), (Some(true), Some(1))] {
+        let order = Order {
+            route_marketable_to_bbo: value,
+            use_price_mgmt_algo: value,
+            ..Default::default()
+        };
 
-    let proto = encode_order(&order);
+        let proto = encode_order(&order);
 
-    assert_eq!(proto.route_marketable_to_bbo, Some(1));
+        assert_eq!(proto.route_marketable_to_bbo, expected, "route_marketable_to_bbo {value:?}");
+        assert_eq!(proto.use_price_mgmt_algo, expected, "use_price_mgmt_algo {value:?}");
+    }
 }
 
 #[test]
@@ -116,6 +121,7 @@ fn encode_order_default_fields_omitted() {
     assert!(proto.all_or_none.is_none());
     assert!(proto.hedge_max_size.is_none());
     assert!(proto.deactivate.is_none());
+    assert!(proto.use_price_mgmt_algo.is_none());
     // `verify_order` gates these on the field: absent when unset, as C# checks presence.
     assert!(proto.route_marketable_to_bbo.is_none());
     assert!(proto.conditions_include_overnight.is_none());

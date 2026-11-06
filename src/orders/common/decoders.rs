@@ -300,10 +300,10 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.auto_cancel_parent = proto.auto_cancel_parent.unwrap_or_default();
     order.shareholder = s(&proto.shareholder);
     order.imbalance_only = proto.imbalance_only.unwrap_or_default();
-    order.route_marketable_to_bbo = proto.route_marketable_to_bbo.unwrap_or_default() != 0;
+    order.route_marketable_to_bbo = proto.route_marketable_to_bbo.map(|v| v != 0);
     order.seek_price_improvement = proto.seek_price_improvement.map(|v| v != 0);
     order.parent_perm_id = proto.parent_perm_id;
-    order.use_price_mgmt_algo = proto.use_price_mgmt_algo.unwrap_or_default() != 0;
+    order.use_price_mgmt_algo = proto.use_price_mgmt_algo.map(|v| v != 0);
     order.duration = proto.duration;
     order.post_to_ats = proto.post_to_ats;
     order.advanced_error_override = s(&proto.advanced_error_override);

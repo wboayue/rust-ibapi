@@ -95,9 +95,10 @@ fn verify_order_gates_fields_above_the_floor() {
             IGNORE_OPEN_AUCTION,
         ),
         (
+            // Gated on presence: an explicit `false` is sent too.
             "route_marketable_to_bbo",
             Order {
-                route_marketable_to_bbo: true,
+                route_marketable_to_bbo: Some(false),
                 ..Order::default()
             },
             ROUTE_MARKETABLE_TO_BBO,
