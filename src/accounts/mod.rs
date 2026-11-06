@@ -241,11 +241,14 @@ impl AccountSummarySnapshot {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnL {
-    /// DailyPnL for the position
-    pub daily_pnl: f64,
+    /// DailyPnL for the position.
+    /// `None` when TWS leaves the figure out.
+    pub daily_pnl: Option<f64>,
     /// UnrealizedPnL total unrealized PnL for the position (since inception) updating in real time.
+    /// `None` when TWS leaves the figure out.
     pub unrealized_pnl: Option<f64>,
     /// RealizedPnL is the realized PnL for the position.
+    /// `None` when TWS leaves the figure out.
     pub realized_pnl: Option<f64>,
 }
 
@@ -255,14 +258,19 @@ pub struct PnL {
 pub struct PnLSingle {
     /// Current size of the position
     pub position: f64,
-    /// DailyPnL for the position
-    pub daily_pnl: f64,
-    /// UnrealizedPnL is the total unrealized PnL for the position (since inception) updating in real time
-    pub unrealized_pnl: f64,
+    /// DailyPnL for the position.
+    /// `None` when TWS leaves the figure out.
+    pub daily_pnl: Option<f64>,
+    /// UnrealizedPnL is the total unrealized PnL for the position (since inception) updating in real time.
+    /// `None` when TWS leaves the figure out, as it does for a flat position
+    /// (live 2026-11-05, see `docs/wire-facts/accounts.md`).
+    pub unrealized_pnl: Option<f64>,
     /// RealizedPnL is the realized PnL for the position.
-    pub realized_pnl: f64,
-    /// Current market value of the position
-    pub value: f64,
+    /// `None` when TWS leaves the figure out.
+    pub realized_pnl: Option<f64>,
+    /// Current market value of the position.
+    /// `None` when TWS leaves the figure out.
+    pub value: Option<f64>,
 }
 
 /// Open position held within the account.

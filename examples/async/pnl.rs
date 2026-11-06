@@ -39,7 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(result) = subscription.next().await {
         match result {
             Ok(pnl_update) => {
-                print!("PnL Update - Daily: ${:.2}", pnl_update.daily_pnl);
+                print!("PnL Update");
+
+                if let Some(daily) = pnl_update.daily_pnl {
+                    print!(" - Daily: ${daily:.2}");
+                }
 
                 if let Some(unrealized) = pnl_update.unrealized_pnl {
                     print!(", Unrealized: ${unrealized:.2}");

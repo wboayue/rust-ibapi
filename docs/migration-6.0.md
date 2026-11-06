@@ -323,6 +323,25 @@ if row.is_smart_depth { /* ... */ }
 
 The compiler finds every use. It does not catch the serialized form: `MarketDepthL2` derives `Serialize` / `Deserialize`, so its JSON key is now `is_smart_depth`, and rows written by 5.x no longer deserialize. `Execution` has no serde derive. The `utoipa` schemas rename all three properties, and `is_liquidation` becomes a boolean.
 
+### 15. PnL figures are `Option<f64>`
+
+`PnLSingle::daily_pnl`, `unrealized_pnl`, `realized_pnl` and `value`, and `PnL::daily_pnl`, were `f64`. A figure TWS left out of the frame decoded as `0.0`, indistinguishable from a real zero. TWS leaves out `unrealized_pnl` for a flat position, for one. They are now `Option<f64>`, `None` for a figure TWS left out, as `PnL::unrealized_pnl` and `realized_pnl` already were.
+
+```rust,ignore
+// 5.x
+println!("daily {:.2}", pnl.daily_pnl);
+
+// 6.0
+if let Some(daily) = pnl.daily_pnl {
+    println!("daily {daily:.2}");
+}
+let daily = pnl.daily_pnl.unwrap_or(0.0); // where the old numeric reading is wanted
+```
+
+Handle `None`, or call `unwrap_or(0.0)` where the old reading of an unset figure as `0.0` is wanted. The compiler finds every use of the five fields as `f64`.
+
+The compiler does not catch the serialized form. `PnL` and `PnLSingle` derive `Serialize` / `Deserialize`, and an unset figure now serializes as `null`, where it was a number; the `utoipa` schemas mark the five fields nullable. JSON written by 5.x still deserializes, but an unset figure stored as `0` reads back as `Some(0.0)`, not `None`.
+
 ### 16. `account_updates_multi` takes a `LedgerOnly`
 
 `Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_only: accounts::LedgerOnly`, TWS's `ledgerAndNLV` flag for the account-updates-by-model request. `LedgerOnly::Yes` delivers only the per-currency `$LEDGER-*` keys (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ...), TWS's light-weight request; `LedgerOnly::No` delivers those plus the account-level keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). 5.x always sent `Yes`, so the account-level keys could not be requested.
@@ -393,6 +412,25 @@ The compiler does not catch any of this. `Error` is `#[non_exhaustive]`, so ever
 `Subscription::cancel_and_drain` (sync and async) logged a failed cancel write and went on draining, so the failure showed up later, if at all, as `Drained::Unconfirmed` or a connection reset. It now returns the write's error. The cancel is also written when the stream had already ended with an error on our side (a decode error, `Error::BufferLimitExceeded`), where 5.x left it to the drop and its log. A `Drained::Unconfirmed` arm that stood for "the write may have failed" now gets those cases as `Err`; treat the request id as possibly live there too.
 
 In async, the deadline now bounds the write as well. A write still pending when it passes gives `Drained::Unconfirmed` and finishes in its own task, where a failure is only logged. `cancel()` still returns `()`.
+
+### 20. `Order::use_price_mgmt_algo` and `route_marketable_to_bbo` are `Option<bool>`
+
+Both fields were `bool`. The order sent `true` as `1` and `false` as nothing, which leaves the TWS default in place, so a caller could not turn either feature off; an open order TWS reported with `0` (explicitly off) read as `false`, the same as unset. They are now `Option<bool>`: `None` sends nothing, `Some(false)` sends `0`, `Some(true)` sends `1`. An open order decodes absent / `0` / `1` the same way; TWS (server 226) sends both fields on every open order, so a read is `Some(false)` or `Some(true)`, and an order placed with `None` reads back `Some(false)` when the default is off.
+
+```rust,ignore
+// 5.x
+order.use_price_mgmt_algo = true;
+order.route_marketable_to_bbo = false; // could only mean "leave the TWS default"
+
+// 6.0
+order.use_price_mgmt_algo = Some(true);
+order.route_marketable_to_bbo = None; // leave the TWS default
+order.route_marketable_to_bbo = Some(false); // turn it off
+```
+
+Replace `true` with `Some(true)` and `false` with `None`, and use `Some(false)` where the feature must be off. The compiler finds every use of the two fields as `bool`.
+
+The compiler does not catch two things. `route_marketable_to_bbo: Some(false)` is sent, so it needs server version 217 (`ADDITIONAL_ORDER_PARAMS_2`), as `Some(true)` always did; against an older server the order now fails with `Error::ServerVersion` where `false` used to pass. `Order` derives `Serialize` / `Deserialize`, and an unset field now serializes as `null`; JSON written by 5.x, which has `true` or `false`, still deserializes, as `Some(true)` or `Some(false)`, so a stored `false` that meant "leave the default" now sends `0`.
 
 ### 21. `historical_news` takes `total_results: u16`
 

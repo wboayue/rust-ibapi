@@ -89,6 +89,22 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   all accepted.
 - What-if answers outside RTH; all 8 `SpreadBuilder` presets PreSubmitted at 23:55 ET.
 
+### `use_price_mgmt_algo` / `route_marketable_to_bbo` echo and acceptance
+
+*Live 2026-11-05 off-hours (23:43 ET), paper Gateway, server 226; AAPL BUY 1 LMT 1.00; #1191.*
+
+- Sent each field absent / 0 / 1, one at a time. Every `openOrder` echo carried both fields
+  set: absent and 0 both came back as 0, so `decode_order` yields `Some(_)` and an echo
+  never shows `None`.
+- `use_price_mgmt_algo`: absent and 0 accepted (PreSubmitted, echo 0); 1 accepted (echo 1).
+  This account's default is off.
+- `route_marketable_to_bbo`: absent and 0 accepted (echo 0); 1 rejected with 10353
+  ("...can result in higher total cost..."), "Restriction is specified in Precautionary
+  Settings of Global Configuration/Presets"; the order was discarded (cancel drew 201).
+- **Not probed:** an account whose default has either feature on (does 0 override it?);
+  `route_marketable_to_bbo=1` with the precautionary setting relaxed; RTH routing effect;
+  live TWS (Gateway only); servers below 226.
+
 ### OrderStatus `filled` / `remaining` always sent
 
 *Live 2026-10-26, paper Gateway, EUR.USD; #1089.*

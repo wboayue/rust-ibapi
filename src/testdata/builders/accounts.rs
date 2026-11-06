@@ -470,7 +470,7 @@ impl ResponseProtoEncoder for CurrentTimeInMillisResponse {
 #[derive(Clone, Debug)]
 pub struct PnLResponse {
     pub request_id: i32,
-    pub daily_pnl: f64,
+    pub daily_pnl: Option<f64>,
     pub unrealized_pnl: Option<f64>,
     pub realized_pnl: Option<f64>,
 }
@@ -479,7 +479,7 @@ impl Default for PnLResponse {
     fn default() -> Self {
         Self {
             request_id: TEST_TICKER_ID,
-            daily_pnl: 1234.56,
+            daily_pnl: Some(1234.56),
             unrealized_pnl: Some(500.0),
             realized_pnl: Some(250.0),
         }
@@ -487,7 +487,7 @@ impl Default for PnLResponse {
 }
 
 impl PnLResponse {
-    pub fn daily_pnl(mut self, v: f64) -> Self {
+    pub fn daily_pnl(mut self, v: Option<f64>) -> Self {
         self.daily_pnl = v;
         self
     }
@@ -507,7 +507,7 @@ impl ResponseProtoEncoder for PnLResponse {
     fn to_proto(&self) -> Self::Proto {
         proto::PnL {
             req_id: Some(self.request_id),
-            daily_pn_l: Some(self.daily_pnl),
+            daily_pn_l: self.daily_pnl,
             unrealized_pn_l: self.unrealized_pnl,
             realized_pn_l: self.realized_pnl,
         }
@@ -520,10 +520,10 @@ impl ResponseProtoEncoder for PnLResponse {
 pub struct PnLSingleResponse {
     pub request_id: i32,
     pub position: f64,
-    pub daily_pnl: f64,
-    pub unrealized_pnl: f64,
-    pub realized_pnl: f64,
-    pub value: f64,
+    pub daily_pnl: Option<f64>,
+    pub unrealized_pnl: Option<f64>,
+    pub realized_pnl: Option<f64>,
+    pub value: Option<f64>,
 }
 
 impl Default for PnLSingleResponse {
@@ -531,10 +531,10 @@ impl Default for PnLSingleResponse {
         Self {
             request_id: TEST_TICKER_ID,
             position: 100.0,
-            daily_pnl: 50.0,
-            unrealized_pnl: 25.0,
-            realized_pnl: 10.0,
-            value: 12345.67,
+            daily_pnl: Some(50.0),
+            unrealized_pnl: Some(25.0),
+            realized_pnl: Some(10.0),
+            value: Some(12345.67),
         }
     }
 }
@@ -544,19 +544,19 @@ impl PnLSingleResponse {
         self.position = v;
         self
     }
-    pub fn daily_pnl(mut self, v: f64) -> Self {
+    pub fn daily_pnl(mut self, v: Option<f64>) -> Self {
         self.daily_pnl = v;
         self
     }
-    pub fn unrealized_pnl(mut self, v: f64) -> Self {
+    pub fn unrealized_pnl(mut self, v: Option<f64>) -> Self {
         self.unrealized_pnl = v;
         self
     }
-    pub fn realized_pnl(mut self, v: f64) -> Self {
+    pub fn realized_pnl(mut self, v: Option<f64>) -> Self {
         self.realized_pnl = v;
         self
     }
-    pub fn value(mut self, v: f64) -> Self {
+    pub fn value(mut self, v: Option<f64>) -> Self {
         self.value = v;
         self
     }
@@ -569,10 +569,10 @@ impl ResponseProtoEncoder for PnLSingleResponse {
         proto::PnLSingle {
             req_id: Some(self.request_id),
             position: Some(self.position.to_string()),
-            daily_pn_l: Some(self.daily_pnl),
-            unrealized_pn_l: Some(self.unrealized_pnl),
-            realized_pn_l: Some(self.realized_pnl),
-            value: Some(self.value),
+            daily_pn_l: self.daily_pnl,
+            unrealized_pn_l: self.unrealized_pnl,
+            realized_pn_l: self.realized_pnl,
+            value: self.value,
         }
     }
 }
