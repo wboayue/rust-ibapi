@@ -78,7 +78,7 @@ mod pnl_tests {
         let message = proto_response(
             IncomingMessages::PnL,
             pnl()
-                .daily_pnl(1234.56)
+                .daily_pnl(Some(1234.56))
                 .unrealized_pnl(Some(2345.67))
                 .realized_pnl(Some(3456.78))
                 .encode_proto(),
@@ -120,10 +120,10 @@ mod pnl_single_tests {
             IncomingMessages::PnLSingle,
             pnl_single()
                 .position(100.0)
-                .daily_pnl(1234.56)
-                .unrealized_pnl(2345.67)
-                .realized_pnl(3456.78)
-                .value(4567.89)
+                .daily_pnl(Some(1234.56))
+                .unrealized_pnl(Some(2345.67))
+                .realized_pnl(Some(3456.78))
+                .value(Some(4567.89))
                 .encode_proto(),
         );
 
