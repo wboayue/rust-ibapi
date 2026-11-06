@@ -152,9 +152,9 @@ Used while `main` is on the next major (for example 5.7.0 from `release/5.x` whi
   git log --format='%H %s' "$BASE..origin/main" | grep -vFf "$S/picked.txt"
   ```
   Skip the breaking ones (subject prefix `N+1.0:`), commits that depend on them, and
-  `docs/rules/` / skill changes (contributor guidance lives on `main`). New variants on an exhaustive enum or new fields on a
-  non-`#[non_exhaustive]` struct have shipped in minors (3.3.0, 4.1.0); the changelog bullet
-  must say what breaks.
+  `docs/rules/` / skill changes (contributor guidance lives on `main`). New variants on an
+  exhaustive enum or new fields on a non-`#[non_exhaustive]` struct have shipped in minors
+  (3.3.0, 4.1.0); the changelog bullet must say what breaks.
 - **Bump PR.** `release-X.Y.Z` off `release/N.x`: `git cherry-pick -x` each pick, then the bump
   commit. Resolve conflicts to the N.x names, and drop the CHANGELOG hunks a pick drags in for
   commits that weren't picked. The changelog audit (§2) covers the picked PRs, not
