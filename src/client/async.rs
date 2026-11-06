@@ -431,7 +431,7 @@ impl Client {
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let mut stream = client.notice_stream().expect("notice subscription failed");
+    ///     let mut stream = client.notice_stream();
     ///     while let Some(notice) = stream.next().await {
     ///         if notice.is_system_message() {
     ///             println!("connectivity: {notice}");
@@ -443,8 +443,8 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn notice_stream(&self) -> Result<crate::subscriptions::notice_stream::async_impl::NoticeStream, Error> {
-        Ok(self.message_bus.notice_subscribe())
+    pub fn notice_stream(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream {
+        self.message_bus.notice_subscribe()
     }
 
     /// Returns the ID assigned to the [Client].

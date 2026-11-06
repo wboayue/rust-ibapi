@@ -144,7 +144,7 @@ async fn notice_stream_ends_on_disconnect() {
     let client_id = ClientId::get();
 
     let client = connect(&client_id).await;
-    let mut notices = client.notice_stream().expect("notice_stream failed");
+    let mut notices = client.notice_stream();
 
     client.disconnect().await;
 
@@ -161,7 +161,7 @@ async fn notice_stream_after_disconnect_is_ended() {
     let client = connect(&client_id).await;
     client.disconnect().await;
 
-    let mut notices = client.notice_stream().expect("notice_stream failed");
+    let mut notices = client.notice_stream();
     match tokio::time::timeout(Duration::from_secs(5), notices.next()).await {
         Ok(None) => {}
         Ok(Some(n)) => panic!("unexpected notice after disconnect: {n:?}"),

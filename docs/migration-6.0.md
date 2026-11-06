@@ -469,3 +469,18 @@ match update? {
 ```
 
 Bind the `Vec<Bar>` in the `Historical` arm, and take the window from `End`. The compiler finds every arm that reads `data.bars`, `data.start` or `data.end`. It does not catch the serialized form: `HistoricalBarUpdate` derives `Serialize` / `Deserialize`, and the `Historical` payload is now an array of bars (`{"Historical":[..]}`) where it was a `{start, end, bars}` object, so JSON written by 5.x does not deserialize. The `utoipa` schema is updated the same way. `historical_data(..).subscribe()`, new in 6.0, yields `HistoricalDataFrame::Bars(Vec<Bar>)` the same way; to trim with `HistoricalData::trim_to`, build `HistoricalData { start, end, bars }` from its `Bars` and `End` frames, as the `historical_data_subscribe` examples do.
+
+### 25. `Client::notice_stream()` returns `NoticeStream`, not `Result`
+
+`Client::notice_stream()` (async and blocking) returned `Result<NoticeStream, Error>`, but it never returned `Err`: subscribing to the notice stream cannot fail. It now returns the `NoticeStream` directly. `ClientBuilder::connect_with_notice_stream()` is unchanged.
+
+```rust,ignore
+// 5.x
+let notices = client.notice_stream()?;
+let notices = client.notice_stream().expect("notice subscription failed");
+
+// 6.0
+let notices = client.notice_stream();
+```
+
+Drop the `?`, `.expect(..)` or `match` on the result. The compiler reports each of them. No error path is lost, since none existed, and nothing changes at runtime.

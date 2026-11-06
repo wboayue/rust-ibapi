@@ -104,7 +104,7 @@ async fn notice_stream_receives_global_notices() {
     let client_id = ClientId::get();
     let client = connect(&client_id).await;
 
-    let mut stream = client.notice_stream().expect("notice_stream failed");
+    let mut stream = client.notice_stream();
 
     let notice = tokio::time::timeout(Duration::from_secs(15), stream.next()).await;
     match notice {
