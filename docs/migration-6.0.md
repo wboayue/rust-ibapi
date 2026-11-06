@@ -396,7 +396,7 @@ In async, the deadline now bounds the write as well. A write still pending when 
 
 ### 20. `Order::use_price_mgmt_algo` and `route_marketable_to_bbo` are `Option<bool>`
 
-Both fields were `bool`. The order sent `true` as `1` and `false` as nothing, which leaves the TWS default in place, so a caller could not turn either feature off; an open order TWS reported with `0` (explicitly off) read as `false`, the same as unset. They are now `Option<bool>`: `None` sends nothing, `Some(false)` sends `0`, `Some(true)` sends `1`. An open order reads back `None`, `Some(false)` or `Some(true)` the same way.
+Both fields were `bool`. The order sent `true` as `1` and `false` as nothing, which leaves the TWS default in place, so a caller could not turn either feature off; an open order TWS reported with `0` (explicitly off) read as `false`, the same as unset. They are now `Option<bool>`: `None` sends nothing, `Some(false)` sends `0`, `Some(true)` sends `1`. An open order decodes absent / `0` / `1` the same way; TWS (server 226) sends both fields on every open order, so a read is `Some(false)` or `Some(true)`, and an order placed with `None` reads back `Some(false)` when the default is off.
 
 ```rust,ignore
 // 5.x
