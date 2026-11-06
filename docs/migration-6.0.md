@@ -447,3 +447,25 @@ let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total
 ```
 
 Integer literals and untyped bindings compile unchanged. Where the argument is a typed `u8`, the compiler reports it; convert with `.into()` or declare it `u16`. The compiler does not check the range: the crate sends any `u16` as given. TWS returns at most 300 headlines for a larger value, without a notice, and rejects 0 with error 321 ([wire facts](wire-facts/news.md#historical-news-total_results-range)).
+
+### 22. `HistoricalBarUpdate::Historical` carries `Vec<Bar>`
+
+`historical_data(..).stream()` yields `HistoricalBarUpdate::Historical` first, with the initial bars. It held a `HistoricalData` whose `start` and `end` were always `OffsetDateTime::UNIX_EPOCH` placeholders: TWS sends the requested window in a separate frame, which the stream already yields as `HistoricalBarUpdate::End { start, end }`. The variant now holds the bars as `Vec<Bar>`. `historical_data(..).fetch()` and `HistoricalData` are unchanged.
+
+```rust,ignore
+// 5.x
+match update? {
+    HistoricalBarUpdate::Historical(data) => println!("{} bars", data.bars.len()),
+    HistoricalBarUpdate::Update(bar) => println!("{bar:?}"),
+    HistoricalBarUpdate::End { start, end } => println!("{start} - {end}"),
+}
+
+// 6.0
+match update? {
+    HistoricalBarUpdate::Historical(bars) => println!("{} bars", bars.len()),
+    HistoricalBarUpdate::Update(bar) => println!("{bar:?}"),
+    HistoricalBarUpdate::End { start, end } => println!("{start} - {end}"),
+}
+```
+
+Bind the `Vec<Bar>` in the `Historical` arm, and take the window from `End`. The compiler finds every arm that reads `data.bars`, `data.start` or `data.end`. It does not catch the serialized form: `HistoricalBarUpdate` derives `Serialize` / `Deserialize`, and the `Historical` payload is now an array of bars (`{"Historical":[..]}`) where it was a `{start, end, bars}` object, so JSON written by 5.x does not deserialize. The `utoipa` schema is updated the same way. `historical_data(..).subscribe()`, new in 6.0, yields `HistoricalDataFrame::Bars(Vec<Bar>)` the same way; to trim with `HistoricalData::trim_to`, build `HistoricalData { start, end, bars }` from its `Bars` and `End` frames, as the `historical_data_subscribe` examples do.

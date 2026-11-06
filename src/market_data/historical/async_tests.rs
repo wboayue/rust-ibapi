@@ -745,11 +745,11 @@ async fn historical_data_streaming_with_updates() {
         .expect("streaming request should succeed");
 
     // First: receive initial historical data
-    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data)))) = subscription.next().await else {
+    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(bars)))) = subscription.next().await else {
         panic!("Expected Historical variant");
     };
-    assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
-    assert_eq!(data.bars[0].open, 185.50, "Wrong open price");
+    assert_eq!(bars.len(), 1, "Should have 1 initial bar");
+    assert_eq!(bars[0].open, 185.50, "Wrong open price");
 
     // Second: receive streaming update
     let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Update(bar)))) = subscription.next().await else {
@@ -823,10 +823,10 @@ async fn historical_data_streaming_hmds_connected_notice_then_data() {
         panic!("165 should arrive as a notice");
     };
     assert_eq!((notice.code, notice.message.as_str()), (HMDS_QUERY_MESSAGE_CODE, HMDS_CONNECTED_MESSAGE));
-    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(data)))) = subscription.next().await else {
+    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(bars)))) = subscription.next().await else {
         panic!("bars should follow the notice");
     };
-    assert_eq!(data.bars.len(), 1);
+    assert_eq!(bars.len(), 1);
 }
 
 #[tokio::test]

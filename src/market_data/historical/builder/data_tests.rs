@@ -319,10 +319,10 @@ mod sync_tests {
 
         let subscription = client.historical_data(&contract, BarSize::Hour).duration(1.days()).subscribe().unwrap();
 
-        let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(data)))) = subscription.next() else {
+        let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(bars)))) = subscription.next() else {
             panic!("expected bars first");
         };
-        assert_eq!(data.bars.len(), 1);
+        assert_eq!(bars.len(), 1);
         assert!(matches!(
             subscription.next(),
             Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { start, end }))) if end > start
@@ -602,10 +602,10 @@ mod async_tests {
             .await
             .unwrap();
 
-        let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(data)))) = subscription.next().await else {
+        let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(bars)))) = subscription.next().await else {
             panic!("expected bars first");
         };
-        assert_eq!(data.bars.len(), 1);
+        assert_eq!(bars.len(), 1);
         assert!(matches!(
             subscription.next().await,
             Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { start, end }))) if end > start

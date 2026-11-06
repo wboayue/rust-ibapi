@@ -274,12 +274,12 @@ pub(crate) fn historical_data(client: &Client, request: BarRequest, request_id: 
         // TWS's cancel; after it, nothing is sent.
         let subscription = builder.send::<HistoricalDataFrame>(message)?;
 
-        let mut data = request_helpers::blocking::next_frame(&subscription, deadline)?.into_bars()?;
+        let bars = request_helpers::blocking::next_frame(&subscription, deadline)?.into_bars()?;
         // Only the window frame proves the download is complete, so a close
         // before it is an error.
-        (data.start, data.end) = request_helpers::blocking::next_frame(&subscription, deadline)?.into_window()?;
+        let (start, end) = request_helpers::blocking::next_frame(&subscription, deadline)?.into_window()?;
 
-        Ok(data)
+        Ok(HistoricalData { start, end, bars })
     })
 }
 

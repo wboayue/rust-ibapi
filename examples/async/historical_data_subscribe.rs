@@ -13,7 +13,7 @@
 //! ```
 
 use clap::Parser;
-use ibapi::market_data::historical::HistoricalDataFrame;
+use ibapi::market_data::historical::{HistoricalData, HistoricalDataFrame};
 use ibapi::prelude::*;
 use time::OffsetDateTime;
 use tokio::time::{timeout_at, Duration, Instant};
@@ -53,19 +53,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bars = None;
     loop {
         match timeout_at(deadline, subscription.next()).await {
-            Ok(Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(data))))) => {
-                println!("received {} bars", data.bars.len());
-                bars = Some(data);
+            Ok(Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(received))))) => {
+                println!("received {} bars", received.len());
+                bars = Some(received);
             }
             Ok(Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End {
                 start: served_start,
                 end: served_end,
             })))) => {
                 println!("TWS served {served_start} to {served_end}");
-                let Some(data) = bars.take() else {
+                let Some(bars) = bars.take() else {
                     return Err("window arrived before the bars".into());
                 };
-                let data = data.trim_to(start, end);
+                let data = HistoricalData {
+                    start: served_start,
+                    end: served_end,
+                    bars,
+                }
+                .trim_to(start, end);
                 println!("{} bars in the requested range", data.bars.len());
                 for bar in data.bars.iter().take(3) {
                     println!("  {}: O {:.2} H {:.2} L {:.2} C {:.2}", bar.date, bar.open, bar.high, bar.low, bar.close);
