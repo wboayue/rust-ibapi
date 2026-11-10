@@ -257,7 +257,7 @@ impl std::fmt::Display for WhatToShow {
 /// through a reset. Code 316 ("Market depth data has been HALTED") is
 /// terminal: the stream ends with `Err`, and the caller re-subscribes.
 /// [`Reroute`](Self::Reroute) names the underlying contract to request in
-/// place of the CFD; it does not end the stream.
+/// place of the CFD; it is the last item, and the stream ends after it.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum MarketDepths {
@@ -269,14 +269,17 @@ pub enum MarketDepths {
     /// been RESET"): empty every row held, then rebuild from the updates that
     /// follow. Delivered as data so it survives `filter_data` / `iter_data`.
     Reset,
-    /// Request depth for the CFD's underlying contract instead.
+    /// Request depth for the CFD's underlying contract instead. The last
+    /// item: the stream ends after it.
     Reroute(Reroute),
 }
 
 /// TWS's answer to a market data or depth request for a CFD: the underlying
 /// contract's `contract_id` and `exchange`, to request in place of the CFD.
-/// Delivered as [`TickTypes::Reroute`] and [`MarketDepths::Reroute`]; it ends
-/// neither subscription.
+/// Delivered as [`TickTypes::Reroute`] and [`MarketDepths::Reroute`], the
+/// last item of either subscription: TWS has ended the CFD request, so the
+/// stream ends after it and writes no cancel. Stock CFDs are rerouted to the
+/// stock; index CFDs are not (live 2026-11-10).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Reroute {
@@ -390,6 +393,11 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
     fn rejection_ends_request(notice: &Notice) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
     }
+
+    /// Live: a rerouted depth request holds no depth slot (309 never fires).
+    fn ends_request(&self) -> bool {
+        matches!(self, MarketDepths::Reroute(_))
+    }
 }
 
 /// Stores depth market data description.
@@ -430,7 +438,8 @@ pub enum TickTypes {
     PriceSize(TickPriceSize),
     /// Active market data type for this subscription (real-time / frozen / delayed / delayed-frozen).
     MarketDataType(crate::market_data::MarketDataType),
-    /// Request market data for the CFD's underlying contract instead.
+    /// Request market data for the CFD's underlying contract instead. The
+    /// last item: the stream ends after it.
     Reroute(Reroute),
 }
 
@@ -474,6 +483,11 @@ impl StreamDecoder<TickTypes> for TickTypes {
 
     fn is_snapshot_end(&self) -> bool {
         matches!(self, TickTypes::SnapshotEnd)
+    }
+
+    /// Live: after a reroute TWS answers the cancel with 300 (no such request).
+    fn ends_request(&self) -> bool {
+        matches!(self, TickTypes::Reroute(_))
     }
 }
 

@@ -676,7 +676,7 @@ fn text_framed_fixture_fails_the_subscription() {
 }
 
 #[test]
-fn market_data_reroute() {
+fn market_data_reroute_ends_without_cancel() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::RerouteMktDataReq,
         reroute_market_data().contract_id(265598).exchange("SMART").encode_proto(),
@@ -697,10 +697,14 @@ fn market_data_reroute() {
         }
         other => panic!("expected Reroute, got {other:?}"),
     }
+    assert!(subscription.next().is_none(), "stream ends after Reroute");
+    assert!(subscription.is_terminated());
+    subscription.cancel();
+    assert_eq!(message_bus.request_messages().len(), 1, "TWS ended the request: no cancel");
 }
 
 #[test]
-fn market_depth_reroute() {
+fn market_depth_reroute_ends_without_cancel() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::RerouteMktDepthReq,
         reroute_market_depth().contract_id(265598).exchange("ISLAND").encode_proto(),
@@ -721,4 +725,8 @@ fn market_depth_reroute() {
             exchange: "ISLAND".into(),
         })
     );
+    assert!(subscription.next().is_none(), "stream ends after Reroute");
+    assert!(subscription.is_terminated());
+    subscription.cancel();
+    assert_eq!(message_bus.request_messages().len(), 1, "TWS ended the request: no cancel");
 }

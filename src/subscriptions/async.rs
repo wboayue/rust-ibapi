@@ -126,7 +126,8 @@ struct RequestState<T: StreamDecoder<T>> {
     /// Set once a snapshot-end sentinel is observed, so drop/cancel skips the
     /// redundant cancel for an already-completed snapshot (mirrors the sync side).
     snapshot_ended: AtomicBool,
-    /// Set only by the native end marker, not by errors: once any clone has
+    /// Set only by the native end marker or an item that ends the request
+    /// (`StreamDecoder::ends_request`), not by errors: once any clone has
     /// seen it, TWS has finished the request and there is nothing left to cancel.
     ended_natively: AtomicBool,
     /// The terminal TWS error of a request-id subscription, for
@@ -624,6 +625,10 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                         Ok(val) => {
                             if val.is_snapshot_end() {
                                 snapshot_ended.store(true, Ordering::Relaxed);
+                            }
+                            if val.ends_request() {
+                                stream_ended.store(true, Ordering::Relaxed);
+                                ended_natively.store(true, Ordering::Relaxed);
                             }
                             return Poll::Ready(Some(Ok(SubscriptionItem::Data(val))));
                         }
