@@ -132,6 +132,24 @@ pub(crate) fn decode_smart_components_proto(p: crate::proto::SmartComponents) ->
 
 // === Sub-message decoders (used by the frame decoders above) ===
 
+/// Parse `ContractDetails.marketRuleIds`: a comma-separated list of integers.
+/// Absent or empty means no rules. A token that is not an integer is
+/// `Error::Parse`; the field exists to feed `market_rule(i32)`, so a value that
+/// cannot be passed there is rejected rather than kept as text.
+pub(crate) fn parse_market_rule_ids(opt: Option<&str>) -> Result<Vec<i32>, Error> {
+    let Some(text) = opt.filter(|t| !t.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    text.split(',')
+        .map(|token| {
+            let token = token.trim();
+            token
+                .parse::<i32>()
+                .map_err(|e| Error::parse_field(token, format!("invalid market rule id in {text:?}: {e}")))
+        })
+        .collect()
+}
+
 pub(crate) fn decode_contract_and_details(
     proto_contract: &proto::Contract,
     proto_details: &proto::ContractDetails,
@@ -178,11 +196,7 @@ pub(crate) fn decode_contract_and_details(
         sec_id_list: tag_values(&proto_details.sec_id_list),
         under_symbol: s(&proto_details.under_symbol),
         under_security_type: s(&proto_details.under_sec_type),
-        market_rule_ids: proto_details
-            .market_rule_ids
-            .as_deref()
-            .map(|s| s.split(',').map(|t| t.to_string()).collect())
-            .unwrap_or_default(),
+        market_rule_ids: parse_market_rule_ids(proto_details.market_rule_ids.as_deref())?,
         real_expiration_date: s(&proto_details.real_expiration_date),
         stock_type: s(&proto_details.stock_type),
         settlement_method: s(&proto_details.settlement_method),

@@ -55,7 +55,8 @@ pub struct Subscription<T: StreamDecoder<T>> {
     cancelled: AtomicBool,
     snapshot_ended: AtomicBool,
     stream_ended: AtomicBool,
-    /// Set only by the native end marker, not by errors: TWS has finished the
+    /// Set only by the native end marker or an item that ends the request
+    /// (`StreamDecoder::ends_request`), not by errors: TWS has finished the
     /// request, so there is nothing left to cancel.
     ended_natively: AtomicBool,
     /// The terminal TWS error of a request-id subscription, for
@@ -364,6 +365,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 Ok(val) => {
                     if val.is_snapshot_end() {
                         self.snapshot_ended.store(true, Ordering::Relaxed);
+                    }
+                    if val.ends_request() {
+                        self.stream_ended.store(true, Ordering::Relaxed);
+                        self.ended_natively.store(true, Ordering::Relaxed);
                     }
                     NextAction::Return(Some(Ok(SubscriptionItem::Data(val))))
                 }

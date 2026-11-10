@@ -57,3 +57,21 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
 - Settles that the flag changes the result; the C# client passes it through unchanged.
 - **Not probed:** holidays / early closes, non-US exchanges, `TradingHours` on other
   security types (options, FX, crypto).
+
+### CFD reroute ends the request on the TWS side
+
+*Live 2026-11-10 RTH, paper Gateway, server 226, SMART CFDs AAPL/BMW/IBUS500/IBDE40; #1197.*
+
+- Stock CFDs (AAPL con 120549942, BMW con 102284037): `reqMktData` and `reqMktDepth` (5
+  rows) each draw exactly one frame, `RerouteMktDataReq` / `RerouteMktDepthReq`, naming the
+  underlying's stock contract (AAPL 265598, BMW 14094) and exchange `SMART`. After it
+  comes nothing: no ticks, no error, for 15s.
+- TWS has already ended the CFD request. `cancelMktData` on the rerouted id draws 300
+  "Can't find EId with tickerId". `cancelMktDepth` draws nothing, so the depth side was
+  checked by slots instead: with six rerouted depth requests left uncancelled, a SMART-depth
+  stock request is still accepted. The control, real depth requests left uncancelled,
+  draws 309 "Max number (3) of market depth requests" on the third.
+- Index CFDs (IBUS500, IBDE40) are not rerouted: `reqMktData` draws 354 (not subscribed)
+  and `reqMktDepth` draws 10092 (deep data not supported for the security type/exchange).
+- **Not probed:** delayed market data (type 3/4) on a CFD; snapshot requests; FX or
+  commodity CFDs; a window longer than 15s; the async client.

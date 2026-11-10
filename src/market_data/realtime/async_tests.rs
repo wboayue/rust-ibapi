@@ -4,7 +4,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
-use crate::market_data::realtime::{DepthOperation, DepthSide};
+use crate::market_data::realtime::{DepthOperation, DepthSide, Reroute};
 use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
@@ -12,8 +12,8 @@ use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
     bid_ask_tick, depth_market_data_description, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response,
-    mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, tick_by_tick_request, tick_generic, tick_price,
-    tick_size, tick_string, trade_tick,
+    mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, reroute_market_data, reroute_market_depth,
+    tick_by_tick_request, tick_generic, tick_price, tick_size, tick_string, trade_tick,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
@@ -752,4 +752,61 @@ async fn text_framed_fixture_fails_the_subscription() {
         Some(Err(Error::UnexpectedWireFormat(_))) => {}
         other => panic!("expected UnexpectedWireFormat on the subscription, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn market_data_reroute_ends_without_cancel() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::RerouteMktDataReq,
+        reroute_market_data().contract_id(265598).exchange("SMART").encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let contract = Contract::stock("AAPL").build();
+
+    let mut subscription = client
+        .market_data(&contract)
+        .subscribe()
+        .await
+        .expect("Failed to create market data subscription");
+
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Data(TickTypes::Reroute(reroute)))) => {
+            assert_eq!(reroute.contract_id, 265598);
+            assert_eq!(reroute.exchange, "SMART");
+        }
+        other => panic!("expected Reroute, got {other:?}"),
+    }
+    assert!(subscription.next().await.is_none(), "stream ends after Reroute");
+    subscription.cancel().await;
+    assert_eq!(message_bus.request_messages().len(), 1, "TWS ended the request: no cancel");
+}
+
+#[tokio::test]
+async fn market_depth_reroute_ends_without_cancel() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::RerouteMktDepthReq,
+        reroute_market_depth().contract_id(265598).exchange("ISLAND").encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SMART_DEPTH);
+    let contract = Contract::stock("AAPL").build();
+
+    let mut subscription = client
+        .market_depth(&contract, 5)
+        .subscribe()
+        .await
+        .expect("Failed to create market depth subscription");
+
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Data(row))) => assert_eq!(
+            row,
+            MarketDepths::Reroute(Reroute {
+                contract_id: 265598,
+                exchange: "ISLAND".into(),
+            })
+        ),
+        other => panic!("expected Reroute, got {other:?}"),
+    }
+    assert!(subscription.next().await.is_none(), "stream ends after Reroute");
+    subscription.cancel().await;
+    assert_eq!(message_bus.request_messages().len(), 1, "TWS ended the request: no cancel");
 }

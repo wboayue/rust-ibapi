@@ -131,6 +131,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bid_book = [None; 5];
                 ask_book = [None; 5];
             }
+            MarketDepths::Reroute(reroute) => {
+                println!("Request depth for contract {} on {} instead", reroute.contract_id, reroute.exchange);
+            }
         }
     }
 

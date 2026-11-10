@@ -39,3 +39,16 @@ Contract details and option chains. Format: [README](README.md).
   returns an empty chain, silently.
 - `contract_id` is required; "0 for underlying" was wrong.
 - **Not probed:** a real FOP underlying (e.g. ES on CME).
+
+### Market rule ids align with valid exchanges
+
+*Live 2026-11-10 RTH, paper Gateway, server 226; #1198.*
+
+- `contract_details` for STK (AAPL SMART and any exchange, SAP@IBIS, 7203@TSEJ), FUT (ES,
+  GC), OPT (SPY 20261120), FOP (ES 202612), CASH, CRYPTO, IND, CFD, CMDTY and FUND: 5,834
+  rows, 16,598 `marketRuleIds` tokens. Every token is a plain integer: no whitespace, no
+  empty entries.
+- In every row the id count equals the `validExchanges` count: id *i* is the rule for
+  exchange *i*, as IB's `ContractDetails` doc says. Usually all ids are equal (AAPL: 4563
+  ×27); some contracts mix them (SAP@IBIS: 1874, 1943, 3055; 7203@TSEJ: 3407, 1460).
+- **Not probed:** bonds, warrants, structured products; contracts with no market rule.
