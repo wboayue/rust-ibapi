@@ -75,9 +75,10 @@ when a future change could reopen the arc.
 
 Claude Code inlines `@path` imports recursively. An `@docs/rules/...` line would pull every
 node into context on every session, which is exactly the cost this structure exists to
-avoid. Use plain markdown links. `CLAUDE.md` exists only to import `AGENTS.md` (Claude Code
-loads `CLAUDE.md`, not `AGENTS.md`); it holds that one line and nothing else. `just rules-check`
-enforces both.
+avoid. Use plain markdown links. `CLAUDE.md` exists only to import `AGENTS.md`: Claude Code
+reads `AGENTS.md` only when no `CLAUDE.md` or `CLAUDE.local.md` exists, so a contributor's
+`CLAUDE.local.md` would otherwise drop the index. It holds that one line and nothing else.
+`just rules-check` enforces both.
 
 ## Validation
 
