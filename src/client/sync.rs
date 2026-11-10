@@ -422,7 +422,7 @@ impl Client {
     /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let stream = client.notice_stream().expect("notice subscription failed");
+    /// let stream = client.notice_stream();
     /// for notice in stream.iter() {
     ///     if notice.is_system_message() {
     ///         println!("connectivity: {notice}");
@@ -433,8 +433,8 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn notice_stream(&self) -> Result<crate::subscriptions::notice_stream::sync_impl::NoticeStream, Error> {
-        Ok(self.message_bus.notice_subscribe())
+    pub fn notice_stream(&self) -> crate::subscriptions::notice_stream::sync_impl::NoticeStream {
+        self.message_bus.notice_subscribe()
     }
 
     // == Internal Use ==

@@ -170,7 +170,7 @@ fn notice_stream_after_disconnect_is_ended() {
     let client = connect(&client_id);
     client.disconnect();
 
-    let notices = client.notice_stream().expect("notice_stream failed");
+    let notices = client.notice_stream();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let _ = tx.send(notices.next().map(|n| n.code));

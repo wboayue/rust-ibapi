@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
     println!("connected; server version {}", client.server_version());
 
-    let mut stream = client.notice_stream()?;
+    let mut stream = client.notice_stream();
     println!("listening for global notices (Ctrl+C to exit)...");
 
     while let Some(notice) = stream.next().await {

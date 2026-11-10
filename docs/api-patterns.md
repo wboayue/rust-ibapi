@@ -544,7 +544,7 @@ itself, so a quiet stream is indistinguishable from missed activity. Detect
 the gap on the notice stream and reconcile:
 
 ```rust
-let notices = client.notice_stream()?;
+let notices = client.notice_stream();
 
 for notice in notices.iter() {
     // 1100: connectivity lost; 1101/1102: restored (data lost / maintained);

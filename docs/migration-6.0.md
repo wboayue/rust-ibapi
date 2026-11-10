@@ -508,3 +508,18 @@ let rule = client.market_rule(rule_id)?;
 ```
 
 Drop the `.parse()` and pass the id directly. The ids are one per entry of `valid_exchanges`, in the same order, and can differ by exchange, so `.first()` is the first valid exchange's rule, not necessarily the one you trade on. `ContractDetails::market_rule_id(exchange)`, new in 6.0, looks it up. The compiler finds every use that treats an id as a string. It does not catch two runtime differences: a non-integer id in a reply is now an `Error::Parse` from `contract_details`, and `ContractDetails` derives `Serialize` / `Deserialize`, so the ids now serialize as numbers and JSON written by 5.x, with string ids, no longer deserializes. The `utoipa` schema is an integer array.
+
+### 25. `Client::notice_stream()` returns `NoticeStream`, not `Result`
+
+`Client::notice_stream()` (async and blocking) returned `Result<NoticeStream, Error>`, but it never returned `Err`: subscribing to the notice stream cannot fail. It now returns the `NoticeStream` directly. `ClientBuilder::connect_with_notice_stream()` is unchanged.
+
+```rust,ignore
+// 5.x
+let notices = client.notice_stream()?;
+let notices = client.notice_stream().expect("notice subscription failed");
+
+// 6.0
+let notices = client.notice_stream();
+```
+
+Drop the `?`, `.expect(..)` or `match` on the result. The compiler reports each of them. No error path is lost, since none existed, and nothing changes at runtime.

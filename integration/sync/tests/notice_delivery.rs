@@ -126,7 +126,7 @@ fn notice_stream_receives_global_notices() {
     let client_id = ClientId::get();
     let client = connect(&client_id);
 
-    let stream = client.notice_stream().expect("notice_stream failed");
+    let stream = client.notice_stream();
 
     let notice = stream.next_timeout(Duration::from_secs(15));
     if let Some(notice) = notice {
