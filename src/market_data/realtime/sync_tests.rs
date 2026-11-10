@@ -4,15 +4,15 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
-use crate::market_data::realtime::{BidAsk, DepthOperation, DepthSide, MidPoint, Trade};
+use crate::market_data::realtime::{BidAsk, DepthOperation, DepthSide, MidPoint, Reroute, Trade};
 use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::market_data::{
     bid_ask_tick, depth_market_data_description, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response,
-    mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, tick_by_tick_request, tick_generic, tick_price,
-    tick_size, tick_string, trade_tick,
+    mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, reroute_market_data, reroute_market_depth,
+    tick_by_tick_request, tick_generic, tick_price, tick_size, tick_string, trade_tick,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
@@ -673,4 +673,52 @@ fn text_framed_fixture_fails_the_subscription() {
         Some(Err(Error::UnexpectedWireFormat(_))) => {}
         other => panic!("expected UnexpectedWireFormat on the subscription, got {other:?}"),
     }
+}
+
+#[test]
+fn market_data_reroute() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::RerouteMktDataReq,
+        reroute_market_data().contract_id(265598).exchange("SMART").encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let contract = Contract::stock("AAPL").build();
+
+    let subscription = client
+        .market_data(&contract)
+        .subscribe()
+        .expect("Failed to create market data subscription");
+    let tick = subscription.iter_data().next().expect("no tick").expect("subscription error");
+
+    match tick {
+        TickTypes::Reroute(reroute) => {
+            assert_eq!(reroute.contract_id, 265598);
+            assert_eq!(reroute.exchange, "SMART");
+        }
+        other => panic!("expected Reroute, got {other:?}"),
+    }
+}
+
+#[test]
+fn market_depth_reroute() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::RerouteMktDepthReq,
+        reroute_market_depth().contract_id(265598).exchange("ISLAND").encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SMART_DEPTH);
+    let contract = Contract::stock("AAPL").build();
+
+    let subscription = client
+        .market_depth(&contract, 5)
+        .subscribe()
+        .expect("Failed to create market depth subscription");
+    let row = subscription.iter_data().next().expect("no row").expect("subscription error");
+
+    assert_eq!(
+        row,
+        MarketDepths::Reroute(Reroute {
+            contract_id: 265598,
+            exchange: "ISLAND".into(),
+        })
+    );
 }
