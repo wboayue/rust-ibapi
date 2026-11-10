@@ -181,7 +181,8 @@ is still true.
 - **Reading a node that calls its own failure mode silent, unenforced, or ungated** → that is a
   missing gate, not a documentation problem. Make the failure loud; then rewrite the node's
   claim rather than appending to it, and delete regression tests the gate made impossible.
-- **Touching `AGENTS.md` or `docs/rules/`** → `just rules-check` before the PR.
+- **Touching `AGENTS.md`, `docs/rules/`, `docs/wire-facts/` or `.claude/skills/`** →
+  `just rules-check` before the PR.
 
 ## Quick Commands
 
@@ -225,7 +226,7 @@ cargo build -p ibapi-integration-async --tests
 cargo clippy -p ibapi-integration-sync  --tests -- -D warnings
 cargo clippy -p ibapi-integration-async --tests -- -D warnings
 
-# AGENTS.md or docs/rules/ — validates the rule graph and its index
+# Rule graph, index and link check; scope in the tools/check-rules-graph.sh header
 just rules-check
 
 # Coverage report, nightly-only. See docs/rules/testing/coverage-floor.md.

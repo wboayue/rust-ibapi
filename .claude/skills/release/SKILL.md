@@ -81,8 +81,8 @@ In `$WT`: `git switch -c release-X.Y.Z`.
    [ "$(git branch --show-current)" = release-X.Y.Z ] && git commit -am "Release X.Y.Z"
    ```
 5. Checks. The legs mirror the `flags` matrix in `.github/workflows/ci.yml`; re-read it in case
-   it changed. Rustdoc runs per leg too: CI has no doc job, and intra-doc links to
-   feature-gated paths break only under some legs.
+   it changed. Rustdoc runs per leg, as in CI: intra-doc links to feature-gated paths break
+   only under some legs.
    ```bash
    cargo fmt -- --check
    for flags in "" "--no-default-features --features sync" "--all-features"; do
