@@ -226,7 +226,7 @@ cargo build -p ibapi-integration-async --tests
 cargo clippy -p ibapi-integration-sync  --tests -- -D warnings
 cargo clippy -p ibapi-integration-async --tests -- -D warnings
 
-# AGENTS.md, docs/rules/, docs/wire-facts/, .claude/skills/ — rule graph, index, links
+# Rule graph, index and link check; scope in the tools/check-rules-graph.sh header
 just rules-check
 
 # Coverage report, nightly-only. See docs/rules/testing/coverage-floor.md.

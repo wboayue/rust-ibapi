@@ -75,7 +75,9 @@ when a future change could reopen the arc.
 
 Claude Code inlines `@path` imports recursively. An `@docs/rules/...` line would pull every
 node into context on every session, which is exactly the cost this structure exists to
-avoid. Use plain markdown links. `just rules-check` enforces this.
+avoid. Use plain markdown links. `CLAUDE.md` exists only to import `AGENTS.md` (Claude Code
+loads `CLAUDE.md`, not `AGENTS.md`); it holds that one line and nothing else. `just rules-check`
+enforces both.
 
 ## Validation
 

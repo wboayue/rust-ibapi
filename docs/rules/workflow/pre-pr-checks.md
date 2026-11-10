@@ -33,8 +33,8 @@ cargo build --examples --no-default-features --features sync
 cargo build --examples --all-features
 ```
 
-Add `just rules-check` when the change touches `AGENTS.md`, `docs/rules/`, `docs/wire-facts/`
-or `.claude/skills/`, and the
+Add `just rules-check` when the change touches a file it scans (listed in the header of
+`tools/check-rules-graph.sh`), and the
 [integration crate builds](integration-crate-builds.md) when it touches a wire surface.
 
 ## Why

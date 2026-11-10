@@ -7,8 +7,9 @@
 #      .claude/skills/** resolves to a real file
 #   2. every node's frontmatter `id` matches its filename stem
 #   3. every `related:` id names an existing node
-#   4. AGENTS.md contains no `@`-imports (they would inline every node into
-#      context on every session, defeating the point of the index)
+#   4. AGENTS.md contains no `@`-imports, and CLAUDE.md contains only
+#      `@AGENTS.md` (Claude Code loads CLAUDE.md; any other import would inline
+#      more files into context on every session, defeating the point of the index)
 #   5. no node cites a `file.rs:NNN` line number — line refs rot silently the
 #      same way the retired rule numbers did, and nothing recomputes them. Name
 #      the fn, test, or type instead.
@@ -88,6 +89,14 @@ done
 if grep -nE '^[[:space:]]*@[A-Za-z0-9_./-]+' "$INDEX" >/dev/null 2>&1; then
     grep -nE '^[[:space:]]*@[A-Za-z0-9_./-]+' "$INDEX" |
         sed "s|^|$INDEX: @-import would inline this file into every session -> line |" >>"$ERRORS"
+fi
+
+# CLAUDE.md is the loader Claude Code reads; it may import the index and nothing else.
+if [ ! -f CLAUDE.md ]; then
+    echo "CLAUDE.md: missing; Claude Code would not load $INDEX" >>"$ERRORS"
+elif grep -vnE "^[[:space:]]*(@$INDEX)?[[:space:]]*\$" CLAUDE.md >/dev/null 2>&1; then
+    grep -vnE "^[[:space:]]*(@$INDEX)?[[:space:]]*\$" CLAUDE.md |
+        sed "s|^|CLAUDE.md: only '@$INDEX' allowed -> line |" >>"$ERRORS"
 fi
 
 # --- 5. no line-number citations in nodes -----------------------------------
