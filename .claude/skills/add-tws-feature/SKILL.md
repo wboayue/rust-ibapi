@@ -86,7 +86,7 @@ Order: types → message ids → registration → encoder → decoder → sync �
     checked by `decoder_roster_is_complete`
   - request ids come from `mint_request_id()`, never a caller
     ([id partition](../../../docs/rules/wire/id-partition.md))
-- **Encoder helpers**: reuse `ToField` (`src/lib.rs`) and `some_str` & co.
+- **Encoder helpers**: reuse `ToField` (`src/messages/to_field.rs`) and `some_str` & co.
   (`src/proto/encoders.rs`); add missing ones there, not locally. Mirror `EClientUtils`'s
   "set only when" conditions exactly.
 - **Field typing** ([wire enum typing](../../../docs/rules/wire/enum-typing.md)):
