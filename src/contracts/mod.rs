@@ -637,9 +637,9 @@ pub struct ContractDetails {
     /// For derivatives, returns the underlying security type.
     pub under_security_type: String,
     /// Market rule ids, one per entry of [`valid_exchanges`](Self::valid_exchanges)
-    /// and in the same order: the rule for that exchange. Exchanges can differ
-    /// (SAP on IBIS: 1874, 1943 and 3055), so look one up with
-    /// [`market_rule_id`](Self::market_rule_id) rather than taking the first.
+    /// and in the same order: the rule for that exchange. Ids can differ by
+    /// exchange, so look one up with [`market_rule_id`](Self::market_rule_id)
+    /// rather than taking the first.
     /// Pass it to `market_rule` for the price increments at a given price.
     pub market_rule_ids: Vec<i32>,
     /// Real expiration date. Requires TWS 968+ and API v973.04+. Python API specifically requires API v973.06+.

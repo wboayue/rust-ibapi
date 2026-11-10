@@ -355,6 +355,7 @@ fn parse_market_rule_ids_table() {
             (Err(Error::Parse(_, value, msg)), Err(token)) => {
                 assert_eq!(value, token, "input {input:?}");
                 assert!(msg.contains("invalid market rule id"), "input {input:?}: {msg}");
+                assert!(msg.contains(&format!("{:?}", input.unwrap())), "reason names the list: {msg}");
             }
             (got, want) => panic!("input {input:?}: expected {want:?}, got {got:?}"),
         }

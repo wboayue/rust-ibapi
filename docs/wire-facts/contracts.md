@@ -45,7 +45,7 @@ Contract details and option chains. Format: [README](README.md).
 *Live 2026-11-10 RTH, paper Gateway, server 226; #1198.*
 
 - `contract_details` for STK (AAPL SMART and any exchange, SAP@IBIS, 7203@TSEJ), FUT (ES,
-  GC), OPT (SPY 20261120), FOP (ES 202612), CASH, CRYPTO, IND, CFD, CMDTY and FUND: 5,845
+  GC), OPT (SPY 20261120), FOP (ES 202612), CASH, CRYPTO, IND, CFD, CMDTY and FUND: 5,834
   rows, 16,598 `marketRuleIds` tokens. Every token is a plain integer: no whitespace, no
   empty entries.
 - In every row the id count equals the `validExchanges` count: id *i* is the rule for
