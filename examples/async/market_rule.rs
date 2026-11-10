@@ -18,8 +18,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(details) = contract_details.first() {
         println!("Contract: {} on {}", details.contract.local_symbol, details.contract.exchange);
 
-        if let Some(&market_rule_id) = details.market_rule_ids.first() {
-            println!("Market Rule IDs: {:?}", details.market_rule_ids);
+        if let Some(market_rule_id) = details.market_rule_id(details.contract.exchange.as_str()) {
+            println!("Market Rule IDs: {:?} for {:?}", details.market_rule_ids, details.valid_exchanges);
             println!("\n=== Fetching Market Rule {market_rule_id} ===");
 
             match client.market_rule(market_rule_id).await {
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(e) => eprintln!("Error fetching market rule: {e:?}"),
             }
         } else {
-            println!("No market rule IDs found for this contract");
+            println!("No market rule ID found for {}", details.contract.exchange);
         }
     } else {
         println!("No contract details found");

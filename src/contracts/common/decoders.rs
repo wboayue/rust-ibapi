@@ -145,7 +145,7 @@ pub(crate) fn parse_market_rule_ids(opt: Option<&str>) -> Result<Vec<i32>, Error
             let token = token.trim();
             token
                 .parse::<i32>()
-                .map_err(|e| Error::parse_field(token, format!("invalid market rule id: {e}")))
+                .map_err(|e| Error::parse_field(token, format!("invalid market rule id in {text:?}: {e}")))
         })
         .collect()
 }

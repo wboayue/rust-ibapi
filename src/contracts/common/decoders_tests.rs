@@ -332,11 +332,13 @@ fn decode_contract_details_rejects_malformed_min_tick() {
 
 // === parse_market_rule_ids ===
 
+/// Input, then the ids it decodes to or the token the error names.
+type MarketRuleIdsCase = (Option<&'static str>, Result<Vec<i32>, &'static str>);
+
 #[test]
-#[allow(clippy::type_complexity)]
 fn parse_market_rule_ids_table() {
     // Ok rows decode; Err rows name the offending token.
-    let cases: [(Option<&str>, Result<Vec<i32>, &str>); 9] = [
+    let cases: [MarketRuleIdsCase; 9] = [
         (None, Ok(vec![])),
         (Some(""), Ok(vec![])),
         (Some("26"), Ok(vec![26])),

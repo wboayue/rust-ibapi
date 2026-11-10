@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ContractDetails::market_rule_id(exchange)`: the market rule id for one of the contract's valid exchanges. `market_rule_ids` is one id per entry of `valid_exchanges`, in the same order, and ids can differ by exchange (#1198).
 - `Liquidity` and `OptionExerciseType` implement `From<T> for i32`, like the other integer-coded enums; `Liquidity` is now `Copy` and `Eq`.
 - `HistoricalData::trim_to(start, end)` keeps the bars in `[start, end)` and reports that range as the window: the trim `fetch()` applies after `between()`, for bars read another way, such as from a subscription (#1188).
 - `historical_data(..).request_id()` and `historical_data(..).subscribe()` (sync and async): a historical bar request the caller owns. Its id is known before anything is sent, it is sent once and never resent, `ending`/`between` and `buffer_limit` apply, and its frames come as the now-public `HistoricalDataFrame`: `Bars`, then `End`. Unlike `fetch()`, a dropped wait loses no bars read so far, and `cancel_and_drain` reports when TWS is done (a cancel of a running request is confirmed with 162). Examples `historical_data_subscribe` and `async_historical_data_subscribe` (#1189).

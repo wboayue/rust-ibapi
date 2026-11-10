@@ -503,8 +503,8 @@ let rule_id: i32 = details.market_rule_ids.first().and_then(|id| id.parse().ok()
 let rule = client.market_rule(rule_id)?;
 
 // 6.0
-let rule_id = *details.market_rule_ids.first().expect("no market rule ids");
+let rule_id = details.market_rule_id("SMART").expect("no market rule for SMART");
 let rule = client.market_rule(rule_id)?;
 ```
 
-Drop the `.parse()` and pass the id directly. The compiler finds every use that treats an id as a string. It does not catch two runtime differences: a non-integer id in a reply is now an `Error::Parse` from `contract_details`, and `ContractDetails` derives `Serialize` / `Deserialize`, so the ids now serialize as numbers and JSON written by 5.x, with string ids, no longer deserializes. The `utoipa` schema is an integer array.
+Drop the `.parse()` and pass the id directly. The ids are one per entry of `valid_exchanges`, in the same order, and can differ by exchange, so `.first()` is the first valid exchange's rule, not necessarily the one you trade on. `ContractDetails::market_rule_id(exchange)`, new in 6.0, looks it up. The compiler finds every use that treats an id as a string. It does not catch two runtime differences: a non-integer id in a reply is now an `Error::Parse` from `contract_details`, and `ContractDetails` derives `Serialize` / `Deserialize`, so the ids now serialize as numbers and JSON written by 5.x, with string ids, no longer deserializes. The `utoipa` schema is an integer array.

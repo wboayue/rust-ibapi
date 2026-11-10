@@ -435,3 +435,30 @@ fn all_fund_asset_types_covers_every_variant() {
     }
     assert!(seen.iter().all(|&s| s), "ALL_FUND_ASSET_TYPES is missing a variant");
 }
+
+#[test]
+fn market_rule_id_by_exchange() {
+    // Ids can differ by exchange, as on a live SAP@IBIS reply.
+    let sap = ContractDetails {
+        valid_exchanges: vec!["SMART".into(), "IBIS".into(), "TGATE".into()],
+        market_rule_ids: vec![1874, 1943, 3055],
+        ..Default::default()
+    };
+    let misaligned = ContractDetails {
+        valid_exchanges: vec!["SMART".into(), "IBIS".into()],
+        market_rule_ids: vec![1874],
+        ..Default::default()
+    };
+    let cases = [
+        ("first exchange", &sap, "SMART", Some(1874)),
+        ("later exchange gets its own id", &sap, "IBIS", Some(1943)),
+        ("last exchange", &sap, "TGATE", Some(3055)),
+        ("not a valid exchange", &sap, "NYSE", None),
+        ("match is exact, not case-insensitive", &sap, "ibis", None),
+        ("lists differ in length", &misaligned, "SMART", None),
+        ("no details", &ContractDetails::default(), "SMART", None),
+    ];
+    for (label, details, exchange, expected) in cases {
+        assert_eq!(details.market_rule_id(exchange), expected, "{label}");
+    }
+}
