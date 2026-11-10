@@ -492,3 +492,19 @@ match depth? {
 ```
 
 Add a `Reroute` arm to exhaustive matches on `TickTypes` and `MarketDepths`; on it, request the named contract on the named exchange. The compiler finds every exhaustive match, since neither enum is `#[non_exhaustive]`. It does not catch a match with a wildcard arm (`_ => {}`): that compiles unchanged and drops the reroute as silently as 5.x did. `MarketDepths` derives `Serialize` / `Deserialize`, and the new variant serializes as `{"Reroute":{"contract_id":..,"exchange":".."}}`, which a 5.x reader does not deserialize.
+
+### 24. `ContractDetails::market_rule_ids` is `Vec<i32>`
+
+`ContractDetails::market_rule_ids` held TWS's comma-separated market rule ids as strings, although `Client::market_rule` takes an `i32`, so each id had to be parsed first. It is now `Vec<i32>`. An absent or empty list is still empty. A `contract_details` reply whose list has an entry that is not an integer now fails with `Error::Parse`, where 5.x kept the text.
+
+```rust,ignore
+// 5.x
+let rule_id: i32 = details.market_rule_ids.first().and_then(|id| id.parse().ok()).expect("no market rule ids");
+let rule = client.market_rule(rule_id)?;
+
+// 6.0
+let rule_id = details.market_rule_id("SMART").expect("no market rule for SMART");
+let rule = client.market_rule(rule_id)?;
+```
+
+Drop the `.parse()` and pass the id directly. The ids are one per entry of `valid_exchanges`, in the same order, and can differ by exchange, so `.first()` is the first valid exchange's rule, not necessarily the one you trade on. `ContractDetails::market_rule_id(exchange)`, new in 6.0, looks it up. The compiler finds every use that treats an id as a string. It does not catch two runtime differences: a non-integer id in a reply is now an `Error::Parse` from `contract_details`, and `ContractDetails` derives `Serialize` / `Deserialize`, so the ids now serialize as numbers and JSON written by 5.x, with string ids, no longer deserializes. The `utoipa` schema is an integer array.

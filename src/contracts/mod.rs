@@ -603,8 +603,8 @@ pub struct ContractDetails {
     pub price_magnifier: i32,
     /// Supported order types for this product.
     pub order_types: Vec<String>,
-    /// Valid exchange fields when placing an order for this contract.
-    /// The list of exchanges will is provided in the same order as the corresponding MarketRuleIds list.
+    /// Valid exchange fields when placing an order for this contract, in the
+    /// same order as [`market_rule_ids`](Self::market_rule_ids).
     pub valid_exchanges: Vec<String>,
     /// For derivatives, the contract ID (conID) of the underlying instrument.
     pub under_contract_id: i32,
@@ -636,8 +636,12 @@ pub struct ContractDetails {
     pub under_symbol: String,
     /// For derivatives, returns the underlying security type.
     pub under_security_type: String,
-    /// The list of market rule IDs separated by comma Market rule IDs can be used to determine the minimum price increment at a given price.
-    pub market_rule_ids: Vec<String>,
+    /// Market rule ids, one per entry of [`valid_exchanges`](Self::valid_exchanges)
+    /// and in the same order: the rule for that exchange. Ids can differ by
+    /// exchange, so look one up with [`market_rule_id`](Self::market_rule_id)
+    /// rather than taking the first.
+    /// Pass it to `market_rule` for the price increments at a given price.
+    pub market_rule_ids: Vec<i32>,
     /// Real expiration date. Requires TWS 968+ and API v973.04+. Python API specifically requires API v973.06+.
     pub real_expiration_date: String,
     /// Last trade time.
@@ -728,6 +732,38 @@ pub struct ContractDetails {
 
     /// Ineligibility reasons for the contract.
     pub ineligibility_reasons: Vec<IneligibilityReason>,
+}
+
+impl ContractDetails {
+    /// The market rule id for `exchange`, one of [`valid_exchanges`](Self::valid_exchanges);
+    /// pass it to `market_rule` for that exchange's price increments.
+    ///
+    /// `None` when `exchange` is not a valid exchange, or when the two lists
+    /// differ in length, so the ids can't be matched to exchanges (TWS sends
+    /// them aligned).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::ContractDetails;
+    ///
+    /// let details = ContractDetails {
+    ///     valid_exchanges: vec!["SMART".into(), "IBIS".into()],
+    ///     market_rule_ids: vec![1874, 1943],
+    ///     ..Default::default()
+    /// };
+    /// assert_eq!(details.market_rule_id("IBIS"), Some(1943));
+    /// assert_eq!(details.market_rule_id("NYSE"), None);
+    /// ```
+    pub fn market_rule_id(&self, exchange: &str) -> Option<i32> {
+        if self.valid_exchanges.len() != self.market_rule_ids.len() {
+            return None;
+        }
+        self.valid_exchanges
+            .iter()
+            .zip(&self.market_rule_ids)
+            .find_map(|(valid, &id)| (valid == exchange).then_some(id))
+    }
 }
 
 /// Fund distribution policy indicator (`fundDistributionPolicyIndicator`).

@@ -130,11 +130,7 @@ impl Client {
     ///
     /// // Market rule ids come from a contract's details.
     /// let details = client.contract_details(&Contract::stock("AAPL").build()).expect("request failed");
-    /// let rule_id: i32 = details[0]
-    ///     .market_rule_ids
-    ///     .first()
-    ///     .and_then(|id| id.parse().ok())
-    ///     .expect("contract has no market rule ids");
+    /// let rule_id = details[0].market_rule_id("SMART").expect("no market rule for SMART");
     ///
     /// let rule = client.market_rule(rule_id).expect("market rule request failed");
     /// for increment in &rule.price_increments {
