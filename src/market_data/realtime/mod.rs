@@ -256,6 +256,8 @@ impl std::fmt::Display for WhatToShow {
 /// [`Reset`](Self::Reset), drop every row first. The stream stays open
 /// through a reset. Code 316 ("Market depth data has been HALTED") is
 /// terminal: the stream ends with `Err`, and the caller re-subscribes.
+/// [`Reroute`](Self::Reroute) names the underlying contract to request in
+/// place of the CFD; it is the last item, and the stream ends after it.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum MarketDepths {
@@ -267,6 +269,24 @@ pub enum MarketDepths {
     /// been RESET"): empty every row held, then rebuild from the updates that
     /// follow. Delivered as data so it survives `filter_data` / `iter_data`.
     Reset,
+    /// Request depth for the CFD's underlying contract instead. The last
+    /// item: the stream ends after it.
+    Reroute(Reroute),
+}
+
+/// TWS's answer to a market data or depth request for a CFD: the underlying
+/// contract's `contract_id` and `exchange`, to request in place of the CFD.
+/// Delivered as [`TickTypes::Reroute`] and [`MarketDepths::Reroute`], the
+/// last item of either subscription: TWS has ended the CFD request, so the
+/// stream ends after it and writes no cancel. Stock CFDs are rerouted to the
+/// stock; index CFDs are not (live 2026-11-10).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Reroute {
+    /// Contract id of the underlying.
+    pub contract_id: i32,
+    /// Exchange to request the underlying on.
+    pub exchange: String,
 }
 
 /// How a [`MarketDepth`] / [`MarketDepthL2`] row changes the book.
@@ -345,12 +365,17 @@ pub struct MarketDepthL2 {
 }
 
 impl StreamDecoder<MarketDepths> for MarketDepths {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
+        IncomingMessages::MarketDepth,
+        IncomingMessages::MarketDepthL2,
+        IncomingMessages::RerouteMktDepthReq,
+    ];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(common::decoders::decode_market_depth(message)?)),
             IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(common::decoders::decode_market_depth_l2(message)?)),
+            IncomingMessages::RerouteMktDepthReq => Ok(MarketDepths::Reroute(common::decoders::decode_reroute_market_depth(message)?)),
             _ => Err(Error::unexpected_response(message)),
         }
     }
@@ -367,6 +392,11 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
     /// Live: after 200 TWS answers the cancel with 310 (no such request).
     fn rejection_ends_request(notice: &Notice) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
+    }
+
+    /// Live: a rerouted depth request holds no depth slot (309 never fires).
+    fn ends_request(&self) -> bool {
+        matches!(self, MarketDepths::Reroute(_))
     }
 }
 
@@ -408,6 +438,9 @@ pub enum TickTypes {
     PriceSize(TickPriceSize),
     /// Active market data type for this subscription (real-time / frozen / delayed / delayed-frozen).
     MarketDataType(crate::market_data::MarketDataType),
+    /// Request market data for the CFD's underlying contract instead. The
+    /// last item: the stream ends after it.
+    Reroute(Reroute),
 }
 
 impl StreamDecoder<TickTypes> for TickTypes {
@@ -420,6 +453,7 @@ impl StreamDecoder<TickTypes> for TickTypes {
         IncomingMessages::TickSnapshotEnd,
         IncomingMessages::TickReqParams,
         IncomingMessages::MarketDataType,
+        IncomingMessages::RerouteMktDataReq,
     ];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
@@ -431,6 +465,7 @@ impl StreamDecoder<TickTypes> for TickTypes {
             IncomingMessages::TickOptionComputation => common::decoders::decode_tick_option_computation(message).map(TickTypes::OptionComputation),
             IncomingMessages::TickReqParams => common::decoders::decode_tick_request_parameters(message).map(TickTypes::RequestParameters),
             IncomingMessages::MarketDataType => common::decoders::decode_market_data_type(message).map(TickTypes::MarketDataType),
+            IncomingMessages::RerouteMktDataReq => common::decoders::decode_reroute_market_data(message).map(TickTypes::Reroute),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
             _ => Err(Error::unexpected_response(message)),
         }
@@ -448,6 +483,11 @@ impl StreamDecoder<TickTypes> for TickTypes {
 
     fn is_snapshot_end(&self) -> bool {
         matches!(self, TickTypes::SnapshotEnd)
+    }
+
+    /// Live: after a reroute TWS answers the cancel with 300 (no such request).
+    fn ends_request(&self) -> bool {
+        matches!(self, TickTypes::Reroute(_))
     }
 }
 

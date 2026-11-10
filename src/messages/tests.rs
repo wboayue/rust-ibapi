@@ -194,6 +194,9 @@ fn routes_by_request_id_works() {
     assert!(routes_by_request_id(IncomingMessages::ContractDataEnd));
     assert!(routes_by_request_id(IncomingMessages::RealTimeBars));
     assert!(routes_by_request_id(IncomingMessages::ExecutionDataEnd));
+    // CFD reroute answers go to the market data / depth subscription that asked.
+    assert!(routes_by_request_id(IncomingMessages::RerouteMktDataReq));
+    assert!(routes_by_request_id(IncomingMessages::RerouteMktDepthReq));
 
     // Error has its own envelope; shared messages route by message type.
     assert!(!routes_by_request_id(IncomingMessages::Error));
@@ -212,6 +215,8 @@ fn text_request_id_field_works() {
     assert_eq!(text_request_id_field(IncomingMessages::ContractData), Some(1));
     assert_eq!(text_request_id_field(IncomingMessages::BondContractData), Some(1));
     assert_eq!(text_request_id_field(IncomingMessages::TickByTick), Some(1));
+    assert_eq!(text_request_id_field(IncomingMessages::RerouteMktDataReq), Some(1));
+    assert_eq!(text_request_id_field(IncomingMessages::RerouteMktDepthReq), Some(1));
 
     // Field-2 messages (request_id after a version field).
     assert_eq!(text_request_id_field(IncomingMessages::TickPrice), Some(2));

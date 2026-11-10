@@ -1912,6 +1912,94 @@ pub fn tick_snapshot_end() -> TickSnapshotEndResponse {
     TickSnapshotEndResponse::default()
 }
 
+#[derive(Clone, Debug)]
+pub struct RerouteMarketDataResponse {
+    pub request_id: i32,
+    pub contract_id: i32,
+    pub exchange: String,
+}
+
+impl Default for RerouteMarketDataResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            contract_id: 0,
+            exchange: String::new(),
+        }
+    }
+}
+
+impl RerouteMarketDataResponse {
+    pub fn contract_id(mut self, v: i32) -> Self {
+        self.contract_id = v;
+        self
+    }
+    pub fn exchange(mut self, v: impl Into<String>) -> Self {
+        self.exchange = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for RerouteMarketDataResponse {
+    type Proto = proto::RerouteMarketDataRequest;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::RerouteMarketDataRequest {
+            req_id: Some(self.request_id),
+            con_id: Some(self.contract_id),
+            exchange: some_str(&self.exchange),
+        }
+    }
+}
+
+pub fn reroute_market_data() -> RerouteMarketDataResponse {
+    RerouteMarketDataResponse::default()
+}
+
+#[derive(Clone, Debug)]
+pub struct RerouteMarketDepthResponse {
+    pub request_id: i32,
+    pub contract_id: i32,
+    pub exchange: String,
+}
+
+impl Default for RerouteMarketDepthResponse {
+    fn default() -> Self {
+        Self {
+            request_id: TEST_REQ_ID_FIRST,
+            contract_id: 0,
+            exchange: String::new(),
+        }
+    }
+}
+
+impl RerouteMarketDepthResponse {
+    pub fn contract_id(mut self, v: i32) -> Self {
+        self.contract_id = v;
+        self
+    }
+    pub fn exchange(mut self, v: impl Into<String>) -> Self {
+        self.exchange = v.into();
+        self
+    }
+}
+
+impl ResponseProtoEncoder for RerouteMarketDepthResponse {
+    type Proto = proto::RerouteMarketDepthRequest;
+
+    fn to_proto(&self) -> Self::Proto {
+        proto::RerouteMarketDepthRequest {
+            req_id: Some(self.request_id),
+            con_id: Some(self.contract_id),
+            exchange: some_str(&self.exchange),
+        }
+    }
+}
+
+pub fn reroute_market_depth() -> RerouteMarketDepthResponse {
+    RerouteMarketDepthResponse::default()
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct MktDepthExchangesResponse {
     pub descriptions: Vec<DepthMarketDataDescriptionFields>,

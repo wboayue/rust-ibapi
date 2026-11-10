@@ -616,6 +616,38 @@ fn determine_routing_protobuf_market_data_type() {
 }
 
 #[test]
+fn determine_routing_protobuf_reroute() {
+    // Declared by the `TickTypes` / `MarketDepths` decoders; without a
+    // `text_request_id_field` entry both fell through to ByMessageType and
+    // were dropped as unroutable.
+    let cases = [
+        (
+            IncomingMessages::RerouteMktDataReq,
+            crate::proto::RerouteMarketDataRequest {
+                req_id: Some(9002),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+        ),
+        (
+            IncomingMessages::RerouteMktDepthReq,
+            crate::proto::RerouteMarketDepthRequest {
+                req_id: Some(9002),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+        ),
+    ];
+    for (message_type, bytes) in cases {
+        let message = proto_response(message_type, bytes);
+        match determine_routing(&message) {
+            RoutingDecision::ByRequestId(id) => assert_eq!(id, 9002, "{message_type:?}"),
+            routing => panic!("Expected ByRequestId(9002) for {message_type:?}, got {routing:?}"),
+        }
+    }
+}
+
+#[test]
 fn first_unroutable_by_request_id_accepts_registered_types() {
     // The two ways in, one per arm of `routable_to_request_id_subscription`.
     let declared = &[

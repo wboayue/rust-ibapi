@@ -330,6 +330,15 @@ pub(crate) trait StreamDecoder<T> {
         false
     }
 
+    /// Whether this item is the last TWS sends for the request, which TWS has
+    /// ended with it. The stream yields the item, then ends as on an end
+    /// marker, so drop writes no cancel and `cancel_and_drain` reports
+    /// `Drained::Ended`. Opt in only where wire-verified, as for
+    /// [`rejection_ends_request`](Self::rejection_ends_request).
+    fn ends_request(&self) -> bool {
+        false
+    }
+
     /// Returns true if this decoded value is an end marker that closes a batch
     /// on a stream that stays open, such as the `End` after an initial dump.
     /// [`next_batch`](crate::subscriptions::Subscription::next_batch) closes a

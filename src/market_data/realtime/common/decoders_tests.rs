@@ -8,8 +8,8 @@ use crate::server_versions;
 use crate::subscriptions::DecoderContext;
 use crate::testdata::builders::market_data::{
     bid_ask_tick, depth_market_data_description, market_depth_response, mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick,
-    tick_generic, tick_price, tick_size, tick_string, trade_tick, BidAskTickResponse, MidPointTickResponse, RealTimeBarTickResponse,
-    TickGenericResponse, TickPriceResponse, TickSizeResponse, TickStringResponse, TradeTickResponse,
+    reroute_market_data, reroute_market_depth, tick_generic, tick_price, tick_size, tick_string, trade_tick, BidAskTickResponse,
+    MidPointTickResponse, RealTimeBarTickResponse, TickGenericResponse, TickPriceResponse, TickSizeResponse, TickStringResponse, TradeTickResponse,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use prost::Message;
@@ -682,6 +682,76 @@ mod market_data_type_tests {
             Err(Error::UnexpectedResponse(_)) => {}
             other => panic!("expected UnexpectedResponse, got {other:?}"),
         }
+    }
+}
+
+mod reroute_tests {
+    use super::*;
+    use crate::market_data::realtime::MarketDepths;
+    use crate::subscriptions::common::StreamDecoder;
+
+    #[test]
+    fn decode_reroute_market_data_proto_works() {
+        let reroute =
+            decode_reroute_market_data_proto(reroute_market_data().contract_id(265598).exchange("SMART").to_proto()).expect("decode failed");
+        assert_eq!(reroute.contract_id, 265598);
+        assert_eq!(reroute.exchange, "SMART");
+    }
+
+    #[test]
+    fn decode_reroute_market_depth_proto_works() {
+        let reroute =
+            decode_reroute_market_depth_proto(reroute_market_depth().contract_id(265598).exchange("ISLAND").to_proto()).expect("decode failed");
+        assert_eq!(reroute.contract_id, 265598);
+        assert_eq!(reroute.exchange, "ISLAND");
+    }
+
+    #[test]
+    fn decode_reroute_through_tick_types() {
+        let message = proto_response(
+            IncomingMessages::RerouteMktDataReq,
+            reroute_market_data().contract_id(265598).exchange("SMART").encode_proto(),
+        );
+        let context = DecoderContext::new(server_versions::PROTOBUF);
+
+        match TickTypes::decode(&context, &message).expect("proto decode failed") {
+            TickTypes::Reroute(reroute) => {
+                assert_eq!(reroute.contract_id, 265598);
+                assert_eq!(reroute.exchange, "SMART");
+            }
+            other => panic!("expected Reroute, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decode_reroute_through_market_depths() {
+        let message = proto_response(
+            IncomingMessages::RerouteMktDepthReq,
+            reroute_market_depth().contract_id(265598).exchange("ISLAND").encode_proto(),
+        );
+        let context = DecoderContext::new(server_versions::PROTOBUF);
+
+        assert_eq!(
+            MarketDepths::decode(&context, &message).expect("proto decode failed"),
+            MarketDepths::Reroute(Reroute {
+                contract_id: 265598,
+                exchange: "ISLAND".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn decode_reroute_rejects_text_framing() {
+        assert_rejects_text_framing(
+            IncomingMessages::RerouteMktDataReq,
+            "91\09000\0265598\0SMART\0",
+            decode_reroute_market_data,
+        );
+        assert_rejects_text_framing(
+            IncomingMessages::RerouteMktDepthReq,
+            "92\09000\0265598\0ISLAND\0",
+            decode_reroute_market_depth,
+        );
     }
 }
 

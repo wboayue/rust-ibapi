@@ -14,8 +14,8 @@ use crate::market_data::MarketDataType;
 /// Delayed ticks (`DelayedBid`, `DelayedLast`, …) fill the same fields as their real-time
 /// counterparts; [`market_data_type`](Self::market_data_type) says which kind of data the quote
 /// holds. Option computations are routed by their `field` into the bid/ask/last/model greeks.
-/// String, generic, snapshot-end and request-parameter ticks, and tick types without a field
-/// here, are ignored.
+/// String, generic, snapshot-end, request-parameter and reroute ticks, and tick types without a
+/// field here, are ignored.
 ///
 /// Values are stored as TWS sends them: TWS may report a missing bid or ask as `-1.0` rather
 /// than omitting it.
@@ -119,7 +119,7 @@ impl Quote {
             }
             TickTypes::OptionComputation(computation) => self.set_greeks(computation),
             TickTypes::MarketDataType(market_data_type) => self.market_data_type = Some(*market_data_type),
-            TickTypes::String(_) | TickTypes::Generic(_) | TickTypes::SnapshotEnd | TickTypes::RequestParameters(_) => {}
+            TickTypes::String(_) | TickTypes::Generic(_) | TickTypes::SnapshotEnd | TickTypes::RequestParameters(_) | TickTypes::Reroute(_) => {}
         }
     }
 
