@@ -472,7 +472,7 @@ Bind the `Vec<Bar>` in the `Historical` arm, and take the window from `End`. The
 
 ### 23. `TickTypes` and `MarketDepths` gain `Reroute`
 
-TWS answers a market data or market depth request for a CFD with the underlying contract to request in its place. Those frames reached no subscription and were dropped with an info-level log. A `market_data` subscription now yields them as `TickTypes::Reroute(Reroute)` and a `market_depth` subscription as `MarketDepths::Reroute(Reroute)`, where `market_data::realtime::Reroute` carries the underlying's `contract_id` and `exchange`. The subscription does not end on it. `Quote::apply` ignores `TickTypes::Reroute`.
+TWS answers a market data or market depth request for a CFD with the underlying contract to request in its place. Those frames reached no subscription and were dropped with an info-level log. A `market_data` subscription now yields them as `TickTypes::Reroute(Reroute)` and a `market_depth` subscription as `MarketDepths::Reroute(Reroute)`, where `market_data::realtime::Reroute` carries the underlying's `contract_id` and `exchange`. It is the last item: TWS has already ended the CFD request, so the stream ends after it and drop writes no cancel. Stock CFDs are rerouted to the stock; index CFDs are not. `Quote::apply` ignores `TickTypes::Reroute`.
 
 ```rust,ignore
 // 5.x
