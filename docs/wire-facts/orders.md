@@ -170,9 +170,12 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   0 or 1, and `ext_operator` `TRADER7` → OrderStatus Cancelled + 202 within ~1s.
   `ext_operator` `probe-cxl` (hyphen) → **no reply**: the order goes PendingCancel and stays
   there. A later plain cancel draws 10148 "cannot be cancelled, state: PendingCancel"; a global
-  cancel draws 161. Not cleared by the end of the session.
+  cancel draws 161. Still wedged at 20:07 ET. By 01:18 ET (inside the daily reset window) the
+  cancel had been dropped: each order was back in its prior state (AAPL PreSubmitted, ES
+  Submitted), and a plain cancel then got Cancelled + 202. When between the two it reverted
+  was not observed.
 - **Global cancel (`global_cancel_with`):** `TRADER7` + indicator 1 → 202 for each working order.
   `probe-gcx` (hyphen) → the order went PendingCancel and wedged, as above.
 - **Not probed:** which characters besides `-` are rejected, length limits, any indicator value
-  other than 0/1, `ext_operator` on a stock order with a valid value, whether a wedged
-  PendingCancel clears at the daily reset, and live (non-paper) accounts.
+  other than 0/1, `ext_operator` on a stock order with a valid value, what reverts a wedged
+  PendingCancel (the reset, or a timeout), and live (non-paper) accounts.
