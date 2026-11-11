@@ -784,6 +784,61 @@ async fn global_cancel() {
     assert_request(&message_bus, 0, &global_cancel_request());
 }
 
+fn tagged_cancel() -> crate::orders::OrderCancel {
+    crate::orders::OrderCancel {
+        manual_order_cancel_time: "20261110-14:30:00".to_owned(),
+        ext_operator: "TRADER7".to_owned(),
+        manual_order_indicator: Some(1),
+    }
+}
+
+#[tokio::test]
+async fn cancel_order_sends_manual_order_cancel_time() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let _subscription = client.cancel_order(1, "20261110-14:30:00").await.expect("cancel_order failed");
+
+    let expected = crate::orders::OrderCancel {
+        manual_order_cancel_time: "20261110-14:30:00".to_owned(),
+        ..Default::default()
+    };
+    assert_request(&message_bus, 0, &cancel_order_request().order_id(1).order_cancel(expected));
+}
+
+#[tokio::test]
+async fn cancel_order_with_sends_operator_fields() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let _subscription = client.cancel_order_with(1, &tagged_cancel()).await.expect("cancel_order_with failed");
+
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &cancel_order_request().order_id(1).order_cancel(tagged_cancel()));
+}
+
+#[tokio::test]
+async fn cancel_order_with_rejects_request_range_id() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let result = client.cancel_order_with(REQUEST_ID_FLOOR, &tagged_cancel()).await;
+
+    assert!(matches!(result, Err(Error::OrderIdInRequestRange { .. })), "got {:?}", result.err());
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[tokio::test]
+async fn global_cancel_with_sends_operator_fields() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::REQ_GLOBAL_CANCEL);
+
+    client.global_cancel_with(&tagged_cancel()).await.expect("global_cancel_with failed");
+
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &global_cancel_request().order_cancel(tagged_cancel()));
+}
+
 // Covers the `Client::order` delegate only. Field-by-field builder semantics are
 // asserted in orders/builder/tests.rs against a mock client; what is unique here
 // is that the entry point binds the real `Client` and the given contract.

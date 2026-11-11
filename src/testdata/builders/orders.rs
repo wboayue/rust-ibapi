@@ -4,8 +4,8 @@ use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_REQ_ID_FIRST};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
-use crate::orders::common::{encode_execution_filter, encode_order, encode_order_cancel};
-use crate::orders::{ExecutionFilter, ExerciseAction, Order, OrderStatusKind};
+use crate::orders::common::{encode_execution_filter, encode_order};
+use crate::orders::{ExecutionFilter, ExerciseAction, Order, OrderCancel, OrderStatusKind};
 use crate::proto;
 use crate::proto::encoders::{encode_contract, encode_contract_with_order, some_bool, some_str};
 
@@ -909,17 +909,28 @@ impl RequestEncoder for PlaceOrderRequestBuilder {
     }
 }
 
+/// Wire form of an `OrderCancel`, written out field by field rather than through
+/// the production encoder so request assertions check the mapping.
+fn order_cancel_proto(order_cancel: &OrderCancel) -> proto::OrderCancel {
+    let non_empty = |v: &str| (!v.is_empty()).then(|| v.to_owned());
+    proto::OrderCancel {
+        manual_order_cancel_time: non_empty(&order_cancel.manual_order_cancel_time),
+        ext_operator: non_empty(&order_cancel.ext_operator),
+        manual_order_indicator: order_cancel.manual_order_indicator,
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct CancelOrderRequestBuilder {
     pub order_id: i32,
-    pub manual_order_cancel_time: String,
+    pub order_cancel: OrderCancel,
 }
 
 impl Default for CancelOrderRequestBuilder {
     fn default() -> Self {
         Self {
             order_id: 13,
-            manual_order_cancel_time: String::new(),
+            order_cancel: OrderCancel::default(),
         }
     }
 }
@@ -927,6 +938,11 @@ impl Default for CancelOrderRequestBuilder {
 impl CancelOrderRequestBuilder {
     pub fn order_id(mut self, v: i32) -> Self {
         self.order_id = v;
+        self
+    }
+
+    pub fn order_cancel(mut self, v: OrderCancel) -> Self {
+        self.order_cancel = v;
         self
     }
 }
@@ -938,7 +954,7 @@ impl RequestEncoder for CancelOrderRequestBuilder {
     fn to_proto(&self) -> Self::Proto {
         proto::CancelOrderRequest {
             order_id: Some(self.order_id),
-            order_cancel: Some(encode_order_cancel(&self.manual_order_cancel_time)),
+            order_cancel: Some(order_cancel_proto(&self.order_cancel)),
         }
     }
 }
@@ -1044,7 +1060,14 @@ impl RequestEncoder for ExecutionsRequestBuilder {
 
 #[derive(Clone, Debug, Default)]
 pub struct GlobalCancelRequestBuilder {
-    pub manual_order_cancel_time: String,
+    pub order_cancel: OrderCancel,
+}
+
+impl GlobalCancelRequestBuilder {
+    pub fn order_cancel(mut self, v: OrderCancel) -> Self {
+        self.order_cancel = v;
+        self
+    }
 }
 
 impl RequestEncoder for GlobalCancelRequestBuilder {
@@ -1053,7 +1076,7 @@ impl RequestEncoder for GlobalCancelRequestBuilder {
 
     fn to_proto(&self) -> Self::Proto {
         proto::GlobalCancelRequest {
-            order_cancel: Some(encode_order_cancel(&self.manual_order_cancel_time)),
+            order_cancel: Some(order_cancel_proto(&self.order_cancel)),
         }
     }
 }

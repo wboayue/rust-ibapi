@@ -326,8 +326,52 @@ impl Client {
     /// }
     /// ```
     pub async fn cancel_order(&self, order_id: impl Into<OrderId>, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
+        let order_cancel = OrderCancel {
+            manual_order_cancel_time: manual_order_cancel_time.to_owned(),
+            ..OrderCancel::default()
+        };
+        self.cancel_order_with(order_id, &order_cancel).await
+    }
+
+    /// Cancels an open [Order], sending the attributes in `order_cancel`.
+    ///
+    /// Use this over [`cancel_order`](Self::cancel_order) to send an operator ID
+    /// ([`OrderCancel::ext_operator`]) or [`OrderCancel::manual_order_indicator`] with the
+    /// cancel, e.g. for CFTC Tag 50 / CME Rule 576 tagging. Responses are as for
+    /// [`cancel_order`](Self::cancel_order).
+    ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let order_cancel = OrderCancel {
+    ///         ext_operator: "TRADER7".to_owned(),
+    ///         manual_order_indicator: Some(1),
+    ///         ..OrderCancel::default()
+    ///     };
+    ///     let mut subscription = client.cancel_order_with(42, &order_cancel).await.expect("cancel failed");
+    ///     while let Some(item) = subscription.next().await {
+    ///         match item {
+    ///             Ok(SubscriptionItem::Notice(n)) if n.is_cancellation() => {
+    ///                 println!("cancelled: {n}");
+    ///                 break;
+    ///             }
+    ///             Ok(item) => println!("{item:?}"),
+    ///             Err(e) => { eprintln!("cancel err: {e:?}"); break; }
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn cancel_order_with(&self, order_id: impl Into<OrderId>, order_cancel: &OrderCancel) -> Result<Subscription<CancelOrder>, Error> {
         let order_id = order_id.into().checked()?;
-        let request = encoders::encode_cancel_order(order_id.value(), manual_order_cancel_time)?;
+        let request = encoders::encode_cancel_order(order_id.value(), order_cancel)?;
         let internal_subscription = self.send_order(order_id, request).await?;
 
         Ok(Subscription::new_from_internal_simple(
@@ -351,7 +395,31 @@ impl Client {
     /// }
     /// ```
     pub async fn global_cancel(&self) -> Result<(), Error> {
-        let message = encoders::encode_global_cancel()?;
+        self.global_cancel_with(&OrderCancel::default()).await
+    }
+
+    /// Cancels all open [Order]s, sending the attributes in `order_cancel`.
+    ///
+    /// Use this over [`global_cancel`](Self::global_cancel) to send an operator ID
+    /// ([`OrderCancel::ext_operator`]) or [`OrderCancel::manual_order_indicator`] with the cancel.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let order_cancel = OrderCancel {
+    ///         ext_operator: "TRADER7".to_owned(),
+    ///         ..OrderCancel::default()
+    ///     };
+    ///     client.global_cancel_with(&order_cancel).await.expect("global_cancel_with failed");
+    /// }
+    /// ```
+    pub async fn global_cancel_with(&self, order_cancel: &OrderCancel) -> Result<(), Error> {
+        let message = encoders::encode_global_cancel(order_cancel)?;
         self.send_message(message).await?;
 
         Ok(())
