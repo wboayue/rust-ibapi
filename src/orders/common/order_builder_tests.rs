@@ -1,6 +1,6 @@
 use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
 use crate::orders::common::order_builder::*;
-use crate::orders::{Action, Order};
+use crate::orders::{Action, Order, OrderType};
 
 /// Tests for basic order types like market, limit, and stop orders
 #[cfg(test)]
@@ -12,7 +12,7 @@ mod basic_order_tests {
         let order = market_order(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MKT");
+        assert_eq!(order.order_type, Some(OrderType::Market));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, None);
         assert_eq!(order.aux_price, None);
@@ -28,7 +28,7 @@ mod basic_order_tests {
         let order = limit_order(Action::Buy, 100.0, 50.25);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.25));
 
@@ -43,7 +43,7 @@ mod basic_order_tests {
         let order = stop(Action::Sell, 100.0, 45.0);
 
         assert_eq!(order.action, Action::Sell);
-        assert_eq!(order.order_type, "STP");
+        assert_eq!(order.order_type, Some(OrderType::Stop));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.aux_price, Some(45.0)); // Stop price
         assert_eq!(order.limit_price, None);
@@ -54,7 +54,7 @@ mod basic_order_tests {
         let order = market_if_touched(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MIT");
+        assert_eq!(order.order_type, Some(OrderType::MarketIfTouched));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.aux_price, Some(50.0)); // Trigger price
     }
@@ -69,7 +69,7 @@ mod time_based_order_tests {
         let order = market_on_close(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MOC");
+        assert_eq!(order.order_type, Some(OrderType::MarketOnClose));
         assert_eq!(order.total_quantity, 100.0);
     }
 
@@ -78,7 +78,7 @@ mod time_based_order_tests {
         let order = market_on_open(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MKT");
+        assert_eq!(order.order_type, Some(OrderType::Market));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.tif, TimeInForce::OnOpen);
     }
@@ -88,7 +88,7 @@ mod time_based_order_tests {
         let order = limit_on_close(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LOC");
+        assert_eq!(order.order_type, Some(OrderType::LimitOnClose));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
     }
@@ -98,7 +98,7 @@ mod time_based_order_tests {
         let order = limit_on_open(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
         assert_eq!(order.tif, TimeInForce::OnOpen);
@@ -124,7 +124,7 @@ mod complex_order_tests {
         let parent = &orders[0];
         assert_eq!(parent.order_id, 1000);
         assert_eq!(parent.action, Action::Buy);
-        assert_eq!(parent.order_type, "LMT");
+        assert_eq!(parent.order_type, Some(OrderType::Limit));
         assert_eq!(parent.total_quantity, 100.0);
         assert_eq!(parent.limit_price, Some(50.0));
         assert!(!parent.transmit);
@@ -133,7 +133,7 @@ mod complex_order_tests {
         let take_profit = &orders[1];
         assert_eq!(take_profit.order_id, 1001);
         assert_eq!(take_profit.action, Action::Sell);
-        assert_eq!(take_profit.order_type, "LMT");
+        assert_eq!(take_profit.order_type, Some(OrderType::Limit));
         assert_eq!(take_profit.total_quantity, 100.0);
         assert_eq!(take_profit.limit_price, Some(55.0));
         assert_eq!(take_profit.parent_id, 1000);
@@ -143,7 +143,7 @@ mod complex_order_tests {
         let stop_loss = &orders[2];
         assert_eq!(stop_loss.order_id, 1002);
         assert_eq!(stop_loss.action, Action::Sell);
-        assert_eq!(stop_loss.order_type, "STP");
+        assert_eq!(stop_loss.order_type, Some(OrderType::Stop));
         assert_eq!(stop_loss.total_quantity, 100.0);
         assert_eq!(stop_loss.aux_price, Some(45.0));
         assert_eq!(stop_loss.parent_id, 1000);
@@ -219,7 +219,7 @@ mod complex_order_tests {
         let order = trailing_stop(Action::Sell, 100.0, 5.0, 45.0);
 
         assert_eq!(order.action, Action::Sell);
-        assert_eq!(order.order_type, "TRAIL");
+        assert_eq!(order.order_type, Some(OrderType::TrailingStop));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.trailing_percent, Some(5.0));
         assert_eq!(order.trail_stop_price, Some(45.0));
@@ -235,7 +235,7 @@ mod combo_order_tests {
         let order = non_guaranteed(combo_market_order(Action::Buy, 100.0));
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MKT");
+        assert_eq!(order.order_type, Some(OrderType::Market));
         assert_eq!(order.total_quantity, 100.0);
 
         // Check non-guaranteed params
@@ -249,7 +249,7 @@ mod combo_order_tests {
         let order = non_guaranteed(combo_limit_order(Action::Buy, 100.0, 50.0));
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
 
@@ -264,7 +264,7 @@ mod combo_order_tests {
         let order = non_guaranteed(relative_limit_combo(Action::Buy, 100.0, 50.0));
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "REL + LMT");
+        assert_eq!(order.order_type, Some(OrderType::RelativeLimitCombo));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
 
@@ -280,7 +280,7 @@ mod combo_order_tests {
         let order = non_guaranteed(limit_order_for_combo_with_leg_prices(Action::Buy, 100.0, leg_prices));
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
 
         // Check leg prices
@@ -304,7 +304,7 @@ mod specialized_order_tests {
         let order = pegged_to_market(Action::Buy, 100.0, 0.05);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "PEG MKT");
+        assert_eq!(order.order_type, Some(OrderType::PeggedToMarket));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.aux_price, Some(0.05));
     }
@@ -314,7 +314,7 @@ mod specialized_order_tests {
         let order = volatility(Action::Buy, 100.0, 0.04, VolatilityType::Daily);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "VOL");
+        assert_eq!(order.order_type, Some(OrderType::Volatility));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.volatility, Some(0.04));
         assert_eq!(order.volatility_type, Some(VolatilityType::Daily));
@@ -325,7 +325,7 @@ mod specialized_order_tests {
         let order = auction_relative(Action::Buy, 100.0, 0.05);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "REL");
+        assert_eq!(order.order_type, Some(OrderType::Relative));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.aux_price, Some(0.05));
     }
@@ -335,7 +335,7 @@ mod specialized_order_tests {
         let order = block(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
         assert!(order.block_order);
@@ -346,7 +346,7 @@ mod specialized_order_tests {
         let order = box_top(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "BOX TOP");
+        assert_eq!(order.order_type, Some(OrderType::BoxTop));
         assert_eq!(order.total_quantity, 100.0);
     }
 
@@ -355,7 +355,7 @@ mod specialized_order_tests {
         let order = sweep_to_fill(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
         assert!(order.sweep_to_fill);
@@ -366,7 +366,7 @@ mod specialized_order_tests {
         let order = discretionary(Action::Buy, 100.0, 50.0, 0.1);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
         assert_eq!(order.discretionary_amt, 0.1);
@@ -377,7 +377,7 @@ mod specialized_order_tests {
         let order = midpoint_match(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MKT");
+        assert_eq!(order.order_type, Some(OrderType::Market));
         assert_eq!(order.total_quantity, 100.0);
     }
 
@@ -386,7 +386,7 @@ mod specialized_order_tests {
         let order = midprice(Action::Buy, 100.0, Some(50.0));
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MIDPRICE");
+        assert_eq!(order.order_type, Some(OrderType::Midprice));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
     }
@@ -396,7 +396,7 @@ mod specialized_order_tests {
         let order = midprice(Action::Buy, 100.0, None);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MIDPRICE");
+        assert_eq!(order.order_type, Some(OrderType::Midprice));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, None);
     }
@@ -411,7 +411,7 @@ mod miscellaneous_order_tests {
         let order = limit_order_with_cash_qty(Action::Buy, 50.0, 5000.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.limit_price, Some(50.0));
         assert_eq!(order.cash_qty, Some(5000.0));
     }
@@ -421,7 +421,7 @@ mod miscellaneous_order_tests {
         let order = limit_order_with_manual_order_time(Action::Buy, 100.0, 50.0, "20240101 10:00:00");
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
         assert_eq!(order.manual_order_time, "20240101 10:00:00");
@@ -432,7 +432,7 @@ mod miscellaneous_order_tests {
         let order = market_with_protection(Action::Buy, 100.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MKT PRT");
+        assert_eq!(order.order_type, Some(OrderType::MarketWithProtection));
         assert_eq!(order.total_quantity, 100.0);
     }
 
@@ -441,7 +441,7 @@ mod miscellaneous_order_tests {
         let order = stop_with_protection(Action::Sell, 100.0, 45.0);
 
         assert_eq!(order.action, Action::Sell);
-        assert_eq!(order.order_type, "STP PRT");
+        assert_eq!(order.order_type, Some(OrderType::StopWithProtection));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.aux_price, Some(45.0));
     }
@@ -451,7 +451,7 @@ mod miscellaneous_order_tests {
         let order = limit_ibkrats(Action::Buy, 100.0, 50.0);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
         assert!(order.not_held);
@@ -462,7 +462,7 @@ mod miscellaneous_order_tests {
         let order = market_f_hedge(1001, Action::Buy);
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MKT");
+        assert_eq!(order.order_type, Some(OrderType::Market));
         assert_eq!(order.total_quantity, 0.0);
         assert_eq!(order.parent_id, 1001);
         assert_eq!(order.hedge_type, "F");
@@ -481,7 +481,7 @@ mod adjustable_order_tests {
 
     fn assert_attached_stop(order: &Order) {
         assert_eq!(order.action, Action::Sell); // Opposite of parent
-        assert_eq!(order.order_type, "STP");
+        assert_eq!(order.order_type, Some(OrderType::Stop));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.aux_price, Some(45.0));
         assert_eq!(order.parent_id, 7);
@@ -493,7 +493,7 @@ mod adjustable_order_tests {
         let order = attach(AdjustTo::Stop { stop_price: 46.0 });
 
         assert_attached_stop(&order);
-        assert_eq!(order.adjusted_order_type, "STP");
+        assert_eq!(order.adjusted_order_type, Some(OrderType::Stop));
         assert_eq!(order.adjusted_stop_price, Some(46.0));
         assert_eq!(order.adjusted_stop_limit_price, None);
     }
@@ -506,7 +506,7 @@ mod adjustable_order_tests {
         });
 
         assert_attached_stop(&order);
-        assert_eq!(order.adjusted_order_type, "STP LMT");
+        assert_eq!(order.adjusted_order_type, Some(OrderType::StopLimit));
         assert_eq!(order.adjusted_stop_price, Some(46.0));
         assert_eq!(order.adjusted_stop_limit_price, Some(47.0));
     }
@@ -520,7 +520,7 @@ mod adjustable_order_tests {
             let order = attach(AdjustTo::Trail { stop_price: 46.0, trail });
 
             assert_attached_stop(&order);
-            assert_eq!(order.adjusted_order_type, "TRAIL");
+            assert_eq!(order.adjusted_order_type, Some(OrderType::TrailingStop));
             assert_eq!(order.adjusted_stop_price, Some(46.0));
             assert_eq!(order.adjustable_trailing_unit, unit, "{trail:?}");
             assert_eq!(order.adjusted_trailing_amount, Some(amount), "{trail:?}");
@@ -537,7 +537,7 @@ mod additional_specialized_order_tests {
         let order = non_guaranteed(relative_market_combo(Action::Buy, 100.0));
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "REL + MKT");
+        assert_eq!(order.order_type, Some(OrderType::RelativeMarketCombo));
         assert_eq!(order.total_quantity, 100.0);
 
         // Check non-guaranteed params
@@ -555,7 +555,7 @@ mod additional_specialized_order_tests {
         );
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "PASSV REL");
+        assert_eq!(order.order_type, Some(OrderType::PassiveRelative));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.aux_price, Some(0.01));
     }
@@ -569,7 +569,7 @@ mod additional_specialized_order_tests {
         );
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "MTL");
+        assert_eq!(order.order_type, Some(OrderType::MarketToLimit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
         assert_eq!(order.tif, TimeInForce::Auction);
@@ -584,7 +584,7 @@ mod additional_specialized_order_tests {
         );
 
         assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.order_type, "LMT");
+        assert_eq!(order.order_type, Some(OrderType::Limit));
         assert_eq!(order.total_quantity, 100.0);
         assert_eq!(order.limit_price, Some(50.0));
         assert!(order.what_if);

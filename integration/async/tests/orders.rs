@@ -3,7 +3,7 @@ use std::time::Instant;
 use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::{
-    Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderUpdate, Orders, PlaceOrder,
+    Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderType, OrderUpdate, Orders, PlaceOrder,
 };
 use ibapi::subscriptions::{Subscription, SubscriptionItem};
 use ibapi::{Client, Error, NoticeCategory};
@@ -22,7 +22,7 @@ fn limit_order(action: Action, quantity: f64, price: f64) -> Order {
     Order {
         action,
         total_quantity: quantity,
-        order_type: "LMT".to_string(),
+        order_type: Some(OrderType::Limit),
         limit_price: Some(price),
         ..Default::default()
     }
@@ -360,7 +360,7 @@ fn market_order(action: Action, quantity: f64) -> Order {
     Order {
         action,
         total_quantity: quantity,
-        order_type: "MKT".to_string(),
+        order_type: Some(OrderType::Market),
         ..Default::default()
     }
 }

@@ -236,3 +236,30 @@ with `override_natural_action`.*
   whether a 65+ value reaches the order, `global_cancel_with` with values other than the
   hyphen, any indicator value other than 0/1, what reverts a wedged PendingCancel (the reset or
   a timeout), and live (non-paper) accounts.
+
+### `adjusted_order_type` and `delta_neutral_order_type` echo
+
+*Live 2026-11-15 00:44–00:46Z (Saturday evening ET, off-hours), paper Gateway, server 226; #1220.*
+
+- **`adjusted_order_type` set:** two STP children of a resting AAPL BUY LMT, built with
+  `attach_adjustable_stop`, echoed `TRAIL` and `STP LMT` as sent, with `trigger_price`,
+  `adjusted_stop_price` and `adjusted_stop_limit_price` as sent, on the `place_order` echo,
+  `open_orders()` and `completed_orders()`.
+- **Unset:** the parent LMT order echoed the string `None` in `adjusted_order_type` on all three
+  reads, and all three stock orders (none with a hedge) echoed `None` in `delta_neutral_order_type`
+  on all three reads; no echo was empty. IB's Java `OrderType.get` maps `None` and `""` to its
+  `OrderType.None`; the crate decodes both to `None`.
+- **`delta_neutral_order_type` set:** on a non-VOL order (a one-leg option BAG with a
+  `delta_neutral_contract`) → 321 "Cannot set VOL attribute on non-VOL order", order not created.
+  On a VOL order (`order_builder::volatility`, 20 % annual, AAPL 20261218 C300) with
+  `delta_neutral_aux_price` → 321 "Delta hedge order type requires that no delta hedge aux price be
+  specified". Without the aux price (`LMT` or `MKT`), and a VOL order with no hedge, the Gateway
+  gave no OpenOrder or notice in 4 s and `open_orders()` was empty 4–8 s later; `cancel_order` then
+  drew 202 "Order Canceled - reason:Order was discarded." and 161. Every VOL order was discarded,
+  hedged or not; off-hours is the likely cause, unverified.
+- Cancelling the parent cancelled both children (`completed_status` "Cancelled by System:
+  Partial Decimal Quantity"); a cancel for an id TWS never created draws 10147.
+- **Not probed:** the echo of a set `delta_neutral_order_type` and whether a VOL order is kept
+  during market hours; `adjusted_order_type` `STP` (`AdjustTo::Stop`); whether `None` is ever
+  echoed for `order_type` itself (it was `LMT`, `STP` or `VOL` on every echo); executions and
+  `order_update_stream`; TWS as opposed to the Gateway; live accounts.

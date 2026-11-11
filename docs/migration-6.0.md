@@ -675,3 +675,36 @@ match details.contract.last_trade_date_or_contract_month {
 - A contract sent as a month comes back from TWS as its last trading day: an order on ES `202612` is echoed as `20261218`. Match on the variant you get, not the one you sent.
 - Serialized, the field is the wire string as before (`"20261218"`); an unset field is `null` instead of `""`. Deserializing still reads `""` as `None`, so 5.x JSON loads. Any other text loads as `Expiry::Unknown`, unchecked.
 - `Expiry` is in the prelude. The compiler reports every site that reads or writes the field.
+
+### 32. `Order`'s order-type fields are `Option<OrderType>`, not `String`
+
+| Field | 5.x | 6.0 |
+|---|---|---|
+| `Order::order_type` | `String` (`"LMT"`, `""` unset) | `Option<OrderType>` (`None` unset) |
+| `Order::adjusted_order_type` | `String` (`"TRAIL"`, `""` unset) | `Option<OrderType>` |
+| `Order::delta_neutral_order_type` | `String` (`"LMT"`, `""` unset) | `Option<OrderType>` |
+
+`Order::order_type` held the TWS order-type code as a `String` while `OrderBuilder::order_type` took the builder's `OrderType` enum, so an order read back from `open_orders()` could only be compared to what was built by its code string; `adjusted_order_type` and `delta_neutral_order_type` held codes from the same set. All three are now `Option<orders::OrderType>` (also at `orders::builder::OrderType`), the enum the builder takes. `Display` and `as_str()` give the code, `s.parse::<OrderType>()` reads one, and a code this version does not list decodes as `OrderType::Unknown(raw)` and is sent back unchanged, so an order read from TWS round-trips. `None` is unset: `Order::default()` holds it, it is sent as no value, as the empty string was, and an absent or empty wire value decodes to it. TWS reports an unset `adjusted_order_type` or `delta_neutral_order_type` as the string `"None"` (see `docs/wire-facts/orders.md`); that decodes to `None` as well, so neither field is ever `Some(Unknown("None"))` on an order read from TWS. `attach_adjustable_stop` writes `Some(OrderType::Stop)`, `Some(OrderType::StopLimit)` or `Some(OrderType::TrailingStop)` where it wrote `"STP"`, `"STP LMT"` or `"TRAIL"`.
+
+Five variants that shared a code with another are removed: `ComboLimit` and `ComboMarket` sent `LMT` / `MKT`, the same as `Limit` / `Market`; `MarketOnOpen`, `LimitOnOpen` and `AtAuction` sent `MKT`, `LMT` and `MTL` and set `TimeInForce::OnOpen` or `Auction`. `.order_type(..)` no longer sets a time in force; `market_on_open()`, `limit_on_open(price)` and `at_auction(price)` set the type and the time in force, as before.
+
+```rust,ignore
+let open_order: OrderData = /* from open_orders() */;
+let stop: Order = /* from attach_adjustable_stop(..) */;
+
+// 5.x
+let order = Order { order_type: "LMT".to_string(), ..Default::default() };
+let is_limit = open_order.order.order_type == "LMT";
+let code: &str = open_order.order.order_type.as_str();
+let adjusts_to_trail = stop.adjusted_order_type == "TRAIL";
+let on_open = Order::builder().buy(100).limit(50.0).order_type(OrderType::LimitOnOpen).build()?;
+
+// 6.0
+let order = Order { order_type: Some(OrderType::Limit), ..Default::default() };     // Some(..) in literals
+let is_limit = open_order.order.order_type == Some(OrderType::Limit);               // compare to Some(..)
+let code: &str = open_order.order.order_type.as_ref().map_or("", OrderType::as_str); // as_str() is on OrderType, not Option
+let adjusts_to_trail = stop.adjusted_order_type == Some(OrderType::TrailingStop);
+let on_open = Order::builder().buy(100).limit_on_open(50.0).build()?;             // LimitOnOpen is removed
+```
+
+Wrap the variant in `Some(..)` in struct literals and comparisons (`OrderType::as_str` lists the codes), replace `ComboLimit` / `ComboMarket` with `Limit` / `Market`, and `.order_type(MarketOnOpen | LimitOnOpen | AtAuction)` with `market_on_open()`, `limit_on_open(..)` or `at_auction(..)`. A code the enum does not list is sent as `Some(OrderType::Unknown("SNAP MID".into()))` or `"SNAP MID".parse::<OrderType>()?`. The compiler finds every struct literal, assignment and comparison that uses a `String` or `&str` or a bare `OrderType`, every `.as_str()` or `.is_empty()` on the three fields, every use of the five removed variants, and every exhaustive `match` on `OrderType`, which needs an `Unknown(_)` arm. It does not catch the serialized forms. `Order` derives `Serialize` / `Deserialize`: an unset field now serializes as `null` where it was `""` (or `"None"` for an adjusted or delta-neutral type read from TWS); JSON written by 5.x still deserializes, with `""` and `"None"` read as `None`. `OrderType` on its own was the variant name (`"Limit"`) and is now the code (`"LMT"`), so `OrderType` JSON written by 5.x deserializes as `Unknown("Limit")` rather than failing, and the `utoipa` schema becomes a plain string where it listed the variant names; the three `Order` fields are nullable strings. An order type TWS reports that this version does not list no longer reads as a string to compare against; match `Some(OrderType::Unknown(code))` instead. `Order::is_delta_neutral()` is `delta_neutral_order_type.is_some()`; TWS reports an order without a hedge with the string `"None"` in that field, which 5.x kept, so it returned `true` for every order read from TWS and now returns `false`. One builder change is also runtime only: `MarketToLimit` now sends a limit price when one is set, so `.limit(p).order_type(OrderType::MarketToLimit)` sends `p` as the limit where 5.x dropped it; `market_to_limit()` clears an earlier limit price and `at_auction(p)` sends `p` whatever time in force follows, both as in 5.x.

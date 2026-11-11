@@ -435,10 +435,9 @@ impl<T> OrderBuilder<T> {
     /// that doesn't take it is dropped: `.limit(100.0).order_type(OrderType::PeggedToStock)` sends
     /// no limit price. Prefer the named setter (`.relative(..)`, `.pegged_to_midpoint(..)`, ...).
     ///
-    /// `MarketOnOpen`, `LimitOnOpen` and `AtAuction` go out as `MKT`, `LMT` and `MTL`; the time in
-    /// force is what makes them, so these also set it (`OnOpen`, `OnOpen`, `Auction`), as their
-    /// named setters do. It replaces an earlier time in force; a later time-in-force setter
-    /// overrides it.
+    /// A market-on-open, limit-on-open or auction order is `Market`, `Limit` or `MarketToLimit`
+    /// with the time in force that makes it; `market_on_open()`, `limit_on_open(..)` and
+    /// `at_auction(..)` set both.
     ///
     /// # Examples
     ///
@@ -447,14 +446,11 @@ impl<T> OrderBuilder<T> {
     /// use ibapi::orders::Order;
     ///
     /// let order = Order::builder().buy(100).limit(150.0).order_type(OrderType::PegBest).build()?;
-    /// assert_eq!(order.order_type, "PEG BEST");
+    /// assert_eq!(order.order_type, Some(OrderType::PegBest));
     /// assert_eq!(order.limit_price, Some(150.0));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
     pub fn order_type(mut self, order_type: OrderType) -> Self {
-        if let Some(tif) = order_type.implied_time_in_force() {
-            self.time_in_force = tif;
-        }
         self.order_type = Some(order_type);
         self
     }
@@ -467,10 +463,10 @@ impl<T> OrderBuilder<T> {
     ///
     /// ```
     /// use ibapi::orders::builder::TrailBy;
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let order = Order::builder().sell(100).trailing_stop_limit(TrailBy::Amount(2.0), 148.0, 0.5).build()?;
-    /// assert_eq!(order.order_type, "TRAIL LIMIT");
+    /// assert_eq!(order.order_type, Some(OrderType::TrailingStopLimit));
     /// assert_eq!(order.aux_price, Some(2.0));
     /// assert_eq!(order.limit_price_offset, Some(0.5));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
@@ -514,6 +510,9 @@ impl<T> OrderBuilder<T> {
     /// Market to Limit - starts as market order, remainder becomes limit
     pub fn market_to_limit(mut self) -> Self {
         self.order_type = Some(OrderType::MarketToLimit);
+        // `build()` sends `limit_price` for MTL (an auction order carries one), so clear one an
+        // earlier setter wrote; C# `OrderSamples.MarketToLimit` sets none.
+        self.limit_price = None;
         self
     }
 
@@ -568,10 +567,10 @@ impl<T> OrderBuilder<T> {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let order = Order::builder().buy(1).relative_limit_combo(2.5).non_guaranteed().build()?;
-    /// assert_eq!(order.order_type, "REL + LMT");
+    /// assert_eq!(order.order_type, Some(OrderType::RelativeLimitCombo));
     /// assert_eq!(order.limit_price, Some(2.5));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
@@ -588,10 +587,10 @@ impl<T> OrderBuilder<T> {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let order = Order::builder().buy(1).relative_market_combo().build()?;
-    /// assert_eq!(order.order_type, "REL + MKT");
+    /// assert_eq!(order.order_type, Some(OrderType::RelativeMarketCombo));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
     pub fn relative_market_combo(mut self) -> Self {
@@ -599,10 +598,12 @@ impl<T> OrderBuilder<T> {
         self.order_type(OrderType::RelativeMarketCombo)
     }
 
-    /// At Auction - for pre-market opening period execution
+    /// At Auction - for pre-market opening period execution: `MTL` with `TimeInForce::Auction`
     pub fn at_auction(mut self, price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::MarketToLimit);
+        self.time_in_force = TimeInForce::Auction;
         self.limit_price = Some(price.into());
-        self.order_type(OrderType::AtAuction)
+        self
     }
 
     /// Market on Close - executes as market order at or near closing price
@@ -618,15 +619,19 @@ impl<T> OrderBuilder<T> {
         self
     }
 
-    /// Market on Open - executes as market order at market open
-    pub fn market_on_open(self) -> Self {
-        self.order_type(OrderType::MarketOnOpen)
+    /// Market on Open - executes as market order at market open: `MKT` with `TimeInForce::OnOpen`
+    pub fn market_on_open(mut self) -> Self {
+        self.order_type = Some(OrderType::Market);
+        self.time_in_force = TimeInForce::OnOpen;
+        self
     }
 
-    /// Limit on Open - executes as limit order at market open
+    /// Limit on Open - executes as limit order at market open: `LMT` with `TimeInForce::OnOpen`
     pub fn limit_on_open(mut self, limit_price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::Limit);
+        self.time_in_force = TimeInForce::OnOpen;
         self.limit_price = Some(limit_price.into());
-        self.order_type(OrderType::LimitOnOpen)
+        self
     }
 
     /// Volatility order (`VOL`) - TWS derives the limit price from `volatility` (options and futures options)
@@ -636,10 +641,10 @@ impl<T> OrderBuilder<T> {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::orders::{Order, VolatilityType};
+    /// use ibapi::orders::{Order, OrderType, VolatilityType};
     ///
     /// let order = Order::builder().buy(1).volatility_order(40.0, VolatilityType::Annual).build()?;
-    /// assert_eq!(order.order_type, "VOL");
+    /// assert_eq!(order.order_type, Some(OrderType::Volatility));
     /// assert_eq!(order.volatility, Some(40.0));
     /// assert_eq!(order.volatility_type, Some(VolatilityType::Annual));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
@@ -1294,14 +1299,14 @@ impl<T> OrderBuilder<T> {
     ///
     /// ```
     /// use ibapi::orders::builder::{CompeteAgainstBest, MidOffsets};
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let order = Order::builder()
     ///     .buy(100)
     ///     .peg_best(150.0, CompeteAgainstBest::Offset(0.01))
     ///     .min_compete_size(200)
     ///     .build()?;
-    /// assert_eq!(order.order_type, "PEG BEST");
+    /// assert_eq!(order.order_type, Some(OrderType::PegBest));
     /// assert_eq!(order.compete_against_best_offset, Some(0.01));
     /// assert!(order.not_held);
     ///
@@ -1331,11 +1336,11 @@ impl<T> OrderBuilder<T> {
     ///
     /// ```
     /// use ibapi::orders::builder::MidOffsets;
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let offsets = MidOffsets { at_whole: 0.02, at_half: 0.025 };
     /// let order = Order::builder().buy(100).peg_mid(150.0, offsets).build()?;
-    /// assert_eq!(order.order_type, "PEG MID");
+    /// assert_eq!(order.order_type, Some(OrderType::PeggedToMidpoint));
     /// assert_eq!(order.mid_offset_at_half, Some(0.025));
     /// assert_eq!(order.aux_price, None);
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
@@ -1357,10 +1362,10 @@ impl<T> OrderBuilder<T> {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let order = Order::builder().buy(100).pegged_to_market(0.05).build()?;
-    /// assert_eq!(order.order_type, "PEG MKT");
+    /// assert_eq!(order.order_type, Some(OrderType::PeggedToMarket));
     /// assert_eq!(order.aux_price, Some(0.05));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
@@ -1378,10 +1383,10 @@ impl<T> OrderBuilder<T> {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let order = Order::builder().buy(100).pegged_to_midpoint(0.01, 150.0).build()?;
-    /// assert_eq!(order.order_type, "PEG MID");
+    /// assert_eq!(order.order_type, Some(OrderType::PeggedToMidpoint));
     /// assert_eq!(order.aux_price, Some(0.01));
     /// assert_eq!(order.limit_price, Some(150.0));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
@@ -1401,10 +1406,10 @@ impl<T> OrderBuilder<T> {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let order = Order::builder().buy(10).box_top().build()?;
-    /// assert_eq!(order.order_type, "BOX TOP");
+    /// assert_eq!(order.order_type, Some(OrderType::BoxTop));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
     pub fn box_top(mut self) -> Self {
@@ -1428,7 +1433,7 @@ impl<T> OrderBuilder<T> {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let order = Order::builder()
     ///     .buy(1)
@@ -1436,7 +1441,7 @@ impl<T> OrderBuilder<T> {
     ///     .stock_reference_price(150.0)
     ///     .stock_range(140.0, 160.0)
     ///     .build()?;
-    /// assert_eq!(order.order_type, "PEG STK");
+    /// assert_eq!(order.order_type, Some(OrderType::PeggedToStock));
     /// assert_eq!(order.delta, Some(0.5));
     /// assert_eq!(order.starting_price, Some(2.10));
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
@@ -1475,7 +1480,7 @@ impl<T> OrderBuilder<T> {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::orders::Order;
+    /// use ibapi::orders::{Order, OrderType};
     ///
     /// let order = Order::builder()
     ///     .buy(100)
@@ -1486,7 +1491,7 @@ impl<T> OrderBuilder<T> {
     ///     .stock_reference_price(49.0)
     ///     .reference_range(48.0, 52.0)
     ///     .build()?;
-    /// assert_eq!(order.order_type, "PEG BENCH");
+    /// assert_eq!(order.order_type, Some(OrderType::PeggedToBenchmark));
     /// assert_eq!(order.reference_contract_id, 12345);
     /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
     /// ```
@@ -1680,7 +1685,7 @@ impl<T> OrderBuilder<T> {
         let mut order = Order {
             action,
             total_quantity,
-            order_type: order_type.as_str().to_string(),
+            order_type: Some(order_type),
             limit_price,
             aux_price,
             trailing_percent,
@@ -1767,8 +1772,8 @@ impl<T> OrderBuilder<T> {
         // Compete fields are PEG BEST's; mid offsets are PEG MID's, or PEG BEST's when it
         // competes up to the midpoint (the forms C# sends them for). Gated inline rather than by
         // `OrderType::uses_*`: each applies to one type, and up-to-mid depends on the value.
-        let mid_offsets = match order_type {
-            OrderType::PegBest => {
+        let mid_offsets = match order.order_type {
+            Some(OrderType::PegBest) => {
                 order.min_compete_size = self.min_compete_size;
                 match self.compete {
                     Some(CompeteAgainstBest::Offset(offset)) => {
@@ -1782,7 +1787,7 @@ impl<T> OrderBuilder<T> {
                     None => None,
                 }
             }
-            OrderType::PeggedToMidpoint => self.mid_offsets,
+            Some(OrderType::PeggedToMidpoint) => self.mid_offsets,
             _ => None,
         };
         if let Some(offsets) = mid_offsets {
@@ -2037,7 +2042,7 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
         // Build take profit order
         let take_profit_order = Order {
             action: parent.action.reverse(),
-            order_type: "LMT".to_string(),
+            order_type: Some(OrderType::Limit),
             total_quantity: parent.total_quantity,
             limit_price: Some(take_profit.value()),
             parent_id: parent.order_id,
@@ -2050,7 +2055,7 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
         // Build stop loss order
         let stop_loss_order = Order {
             action: parent.action.reverse(),
-            order_type: "STP".to_string(),
+            order_type: Some(OrderType::Stop),
             total_quantity: parent.total_quantity,
             aux_price: Some(stop_loss.value()),
             parent_id: parent.order_id,

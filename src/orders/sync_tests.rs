@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, OrderCondition, OrderStatusKind, TimeInForce};
+use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, OrderCondition, OrderStatusKind, OrderType, TimeInForce};
 use crate::proto;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -864,6 +864,35 @@ fn order_update_stream_survives_unknown_tif() {
 }
 
 #[test]
+fn order_update_stream_survives_unknown_order_type() {
+    // OrderType is open: an OpenOrder frame carrying an order type this crate
+    // does not list arrives as OrderType::Unknown and the frame queued behind
+    // it still arrives.
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order().order_id(1).order_type("SNAP MID").encode_proto(),
+        ),
+        proto_response(IncomingMessages::OpenOrder, open_order().order_id(1).order_type("LMT").encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let stream = client.order_update_stream().expect("failed to create stream");
+
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => {
+            assert_eq!(o.order.order_type, Some(OrderType::Unknown("SNAP MID".into())));
+        }
+        other => panic!("expected OpenOrder with Unknown order type, got {other:?}"),
+    }
+    match stream.next_data() {
+        Some(Ok(OrderUpdate::OpenOrder(o))) => {
+            assert_eq!(o.order.order_type, Some(OrderType::Limit));
+        }
+        other => panic!("stream did not survive the unknown order type, got {other:?}"),
+    }
+}
+
+#[test]
 fn order_update_stream_survives_unknown_security_id_type() {
     // SecurityIdType is open: a contract carrying an identifier scheme this
     // crate does not model arrives as SecurityIdType::Unknown and the frame
@@ -1137,7 +1166,7 @@ fn build_order_does_not_reach_the_wire() {
         .build_order()
         .expect("order should build");
 
-    assert_eq!(order.order_type, "TRAIL");
+    assert_eq!(order.order_type, Some(OrderType::TrailingStop));
     assert_eq!(order.trailing_percent, Some(5.0));
     assert_eq!(order.trail_stop_price, Some(95.0));
     assert_eq!(request_message_count(&bus), 0);

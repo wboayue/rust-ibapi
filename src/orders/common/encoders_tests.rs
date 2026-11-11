@@ -1,13 +1,13 @@
 use super::*;
 use crate::orders::common::decoders::decode_order;
-use crate::orders::{self, Action, TimeInForce, WhatIfType};
+use crate::orders::{self, Action, OrderType, TimeInForce, WhatIfType};
 
 #[test]
 fn encode_order_basic() {
     let order = Order {
         action: Action::Buy,
         total_quantity: 100.0,
-        order_type: "LMT".to_string(),
+        order_type: Some(OrderType::Limit),
         limit_price: Some(150.0),
         tif: TimeInForce::Day,
         transmit: true,

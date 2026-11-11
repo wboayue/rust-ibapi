@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::orders::{OrderId, TimeInForce};
+use crate::orders::OrderId;
 
 /// Order IDs from [`AttachedOrdersBuilder::submit`](crate::orders::AttachedOrdersBuilder).
 ///
@@ -169,9 +169,20 @@ pub struct BracketPrices {
     pub stop_loss: f64,
 }
 
-/// Order types supported by Interactive Brokers
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Order types supported by Interactive Brokers.
+///
+/// [`Order::order_type`](crate::orders::Order::order_type) holds one and
+/// [`OrderBuilder::order_type`](crate::orders::OrderBuilder::order_type) takes one. `Display`
+/// and [`as_str`](Self::as_str) give the TWS wire string (`"LMT"`, `"STP LMT"`, ...);
+/// `s.parse::<OrderType>()` reads one. Serde uses the wire string in both directions.
+///
+/// A market-on-open, limit-on-open or auction order is a plain `Market`, `Limit` or
+/// `MarketToLimit` with [`TimeInForce::OnOpen`](crate::orders::TimeInForce::OnOpen) or
+/// [`TimeInForce::Auction`](crate::orders::TimeInForce::Auction); the builder's
+/// [`market_on_open`](crate::orders::OrderBuilder::market_on_open),
+/// [`limit_on_open`](crate::orders::OrderBuilder::limit_on_open) and
+/// [`at_auction`](crate::orders::OrderBuilder::at_auction) set both.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OrderType {
     // Basic Orders
     /// Market order executed immediately at the best available price.
@@ -194,12 +205,6 @@ pub enum OrderType {
     MarketOnClose,
     /// Limit-on-close order.
     LimitOnClose,
-    /// Market-on-open order.
-    MarketOnOpen,
-    /// Limit-on-open order.
-    LimitOnOpen,
-    /// Auction order routed to an exchange auction.
-    AtAuction,
 
     // Touched Orders
     /// Market-if-touched order.
@@ -244,18 +249,24 @@ pub enum OrderType {
     BoxTop,
 
     // Combo Orders (special handling required)
-    /// Limit order for combo legs.
-    ComboLimit,
-    /// Market order for combo legs.
-    ComboMarket,
     /// Relative + limit order for combo legs.
     RelativeLimitCombo,
     /// Relative + market order for combo legs.
     RelativeMarketCombo,
+
+    /// Order type string not modeled by this version of the API. Carries the raw
+    /// wire value as received on an inbound order; sent back unchanged, so an order
+    /// read from TWS round-trips. Matching is exact and case-sensitive. To send a code
+    /// this version does not list, build one (`OrderType::Unknown("SNAP MID".into())`) or
+    /// parse it (`"SNAP MID".parse::<OrderType>()`). Not for a listed code: `Unknown("LMT")`
+    /// sends the same string as [`Limit`](Self::Limit) but is not equal to it, and parsing
+    /// never produces it. An unset `Order` field is `None`, never `Unknown("")`.
+    Unknown(String),
 }
 
 impl OrderType {
-    /// Return the TWS API string identifier for this order type.
+    /// Return the TWS API string identifier for this order type — for
+    /// [`Unknown`](Self::Unknown), the raw value as received.
     pub fn as_str(&self) -> &str {
         match self {
             // Basic Orders
@@ -271,9 +282,6 @@ impl OrderType {
             // Time-based Orders
             Self::MarketOnClose => "MOC",
             Self::LimitOnClose => "LOC",
-            Self::MarketOnOpen => "MKT",
-            Self::LimitOnOpen => "LMT",
-            Self::AtAuction => "MTL",
 
             // Touched Orders
             Self::MarketIfTouched => "MIT",
@@ -303,19 +311,40 @@ impl OrderType {
             Self::BoxTop => "BOX TOP",
 
             // Combo Orders
-            Self::ComboLimit => "LMT",
-            Self::ComboMarket => "MKT",
             Self::RelativeLimitCombo => "REL + LMT",
             Self::RelativeMarketCombo => "REL + MKT",
+
+            Self::Unknown(raw) => raw,
         }
     }
 
-    /// The time in force this type is made of, for the types `as_str` sends as a plain
-    /// `MKT` / `LMT` / `MTL`.
-    pub(crate) fn implied_time_in_force(&self) -> Option<TimeInForce> {
-        match self {
-            Self::MarketOnOpen | Self::LimitOnOpen => Some(TimeInForce::OnOpen),
-            Self::AtAuction => Some(TimeInForce::Auction),
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "MKT" => Some(Self::Market),
+            "LMT" => Some(Self::Limit),
+            "STP" => Some(Self::Stop),
+            "STP LMT" => Some(Self::StopLimit),
+            "TRAIL" => Some(Self::TrailingStop),
+            "TRAIL LIMIT" => Some(Self::TrailingStopLimit),
+            "MOC" => Some(Self::MarketOnClose),
+            "LOC" => Some(Self::LimitOnClose),
+            "MIT" => Some(Self::MarketIfTouched),
+            "LIT" => Some(Self::LimitIfTouched),
+            "MKT PRT" => Some(Self::MarketWithProtection),
+            "STP PRT" => Some(Self::StopWithProtection),
+            "MTL" => Some(Self::MarketToLimit),
+            "MIDPRICE" => Some(Self::Midprice),
+            "PEG MKT" => Some(Self::PeggedToMarket),
+            "PEG STK" => Some(Self::PeggedToStock),
+            "PEG MID" => Some(Self::PeggedToMidpoint),
+            "PEG BENCH" => Some(Self::PeggedToBenchmark),
+            "PEG BEST" => Some(Self::PegBest),
+            "REL" => Some(Self::Relative),
+            "PASSV REL" => Some(Self::PassiveRelative),
+            "VOL" => Some(Self::Volatility),
+            "BOX TOP" => Some(Self::BoxTop),
+            "REL + LMT" => Some(Self::RelativeLimitCombo),
+            "REL + MKT" => Some(Self::RelativeMarketCombo),
             _ => None,
         }
     }
@@ -324,14 +353,7 @@ impl OrderType {
     pub fn requires_limit_price(&self) -> bool {
         matches!(
             self,
-            Self::Limit
-                | Self::StopLimit
-                | Self::LimitOnClose
-                | Self::LimitOnOpen
-                | Self::LimitIfTouched
-                | Self::ComboLimit
-                | Self::RelativeLimitCombo
-                | Self::AtAuction // TrailingStopLimit uses limit_price_offset, not limit_price
+            Self::Limit | Self::StopLimit | Self::LimitOnClose | Self::LimitIfTouched | Self::RelativeLimitCombo // TrailingStopLimit uses limit_price_offset, not limit_price
         )
     }
 
@@ -361,9 +383,14 @@ impl OrderType {
         matches!(self, Self::Stop | Self::StopLimit | Self::StopWithProtection)
     }
 
-    /// Types that send `limit_price`, required or as an optional cap.
+    /// Types that send `limit_price`, required or as an optional cap. `MarketToLimit` carries
+    /// one as an auction order (`at_auction`); `market_to_limit()` clears an earlier one.
     pub(crate) fn uses_limit_price(&self) -> bool {
-        self.requires_limit_price() || matches!(self, Self::Midprice | Self::Relative | Self::PeggedToMidpoint | Self::PegBest)
+        self.requires_limit_price()
+            || matches!(
+                self,
+                Self::Midprice | Self::Relative | Self::PeggedToMidpoint | Self::PegBest | Self::MarketToLimit
+            )
     }
 
     /// Types that send `aux_price` as a trigger, offset or trail amount.
@@ -374,6 +401,49 @@ impl OrderType {
     /// Types that send `trailing_percent` and `trail_stop_price`.
     pub(crate) fn uses_trail(&self) -> bool {
         matches!(self, Self::TrailingStop | Self::TrailingStopLimit)
+    }
+}
+
+// Open: an inbound OpenOrder / CompletedOrder field whose codes TWS assigns, so one
+// this crate does not list must not end the order stream.
+impl_wire_enum!(OrderType, fallback Unknown);
+
+// Serde as the plain wire string in both directions, so `Unknown("X")`
+// round-trips as `"X"` rather than the externally tagged `{"Unknown":"X"}` a
+// derive would produce for the one payload variant, and `Order` JSON keeps
+// `"order_type":"LMT"`. Deserialize rejects `""` like `FromStr`; the `Order`
+// fields go through `deserialize_optional_order_type`, which reads `null`, `""`
+// and `"None"` as `None`. The utoipa schema is hand-written for the same reason —
+// see `OrderStatusKind` in `orders/mod.rs`.
+#[cfg(feature = "utoipa")]
+impl utoipa::PartialSchema for OrderType {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        String::schema()
+    }
+}
+
+#[cfg(feature = "utoipa")]
+impl utoipa::ToSchema for OrderType {}
+
+impl Serialize for OrderType {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for OrderType {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+/// Deserializer for `Order`'s `Option<OrderType>` fields: `null`, `""` and `"None"` are
+/// `None`. 5.x serialized an unset `order_type` as `""` and an unset `adjusted_order_type`
+/// or `delta_neutral_order_type` as TWS echoed it, `"None"`, so that JSON still loads.
+pub(crate) fn deserialize_optional_order_type<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<OrderType>, D::Error> {
+    match Option::<String>::deserialize(deserializer)?.as_deref() {
+        None | Some("") | Some("None") => Ok(None),
+        Some(code) => code.parse().map(Some).map_err(serde::de::Error::custom),
     }
 }
 

@@ -23,13 +23,13 @@ standing in for the enum and a private field nothing writes are both symptoms, a
 mean the wire has no such field; see [wire enum typing](../wire/enum-typing.md) on
 `AuctionStrategy`.
 
-Open enums (`TimeInForce`, `Rule80A`, `OrderOpenClose`) get no named method for `Unknown(raw)`:
-the raw value comes from a decode, so the general setter is the way in, and a `.unknown("Z")`
-method would invite invented wire strings.
+Open enums (`TimeInForce`, `Rule80A`, `OrderOpenClose`, `OrderType`) get no named method for
+`Unknown(raw)`: the raw value comes from a decode, so the general setter is the way in, and a
+`.unknown("Z")` method would invite invented wire strings.
 
 ## Auditing `Order`
 
-Eleven `Order` fields are enum-typed; eight have a same-named setter. Re-derive rather than trust
+Fourteen `Order` fields are enum-typed; nine have a same-named setter. Re-derive rather than trust
 the count:
 
 ```bash
@@ -38,15 +38,18 @@ sed -n '/^pub struct Order {/,/^}/p' src/orders/mod.rs \
   | grep -vE ': (Option<)?(String|Vec)' | sed 's/^    pub //'
 ```
 
-That prints twelve rows; drop `soft_dollar_tier` (a struct). Look each field up in
-`grep -oE 'pub fn [a-z_0-9]+' src/orders/builder/order_builder.rs`. Three misses are not gaps,
-because their setters are named for the variants or a neighboring field: `action`
+That prints fifteen rows; drop `soft_dollar_tier` (a struct). Look each field up in
+`grep -oE 'pub fn [a-z_0-9]+' src/orders/builder/order_builder.rs`. Five misses are not gaps.
+Three have setters named for the variants or a neighboring field: `action`
 (`.buy()` / `.sell()` / `.sell_short()` / `.sell_long()`), `tif` (`.time_in_force()` and named
-siblings), `oca_type` (`.oca_group(group, OcaType)`). The `Vec` filter also hides
+siblings), `oca_type` (`.oca_group(group, OcaType)`). Two have no builder setter at all:
+`adjusted_order_type` is written by the free function `order_builder::attach_adjustable_stop`,
+and `delta_neutral_order_type` by hand on a VOL order. The `Vec` filter also hides
 `conditions: Vec<OrderCondition>`, reachable through `.condition()`.
 
-The builder's own `OrderType` is not an `Order` field. Cross-check its variants against setters
-that write them (`Some(OrderType::X)` or `self.order_type(OrderType::X)`):
+`OrderType` is both the `order_type` field's type and what `.order_type(..)` takes. Cross-check
+its variants against setters that write them (`Some(OrderType::X)` or
+`self.order_type(OrderType::X)`):
 
 ```bash
 sed -n '/^pub enum OrderType {/,/^}/p' src/orders/builder/types.rs \
@@ -55,8 +58,8 @@ sed -n '/^pub enum OrderType {/,/^}/p' src/orders/builder/types.rs \
       | grep -qE "(Some\(|order_type\()OrderType::$v\)" || echo "$v"; done
 ```
 
-It prints `ComboLimit` and `ComboMarket`. Neither is a gap: they send `LMT` / `MKT`, the same
-wire as `.limit()` / `.market()`.
+It prints nothing. `Unknown(String)` does not match the pattern and, as on the other open enums,
+has no named method.
 
 ## Why
 
@@ -77,7 +80,11 @@ check is a read: list variants, list setters, compare. Do it when you touch eith
   `AuctionStrategy` had no proto field and was deleted: a missing setter can mean a dead field.
 - #833 — the string-typed open enums: `.rule_80_a(Rule80A)`, `.open_close(OrderOpenClose)`.
 - #1073 — `.order_type(MarketOnOpen | LimitOnOpen | AtAuction)` left TIF at `Day` and sent a
-  plain day order; `order_type()` now sets the implied TIF and the named setters route through it.
+  plain day order; `order_type()` set the implied TIF and the named setters routed through it.
+  Superseded in 6.0: the three variants, and `ComboLimit` / `ComboMarket`, shared a wire code
+  with `Market` / `Limit` / `MarketToLimit` and were removed when `OrderType` became the
+  `Order::order_type` field's type; `market_on_open()`, `limit_on_open()` and `at_auction()` set
+  the type and TIF themselves (`docs/migration-6.0.md` §32).
 - #1076 — `.relative_limit_combo()` / `.relative_market_combo()`, the `OrderType` gaps the
   cross-check recipe was added to surface. No offset argument, matching C# `OrderSamples`.
 - #1082 — `.volatility_order(volatility, VolatilityType)` for `OrderType::Volatility`.

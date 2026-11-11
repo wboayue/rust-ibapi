@@ -2,7 +2,7 @@ use futures::StreamExt;
 use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
 use ibapi::accounts::LedgerOnly;
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};
+use ibapi::orders::{Action, Order, OrderStatusKind, OrderType, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Client;
 use ibapi_integration_async::connect;
@@ -152,7 +152,7 @@ async fn pnl_single_receives_updates() {
     let buy = Order {
         action: Action::Buy,
         total_quantity: 1.0,
-        order_type: "MKT".into(),
+        order_type: Some(OrderType::Market),
         ..Default::default()
     };
     let order_id = client.next_order_id();
@@ -179,7 +179,7 @@ async fn pnl_single_receives_updates() {
     let sell = Order {
         action: Action::Sell,
         total_quantity: 1.0,
-        order_type: "MKT".into(),
+        order_type: Some(OrderType::Market),
         ..Default::default()
     };
     let sell_id = client.next_order_id();

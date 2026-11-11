@@ -1,5 +1,6 @@
 use super::*;
 use crate::common::test_utils::wire_enum::{check_wire_code_round_trip, check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
+use crate::orders::common::test_tables::ALL_ORDER_TYPES;
 use crate::Error;
 
 const ALL_KINDS: &[(OrderStatusKind, &str)] = &[
@@ -392,4 +393,118 @@ fn time_in_force_serde_round_trips_as_plain_string() {
     assert_eq!(serde_json::from_str::<TimeInForce>("\"GTZ\"").unwrap(), unknown);
 
     assert!(serde_json::from_str::<TimeInForce>("\"\"").is_err(), "empty string must not deserialize");
+}
+
+#[test]
+fn order_type_round_trip() {
+    check_wire_enum_round_trip(ALL_ORDER_TYPES);
+}
+
+/// Compile-time guard that `ALL_ORDER_TYPES` (`src/orders/common/test_tables.rs`)
+/// lists every modeled variant, the shape of `all_tifs_covers_every_variant`.
+/// `src/orders/builder/order_builder_tests.rs` drives the same table through
+/// `build()`.
+#[test]
+fn all_order_types_covers_every_variant() {
+    fn modeled_index(order_type: &OrderType) -> Option<usize> {
+        match order_type {
+            OrderType::Market => Some(0),
+            OrderType::Limit => Some(1),
+            OrderType::Stop => Some(2),
+            OrderType::StopLimit => Some(3),
+            OrderType::TrailingStop => Some(4),
+            OrderType::TrailingStopLimit => Some(5),
+            OrderType::MarketOnClose => Some(6),
+            OrderType::LimitOnClose => Some(7),
+            OrderType::MarketIfTouched => Some(8),
+            OrderType::LimitIfTouched => Some(9),
+            OrderType::MarketWithProtection => Some(10),
+            OrderType::StopWithProtection => Some(11),
+            OrderType::MarketToLimit => Some(12),
+            OrderType::Midprice => Some(13),
+            OrderType::PeggedToMarket => Some(14),
+            OrderType::PeggedToStock => Some(15),
+            OrderType::PeggedToMidpoint => Some(16),
+            OrderType::PeggedToBenchmark => Some(17),
+            OrderType::PegBest => Some(18),
+            OrderType::Relative => Some(19),
+            OrderType::PassiveRelative => Some(20),
+            OrderType::Volatility => Some(21),
+            OrderType::BoxTop => Some(22),
+            OrderType::RelativeLimitCombo => Some(23),
+            OrderType::RelativeMarketCombo => Some(24),
+            // Unknown carries a raw string, so it has no place in a table of
+            // modeled wire values; `order_type_preserves_unknown_wire_value`
+            // covers it.
+            OrderType::Unknown(_) => None,
+        }
+    }
+
+    let mut seen = [false; 25];
+    for (variant, _) in ALL_ORDER_TYPES {
+        if let Some(index) = modeled_index(variant) {
+            seen[index] = true;
+        }
+    }
+    assert!(seen.iter().all(|&s| s), "ALL_ORDER_TYPES is missing an OrderType variant");
+}
+
+#[test]
+fn order_type_preserves_unknown_wire_value() {
+    // Open enum, same shape as TimeInForce: an unrecognized non-empty order
+    // type keeps its raw value and puts it back on the wire unchanged, so an
+    // order read from TWS round-trips. Matching is exact and case-sensitive.
+    check_wire_enum_round_trip(&[
+        (OrderType::Unknown("SNAP MID".into()), "SNAP MID"),
+        (OrderType::Unknown("lmt".into()), "lmt"),
+        (OrderType::Unknown("Mkt".into()), "Mkt"),
+    ]);
+
+    // `FromStr` rejects the absent value (docs/rules/wire/enum-typing.md); the
+    // proto decoder maps it, and the string "None" TWS echoes for an unset adjusted
+    // or delta-neutral type, to `None` before it gets here. "None" alone is Unknown.
+    check_wire_enum_rejects_unknown::<OrderType>(&[""]);
+    assert_eq!("None".parse::<OrderType>().unwrap(), OrderType::Unknown("None".into()));
+    assert_eq!(Order::default().order_type, None);
+}
+
+#[test]
+fn order_type_serde_round_trips_as_plain_string() {
+    // Manual serde keeps the JSON the TWS wire string in both directions, so
+    // Unknown("X") serializes as "X" rather than {"Unknown":"X"} and `Order`
+    // JSON keeps "order_type":"LMT".
+    let known = OrderType::StopLimit;
+    assert_eq!(serde_json::to_string(&known).unwrap(), "\"STP LMT\"");
+    assert_eq!(serde_json::from_str::<OrderType>("\"STP LMT\"").unwrap(), known);
+
+    let unknown = OrderType::Unknown("SNAP MID".to_string());
+    assert_eq!(serde_json::to_string(&unknown).unwrap(), "\"SNAP MID\"");
+    assert_eq!(serde_json::from_str::<OrderType>("\"SNAP MID\"").unwrap(), unknown);
+
+    // "" is rejected, as by FromStr; the `Order` fields handle it below.
+    assert!(serde_json::from_str::<OrderType>("\"\"").is_err());
+}
+
+#[test]
+fn order_type_fields_serde_unset_is_null_and_reads_legacy_strings() {
+    // An unset order-type field serializes as null. 5.x JSON holds "" for an unset
+    // order_type and the TWS echo "None" for an unset adjusted or delta-neutral type;
+    // both read back as None.
+    let json = serde_json::to_string(&Order::default()).unwrap();
+    for field in ["order_type", "adjusted_order_type", "delta_neutral_order_type"] {
+        assert!(json.contains(&format!("\"{field}\":null")), "{field} in {json}");
+    }
+    let legacy = json
+        .replace("\"order_type\":null", "\"order_type\":\"\"")
+        .replace("\"adjusted_order_type\":null", "\"adjusted_order_type\":\"None\"")
+        .replace("\"delta_neutral_order_type\":null", "\"delta_neutral_order_type\":\"None\"");
+    assert_ne!(legacy, json);
+    assert_eq!(serde_json::from_str::<Order>(&legacy).unwrap(), Order::default());
+
+    let set = json
+        .replace("\"order_type\":null", "\"order_type\":\"STP LMT\"")
+        .replace("\"adjusted_order_type\":null", "\"adjusted_order_type\":\"TRAIL\"");
+    let order: Order = serde_json::from_str(&set).unwrap();
+    assert_eq!(order.order_type, Some(OrderType::StopLimit));
+    assert_eq!(order.adjusted_order_type, Some(OrderType::TrailingStop));
 }

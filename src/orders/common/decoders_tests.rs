@@ -4,7 +4,7 @@ use super::*;
 use crate::common::test_utils::helpers::{assert_missing_field, assert_rejects_text_framing};
 use crate::contracts::Symbol;
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, OptionExerciseType, OrderStatusKind, UnknownCondition};
+use crate::orders::{Action, OptionExerciseType, OrderStatusKind, OrderType, UnknownCondition};
 use crate::testdata::builders::orders::{order_bound, OrderBoundResponse};
 use crate::testdata::builders::ResponseProtoEncoder;
 
@@ -41,7 +41,7 @@ fn decode_open_order_proto_works() {
     assert_eq!(result.order.order_id, 42);
     assert_eq!(result.order.action, Action::Buy);
     assert_eq!(result.order.total_quantity, 100.0);
-    assert_eq!(result.order.order_type, "LMT");
+    assert_eq!(result.order.order_type, Some(OrderType::Limit));
     assert_eq!(result.order.limit_price, Some(150.0));
     assert_eq!(result.order_state.status, OrderStatusKind::Submitted);
 }
@@ -236,7 +236,7 @@ fn decode_open_order_proto_via_builder() {
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.contract.symbol, Symbol::from("AAPL"));
     assert_eq!(result.order.action, Action::Buy);
-    assert_eq!(result.order.order_type, "LMT");
+    assert_eq!(result.order.order_type, Some(OrderType::Limit));
     assert_eq!(result.order.limit_price, Some(150.0));
     assert_eq!(result.order_state.status, OrderStatusKind::Submitted);
 }
@@ -778,6 +778,65 @@ fn decode_order_maps_conditions_include_overnight() {
 fn decode_order_conditions_include_overnight_absent_is_false() {
     let order = decode_order(&proto_order()).unwrap();
     assert!(!order.conditions_include_overnight);
+}
+
+// === decode_order order_type ===
+
+#[test]
+fn decode_order_preserves_unknown_order_type() {
+    // An order type this crate does not list keeps its raw value instead of
+    // ending the stream with Error::Parse.
+    let proto_order = proto::Order {
+        order_type: Some("SNAP MID".to_string()),
+        ..proto_order()
+    };
+    assert_eq!(
+        decode_order(&proto_order).unwrap().order_type,
+        Some(OrderType::Unknown("SNAP MID".to_string()))
+    );
+}
+
+#[test]
+fn decode_order_unset_order_type_fields_are_none() {
+    // Absent, empty and the string "None" (how TWS echoes an unset adjusted or
+    // delta-neutral type; docs/wire-facts/orders.md) all decode to None, which
+    // encodes back as no value.
+    for raw in [None, Some(String::new()), Some("None".to_string())] {
+        let proto_order = proto::Order {
+            order_type: raw.clone(),
+            adjusted_order_type: raw.clone(),
+            delta_neutral_order_type: raw.clone(),
+            ..proto_order()
+        };
+        let order = decode_order(&proto_order).unwrap();
+        assert_eq!(
+            (&order.order_type, &order.adjusted_order_type, &order.delta_neutral_order_type),
+            (&None, &None, &None),
+            "{raw:?}"
+        );
+        let encoded = crate::orders::common::encoders::encode_order(&order);
+        assert_eq!(
+            (encoded.order_type, encoded.adjusted_order_type, encoded.delta_neutral_order_type),
+            (None, None, None),
+            "{raw:?}"
+        );
+    }
+}
+
+#[test]
+fn decode_order_adjusted_and_delta_neutral_order_types() {
+    // The two fields take the same codes as order_type and round-trip through the encoder.
+    let proto_order = proto::Order {
+        adjusted_order_type: Some("TRAIL".to_string()),
+        delta_neutral_order_type: Some("LMT".to_string()),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.adjusted_order_type, Some(OrderType::TrailingStop));
+    assert_eq!(order.delta_neutral_order_type, Some(OrderType::Limit));
+    let encoded = crate::orders::common::encoders::encode_order(&order);
+    assert_eq!(encoded.adjusted_order_type.as_deref(), Some("TRAIL"));
+    assert_eq!(encoded.delta_neutral_order_type.as_deref(), Some("LMT"));
 }
 
 // === decode_order tif ===
