@@ -1525,7 +1525,11 @@ pub struct Execution {
     /// A correction is indicated by an ExecId which differs from a previous ExecId in only the digits after the final period,
     /// e.g. an ExecId ending in ".02" would be a correction of a previous execution with an ExecId ending in ".01"
     pub execution_id: String,
-    /// The execution's server time.
+    /// The execution's server time, as the gateway renders it: `yyyymmdd HH:MM:SS <zone>`
+    /// in the instrument's zone (`20261110 20:17:28 US/Central`, the default here) or the
+    /// operator's, or `yyyymmdd-HH:MM:SSZ` under the "Send instrument-specific attributes
+    /// for dual-mode API client in: UTC format" setting (live: 2026-11-11, paper Gateway,
+    /// server 226; `docs/wire-facts/orders.md`). Passed through unparsed.
     pub time: String,
     /// The account to which the order was allocated.
     pub account_number: String,
@@ -1870,7 +1874,10 @@ pub struct ExecutionFilter {
     pub client_id: Option<i32>,
     /// The account to which the order was allocated to
     pub account_code: String,
-    /// Time from which the executions will be returned yyyymmdd hh:mm:ss
+    /// Time from which the executions will be returned, `yyyymmdd-hh:mm:ss` (UTC) or
+    /// `yyyymmdd hh:mm:ss [zone]`; a zone-less value (deprecated by IB) is read as UTC or
+    /// the operator's zone, not the instrument's, and a zone after the dashed form draws 10314
+    /// (live: 2026-11-11, paper Gateway, server 226; `docs/wire-facts/orders.md`).
     /// Only those executions reported after the specified time will be returned.
     pub time: String,
     /// The instrument's symbol

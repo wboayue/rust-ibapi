@@ -25,6 +25,8 @@ shape below, with the gateway version and API date/time setting that produced it
 | `20260101 09:30:00 US/Eastern` | default "instrument timezone" setting; fixtures since 2.x | wall clock in the named zone; the zone is everything after the time (`China Standard Time` works) |
 | `20260910-04:33:56` | IB Gateway 10.50, "Send instrument-specific attributes ... in: UTC format", raw capture in #808 | UTC |
 
+Related, not a `HistoricalDataEnd` capture: under the same UTC format setting, `Execution.time` renders as `20261111-02:17:28Z`, with a trailing `Z`, and `OrderState.completed_time` as `20261111-02:17:28` without one (live 2026-11-11, server 226; [orders wire facts](wire-facts/orders.md#executiontime-rendering)).
+
 ### Candidates (rejected today: parse error)
 
 Promote one only with a capture (`IBAPI_RAW_CAPTURE_DIR`), recording the gateway version and the API date/time setting that produced it.

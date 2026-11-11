@@ -148,6 +148,47 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - `specific_dates = ["yyyymmdd"]` → exactly that day.
 - One commission report per execution comes back alongside.
 
+### `Execution.time` rendering
+
+*Live 2026-11-11 overnight (02:17Z to 03:09Z), paper Gateway, server 226; #1225.*
+
+- The Gateway setting "Send instrument-specific attributes for dual-mode API client in"
+  picks the rendering of `Execution.time` and `OrderState.completed_time`. One ES (CME) fill
+  at 02:17:28Z, re-requested under each setting:
+
+  | Setting | `Execution.time` | `completed_time` |
+  |---|---|---|
+  | Instrument timezone (the default on this install) | `20261110 20:17:28 US/Central` | `20261110 20:17:28 US/Central` |
+  | Operator timezone (login zone Europe/London) | `20261111 02:17:28 Europe/London` | `20261111 02:17:28 Europe/London` |
+  | UTC format | `20261111-02:17:28Z` | `20261111-02:17:28` |
+
+- Zone-named forms are `yyyymmdd HH:MM:SS <IANA zone>`, single spaces. The UTC form is
+  `yyyymmdd-HH:MM:SS`, with a trailing `Z` on `Execution.time` and none on `completed_time`.
+- Stored as an instant, rendered at send time: the same fill re-rendered under each setting,
+  and fills placed under UTC format and Operator timezone rendered the same way. The setting
+  took effect without a restart.
+- Execution filters: the default `ExecutionFilter`, `last_n_days` 1 and 2, `client_id` of the
+  placing client and 0, and `time = "20261110-20:00:00"` each returned every fill of the
+  session. `specific_dates = ["20261111"]` returned them and `["20261110"]` none, under all
+  three settings: the filter's day is the UTC or operator day, not the instrument day
+  (dated 20261110 in US/Central). A request sent in the same second as a fill did not
+  include it; it was present on a later request.
+- `ExecutionFilter::time` (Instrument timezone setting only; eight fills at 02:17:28Z,
+  02:36:38Z, 02:37:49Z and 02:39:55Z, two each): the dashed form is UTC, as the 10314 text
+  states, and the zone-less space form was read as UTC (or the operator zone,
+  Europe/London, which equals UTC in November), not the instrument zone.
+  `"20261111-02:30:00"` returned the six after 02:30Z and `"20261110-20:30:00"` all eight;
+  `"20261110 20:30:00"` also returned eight (as Central it would have returned six) and
+  `"20261111 02:30:00 Europe/London"` six. A zone suffix on the dashed form
+  (`"20261110-20:30:00 US/Central"`, `"20261111-02:30:00 UTC"`) drew error 10314 ("The
+  date, time, or time-zone entered is invalid") and no fills. The 10314 text itself says "If
+  no time-zone is specified, local time-zone is assumed(deprecated)" and "yyyymmddd-hh:mm:ss
+  time is in UTC".
+- **Not probed:** live (non-paper) accounts; instruments other than a CME future, so one
+  instrument zone; an operator zone that differs from UTC on the day (London and UTC
+  coincide in November), so whether `specific_dates` and the zone-less `time` filter read
+  UTC or the operator zone; TWS as opposed to the Gateway.
+
 ### `exercise_options` account
 
 *Live 2026-10-04, paper Gateway, AAPL call, no position held; #901.*
