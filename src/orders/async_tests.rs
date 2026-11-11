@@ -192,7 +192,7 @@ async fn cancel_order() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-    let mut subscription = client.cancel_order(1, "").await.expect("failed to cancel order");
+    let mut subscription = client.cancel_order(1).await.expect("failed to cancel order");
 
     let cancel_response = subscription.next().await;
     assert!(
@@ -219,7 +219,7 @@ async fn cancel_order_delivers_202_as_non_terminal_notice() {
     ]));
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    let mut subscription = client.cancel_order(order_id, "").await.expect("cancel_order failed");
+    let mut subscription = client.cancel_order(order_id).await.expect("cancel_order failed");
 
     match subscription.next().await {
         Some(Ok(SubscriptionItem::Notice(notice))) => {
@@ -849,20 +849,6 @@ fn tagged_cancel() -> crate::orders::OrderCancel {
 }
 
 #[tokio::test]
-async fn cancel_order_sends_manual_order_cancel_time() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
-
-    let _subscription = client.cancel_order(1, "20261110-14:30:00").await.expect("cancel_order failed");
-
-    let expected = crate::orders::OrderCancel {
-        manual_order_cancel_time: "20261110-14:30:00".to_owned(),
-        ..Default::default()
-    };
-    assert_request(&message_bus, 0, &cancel_order_request().order_id(1).order_cancel(expected));
-}
-
-#[tokio::test]
 async fn cancel_order_with_sends_operator_fields() {
     let message_bus = Arc::new(MessageBusStub::default());
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -1269,7 +1255,7 @@ async fn order_entry_points_reject_request_range_ids() {
     rejected(client.place_order(floor, &contract, &order).await.map(|_| ()), "place_order");
     rejected(client.place_order(1, &contract, &with_parent).await.map(|_| ()), "place_order parent_id");
     rejected(client.submit_order(floor, &contract, &order).await, "submit_order");
-    rejected(client.cancel_order(floor, "").await.map(|_| ()), "cancel_order");
+    rejected(client.cancel_order(floor).await.map(|_| ()), "cancel_order");
     rejected(client.order_status_stream(floor).await.map(|_| ()), "order_status_stream");
     rejected(client.wait_for_fill(floor, std::time::Duration::ZERO).await.map(|_| ()), "wait_for_fill");
 
@@ -1309,7 +1295,7 @@ async fn order_methods_accept_typed_order_ids() {
     let order = order_builder::market_order(Action::Buy, 100.0);
 
     client.submit_order(ids.parent, &contract, &order).await.expect("submit_order");
-    let _cancel = client.cancel_order(ids.take_profit, "").await.expect("cancel_order");
+    let _cancel = client.cancel_order(ids.take_profit).await.expect("cancel_order");
     let _placed = client.place_order(ids.stop_loss, &contract, &order).await.expect("place_order");
 
     let placed_id = |index| decode_request_proto::<crate::proto::PlaceOrderRequest>(&message_bus, index).order_id;

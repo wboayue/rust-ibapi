@@ -98,9 +98,12 @@ impl Client {
     /// the subscription stays open until dropped, so break once cancellation
     /// is observed.
     ///
+    /// Sends an immediate cancel with no operator attributes. To set a manual cancel
+    /// time, an operator ID or the manual order indicator, use
+    /// [`cancel_order_with`](Self::cancel_order_with).
+    ///
     /// # Arguments
     /// * `order_id` - ID of the [`crate::orders::Order`] to cancel.
-    /// * `manual_order_cancel_time` - Optional timestamp to specify the cancellation time. Use an empty string to use the current time.
     ///
     /// # Errors
     /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
@@ -114,7 +117,7 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let order_id = 15;
-    /// let subscription = client.cancel_order(order_id, "").expect("request failed");
+    /// let subscription = client.cancel_order(order_id).expect("request failed");
     /// for item in &subscription {
     ///     match item {
     ///         Ok(SubscriptionItem::Data(status)) => println!("status: {status:?}"),
@@ -127,17 +130,14 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn cancel_order(&self, order_id: impl Into<OrderId>, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
-        let order_cancel = OrderCancel {
-            manual_order_cancel_time: manual_order_cancel_time.to_owned(),
-            ..OrderCancel::default()
-        };
-        self.cancel_order_with(order_id, &order_cancel)
+    pub fn cancel_order(&self, order_id: impl Into<OrderId>) -> Result<Subscription<CancelOrder>, Error> {
+        self.cancel_order_with(order_id, &OrderCancel::default())
     }
 
     /// Cancels an open [`crate::orders::Order`], sending the attributes in `order_cancel`.
     ///
-    /// Use this over [`cancel_order`](Self::cancel_order) to send an operator ID
+    /// Use this over [`cancel_order`](Self::cancel_order) to send a manual cancel time
+    /// ([`OrderCancel::manual_order_cancel_time`]), an operator ID
     /// ([`OrderCancel::ext_operator`]) or [`OrderCancel::manual_order_indicator`] with the
     /// cancel, e.g. for CFTC Tag 50 / CME Rule 576 tagging. Responses are as for
     /// [`cancel_order`](Self::cancel_order).

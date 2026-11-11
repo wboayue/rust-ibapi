@@ -45,7 +45,7 @@ async fn submit_and_cleanup(client: &Client, contract: &Contract, order: &Order)
     }
     assert!(acknowledged, "no acknowledgement from TWS within timeout");
 
-    let _ = client.cancel_order(order_id, "").await;
+    let _ = client.cancel_order(order_id).await;
 }
 
 // Use a far-from-market limit so the order never fills even if a condition
