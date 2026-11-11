@@ -32,6 +32,11 @@ fn setters_map_to_the_request() {
         ),
         ("account", builder(&contract).exercise(1).account("DU123"), base.clone().account("DU123")),
         (
+            "account from AccountId",
+            builder(&contract).exercise(1).account(AccountId::from("DU123")),
+            base.clone().account("DU123"),
+        ),
+        (
             "override",
             builder(&contract).exercise(1).override_natural_action(),
             base.clone().override_(true),

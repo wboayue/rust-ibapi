@@ -12,6 +12,7 @@ use time::OffsetDateTime;
 use super::builder::ValidationError;
 use super::common::encoders;
 use super::ExerciseAction;
+use crate::accounts::types::AccountId;
 use crate::contracts::Contract;
 use crate::orders::OrderId;
 use crate::Error;
@@ -23,7 +24,7 @@ pub struct ExerciseOptionsBuilder<'a, C> {
     client: &'a C,
     contract: &'a Contract,
     action: Option<(ExerciseAction, i32)>,
-    account: Option<String>,
+    account: Option<AccountId>,
     override_natural_action: bool,
     manual_order_time: Option<OffsetDateTime>,
 }
@@ -54,7 +55,7 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
 
     /// Account holding the options. If unset, no account is sent; on a single-account login TWS
     /// then uses the logged-in account.
-    pub fn account(mut self, account: impl Into<String>) -> Self {
+    pub fn account(mut self, account: impl Into<AccountId>) -> Self {
         self.account = Some(account.into());
         self
     }

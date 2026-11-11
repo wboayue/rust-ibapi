@@ -2,6 +2,7 @@
 
 use time::Date;
 
+use crate::accounts::types::ContractId;
 use crate::client::blocking::ClientRequestBuilders;
 use crate::client::sync::Client;
 use crate::subscriptions::sync::Subscription;
@@ -48,7 +49,7 @@ impl Client {
     /// let event_data = client.wsh_event_data_by_contract(contract_id).fetch().expect("request wsh event data failed");
     /// println!("{event_data:?}");
     /// ```
-    pub fn wsh_event_data_by_contract(&self, contract_id: i32) -> WshEventDataBuilder<'_, Self> {
+    pub fn wsh_event_data_by_contract(&self, contract_id: impl Into<ContractId>) -> WshEventDataBuilder<'_, Self> {
         WshEventDataBuilder::new(self, contract_id)
     }
 

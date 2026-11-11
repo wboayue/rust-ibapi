@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Liquidity` and `OptionExerciseType` implement `From<T> for i32`, like the other integer-coded enums; `Liquidity` is now `Copy` and `Eq`.
 - `HistoricalData::trim_to(start, end)` keeps the bars in `[start, end)` and reports that range as the window: the trim `fetch()` applies after `between()`, for bars read another way, such as from a subscription (#1188).
 - `historical_data(..).request_id()` and `historical_data(..).subscribe()` (sync and async): a historical bar request the caller owns. Its id is known before anything is sent, it is sent once and never resent, `ending`/`between` and `buffer_limit` apply, and its frames come as the now-public `HistoricalDataFrame`: `Bars`, then `End`. Unlike `fetch()`, a dropped wait loses no bars read so far, and `cancel_and_drain` reports when TWS is done (a cancel of a running request is confirmed with 162). Examples `historical_data_subscribe` and `async_historical_data_subscribe` (#1189).
+- `AccountId` converts from `&String` and `&AccountId`, so a borrowed account id passes to `OrderBuilder::account` and `ExerciseOptionsBuilder::account` (#1204).
 
 ### Changed
 
@@ -38,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `market_data` subscriptions yield `TickTypes::Reroute` and `market_depth` subscriptions `MarketDepths::Reroute` when TWS answers a CFD request with the underlying to request instead (`Reroute { contract_id, exchange }`); the stream ends after it, without a cancel. Previously they were dropped with an info-level log. Exhaustive matches on `TickTypes` and `MarketDepths` need the arm. See `docs/migration-6.0.md` §23 (#1197).
 - `ContractDetails::market_rule_ids` is now `Vec<i32>` instead of `Vec<String>`, so each id can be passed to `Client::market_rule` directly; serialized, the ids are numbers and the `utoipa` schema is an integer array; JSON with string ids no longer deserializes. A `contract_details` reply whose market rule ids include a non-integer entry now fails with `Error::Parse`. See `docs/migration-6.0.md` §24 (#1198).
 - `Client::notice_stream()` (async and blocking) returns the `NoticeStream` directly rather than in a `Result`; it never returned `Err`. Drop the `?` or `.expect(..)` after the call. See `docs/migration-6.0.md` §25 (#1199).
+- `Client::option_chain`, `wsh_event_data_by_contract` and `historical_news` (sync and async) take `contract_id: impl Into<ContractId>` instead of `i32`, and `OrderBuilder::account` and `ExerciseOptionsBuilder::account` take `impl Into<AccountId>` instead of `impl Into<String>`, so a `ContractId` or `AccountId` (the types `pnl_single` and the condition constructors take) passes without unwrapping. Integer literals, `i32`, `&str`, `String` and `&String` compile as before; an argument that took its type from the `i32` parameter (`field.parse()?`) or that converts only into `String` (`Cow<str>`) no longer does. See `docs/migration-6.0.md` §26 (#1204).
 
 ### Removed
 

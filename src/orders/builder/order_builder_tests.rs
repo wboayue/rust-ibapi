@@ -443,6 +443,10 @@ fn account() {
 
     let order = builder.build().unwrap();
     assert_eq!(order.account, "DU123456");
+
+    let account = AccountId::from("DU123456");
+    let order = OrderBuilder::new(&client, &contract).buy(100).market().account(&account).build().unwrap();
+    assert_eq!(order.account, "DU123456");
 }
 
 #[test]
