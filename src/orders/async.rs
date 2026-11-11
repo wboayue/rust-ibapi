@@ -352,7 +352,7 @@ impl Client {
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     let order_cancel = OrderCancel {
-    ///         ext_operator: "trader-7".to_owned(),
+    ///         ext_operator: "TRADER7".to_owned(),
     ///         manual_order_indicator: Some(1),
     ///         ..OrderCancel::default()
     ///     };
@@ -412,7 +412,7 @@ impl Client {
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     let order_cancel = OrderCancel {
-    ///         ext_operator: "trader-7".to_owned(),
+    ///         ext_operator: "TRADER7".to_owned(),
     ///         ..OrderCancel::default()
     ///     };
     ///     client.global_cancel_with(&order_cancel).await.expect("global_cancel_with failed");

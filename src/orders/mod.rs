@@ -436,6 +436,9 @@ pub struct Order {
     /// Is used to place an order to a model. For example, "Technology" model can be used for tech stocks first created in TWS.
     pub model_code: String,
     /// This is a regulatory attribute that applies to all US Commodity (Futures) Exchanges, provided to allow client to comply with CFTC Tag 50 Rules.
+    ///
+    /// Use letters and digits only: on paper (live: 2026-11-10) a hyphen draws 201
+    /// "Invalid value in field # 8089".
     pub ext_operator: String,
     /// The native cash quantity.
     pub cash_qty: Option<f64>,
@@ -1879,7 +1882,7 @@ impl_wire_enum!(ExecutionSide);
 /// use ibapi::orders::OrderCancel;
 ///
 /// let cancel = OrderCancel {
-///     ext_operator: "trader-7".to_owned(),
+///     ext_operator: "TRADER7".to_owned(),
 ///     manual_order_indicator: Some(1),
 ///     ..OrderCancel::default()
 /// };
@@ -1891,6 +1894,11 @@ pub struct OrderCancel {
     pub manual_order_cancel_time: String,
     /// Operator ID for CFTC Tag 50 rules on US commodity (futures) exchanges, as on
     /// [`Order::ext_operator`]. Empty sends none.
+    ///
+    /// Use letters and digits only. On paper (live: 2026-11-10), a cancel whose operator ID
+    /// holds a hyphen gets no reply from TWS and leaves the order stuck in `PendingCancel`,
+    /// where later cancels are refused (10148 / 161). See
+    /// `docs/wire-facts/orders.md#ext_operator-and-manual_order_indicator-on-orders-and-cancels`.
     pub ext_operator: String,
     /// Manual order indicator, as on [`Order::manual_order_indicator`]. `None` sends none.
     pub manual_order_indicator: Option<i32>,

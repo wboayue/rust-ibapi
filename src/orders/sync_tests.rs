@@ -267,7 +267,7 @@ fn global_cancel() {
 fn tagged_cancel() -> crate::orders::OrderCancel {
     crate::orders::OrderCancel {
         manual_order_cancel_time: "20261110-14:30:00".to_owned(),
-        ext_operator: "trader-7".to_owned(),
+        ext_operator: "TRADER7".to_owned(),
         manual_order_indicator: Some(1),
     }
 }
