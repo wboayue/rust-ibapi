@@ -4,8 +4,8 @@ use std::time::{Duration, Instant};
 use super::common::fill::{completed_status, lists_order, lookup_wait, FillTracker};
 use super::common::{decoders, encoders, verify};
 use super::{
-    CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderOutcome, OrderStatus, OrderUpdate, Orders,
-    PlaceOrder,
+    CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderCancel, OrderOutcome, OrderStatus, OrderUpdate,
+    Orders, PlaceOrder,
 };
 use crate::client::blocking::Subscription;
 use crate::common::request_helpers::{self, expect_proto};
@@ -128,8 +128,52 @@ impl Client {
     /// }
     /// ```
     pub fn cancel_order(&self, order_id: impl Into<OrderId>, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
+        let order_cancel = OrderCancel {
+            manual_order_cancel_time: manual_order_cancel_time.to_owned(),
+            ..OrderCancel::default()
+        };
+        self.cancel_order_with(order_id, &order_cancel)
+    }
+
+    /// Cancels an open [`crate::orders::Order`], sending the attributes in `order_cancel`.
+    ///
+    /// Use this over [`cancel_order`](Self::cancel_order) to send an operator ID
+    /// ([`OrderCancel::ext_operator`]) or [`OrderCancel::manual_order_indicator`] with the
+    /// cancel, e.g. for CFTC Tag 50 / CME Rule 576 tagging. Responses are as for
+    /// [`cancel_order`](Self::cancel_order).
+    ///
+    /// # Errors
+    /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::orders::OrderCancel;
+    /// use ibapi::subscriptions::SubscriptionItem;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let order_cancel = OrderCancel {
+    ///     ext_operator: "trader-7".to_owned(),
+    ///     manual_order_indicator: Some(1),
+    ///     ..OrderCancel::default()
+    /// };
+    /// let subscription = client.cancel_order_with(15, &order_cancel).expect("request failed");
+    /// for item in &subscription {
+    ///     match item {
+    ///         Ok(SubscriptionItem::Notice(n)) if n.is_cancellation() => {
+    ///             println!("cancelled: {n}");
+    ///             break;
+    ///         }
+    ///         Ok(item) => println!("{item:?}"),
+    ///         Err(e) => { eprintln!("cancel err: {e:?}"); break; }
+    ///     }
+    /// }
+    /// ```
+    pub fn cancel_order_with(&self, order_id: impl Into<OrderId>, order_cancel: &OrderCancel) -> Result<Subscription<CancelOrder>, Error> {
         let order_id = order_id.into().checked()?;
-        let request = encoders::encode_cancel_order(order_id.value(), manual_order_cancel_time)?;
+        let request = encoders::encode_cancel_order(order_id.value(), order_cancel)?;
         let subscription = self.send_order(order_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -220,7 +264,30 @@ impl Client {
     /// client.global_cancel().expect("request failed");
     /// ```
     pub fn global_cancel(&self) -> Result<(), Error> {
-        let message = encoders::encode_global_cancel()?;
+        self.global_cancel_with(&OrderCancel::default())
+    }
+
+    /// Cancels all open [`crate::orders::Order`]s, sending the attributes in `order_cancel`.
+    ///
+    /// Use this over [`global_cancel`](Self::global_cancel) to send an operator ID
+    /// ([`OrderCancel::ext_operator`]) or [`OrderCancel::manual_order_indicator`] with the cancel.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::orders::OrderCancel;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let order_cancel = OrderCancel {
+    ///     ext_operator: "trader-7".to_owned(),
+    ///     ..OrderCancel::default()
+    /// };
+    /// client.global_cancel_with(&order_cancel).expect("request failed");
+    /// ```
+    pub fn global_cancel_with(&self, order_cancel: &OrderCancel) -> Result<(), Error> {
+        let message = encoders::encode_global_cancel(order_cancel)?;
         self.send_message(message)?;
 
         Ok(())

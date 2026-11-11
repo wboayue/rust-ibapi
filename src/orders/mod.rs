@@ -1867,6 +1867,35 @@ impl ExecutionSide {
 
 impl_wire_enum!(ExecutionSide);
 
+/// Optional attributes sent with an order cancel.
+///
+/// Passed to `cancel_order_with` and `global_cancel_with`. The [`Default`] value is what
+/// `cancel_order(id, "")` and `global_cancel()` send: an immediate cancel with no
+/// operator attributes. Mirrors the C# client's `OrderCancel`.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::OrderCancel;
+///
+/// let cancel = OrderCancel {
+///     ext_operator: "trader-7".to_owned(),
+///     manual_order_indicator: Some(1),
+///     ..OrderCancel::default()
+/// };
+/// assert!(cancel.manual_order_cancel_time.is_empty());
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OrderCancel {
+    /// Manual cancel time. Empty cancels immediately.
+    pub manual_order_cancel_time: String,
+    /// Operator ID for CFTC Tag 50 rules on US commodity (futures) exchanges, as on
+    /// [`Order::ext_operator`]. Empty sends none.
+    pub ext_operator: String,
+    /// Manual order indicator, as on [`Order::manual_order_indicator`]. `None` sends none.
+    pub manual_order_indicator: Option<i32>,
+}
+
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 /// Filter criteria used to determine which execution reports are returned.

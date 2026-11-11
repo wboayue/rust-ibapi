@@ -264,36 +264,59 @@ fn global_cancel() {
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 }
 
-#[test]
-fn cancel_order_cme_tagging() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::OrderStatus,
-        order_status()
-            .order_id(41)
-            .status(OrderStatusKind::Cancelled)
-            .remaining(100.0)
-            .perm_id(71270927)
-            .encode_proto(),
-    )]));
-
-    let client = Client::stubbed(message_bus.clone(), server_versions::CME_TAGGING_FIELDS);
-
-    let order_id = 41;
-    let results = client.cancel_order(order_id, "");
-
-    assert_request(&message_bus, 0, &cancel_order_request().order_id(order_id));
-    assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
+fn tagged_cancel() -> crate::orders::OrderCancel {
+    crate::orders::OrderCancel {
+        manual_order_cancel_time: "20261110-14:30:00".to_owned(),
+        ext_operator: "trader-7".to_owned(),
+        manual_order_indicator: Some(1),
+    }
 }
 
 #[test]
-fn global_cancel_cme_tagging() {
+fn cancel_order_sends_manual_order_cancel_time() {
     let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus.clone(), server_versions::CME_TAGGING_FIELDS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-    let results = client.global_cancel();
+    let _subscription = client.cancel_order(41, "20261110-14:30:00").expect("cancel_order failed");
 
-    assert_request(&message_bus, 0, &global_cancel_request());
-    assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
+    let expected = crate::orders::OrderCancel {
+        manual_order_cancel_time: "20261110-14:30:00".to_owned(),
+        ..Default::default()
+    };
+    assert_request(&message_bus, 0, &cancel_order_request().order_id(41).order_cancel(expected));
+}
+
+#[test]
+fn cancel_order_with_sends_operator_fields() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let _subscription = client.cancel_order_with(41, &tagged_cancel()).expect("cancel_order_with failed");
+
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &cancel_order_request().order_id(41).order_cancel(tagged_cancel()));
+}
+
+#[test]
+fn cancel_order_with_rejects_request_range_id() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let result = client.cancel_order_with(crate::client::ids::REQUEST_ID_FLOOR, &tagged_cancel());
+
+    assert!(matches!(result, Err(Error::OrderIdInRequestRange { .. })), "got {:?}", result.err());
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
+#[test]
+fn global_cancel_with_sends_operator_fields() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    client.global_cancel_with(&tagged_cancel()).expect("global_cancel_with failed");
+
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &global_cancel_request().order_cancel(tagged_cancel()));
 }
 
 #[test]
