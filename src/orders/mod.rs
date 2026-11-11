@@ -1897,7 +1897,8 @@ pub struct OrderCancel {
     ///
     /// Use letters and digits only. On paper (live: 2026-11-10), a cancel whose operator ID
     /// holds a hyphen gets no reply from TWS and leaves the order stuck in `PendingCancel`,
-    /// where later cancels are refused (10148 / 161). See
+    /// where later cancels are refused (10148 / 161), until TWS drops the cancel (seen by the
+    /// next daily reset). The order is then working again. See
     /// `docs/wire-facts/orders.md#ext_operator-and-manual_order_indicator-on-orders-and-cancels`.
     pub ext_operator: String,
     /// Manual order indicator, as on [`Order::manual_order_indicator`]. `None` sends none.
