@@ -41,7 +41,7 @@
 pub use crate::Client;
 pub use crate::ClientBuilder;
 pub use crate::Error;
-pub use crate::{ConnectivityStatus, Notice, NoticeCategory};
+pub use crate::{ConnectivityStatus, DataFarm, DataFarmKind, Notice, NoticeCategory};
 
 // Contract types
 pub use crate::contracts::{

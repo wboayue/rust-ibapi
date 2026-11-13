@@ -384,6 +384,97 @@ fn connectivity_status_from_code_table() {
 }
 
 #[test]
+fn data_farm_kind_covers_exactly_the_connectivity_codes() {
+    // Per docs/rules/testing/derive-from-constants.md: every farm status code has
+    // a kind, and the neighbors that have no status have no kind.
+    let farm_codes = FARM_OK_CODES
+        .iter()
+        .chain(&FARM_BROKEN_CODES)
+        .chain(&FARM_INACTIVE_CODES)
+        .chain(&FARM_CONNECTING_CODES);
+    for &code in farm_codes {
+        assert!(DataFarmKind::from_code(code).is_some(), "farm code {code} has no kind");
+    }
+    for code in [
+        *WARNING_CODE_RANGE.start(),
+        2102,
+        2109,
+        2120,
+        2156,
+        2159,
+        *WARNING_CODE_RANGE.end(),
+        500,
+        1100,
+    ] {
+        assert_eq!(DataFarmKind::from_code(code), None, "code {code} should have no kind");
+    }
+}
+
+#[test]
+fn data_farm_kind_from_code_table() {
+    let cases = [
+        (2103, DataFarmKind::MarketData),
+        (2104, DataFarmKind::MarketData),
+        (2108, DataFarmKind::MarketData),
+        (2119, DataFarmKind::MarketData),
+        (2105, DataFarmKind::HistoricalData),
+        (2106, DataFarmKind::HistoricalData),
+        (2107, DataFarmKind::HistoricalData),
+        (2157, DataFarmKind::SecurityDefinition),
+        (2158, DataFarmKind::SecurityDefinition),
+    ];
+    for (code, kind) in cases {
+        assert_eq!(DataFarmKind::from_code(code), Some(kind), "code {code}");
+    }
+}
+
+#[test]
+fn data_farm_reads_kind_and_name() {
+    // Messages as paper TWS sent them at connect (server 223, 2026-11-13).
+    let cases = [
+        (2104, "Market data farm connection is OK:usopt", DataFarmKind::MarketData, Some("usopt")),
+        (
+            2104,
+            "Market data farm connection is OK:usfarm.nj",
+            DataFarmKind::MarketData,
+            Some("usfarm.nj"),
+        ),
+        (
+            2106,
+            "HMDS data farm connection is OK:ushmds",
+            DataFarmKind::HistoricalData,
+            Some("ushmds"),
+        ),
+        (
+            2158,
+            "Sec-def data farm connection is OK:secdefnj",
+            DataFarmKind::SecurityDefinition,
+            Some("secdefnj"),
+        ),
+        (
+            2103,
+            "Market data farm connection is broken: usfarm ",
+            DataFarmKind::MarketData,
+            Some("usfarm"),
+        ),
+        (2104, "Market data farm connection is OK", DataFarmKind::MarketData, None),
+        (2105, "HMDS data farm connection is broken:", DataFarmKind::HistoricalData, None),
+    ];
+    for (code, message, kind, name) in cases {
+        let farm = helpers::test_notice(code, message).data_farm();
+        assert_eq!(
+            farm,
+            Some(DataFarm {
+                kind,
+                name: name.map(str::to_owned)
+            }),
+            "{message:?}"
+        );
+    }
+    assert_eq!(helpers::test_notice(500, "Not connected:usfarm").data_farm(), None);
+}
+
+#[test]
 fn connectivity_status_delegates() {
     // The accessor is a thin wrapper over from_code; assert delegation without
     // re-asserting the whole table.
