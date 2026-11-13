@@ -588,6 +588,57 @@ impl ConnectivityStatus {
     }
 }
 
+/// Which data farm a data-farm notice is about, by its code.
+///
+/// | Kind | Codes | Wire text |
+/// |---|---|---|
+/// | [`MarketData`](Self::MarketData) | 2103, 2104, 2108, 2119 | Market data farm … |
+/// | [`HistoricalData`](Self::HistoricalData) | 2105, 2106, 2107 | HMDS data farm … |
+/// | [`SecurityDefinition`](Self::SecurityDefinition) | 2157, 2158 | Sec-def data farm … |
+///
+/// The codes are those of [`ConnectivityStatus`], so a notice has a kind exactly
+/// when it has a status.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DataFarmKind {
+    /// Live market data (`usfarm`, `usopt`, `cashfarm`, ...).
+    MarketData,
+    /// Historical market data, IB's HMDS (`ushmds`, ...).
+    HistoricalData,
+    /// Security definitions: contract details and option chains (`secdefnj`, ...).
+    SecurityDefinition,
+}
+
+impl DataFarmKind {
+    /// The farm kind a data-farm status code reports on; `None` for every other code.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::DataFarmKind;
+    /// assert_eq!(DataFarmKind::from_code(2104), Some(DataFarmKind::MarketData));
+    /// assert_eq!(DataFarmKind::from_code(2105), Some(DataFarmKind::HistoricalData));
+    /// assert_eq!(DataFarmKind::from_code(500), None);
+    /// ```
+    pub fn from_code(code: i32) -> Option<DataFarmKind> {
+        match code {
+            2103 | 2104 | 2108 | 2119 => Some(DataFarmKind::MarketData),
+            2105..=2107 => Some(DataFarmKind::HistoricalData),
+            2157 | 2158 => Some(DataFarmKind::SecurityDefinition),
+            _ => None,
+        }
+    }
+}
+
+/// The data farm a notice reports on, from [`Notice::data_farm`].
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DataFarm {
+    /// The farm's kind, from the notice code.
+    pub kind: DataFarmKind,
+    /// The farm's name, the text after the last `:` of the message (`usfarm` in
+    /// "Market data farm connection is OK:usfarm"); `None` when the message names none.
+    pub name: Option<String>,
+}
+
 impl From<&ResponseMessage> for Notice {
     /// Build a Notice from a protobuf Error frame; at floor 213 every Error
     /// payload arrives proto-encoded. Returns `Notice::from(DecodedError::default())`
@@ -798,6 +849,32 @@ impl Notice {
     /// ```
     pub fn connectivity_status(&self) -> Option<ConnectivityStatus> {
         ConnectivityStatus::from_code(self.code)
+    }
+
+    /// The data farm this notice reports on, so a caller can track each farm's
+    /// [`connectivity_status`](Self::connectivity_status) separately; `None` for a
+    /// notice that is not about a data farm.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::{ConnectivityStatus, DataFarmKind, Notice};
+    /// # let notice: Notice = unimplemented!();
+    /// if let (Some(farm), Some(ConnectivityStatus::Ok)) = (notice.data_farm(), notice.connectivity_status()) {
+    ///     if farm.kind == DataFarmKind::MarketData {
+    ///         println!("market data farm {:?} is back", farm.name);
+    ///     }
+    /// }
+    /// ```
+    pub fn data_farm(&self) -> Option<DataFarm> {
+        let kind = DataFarmKind::from_code(self.code)?;
+        let name = self
+            .message
+            .rsplit_once(':')
+            .map(|(_, name)| name.trim())
+            .filter(|name| !name.is_empty())
+            .map(str::to_owned);
+        Some(DataFarm { kind, name })
     }
 
     /// Log severity for this notice, derived from [`Notice::category`] so that

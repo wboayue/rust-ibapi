@@ -233,7 +233,7 @@ pub use transport::rate_limiter::RateLimiter;
 pub(crate) use messages::{encode_option_field, ToField};
 
 #[doc(inline)]
-pub use messages::{ConnectivityStatus, IncomingMessages, Notice, NoticeCategory, OutgoingMessages};
+pub use messages::{ConnectivityStatus, DataFarm, DataFarmKind, IncomingMessages, Notice, NoticeCategory, OutgoingMessages};
 
 #[doc(inline)]
 pub use messages::{
