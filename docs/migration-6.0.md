@@ -523,3 +523,19 @@ let notices = client.notice_stream();
 ```
 
 Drop the `?`, `.expect(..)` or `match` on the result. The compiler reports each of them. No error path is lost, since none existed, and nothing changes at runtime.
+
+### 26. `last_trade_date_or_contract_month` holds only the date
+
+`contract_details` decoded a future's or option's `last_trade_date_or_contract_month` as TWS sends it, with the last trade time and zone appended (`"20261218 08:30:00 US/Central"`). It now holds the date alone (`"20261218"`), the time goes to `ContractDetails::last_trade_time` (`"08:30:00"`), and the zone is dropped; `ContractDetails::time_zone_id` holds the product's zone. This is what IB's own clients do (`EDecoderUtils.SetLastTradeDate`). Bonds are unchanged.
+
+```rust,ignore
+// 5.x
+let (date, rest) = details.contract.last_trade_date_or_contract_month.split_once(' ').unwrap();
+
+// 6.0
+let date = &details.contract.last_trade_date_or_contract_month;
+let time = &details.last_trade_time;
+let zone = &details.time_zone_id;
+```
+
+Code that split the field itself can drop that step. Nothing fails to compile; check any code that parses the field.
