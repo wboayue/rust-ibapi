@@ -112,12 +112,17 @@ impl StreamDecoder<Executions> for Executions {
 }
 
 impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
+        IncomingMessages::OpenOrder,
+        IncomingMessages::OrderStatus,
+        IncomingMessages::ExecutionData,
+    ];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<ExerciseOptions, Error> {
         match message.message_type() {
             IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(message)?)),
             IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(message)?)),
+            IncomingMessages::ExecutionData => Ok(ExerciseOptions::ExecutionData(decoders::decode_execution_data(message)?)),
             _ => Err(Error::unexpected_response(message)),
         }
     }

@@ -523,3 +523,21 @@ let notices = client.notice_stream();
 ```
 
 Drop the `?`, `.expect(..)` or `match` on the result. The compiler reports each of them. No error path is lost, since none existed, and nothing changes at runtime.
+
+### 26. `ExerciseOptions` gains `ExecutionData` and drops `PartialEq` and serde
+
+An `exercise_options` subscription now yields `ExerciseOptions::ExecutionData` for the exercise's two executions (the underlying and the option); they were dropped before. An exhaustive `match` needs the arm. `ExerciseOptions` derives only `Debug` and `Clone`, like `PlaceOrder` and `OrderUpdate`, because `ExecutionData` implements neither `PartialEq` nor serde.
+
+```rust,ignore
+// 6.0
+match item {
+    SubscriptionItem::Data(ExerciseOptions::OpenOrder(order)) => {}
+    SubscriptionItem::Data(ExerciseOptions::OrderStatus(status)) => {}
+    SubscriptionItem::Data(ExerciseOptions::ExecutionData(data)) => {
+        // data.execution.option_exercise_type is Exercise, Lapse, Assigned, ...
+    }
+    SubscriptionItem::Notice(notice) => {}
+}
+```
+
+Code that compared or serialized `ExerciseOptions` values compares or serializes the fields it needs instead.

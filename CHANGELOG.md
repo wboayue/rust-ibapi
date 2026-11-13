@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `market_data` subscriptions yield `TickTypes::Reroute` and `market_depth` subscriptions `MarketDepths::Reroute` when TWS answers a CFD request with the underlying to request instead (`Reroute { contract_id, exchange }`); the stream ends after it, without a cancel. Previously they were dropped with an info-level log. Exhaustive matches on `TickTypes` and `MarketDepths` need the arm. See `docs/migration-6.0.md` §23 (#1197).
 - `ContractDetails::market_rule_ids` is now `Vec<i32>` instead of `Vec<String>`, so each id can be passed to `Client::market_rule` directly; serialized, the ids are numbers and the `utoipa` schema is an integer array; JSON with string ids no longer deserializes. A `contract_details` reply whose market rule ids include a non-integer entry now fails with `Error::Parse`. See `docs/migration-6.0.md` §24 (#1198).
 - `Client::notice_stream()` (async and blocking) returns the `NoticeStream` directly rather than in a `Result`; it never returned `Err`. Drop the `?` or `.expect(..)` after the call. See `docs/migration-6.0.md` §25 (#1199).
+- `ExerciseOptions` gains an `ExecutionData` variant: an `exercise_options` subscription now yields the exercise's executions on the underlying and the option, each with `Execution::option_exercise_type` set. They were dropped. `ExerciseOptions` no longer derives `PartialEq`, `Serialize` or `Deserialize`, like `PlaceOrder`, whose `ExecutionData` has neither. See `docs/migration-6.0.md` §26 (#1210).
 
 ### Removed
 
@@ -48,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning`. TWS sends it on every `exercise_options` request and goes on with the exercise, but it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading. Orders whose TIF TWS sets from the preset are affected the same way (#1210).
 - `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
 
 ## [5.7.0] - 2026-11-05

@@ -1953,14 +1953,21 @@ pub enum ExerciseAction {
 }
 
 /// Responses from exercising options.
+///
+/// TWS reports an exercise as an order on the option: an open order and its
+/// statuses, then one execution on the underlying and one on the option, each
+/// with [`Execution::option_exercise_type`] set. It sends no commission report
+/// for them.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum ExerciseOptions {
     /// Open order information.
     OpenOrder(OrderData),
     /// Order status update.
     OrderStatus(OrderStatus),
+    /// Execution of the exercise, on the underlying or the option.
+    ExecutionData(ExecutionData),
 }
 
 // Feature-specific implementations

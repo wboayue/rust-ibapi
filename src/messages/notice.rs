@@ -55,6 +55,11 @@ pub(crate) const HMDS_QUERY_MESSAGE_CODE: i32 = 165;
 /// it, so it is a warning, not a failed query (#1136).
 pub(crate) const HMDS_CONNECTED_TEXT: &str = "HMDS server connection was successful";
 
+/// "Order TIF was set to DAY based on order preset." TWS applied the preset's
+/// time in force to an order that left it unset, such as an `exerciseOptions`
+/// request, and goes on with the order, so it is a warning.
+pub(crate) const ORDER_PRESET_TIF_CODE: i32 = 10349;
+
 /// "No security definition has been found for the request".
 pub(crate) const NO_SECURITY_DEFINITION_CODE: i32 = 200;
 
@@ -80,9 +85,11 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2199;
 /// falls back to the same default, so code 0 never carries a hard error.
 ///
 /// Code 165 is a warning only in its [`HMDS_CONNECTED_TEXT`] form; its other
-/// texts can be real query failures.
+/// texts can be real query failures. Code 10349 ([`ORDER_PRESET_TIF_CODE`])
+/// reports an order TWS goes on with.
 pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
     code == 0
+        || code == ORDER_PRESET_TIF_CODE
         || WARNING_CODE_RANGE.contains(&code)
         || (code == ORDER_MESSAGE_CODE && message.lines().any(|line| line.trim_start().starts_with("Warning:")))
         || (code == HMDS_QUERY_MESSAGE_CODE && message.contains(HMDS_CONNECTED_TEXT))
@@ -457,7 +464,8 @@ pub(crate) fn resubscribed_notice() -> Notice {
 ///    the ranges: 317 is inside [`ORDER_REJECTION_CODE_RANGE`] and 2188 inside
 ///    [`WARNING_CODE_RANGE`].
 /// 3. [`Warning`](Self::Warning) — [`WARNING_CODE_RANGE`], code 399 with a `Warning:`
-///    line, or code 0 (a frame whose `error_code` field was absent on the wire).
+///    line, code 10349 (order TIF set from the order preset), or code 0 (a frame
+///    whose `error_code` field was absent on the wire).
 /// 4. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
 /// 5. [`RequestError`](Self::RequestError) — [`REQUEST_ERROR_CODES`]. Ahead of
 ///    [`ORDER_REJECTION_CODE_RANGE`], which they sit inside.
@@ -491,8 +499,8 @@ pub enum NoticeCategory {
     /// Order cancellation confirmation (exact code 202).
     Cancellation,
     /// Informational warning ([`WARNING_CODE_RANGE`], code 399 with a `Warning:`
-    /// line, code 165 "HMDS server connection was successful", or code 0 — a
-    /// code-less frame).
+    /// line, code 165 "HMDS server connection was successful", code 10349 "Order
+    /// TIF was set to DAY based on order preset", or code 0 — a code-less frame).
     Warning,
     /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
     SystemMessage,
@@ -628,8 +636,9 @@ impl Notice {
 
     /// Returns `true` if this is a warning message.
     ///
-    /// Warnings are [`WARNING_CODE_RANGE`], code 399 with a `Warning:` line, and
-    /// code 0 — a frame whose `error_code` field was absent on the wire, which
+    /// Warnings are [`WARNING_CODE_RANGE`], code 399 with a `Warning:` line, code
+    /// 10349 (order TIF set from the order preset), and code 0 — a frame whose
+    /// `error_code` field was absent on the wire, which
     /// IB Gateway sends for informational notices. Same as
     /// `category() == NoticeCategory::Warning`.
     pub fn is_warning(&self) -> bool {

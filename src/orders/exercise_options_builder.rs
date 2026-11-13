@@ -122,7 +122,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
     ///     .submit()
     ///     .expect("exercise_options failed");
     ///
-    /// // Consume the subscription so execution updates and commission reports surface.
+    /// // Read the open order, its statuses and the two exercise executions.
     /// for event in subscription.iter_data() {
     ///     match event {
     ///         Ok(item) => println!("exercise event: {item:?}"),
@@ -171,7 +171,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
     ///         .await
     ///         .expect("exercise_options failed");
     ///
-    ///     // Consume the subscription so execution updates and commission reports surface.
+    ///     // Read the open order, its statuses and the two exercise executions.
     ///     let mut events = subscription.filter_data();
     ///     while let Some(event) = events.next().await {
     ///         match event {
