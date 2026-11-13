@@ -157,6 +157,27 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   is optional on a single-account login.
 - **Not probed:** multi-account (FA) logins.
 
+### `exercise_options` replies
+
+*Live 2026-11-13 11:22–11:38 ET RTH, paper TWS, server 223, SPY 20261120 calls (755, 780), exercise
+with `override_natural_action`.*
+
+- First reply: 10349 "Order TIF was set to DAY based on order preset.", bound to the exercise's
+  order id. The exercise goes ahead.
+- Then, on the exercise's order id: OpenOrder (BUY LMT, price 0, quantity 1, no account)
+  PreSubmitted; ExecutionData for the underlying (BOT 100 at the strike); OpenOrder and
+  OrderStatus Filled with quantity and `filled` **100**; ExecutionData for the option (SLD 1 at
+  0); OpenOrder and OrderStatus Filled with `filled` 1. Both executions carry
+  `optExerciseOrLapseType` 1 (Exercise) and the exercise order's `permId`.
+- No commission report for either execution, within 40 s or by `reqExecutions` later the same
+  day.
+- The open order has no field marking it as an exercise; only the shared `permId` links it to the
+  executions.
+- **Not probed:** lapse, assignment, automatic exercise at expiry, puts, futures options, and
+  exercising from a client other than the one that bought. Twice, after a session disconnected
+  right after its exercise, the next session's `nextValidId` repeated the exercise's order id
+  and an order sent with it got no reply; after a session that stayed open it did not repeat.
+
 ### `ext_operator` and `manual_order_indicator` on orders and cancels
 
 *Live 2026-11-10 20:03–20:07 ET (AAPL off-hours, ES Globex overnight), paper Gateway, server 226; #1200.*

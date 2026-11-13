@@ -606,6 +606,77 @@ fn exercise_options() {
     assert_eq!(request_message_count(&message_bus), 1);
 }
 
+// Live frame order (paper TWS, server 223): 10349 bound to the exercise's order id,
+// then the open order and the executions. 10349 must not end the stream.
+#[test]
+fn exercise_options_reads_past_preset_tif_warning_to_executions() {
+    let order_id = 16;
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_error_response(
+            order_id,
+            crate::messages::ORDER_PRESET_TIF_CODE,
+            "Order TIF was set to DAY based on order preset.",
+        ),
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order()
+                .order_id(order_id)
+                .symbol("SPY")
+                .security_type("OPT")
+                .last_trade_date_or_contract_month("20261120")
+                .strike(755.0)
+                .right("C")
+                .multiplier("100")
+                .exchange("SMART")
+                .total_quantity(1.0)
+                .order_type("LMT")
+                .perm_id(1995911677)
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::ExecutionData,
+            execution_data()
+                .order_id(order_id)
+                .contract_id(756733)
+                .symbol("SPY")
+                .security_type("STK")
+                .execution_id("0000fd27.6af734bb.01.01")
+                .side("BOT")
+                .shares(100.0)
+                .price(755.0)
+                .perm_id(1995911677)
+                .option_exercise_type(1)
+                .encode_proto(),
+        ),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let contract = Contract::option("SPY", "20261120", 755.0, OptionRight::Call);
+
+    let subscription = client.exercise_options(&contract).exercise(1).submit().expect("exercise_options failed");
+
+    match subscription.next() {
+        Some(Ok(crate::subscriptions::SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.code, crate::messages::ORDER_PRESET_TIF_CODE);
+            assert!(notice.is_warning(), "10349 should be a warning, got {notice:?}");
+        }
+        other => panic!("expected the 10349 notice, got {other:?}"),
+    }
+    match subscription.next() {
+        Some(Ok(crate::subscriptions::SubscriptionItem::Data(ExerciseOptions::OpenOrder(order)))) => assert_eq!(order.order.perm_id, 1995911677),
+        other => panic!("expected the exercise's open order, got {other:?}"),
+    }
+    match subscription.next() {
+        Some(Ok(crate::subscriptions::SubscriptionItem::Data(ExerciseOptions::ExecutionData(data)))) => {
+            assert_eq!(data.execution.execution_id, "0000fd27.6af734bb.01.01");
+            assert_eq!(data.execution.shares, 100.0);
+            assert_eq!(data.execution.price, 755.0);
+            assert_eq!(data.execution.option_exercise_type, crate::orders::OptionExerciseType::Exercise);
+            assert_eq!(data.contract.security_type, SecurityType::Stock);
+        }
+        other => panic!("expected the exercise execution, got {other:?}"),
+    }
+}
+
 #[test]
 fn submit_order() {
     let message_bus = Arc::new(MessageBusStub::default());
