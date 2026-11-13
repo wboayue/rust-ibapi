@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `market_data` subscriptions yield `TickTypes::Reroute` and `market_depth` subscriptions `MarketDepths::Reroute` when TWS answers a CFD request with the underlying to request instead (`Reroute { contract_id, exchange }`); the stream ends after it, without a cancel. Previously they were dropped with an info-level log. Exhaustive matches on `TickTypes` and `MarketDepths` need the arm. See `docs/migration-6.0.md` §23 (#1197).
 - `ContractDetails::market_rule_ids` is now `Vec<i32>` instead of `Vec<String>`, so each id can be passed to `Client::market_rule` directly; serialized, the ids are numbers and the `utoipa` schema is an integer array; JSON with string ids no longer deserializes. A `contract_details` reply whose market rule ids include a non-integer entry now fails with `Error::Parse`. See `docs/migration-6.0.md` §24 (#1198).
 - `Client::notice_stream()` (async and blocking) returns the `NoticeStream` directly rather than in a `Result`; it never returned `Err`. Drop the `?` or `.expect(..)` after the call. See `docs/migration-6.0.md` §25 (#1199).
+- `contract_details` keeps only the date in a non-bond contract's `last_trade_date_or_contract_month` and moves the last trade time to `ContractDetails::last_trade_time`, as IB's own clients do. TWS sends `"20261218 08:30:00 US/Central"` for futures; the field read that whole, and `last_trade_time` stayed empty. Bonds are unchanged. See `docs/migration-6.0.md` §26.
 
 ### Removed
 
