@@ -5,11 +5,12 @@ use crate::common::test_utils::helpers::{
     decode_request_proto, order_status_response, proto_error_response, proto_response, request_message_count,
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityIdType, SecurityType, Symbol};
-use crate::messages::IncomingMessages;
-use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, ExerciseOptions, OcaType, OrderCondition, OrderStatusKind, TimeInForce};
+use crate::messages::{IncomingMessages, ORDER_PRESET_TIF_CODE};
+use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, OptionExerciseType, OrderCondition, OrderStatusKind, TimeInForce};
 use crate::proto;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_and_fees_report, completed_order, completed_orders_end,
     completed_orders_request, execution_data, execution_data_end, executions_request, global_cancel_request, next_valid_id,
@@ -238,14 +239,14 @@ fn cancel_order_delivers_202_as_non_terminal_notice() {
     let subscription = client.cancel_order(order_id, "").expect("cancel_order failed");
 
     match subscription.next() {
-        Some(Ok(crate::subscriptions::SubscriptionItem::Notice(notice))) => {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
             assert!(notice.is_cancellation(), "expected cancellation notice, got {notice:?}");
         }
         other => panic!("expected non-terminal cancellation Notice, got {other:?}"),
     }
 
     match subscription.next() {
-        Some(Ok(crate::subscriptions::SubscriptionItem::Data(CancelOrder::OrderStatus(status)))) => {
+        Some(Ok(SubscriptionItem::Data(CancelOrder::OrderStatus(status)))) => {
             assert_eq!(status.status, OrderStatusKind::Cancelled);
         }
         other => panic!("expected OrderStatus after the 202 notice, got {other:?}"),
@@ -598,8 +599,8 @@ fn exercise_options() {
 
     let exercise_response = subscription.next_data();
     assert!(
-        matches!(exercise_response, Some(Ok(ExerciseOptions::OpenOrder(_)))),
-        "Expected ExerciseOptions::OpenOrder, got {:?}",
+        matches!(exercise_response, Some(Ok(PlaceOrder::OpenOrder(_)))),
+        "Expected PlaceOrder::OpenOrder, got {:?}",
         exercise_response
     );
 
@@ -612,11 +613,7 @@ fn exercise_options() {
 fn exercise_options_reads_past_preset_tif_warning_to_executions() {
     let order_id = 16;
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-        proto_error_response(
-            order_id,
-            crate::messages::ORDER_PRESET_TIF_CODE,
-            "Order TIF was set to DAY based on order preset.",
-        ),
+        proto_error_response(order_id, ORDER_PRESET_TIF_CODE, "Order TIF was set to DAY based on order preset."),
         proto_response(
             IncomingMessages::OpenOrder,
             open_order()
@@ -655,22 +652,22 @@ fn exercise_options_reads_past_preset_tif_warning_to_executions() {
     let subscription = client.exercise_options(&contract).exercise(1).submit().expect("exercise_options failed");
 
     match subscription.next() {
-        Some(Ok(crate::subscriptions::SubscriptionItem::Notice(notice))) => {
-            assert_eq!(notice.code, crate::messages::ORDER_PRESET_TIF_CODE);
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.code, ORDER_PRESET_TIF_CODE);
             assert!(notice.is_warning(), "10349 should be a warning, got {notice:?}");
         }
         other => panic!("expected the 10349 notice, got {other:?}"),
     }
     match subscription.next() {
-        Some(Ok(crate::subscriptions::SubscriptionItem::Data(ExerciseOptions::OpenOrder(order)))) => assert_eq!(order.order.perm_id, 1995911677),
+        Some(Ok(SubscriptionItem::Data(PlaceOrder::OpenOrder(order)))) => assert_eq!(order.order.perm_id, 1995911677),
         other => panic!("expected the exercise's open order, got {other:?}"),
     }
     match subscription.next() {
-        Some(Ok(crate::subscriptions::SubscriptionItem::Data(ExerciseOptions::ExecutionData(data)))) => {
+        Some(Ok(SubscriptionItem::Data(PlaceOrder::ExecutionData(data)))) => {
             assert_eq!(data.execution.execution_id, "0000fd27.6af734bb.01.01");
             assert_eq!(data.execution.shares, 100.0);
             assert_eq!(data.execution.price, 755.0);
-            assert_eq!(data.execution.option_exercise_type, crate::orders::OptionExerciseType::Exercise);
+            assert_eq!(data.execution.option_exercise_type, OptionExerciseType::Exercise);
             assert_eq!(data.contract.security_type, SecurityType::Stock);
         }
         other => panic!("expected the exercise execution, got {other:?}"),

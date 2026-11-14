@@ -611,20 +611,28 @@ let zone = &details.time_zone_id;
 
 Code that split the field itself can drop that step. Nothing fails to compile; check any code that parses the field. For a typed date, `details.contract.last_trade_date` (`Option<time::Date>`) already carries the last trading day of a future or option.
 
-### 29. `ExerciseOptions` gains `ExecutionData` and drops `PartialEq` and serde
+### 29. `exercise_options` yields `PlaceOrder`; `ExerciseOptions` is removed
 
-An `exercise_options` subscription now yields `ExerciseOptions::ExecutionData` for the exercise's two executions (the underlying and the option); they were dropped before. An exhaustive `match` needs the arm. `ExerciseOptions` derives only `Debug` and `Clone`, like `PlaceOrder` and `OrderUpdate`, because `ExecutionData` implements neither `PartialEq` nor serde.
+TWS reports an exercise as an order on the option, so an `exercise_options` subscription now yields `PlaceOrder`, the item type of `place_order`, and `ExerciseOptions` is gone. The subscription also yields the exercise's two executions (on the underlying and on the option) as `PlaceOrder::ExecutionData`, each with `Execution::option_exercise_type` set; they were dropped before. TWS sends no commission report for them.
 
 ```rust,ignore
-// 6.0
+// 5.x
 match item {
     SubscriptionItem::Data(ExerciseOptions::OpenOrder(order)) => {}
     SubscriptionItem::Data(ExerciseOptions::OrderStatus(status)) => {}
-    SubscriptionItem::Data(ExerciseOptions::ExecutionData(data)) => {
-        // data.execution.option_exercise_type is Exercise, Lapse, Assigned, ...
+    SubscriptionItem::Notice(notice) => {}
+}
+
+// 6.0
+match item {
+    SubscriptionItem::Data(PlaceOrder::OpenOrder(order)) => {}
+    SubscriptionItem::Data(PlaceOrder::OrderStatus(status)) => {}
+    SubscriptionItem::Data(PlaceOrder::ExecutionData(data)) => {
+        // data.execution.option_exercise_type is Exercise, Lapse, ...
     }
+    SubscriptionItem::Data(PlaceOrder::CommissionAndFeesReport(_)) => {}
     SubscriptionItem::Notice(notice) => {}
 }
 ```
 
-Code that compared or serialized `ExerciseOptions` values compares or serializes the fields it needs instead.
+Rename `ExerciseOptions` to `PlaceOrder` and add the two arms; the compiler reports each site. `ExerciseOptions` derived `PartialEq` and serde; `PlaceOrder` does not, so code that compared or serialized the items compares or serializes the fields it needs instead. The subscription does not end on its own: stop reading after the execution on the option.

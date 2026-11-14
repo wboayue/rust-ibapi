@@ -174,9 +174,19 @@ with `override_natural_action`.*
 - The open order has no field marking it as an exercise; only the shared `permId` links it to the
   executions.
 - **Not probed:** lapse, assignment, automatic exercise at expiry, puts, futures options, and
-  exercising from a client other than the one that bought. Twice, after a session disconnected
-  right after its exercise, the next session's `nextValidId` repeated the exercise's order id
-  and an order sent with it got no reply; after a session that stayed open it did not repeat.
+  exercising from a client other than the one that bought.
+
+### `nextValidId` can repeat an exercise's order id after a disconnect
+
+*Live 2026-11-13 RTH, paper TWS, server 223; observed while probing `exercise_options` (#1210).*
+
+- Twice, a session disconnected right after its exercise; the next session's `nextValidId`
+  returned the exercise's order id again, and an order sent with that id got no reply at all
+  (no status, no error).
+- After a session that stayed connected until the exercise finished, `nextValidId` did not
+  repeat the id.
+- **Not probed:** whether a plain order (not an exercise) shows the same, whether it depends on
+  the client id, and whether TWS rejects the reused id later.
 
 ### `ext_operator` and `manual_order_indicator` on orders and cancels
 
