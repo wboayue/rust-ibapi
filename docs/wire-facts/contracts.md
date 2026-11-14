@@ -24,6 +24,22 @@ Contract details and option chains. Format: [README](README.md).
   (FUT/FOP).
 - C# never encodes tag 21, so `ContractBuilder::last_trade_date` has no wire effect.
 
+### `lastTradeDateOrContractMonth` (tag 4) on a future
+
+*Live 2026-11-13 09:55 ET RTH, paper TWS, server 223; contract_details for ES 202612.*
+
+- Tag 4 arrives as `20261218 08:30:00 US/Central`; `time_zone_id` is `US/Central` too.
+- Sent back as the date alone or in that full form, `contract_details`, `head_timestamp`
+  and a market-data snapshot all succeed: this build accepts both forms.
+- **Zone equals `time_zone_id`** (*live 2026-11-14 14:00 ET off-hours, paper Gateway, server
+  226*): every contract carrying a zone in tag 4 matched its `time_zone_id`. FUT on CME (ES),
+  NYMEX (CL), CBOT (ZN), CFE (VIX), EUREX (DAX, ESTX50 → `MET`), ICEEU (Z → `GB-Eire`),
+  OSE.JPN (N225 → `Japan`), HKFE (HSI → `Hongkong`); FOP ES 202612 (6943 contracts); OPT SPX
+  (`US/Central`) and SAP on EUREX. AAPL OPT on SMART sends the date alone (`20261218`), no time
+  or zone. So dropping the zone loses nothing.
+- **Not probed:** IB Gateway 10.51, where an NT adapter note reports 10372 for the full
+  form; orders; bonds.
+
 ### Option chain `exchange` is a futures-options filter
 
 *Live 2026-09-03, paper Gateway, server 220, `reqSecDefOptParams`; #792.*

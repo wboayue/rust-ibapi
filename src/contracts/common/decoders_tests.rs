@@ -203,7 +203,8 @@ fn bond_frame(last_trade_date_or_contract_month: &str) -> ResponseMessage {
 
 #[test]
 fn decode_bond_contract_details_splits_last_trade_date() {
-    // Mirrors C# EDecoderUtils.SetLastTradeDate(.., isBond: true).
+    // Mirrors C# EDecoderUtils.SetLastTradeDate(.., isBond: true). A bond keeps the
+    // contract field as sent; only maturity, last_trade_time and the zone change.
     let cases = [
         ("20430504 16:00 Europe/London", "20430504", "16:00", "Europe/London"),
         ("20430504-16:00", "20430504", "16:00", "US/Eastern"),
@@ -215,7 +216,6 @@ fn decode_bond_contract_details_splits_last_trade_date() {
         assert_eq!(details.maturity, maturity, "maturity for {raw:?}");
         assert_eq!(details.last_trade_time, time, "time for {raw:?}");
         assert_eq!(details.time_zone_id, zone, "zone for {raw:?}");
-        // C# leaves the contract field as sent for bonds.
         assert_eq!(details.contract.last_trade_date_or_contract_month, raw);
     }
 }
@@ -240,22 +240,37 @@ fn decode_contract_details_reads_last_trade_date() {
 }
 
 #[test]
-fn decode_contract_details_leaves_maturity_unset() {
-    // The split is bond-only: a ContractData frame keeps maturity empty.
+fn decode_contract_details_splits_last_trade_date() {
+    // Mirrors C# EDecoderUtils.SetLastTradeDate(.., isBond: false): the date stays
+    // in the contract, the time moves to last_trade_time, the zone is dropped, and
+    // maturity and time_zone_id are untouched.
     use crate::common::test_utils::helpers::proto_response;
     use crate::testdata::builders::contracts::contract_data;
     use crate::testdata::builders::ResponseProtoEncoder;
 
-    let frame = proto_response(
-        IncomingMessages::ContractData,
-        contract_data()
-            .request_id(9000)
-            .last_trade_date_or_contract_month("20430504")
-            .encode_proto(),
-    );
-    let details = decode_contract_details(&frame).unwrap();
-    assert_eq!(details.maturity, "");
-    assert_eq!(details.contract.last_trade_date_or_contract_month, "20430504");
+    let cases = [
+        ("20261218 08:30:00 US/Central", "20261218", "08:30:00"),
+        ("20261218-08:30:00", "20261218", "08:30:00"),
+        ("20261218", "20261218", ""),
+        ("202612", "202612", ""),
+        ("", "", ""),
+    ];
+    for (raw, date, time) in cases {
+        let frame = proto_response(
+            IncomingMessages::ContractData,
+            contract_data()
+                .request_id(9000)
+                .security_type("FUT")
+                .last_trade_date_or_contract_month(raw)
+                .time_zone_id("US/Eastern")
+                .encode_proto(),
+        );
+        let details = decode_contract_details(&frame).unwrap();
+        assert_eq!(details.contract.last_trade_date_or_contract_month, date, "date for {raw:?}");
+        assert_eq!(details.last_trade_time, time, "time for {raw:?}");
+        assert_eq!(details.time_zone_id, "US/Eastern", "zone for {raw:?}");
+        assert_eq!(details.maturity, "", "maturity for {raw:?}");
+    }
 }
 
 #[test]
