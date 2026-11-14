@@ -1952,17 +1952,6 @@ pub enum ExerciseAction {
     Lapse = 2,
 }
 
-/// Responses from exercising options.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[allow(clippy::large_enum_variant)]
-pub enum ExerciseOptions {
-    /// Open order information.
-    OpenOrder(OrderData),
-    /// Order status update.
-    OrderStatus(OrderStatus),
-}
-
 // Feature-specific implementations
 #[cfg(feature = "sync")]
 mod sync;

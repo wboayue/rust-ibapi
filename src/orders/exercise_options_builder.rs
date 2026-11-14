@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 
 use super::builder::ValidationError;
 use super::common::encoders;
-use super::ExerciseAction;
+use super::{ExerciseAction, PlaceOrder};
 use crate::accounts::types::AccountId;
 use crate::contracts::Contract;
 use crate::orders::OrderId;
@@ -101,6 +101,17 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
     /// Send the request and return a subscription yielding its order status, open order and
     /// execution updates.
     ///
+    /// TWS reports an exercise as an order on the option, so the items are [`PlaceOrder`]s.
+    /// Exercising a call (live, paper TWS, server 223) yields an open order, an execution on
+    /// the underlying, a `Filled` status, an execution on the option, then one more open order
+    /// and `Filled` status. Both executions have
+    /// [`Execution::option_exercise_type`](super::Execution::option_exercise_type) set; no
+    /// commission report arrives for them. Lapses, puts and futures options are unverified.
+    ///
+    /// The subscription does not end on its own; stop reading once the option's execution
+    /// arrives. The two frames after it repeat the fill, and the first `Filled` status is no
+    /// end marker: its `filled` counts the underlying's shares (100 for one contract).
+    ///
     /// Note: a TWS setting decides whether an exercise request must be finalized before it is sent.
     ///
     /// # Errors
@@ -113,6 +124,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::{Contract, OptionRight};
+    /// use ibapi::orders::PlaceOrder;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::option("AAPL", "20251219", 150.0, OptionRight::Call);
@@ -123,15 +135,19 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
     ///     .submit()
     ///     .expect("exercise_options failed");
     ///
-    /// // Consume the subscription so execution updates and commission reports surface.
     /// for event in subscription.iter_data() {
     ///     match event {
+    ///         // The execution on the option itself is the exercise's last.
+    ///         Ok(PlaceOrder::ExecutionData(data)) if data.contract.security_type == contract.security_type => {
+    ///             println!("exercised: {:?}", data.execution);
+    ///             break;
+    ///         }
     ///         Ok(item) => println!("exercise event: {item:?}"),
     ///         Err(e) => { eprintln!("exercise err: {e:?}"); break; }
     ///     }
     /// }
     /// ```
-    pub fn submit(self) -> Result<crate::subscriptions::sync::Subscription<super::ExerciseOptions>, Error> {
+    pub fn submit(self) -> Result<crate::subscriptions::sync::Subscription<PlaceOrder>, Error> {
         let (order_id, request) = self.encode(|| self.client.next_order_id())?;
         let subscription = self.client.send_order(order_id, request)?;
 
@@ -147,6 +163,17 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
 impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
     /// Send the request and return a subscription yielding its order status, open order and
     /// execution updates.
+    ///
+    /// TWS reports an exercise as an order on the option, so the items are [`PlaceOrder`]s.
+    /// Exercising a call (live, paper TWS, server 223) yields an open order, an execution on
+    /// the underlying, a `Filled` status, an execution on the option, then one more open order
+    /// and `Filled` status. Both executions have
+    /// [`Execution::option_exercise_type`](super::Execution::option_exercise_type) set; no
+    /// commission report arrives for them. Lapses, puts and futures options are unverified.
+    ///
+    /// The subscription does not end on its own; stop reading once the option's execution
+    /// arrives. The two frames after it repeat the fill, and the first `Filled` status is no
+    /// end marker: its `filled` counts the underlying's shares (100 for one contract).
     ///
     /// Note: a TWS setting decides whether an exercise request must be finalized before it is sent.
     ///
@@ -172,17 +199,21 @@ impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
     ///         .await
     ///         .expect("exercise_options failed");
     ///
-    ///     // Consume the subscription so execution updates and commission reports surface.
     ///     let mut events = subscription.filter_data();
     ///     while let Some(event) = events.next().await {
     ///         match event {
+    ///             // The execution on the option itself is the exercise's last.
+    ///             Ok(PlaceOrder::ExecutionData(data)) if data.contract.security_type == contract.security_type => {
+    ///                 println!("exercised: {:?}", data.execution);
+    ///                 break;
+    ///             }
     ///             Ok(item) => println!("exercise event: {item:?}"),
     ///             Err(e) => { eprintln!("exercise err: {e:?}"); break; }
     ///         }
     ///     }
     /// }
     /// ```
-    pub async fn submit(self) -> Result<crate::subscriptions::r#async::Subscription<super::ExerciseOptions>, Error> {
+    pub async fn submit(self) -> Result<crate::subscriptions::r#async::Subscription<PlaceOrder>, Error> {
         let (order_id, request) = self.encode(|| self.client.next_order_id())?;
         let internal_subscription = self.client.send_order(order_id, request).await?;
 

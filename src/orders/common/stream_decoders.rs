@@ -1,6 +1,6 @@
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::orders::common::decoders;
-use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderStatus, OrderUpdate, Orders, PlaceOrder};
+use crate::orders::{CancelOrder, Executions, OrderStatus, OrderUpdate, Orders, PlaceOrder};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -106,18 +106,6 @@ impl StreamDecoder<Executions> for Executions {
                 Ok(Executions::CommissionAndFeesReport(decoders::decode_commission_and_fees_report(message)?))
             }
             IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
-            _ => Err(Error::unexpected_response(message)),
-        }
-    }
-}
-
-impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus];
-
-    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<ExerciseOptions, Error> {
-        match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(message)?)),
-            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(message)?)),
             _ => Err(Error::unexpected_response(message)),
         }
     }

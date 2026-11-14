@@ -470,12 +470,39 @@ async fn exercise_options() {
 
     let exercise_response = subscription.next().await;
     assert!(
-        matches!(exercise_response, Some(Ok(SubscriptionItem::Data(ExerciseOptions::OpenOrder(_))))),
-        "Expected ExerciseOptions::OpenOrder, got {:?}",
+        matches!(exercise_response, Some(Ok(SubscriptionItem::Data(PlaceOrder::OpenOrder(_))))),
+        "Expected PlaceOrder::OpenOrder, got {:?}",
         exercise_response
     );
 
     assert_eq!(request_message_count(&message_bus), 1);
+}
+
+// Replays one live exercise (paper TWS, server 223): 10349 must not end the stream, and every
+// open order, status and execution after it arrives.
+#[tokio::test]
+async fn exercise_options_reads_past_preset_tif_warning_to_executions() {
+    use crate::orders::common::test_tables::{assert_exercise_live_items, exercise_live_frames};
+
+    let order_id = 16;
+    let frames = exercise_live_frames(order_id);
+    let frame_count = frames.len();
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(frames));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let contract = Contract::option("SPY", "20261120", 755.0, OptionRight::Call);
+
+    let mut subscription = client
+        .exercise_options(&contract)
+        .exercise(1)
+        .submit()
+        .await
+        .expect("exercise_options failed");
+
+    let mut items = Vec::new();
+    for _ in 0..frame_count {
+        items.push(subscription.next().await.expect("stream ended early").expect("exercise item failed"));
+    }
+    assert_exercise_live_items(&items, &contract);
 }
 
 #[tokio::test]

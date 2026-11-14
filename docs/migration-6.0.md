@@ -610,3 +610,29 @@ let zone = &details.time_zone_id;
 ```
 
 Code that split the field itself can drop that step. Nothing fails to compile; check any code that parses the field. For a typed date, `details.contract.last_trade_date` (`Option<time::Date>`) already carries the last trading day of a future or option.
+
+### 29. `exercise_options` yields `PlaceOrder`; `ExerciseOptions` is removed
+
+TWS reports an exercise as an order on the option, so an `exercise_options` subscription now yields `PlaceOrder`, the item type of `place_order`, and `ExerciseOptions` is gone. The subscription also yields the exercise's two executions (on the underlying and on the option) as `PlaceOrder::ExecutionData`, each with `Execution::option_exercise_type` set; they were dropped before. TWS sends no commission report for them.
+
+```rust,ignore
+// 5.x
+match item {
+    SubscriptionItem::Data(ExerciseOptions::OpenOrder(order)) => {}
+    SubscriptionItem::Data(ExerciseOptions::OrderStatus(status)) => {}
+    SubscriptionItem::Notice(notice) => {}
+}
+
+// 6.0
+match item {
+    SubscriptionItem::Data(PlaceOrder::OpenOrder(order)) => {}
+    SubscriptionItem::Data(PlaceOrder::OrderStatus(status)) => {}
+    SubscriptionItem::Data(PlaceOrder::ExecutionData(data)) => {
+        // data.execution.option_exercise_type is Exercise, Lapse, ...
+    }
+    SubscriptionItem::Data(PlaceOrder::CommissionAndFeesReport(_)) => {}
+    SubscriptionItem::Notice(notice) => {}
+}
+```
+
+Rename `ExerciseOptions` to `PlaceOrder` and add the two arms; the compiler reports each site. `ExerciseOptions` derived `PartialEq` and serde; `PlaceOrder` does not, so code that compared or serialized the items compares or serializes the fields it needs instead. The subscription does not end on its own: stop reading after the execution on the option (the `ExecutionData` whose `contract.security_type` is the option's). An open order and a `Filled` status follow it and repeat the fill; the earlier `Filled` status is no end marker, since its `filled` counts the underlying's shares (100 for one contract).

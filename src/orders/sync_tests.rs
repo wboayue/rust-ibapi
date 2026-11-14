@@ -6,10 +6,11 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, ExerciseOptions, OcaType, OrderCondition, OrderStatusKind, TimeInForce};
+use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, OrderCondition, OrderStatusKind, TimeInForce};
 use crate::proto;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_and_fees_report, completed_order, completed_orders_end,
     completed_orders_request, execution_data, execution_data_end, executions_request, global_cancel_request, next_valid_id,
@@ -238,14 +239,14 @@ fn cancel_order_delivers_202_as_non_terminal_notice() {
     let subscription = client.cancel_order(order_id, "").expect("cancel_order failed");
 
     match subscription.next() {
-        Some(Ok(crate::subscriptions::SubscriptionItem::Notice(notice))) => {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
             assert!(notice.is_cancellation(), "expected cancellation notice, got {notice:?}");
         }
         other => panic!("expected non-terminal cancellation Notice, got {other:?}"),
     }
 
     match subscription.next() {
-        Some(Ok(crate::subscriptions::SubscriptionItem::Data(CancelOrder::OrderStatus(status)))) => {
+        Some(Ok(SubscriptionItem::Data(CancelOrder::OrderStatus(status)))) => {
             assert_eq!(status.status, OrderStatusKind::Cancelled);
         }
         other => panic!("expected OrderStatus after the 202 notice, got {other:?}"),
@@ -598,12 +599,33 @@ fn exercise_options() {
 
     let exercise_response = subscription.next_data();
     assert!(
-        matches!(exercise_response, Some(Ok(ExerciseOptions::OpenOrder(_)))),
-        "Expected ExerciseOptions::OpenOrder, got {:?}",
+        matches!(exercise_response, Some(Ok(PlaceOrder::OpenOrder(_)))),
+        "Expected PlaceOrder::OpenOrder, got {:?}",
         exercise_response
     );
 
     assert_eq!(request_message_count(&message_bus), 1);
+}
+
+// Replays one live exercise (paper TWS, server 223): 10349 must not end the stream, and every
+// open order, status and execution after it arrives.
+#[test]
+fn exercise_options_reads_past_preset_tif_warning_to_executions() {
+    use crate::orders::common::test_tables::{assert_exercise_live_items, exercise_live_frames};
+
+    let order_id = 16;
+    let frames = exercise_live_frames(order_id);
+    let frame_count = frames.len();
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(frames));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let contract = Contract::option("SPY", "20261120", 755.0, OptionRight::Call);
+
+    let subscription = client.exercise_options(&contract).exercise(1).submit().expect("exercise_options failed");
+
+    let items: Vec<_> = (0..frame_count)
+        .map(|_| subscription.next().expect("stream ended early").expect("exercise item failed"))
+        .collect();
+    assert_exercise_live_items(&items, &contract);
 }
 
 #[test]

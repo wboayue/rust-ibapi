@@ -157,6 +157,37 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   is optional on a single-account login.
 - **Not probed:** multi-account (FA) logins.
 
+### `exercise_options` replies
+
+*Live 2026-11-13 11:22–11:38 ET RTH, paper TWS, server 223, SPY 20261120 calls (755, 780), exercise
+with `override_natural_action`.*
+
+- First reply: 10349 "Order TIF was set to DAY based on order preset.", bound to the exercise's
+  order id. The exercise goes ahead.
+- Then, on the exercise's order id: OpenOrder (BUY LMT, price 0, quantity 1, no account)
+  PreSubmitted; ExecutionData for the underlying (BOT 100 at the strike); OpenOrder and
+  OrderStatus Filled with quantity and `filled` **100**; ExecutionData for the option (SLD 1 at
+  0); OpenOrder and OrderStatus Filled with `filled` 1. Both executions carry
+  `optExerciseOrLapseType` 1 (Exercise) and the exercise order's `permId`.
+- No commission report for either execution, within 40 s or by `reqExecutions` later the same
+  day.
+- The open order has no field marking it as an exercise; only the shared `permId` links it to the
+  executions.
+- **Not probed:** lapse, assignment, automatic exercise at expiry, puts, futures options, and
+  exercising from a client other than the one that bought.
+
+### `nextValidId` can repeat an exercise's order id after a disconnect
+
+*Live 2026-11-13 RTH, paper TWS, server 223; observed while probing `exercise_options` (#1210).*
+
+- Twice, a session disconnected right after its exercise; the next session's `nextValidId`
+  returned the exercise's order id again, and an order sent with that id got no reply at all
+  (no status, no error).
+- After a session that stayed connected until the exercise finished, `nextValidId` did not
+  repeat the id.
+- **Not probed:** whether a plain order (not an exercise) shows the same, whether it depends on
+  the client id, and whether TWS rejects the reused id later.
+
 ### `ext_operator` and `manual_order_indicator` on orders and cancels
 
 *Live 2026-11-10 20:03–20:07 ET (AAPL off-hours, ES Globex overnight), paper Gateway, server 226; #1200.*

@@ -349,6 +349,8 @@ fn notice_category_partition() {
         (10090, NoticeCategory::DataAdvisory),
         (10091, NoticeCategory::DataAdvisory),
         (10167, NoticeCategory::DataAdvisory),
+        (ORDER_PRESET_TIF_CODE, NoticeCategory::Warning), // 10349: TWS goes on with the order
+        (ORDER_PRESET_TIF_CODE + 1, NoticeCategory::Error),
         (100, NoticeCategory::Error),
         (502, NoticeCategory::Error),
         (10000, NoticeCategory::Error),
