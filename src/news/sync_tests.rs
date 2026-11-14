@@ -116,7 +116,7 @@ fn historical_news_works() {
 }
 
 #[test]
-fn historical_news_page() {
+fn historical_news_page_works() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::HistoricalNews,

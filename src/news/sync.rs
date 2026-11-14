@@ -126,6 +126,10 @@ impl Client {
     /// `has_more` flag, which [`historical_news`](Self::historical_news)
     /// discards. Waits for TWS's end frame.
     ///
+    /// TWS returns the newest headlines first. To read the next page when `has_more` is
+    /// set, request again with `end_time` set to the oldest article's `time`; `end_time`
+    /// is inclusive, so that article comes back first and should be skipped.
+    ///
     /// # Arguments
     ///
     /// * `contract_id`    - Contract ID of ticker. See [contract_details](Client::contract_details) for how to retrieve contract ID.
@@ -140,8 +144,7 @@ impl Client {
     /// request's channel closes before the end frame; [`Error::Timeout`] if the page has
     /// not fully arrived within the one-shot timeout (30 seconds by default);
     /// [`Error::ConnectionReset`] if the connection drops on every retry (three),
-    /// [`Error::Shutdown`] if the client shuts down. On the async client, a channel that
-    /// overflows mid-page fails the read rather than return a short page.
+    /// [`Error::Shutdown`] if the client shuts down.
     ///
     /// # Examples
     ///

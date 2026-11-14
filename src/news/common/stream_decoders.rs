@@ -1,6 +1,5 @@
 use crate::common::error_helpers;
 use crate::market_data::realtime;
-use crate::messages::Notice;
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::news::common::decoders;
 use crate::news::common::encoders;
@@ -64,14 +63,7 @@ impl StreamDecoder<HistoricalNewsFrame> for HistoricalNewsFrame {
     }
 
     // No cancel: TWS has no cancel for `reqHistoricalNews`, so `cancel_message`
-    // keeps its `NotImplemented` default.
-
-    fn is_snapshot_end(&self) -> bool {
-        matches!(self, Self::End { .. })
-    }
-
-    /// Any error: a one-shot query has nothing to continue after one.
-    fn rejection_ends_request(_notice: &Notice) -> bool {
-        true
-    }
+    // keeps its `NotImplemented` default, and the hooks that only decide
+    // whether drop sends one (`is_snapshot_end`, `rejection_ends_request`)
+    // are left at theirs.
 }
