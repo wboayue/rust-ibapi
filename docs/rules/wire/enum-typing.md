@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
