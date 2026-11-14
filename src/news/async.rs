@@ -4,6 +4,7 @@ use super::common::{self, decoders, encoders};
 use super::*;
 use crate::client::{ClientRequestBuilders, SubscriptionBuilderExt};
 use crate::common::request_helpers::{self, expect_proto};
+use crate::common::retry::retry_on_connection_reset;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::Subscription;
@@ -113,6 +114,89 @@ impl Client {
         let request =
             encoders::encode_request_historical_news(builder.request_id(), contract_id, provider_codes, start_time, end_time, total_results)?;
         builder.send(request).await
+    }
+
+    /// Requests one page of historical news headlines: the articles and TWS's
+    /// `has_more` flag, which [`historical_news`](Self::historical_news)
+    /// discards. Waits for TWS's end frame.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_id`    - Contract ID of ticker. See [contract_details](Client::contract_details) for how to retrieve contract ID.
+    /// * `provider_codes` - A list of provider codes.
+    /// * `start_time`     - Marks the (exclusive) start of the date range.
+    /// * `end_time`       - Marks the (inclusive) end of the date range.
+    /// * `total_results`  - The maximum number of headlines to fetch (1 – 300). TWS returns at most 300 for a
+    ///   larger value, without a notice, and rejects 0 with error 321 (live: 2026-11-05).
+    ///
+    /// # Errors
+    /// A TWS rejection as [`Error::Notice`]; [`Error::UnexpectedEndOfStream`] if the
+    /// request's channel closes before the end frame; [`Error::Timeout`] if the page has
+    /// not fully arrived within the one-shot timeout (30 seconds by default);
+    /// [`Error::ConnectionReset`] if the connection drops on every retry (three),
+    /// [`Error::Shutdown`] if the client shuts down. On the async client, a channel that
+    /// overflows mid-page fails the read rather than return a short page.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    /// use time::macros::datetime;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), ibapi::Error> {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await?;
+    ///
+    ///     let page = client
+    ///         .historical_news_page(
+    ///             265598, // AAPL
+    ///             &["DJNL", "BRFG"],
+    ///             datetime!(2023-01-01 0:00 UTC),
+    ///             datetime!(2023-01-02 0:00 UTC),
+    ///             5,
+    ///         )
+    ///         .await?;
+    ///
+    ///     for article in &page.articles {
+    ///         println!("{:?}: {}", article.time, article.headline);
+    ///     }
+    ///     if page.has_more {
+    ///         println!("more headlines match the range");
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    // Flat like `historical_news`: five required arguments, no defaults; see docs/rules/style/param-budget.md.
+    pub async fn historical_news_page(
+        &self,
+        contract_id: i32,
+        provider_codes: &[&str],
+        start_time: OffsetDateTime,
+        end_time: OffsetDateTime,
+        total_results: u16,
+    ) -> Result<HistoricalNewsPage, Error> {
+        let deadline = request_helpers::one_shot_deadline(self);
+        retry_on_connection_reset(self, deadline, || async {
+            request_helpers::check_deadline(deadline)?;
+            let builder = self.request();
+            let request =
+                encoders::encode_request_historical_news(builder.request_id(), contract_id, provider_codes, start_time, end_time, total_results)?;
+            let mut subscription = builder.send::<HistoricalNewsFrame>(request).await?;
+
+            // Only the end frame carries `has_more` and proves the page is
+            // complete, so a close before it is an error.
+            let mut page = HistoricalNewsPage::default();
+            loop {
+                match request_helpers::next_frame(&mut subscription, deadline).await? {
+                    HistoricalNewsFrame::Article(article) => page.articles.push(article),
+                    HistoricalNewsFrame::End { has_more } => {
+                        page.has_more = has_more;
+                        return Ok(page);
+                    }
+                }
+            }
+        })
+        .await
     }
 
     /// Requests news article body

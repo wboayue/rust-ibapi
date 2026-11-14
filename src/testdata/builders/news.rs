@@ -300,12 +300,14 @@ impl ResponseProtoEncoder for HistoricalNewsResponse {
 #[derive(Clone, Copy, Debug)]
 pub struct HistoricalNewsEndResponse {
     pub request_id: i32,
+    pub has_more: Option<bool>,
 }
 
 impl Default for HistoricalNewsEndResponse {
     fn default() -> Self {
         Self {
             request_id: TEST_REQ_ID_FIRST,
+            has_more: None,
         }
     }
 }
@@ -313,6 +315,10 @@ impl Default for HistoricalNewsEndResponse {
 impl HistoricalNewsEndResponse {
     pub fn request_id(mut self, v: i32) -> Self {
         self.request_id = v;
+        self
+    }
+    pub fn has_more(mut self, v: bool) -> Self {
+        self.has_more = Some(v);
         self
     }
 }
@@ -323,7 +329,7 @@ impl ResponseProtoEncoder for HistoricalNewsEndResponse {
     fn to_proto(&self) -> Self::Proto {
         proto::HistoricalNewsEnd {
             req_id: Some(self.request_id),
-            has_more: None,
+            has_more: self.has_more,
         }
     }
 }

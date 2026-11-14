@@ -110,6 +110,14 @@ fn decode_historical_news_proto_unusable_time_is_none() {
 }
 
 #[test]
+fn decode_historical_news_end_proto_works() {
+    for (has_more, expected) in [(Some(true), true), (Some(false), false), (None, false)] {
+        let proto_msg = crate::proto::HistoricalNewsEnd { req_id: Some(1), has_more };
+        assert_eq!(decode_historical_news_end_proto(proto_msg), expected, "{has_more:?}");
+    }
+}
+
+#[test]
 fn decode_news_providers_proto_works() {
     let proto_msg = crate::proto::NewsProviders {
         news_providers: vec![
