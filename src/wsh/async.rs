@@ -2,6 +2,7 @@
 
 use time::Date;
 
+use crate::accounts::types::ContractId;
 use crate::{client::ClientRequestBuilders, common::request_helpers, subscriptions::Subscription, Client, Error};
 
 use super::builder::{WshEventDataBuilder, WshEventFilterBuilder};
@@ -54,7 +55,7 @@ impl Client {
     ///     println!("{event_data:?}");
     /// }
     /// ```
-    pub fn wsh_event_data_by_contract(&self, contract_id: i32) -> WshEventDataBuilder<'_, Self> {
+    pub fn wsh_event_data_by_contract(&self, contract_id: impl Into<ContractId>) -> WshEventDataBuilder<'_, Self> {
         WshEventDataBuilder::new(self, contract_id)
     }
 

@@ -35,10 +35,14 @@ fn historical_news() {
     let details = client.contract_details(&contract).expect("contract_details failed");
     let con_id = details[0].contract.contract_id;
 
-    let end = time::OffsetDateTime::now_utc();
-    let start = end - time::Duration::days(7);
+    let since = time::OffsetDateTime::now_utc() - time::Duration::days(7);
 
-    let subscription = client.historical_news(con_id, &["BRFG"], start, end, 5).expect("historical_news failed");
+    let subscription = client
+        .historical_news(con_id, &["BRFG"])
+        .since(since)
+        .limit(5)
+        .subscribe()
+        .expect("historical_news failed");
 
     // Paper accounts may not have news subscriptions - just verify API works
     let _item = subscription.next_timeout(Duration::from_secs(5));

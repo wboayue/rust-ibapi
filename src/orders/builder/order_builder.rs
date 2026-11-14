@@ -1,7 +1,7 @@
 use super::algo_builders::AlgoParams;
 use super::types::*;
 use super::validation;
-use crate::accounts::types::ContractId;
+use crate::accounts::types::{AccountId, ContractId};
 use crate::contracts::Contract;
 use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
@@ -743,8 +743,8 @@ impl<T> OrderBuilder<T> {
     }
 
     /// Set account for order
-    pub fn account(mut self, account: impl Into<String>) -> Self {
-        self.account = Some(account.into());
+    pub fn account(mut self, account: impl Into<AccountId>) -> Self {
+        self.account = Some(account.into().0);
         self
     }
 

@@ -16,13 +16,14 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let contract_id = 76792991; // TSLA
-    let provider_codes = vec!["BRFG", "DJ-N", "DJ-RT"];
-    let start_time = datetime!(2024-10-27 0:00 UTC);
-    let end_time = datetime!(2024-10-29 0:00 UTC);
-    let total_results = 10;
+    let provider_codes = ["BRFG", "DJ-N", "DJ-RT"];
 
+    // The newest 10 headlines before the date; `.since(..)` instead returns those after it.
     let articles = client
-        .historical_news(contract_id, &provider_codes, start_time, end_time, total_results)
+        .historical_news(contract_id, &provider_codes)
+        .before(datetime!(2026-11-01 0:00 UTC))
+        .limit(10)
+        .subscribe()
         .expect("request historical news failed");
 
     for article in articles.iter_data() {
