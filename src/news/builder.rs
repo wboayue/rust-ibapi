@@ -3,6 +3,10 @@ use time::OffsetDateTime;
 use super::HistoricalNewsPage;
 use crate::Error;
 
+#[cfg(test)]
+#[path = "builder_tests.rs"]
+mod tests;
+
 /// The most headlines TWS returns for one request; a larger `limit` is capped
 /// to it without a notice (live: 2026-11-05).
 const MAX_HEADLINES: u16 = 300;
@@ -29,11 +33,11 @@ pub(crate) enum NewsBound {
 /// and [`since`](Self::since) set one bound, and the last call wins.
 #[must_use = "HistoricalNewsBuilder does nothing until you call .page() or .subscribe()"]
 pub struct HistoricalNewsBuilder<'a, C> {
-    pub(crate) client: &'a C,
-    pub(crate) contract_id: i32,
-    pub(crate) provider_codes: &'a [&'a str],
-    pub(crate) bound: Option<NewsBound>,
-    pub(crate) limit: u16,
+    pub(super) client: &'a C,
+    contract_id: i32,
+    provider_codes: &'a [&'a str],
+    bound: Option<NewsBound>,
+    limit: u16,
 }
 
 impl<'a, C> HistoricalNewsBuilder<'a, C> {
@@ -71,6 +75,11 @@ impl<'a, C> HistoricalNewsBuilder<'a, C> {
     pub fn limit(mut self, limit: u16) -> Self {
         self.limit = limit;
         self
+    }
+
+    /// The `reqHistoricalNews` message for this request under `request_id`.
+    pub(super) fn encode(&self, request_id: i32) -> Result<Vec<u8>, Error> {
+        super::common::encoders::encode_request_historical_news(request_id, self.contract_id, self.provider_codes, self.bound, self.limit)
     }
 }
 

@@ -551,7 +551,7 @@ without a notice, so every request returned the newest headlines. TWS also uses 
 request: given both, it reads the start time as the newest bound and ignores the end time
 ([wire facts](wire-facts/news.md#historical-news-range-and-has_more)). So pick the bound that
 matches the intent. For "what happened since `start`", use `.since(start)`. For "the latest
-headlines up to `end`", use `.before(end)`; it excludes `end`, where the 5.x argument included it.
+headlines before `end`", use `.before(end)`.
 A 5.x call whose range was not the latest headlines returned the wrong ones; the same call with a
 bound now returns what it asked for.
 

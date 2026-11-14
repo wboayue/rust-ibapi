@@ -179,13 +179,7 @@ impl Client {
 /// The headline stream behind [`HistoricalNewsBuilder::subscribe`].
 pub(super) async fn historical_news_subscription(request: &HistoricalNewsBuilder<'_, Client>) -> Result<Subscription<NewsArticle>, Error> {
     let builder = request.client.request();
-    let message = encoders::encode_request_historical_news(
-        builder.request_id(),
-        request.contract_id,
-        request.provider_codes,
-        request.bound,
-        request.limit,
-    )?;
+    let message = request.encode(builder.request_id())?;
     builder.send(message).await
 }
 
@@ -196,13 +190,7 @@ pub(super) async fn historical_news_page(request: &HistoricalNewsBuilder<'_, Cli
     retry_on_connection_reset(client, deadline, || async {
         request_helpers::check_deadline(deadline)?;
         let builder = client.request();
-        let message = encoders::encode_request_historical_news(
-            builder.request_id(),
-            request.contract_id,
-            request.provider_codes,
-            request.bound,
-            request.limit,
-        )?;
+        let message = request.encode(builder.request_id())?;
         let mut subscription = builder.send::<HistoricalNewsFrame>(message).await?;
 
         // Only the end frame carries `has_more` and proves the page is
