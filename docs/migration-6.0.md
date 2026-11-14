@@ -576,18 +576,21 @@ Integer literals, `i32`, `ContractId`, `&str`, `String`, `&String`, `AccountId` 
 - **A value that converts only into `String`.** `Cow<str>`, `Box<str>`, `char`, `&mut str`, a user type with only `Into<String>`, or a generic `impl Into<String>` forwarded to `account(..)`: convert to `String` first.
 
 ```rust,ignore
-// 5.x (the first two lines still compile in 6.0)
+let account: String = client.managed_accounts()?.remove(0);
+let field: &str = "265598";
+let cow: Cow<str> = Cow::Borrowed("DU1234567");
+
+// 5.x
 let pnl = client.pnl(&AccountId(account.clone()), None)?;
 let single = client.pnl_single(&AccountId(account.clone()), ContractId(contract.contract_id), None)?;
 let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse()?);
-let order = client.order(&contract).buy(100).market().account(cow_account);
+let order = client.order(&contract).buy(100).market().account(cow);
 
-// 6.0
+// 6.0: the 5.x pnl / pnl_single lines still compile; these are the shorter forms
 let pnl = client.pnl(&account, None)?;
 let single = client.pnl_single(&account, contract.contract_id, None)?;
-let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse::<i32>()?);
-let account: String = cow_account.into();
-let order = client.order(&contract).buy(100).market().account(account);
+let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse::<i32>()?); // was inferred from i32
+let order = client.order(&contract).buy(100).market().account(cow.into_owned());     // Cow<str> isn't Into<AccountId>
 ```
 
 The compiler reports every call that no longer compiles. Nothing changes at runtime.
