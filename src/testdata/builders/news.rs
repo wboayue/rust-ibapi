@@ -9,8 +9,6 @@ use crate::common::test_utils::helpers::constants::{TEST_CONTRACT_ID, TEST_REQ_I
 use crate::messages::OutgoingMessages;
 use crate::proto;
 use crate::proto::encoders::{some_bool, some_str};
-use crate::ToField;
-use time::OffsetDateTime;
 
 empty_request_builder!(NewsProvidersRequestBuilder, NewsProvidersRequest, OutgoingMessages::RequestNewsProviders);
 
@@ -48,8 +46,9 @@ pub struct HistoricalNewsRequestBuilder {
     pub request_id: i32,
     pub contract_id: i32,
     pub provider_codes: Vec<String>,
-    pub start_time: OffsetDateTime,
-    pub end_time: OffsetDateTime,
+    /// The wire text, spelled out: tests assert the format TWS reads.
+    pub start_date_time: Option<String>,
+    pub end_date_time: Option<String>,
     pub total_results: u16,
 }
 
@@ -59,8 +58,8 @@ impl Default for HistoricalNewsRequestBuilder {
             request_id: TEST_REQ_ID_FIRST,
             contract_id: TEST_CONTRACT_ID,
             provider_codes: Vec::new(),
-            start_time: OffsetDateTime::UNIX_EPOCH,
-            end_time: OffsetDateTime::UNIX_EPOCH,
+            start_date_time: None,
+            end_date_time: None,
             total_results: 0,
         }
     }
@@ -75,12 +74,12 @@ impl HistoricalNewsRequestBuilder {
         self.provider_codes = v.iter().map(|s| s.as_ref().to_string()).collect();
         self
     }
-    pub fn start_time(mut self, v: OffsetDateTime) -> Self {
-        self.start_time = v;
+    pub fn start_date_time(mut self, v: &str) -> Self {
+        self.start_date_time = Some(v.to_string());
         self
     }
-    pub fn end_time(mut self, v: OffsetDateTime) -> Self {
-        self.end_time = v;
+    pub fn end_date_time(mut self, v: &str) -> Self {
+        self.end_date_time = Some(v.to_string());
         self
     }
     pub fn total_results(mut self, v: u16) -> Self {
@@ -98,8 +97,8 @@ impl RequestEncoder for HistoricalNewsRequestBuilder {
             req_id: Some(self.request_id),
             con_id: Some(self.contract_id),
             provider_codes: Some(self.provider_codes.join("+")),
-            start_date_time: Some(self.start_time.to_field()),
-            end_date_time: Some(self.end_time.to_field()),
+            start_date_time: self.start_date_time.clone(),
+            end_date_time: self.end_date_time.clone(),
             total_results: Some(self.total_results as i32),
             historical_news_options: Default::default(),
         }

@@ -10,7 +10,7 @@ triggers:
   - a public method takes several Option arguments
 symbols: [too_many_arguments]
 related: [domain-module-layout, macros-last-resort, doc-parity-audit]
-precedents: ["#549", "#573", "#660", "#752", "#792", "#901", "#1079", "#1123"]
+precedents: ["#549", "#573", "#660", "#752", "#792", "#901", "#1079", "#1123", "#1213"]
 ---
 
 Three parameters is the budget for the **public API** (anything rustdoc shows). The receiver
@@ -46,13 +46,16 @@ not the destination; the builder that later absorbs the split is not undoing it.
 [doc parity audit](../docs/doc-parity-audit.md). Name the optional's setter to read in the
 chain: `.ending(date)`, not `.end_date(date)`.
 
-Public signatures over budget are all-required and kept flat with a reason: `historical_news`
-(five arguments; `historical_news_page` mirrors it), `Contract::option` (superseded by
-`Contract::call()` / `put()`), and the client-less `orders::order_builder` free functions (module
-doc explains).
+Public signatures over budget are all-required and kept flat with a reason: `Contract::option`
+(superseded by `Contract::call()` / `put()`) and the client-less `orders::order_builder` free
+functions (module doc explains).
 
 ## Precedents
 
+- #1213 — `historical_news(contract_id, codes, start, end, total)` was kept flat as "all five
+  required" (#901). A live probe showed TWS uses one bound per request, so two of the five were
+  never both meaningful; it became a builder (`.before` / `.since` / `.limit`). Counter-example to
+  "all required, no default": probe before accepting it.
 - #1079 — scoped the budget to the public API; annotating the internal 4–7-arg functions would
   have been churn with no caller to protect.
 - #901 — removed free functions whose same-typed prices were ordered differently from the fluent

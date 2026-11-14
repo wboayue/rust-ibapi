@@ -34,11 +34,13 @@ async fn historical_news() {
     let details = client.contract_details(&contract).await.expect("contract_details failed");
     let con_id = details[0].contract.contract_id;
 
-    let end = time::OffsetDateTime::now_utc();
-    let start = end - time::Duration::days(7);
+    let since = time::OffsetDateTime::now_utc() - time::Duration::days(7);
 
     let mut subscription = client
-        .historical_news(con_id, &["BRFG"], start, end, 5)
+        .historical_news(con_id, &["BRFG"])
+        .since(since)
+        .limit(5)
+        .subscribe()
         .await
         .expect("historical_news failed");
 
