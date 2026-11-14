@@ -404,20 +404,20 @@ fn farm_code_table() {
 
 #[test]
 fn data_farm_reads_kind_status_and_name() {
-    use ConnectivityStatus::*;
+    use ConnectivityStatus::{Broken, Connecting, Inactive, Ok as FarmOk};
     use DataFarmKind::*;
-    // The OK messages are as paper TWS sent them at connect (server 223,
-    // 2026-11-13/14). The inactive shape, with `.` before the name, is from
-    // IB-reported logs; not yet captured live.
+    // The first four messages are as paper TWS/Gateway sent them at connect
+    // (docs/wire-facts/protocol.md#data-farm-notices). The rest, including the
+    // inactive shape with `.` before the name, are not captured live.
     let cases = [
-        (2104, "Market data farm connection is OK:usopt", MarketData, Ok, Some("usopt")),
-        (2104, "Market data farm connection is OK:usfarm.nj", MarketData, Ok, Some("usfarm.nj")),
-        (2106, "HMDS data farm connection is OK:ushmds", HistoricalData, Ok, Some("ushmds")),
+        (2104, "Market data farm connection is OK:usopt", MarketData, FarmOk, Some("usopt")),
+        (2104, "Market data farm connection is OK:usfarm", MarketData, FarmOk, Some("usfarm")),
+        (2106, "HMDS data farm connection is OK:ushmds", HistoricalData, FarmOk, Some("ushmds")),
         (
             2158,
             "Sec-def data farm connection is OK:secdefnj",
             SecurityDefinition,
-            Ok,
+            FarmOk,
             Some("secdefnj"),
         ),
         (2103, "Market data farm connection is broken: usfarm ", MarketData, Broken, Some("usfarm")),
@@ -436,7 +436,7 @@ fn data_farm_reads_kind_status_and_name() {
             Inactive,
             Some("ushmds"),
         ),
-        (2104, "Market data farm connection is OK", MarketData, Ok, None),
+        (2104, "Market data farm connection is OK", MarketData, FarmOk, None),
         (2105, "HMDS data farm connection is broken:", HistoricalData, Broken, None),
         (2107, "HMDS data farm connection is inactive.", HistoricalData, Inactive, None),
     ];

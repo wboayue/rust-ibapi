@@ -100,3 +100,20 @@ longer occurs for them.
   third account_summary request on the same connection still got 322 (max 2) 10s later. A fresh
   connection per request works. Unknown whether TWS keeps the slot or the cancel is
   ineffective.
+
+### Data-farm notices
+
+*Live 2026-11-13 (session not recorded), paper TWS, server 223; live 2026-11-14 weekend, paper Gateway,
+server 226; #1209 (`FARM_CODES`, `Notice::data_farm` in `src/messages/notice.rs`).*
+
+- At connect, TWS sends one global notice (request id -1) per farm, with the farm name after
+  a `:` and no space:
+  - TWS, server 223: `2104 Market data farm connection is OK:usopt`, `2104 ...OK:usfarm`,
+    `2106 HMDS data farm connection is OK:ushmds`, `2158 Sec-def data farm connection is
+    OK:secdefnj`.
+  - Gateway, server 226: `2104 ...OK:usfuture`, `2104 ...OK:usfarm`, `2106 ...OK:ushmds`,
+    `2158 ...OK:secdefnj`.
+- Only OK codes appeared in either burst.
+- **Not probed:** broken (2103, 2105, 2157), inactive (2107, 2108) and connecting (2119) text.
+  IB-reported logs show the inactive notices ending `...available upon demand.usfarm`, a `.`
+  rather than a `:` before the name; `Notice::data_farm` parses that shape, unverified.
