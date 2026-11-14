@@ -3,6 +3,7 @@
 use super::common::stream_decoders::{ImpliedVolatilityRequest, OptionPriceRequest};
 use super::common::{decoders, encoders};
 use super::*;
+use crate::accounts::types::ContractId;
 use crate::client::ids::RequestId;
 use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
@@ -323,7 +324,12 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn option_chain<'a>(&'a self, symbol: &'a str, security_type: SecurityType, contract_id: i32) -> OptionChainBuilder<'a, Self> {
+    pub fn option_chain<'a>(
+        &'a self,
+        symbol: &'a str,
+        security_type: SecurityType,
+        contract_id: impl Into<ContractId>,
+    ) -> OptionChainBuilder<'a, Self> {
         OptionChainBuilder::new(self, symbol, security_type, contract_id, self.mint_request_id())
     }
 }

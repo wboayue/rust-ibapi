@@ -1,6 +1,7 @@
 use time::OffsetDateTime;
 
 use super::HistoricalNewsPage;
+use crate::accounts::types::ContractId;
 use crate::Error;
 
 #[cfg(test)]
@@ -41,10 +42,10 @@ pub struct HistoricalNewsBuilder<'a, C> {
 }
 
 impl<'a, C> HistoricalNewsBuilder<'a, C> {
-    pub(crate) fn new(client: &'a C, contract_id: i32, provider_codes: &'a [&'a str]) -> Self {
+    pub(crate) fn new(client: &'a C, contract_id: impl Into<ContractId>, provider_codes: &'a [&'a str]) -> Self {
         Self {
             client,
-            contract_id,
+            contract_id: contract_id.into().value(),
             provider_codes,
             bound: None,
             limit: MAX_HEADLINES,

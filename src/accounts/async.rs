@@ -124,23 +124,22 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::accounts::types::AccountId;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let account = AccountId("account id".to_string());
-    ///     let mut subscription = client.pnl(&account, None).await.expect("error requesting pnl");
+    ///     let mut subscription = client.pnl("DU1234567", None).await.expect("error requesting pnl");
     ///
     ///     while let Some(pnl) = subscription.next().await {
     ///         println!("{pnl:?}")
     ///     }
     /// }
     /// ```
-    pub async fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
+    pub async fn pnl(&self, account: impl Into<AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
+        let account = account.into();
         let builder = self.request();
-        let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
+        let request = encoders::encode_request_pnl(builder.request_id(), &account, model_code)?;
         builder.send(request).await
     }
 
@@ -157,17 +156,13 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::accounts::types::{AccountId, ContractId};
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     let account = AccountId("<account id>".to_string());
-    ///     let contract_id = ContractId(1001);
-    ///
-    ///     let mut subscription = client.pnl_single(&account, contract_id, None).await.expect("error requesting pnl");
+    ///     let mut subscription = client.pnl_single("DU1234567", 1001, None).await.expect("error requesting pnl");
     ///
     ///     while let Some(pnl) = subscription.next().await {
     ///         println!("{pnl:?}")
@@ -176,12 +171,12 @@ impl Client {
     /// ```
     pub async fn pnl_single(
         &self,
-        account: &AccountId,
-        contract_id: ContractId,
+        account: impl Into<AccountId>,
+        contract_id: impl Into<ContractId>,
         model_code: Option<&ModelCode>,
     ) -> Result<Subscription<PnLSingle>, Error> {
         let builder = self.request();
-        let request = encoders::encode_request_pnl_single(builder.request_id(), account, contract_id, model_code)?;
+        let request = encoders::encode_request_pnl_single(builder.request_id(), &account.into(), contract_id.into(), model_code)?;
         builder.send(request).await
     }
 
@@ -310,7 +305,6 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::accounts::AccountUpdate;
-    /// use ibapi::accounts::types::AccountId;
     /// use ibapi::subscriptions::SubscriptionItem;
     /// use futures::StreamExt;
     ///
@@ -318,9 +312,7 @@ impl Client {
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     let account = AccountId("U1234567".to_string());
-    ///
-    ///     let mut subscription = client.account_updates(&account).await.expect("error requesting account updates");
+    ///     let mut subscription = client.account_updates("U1234567").await.expect("error requesting account updates");
     ///
     ///     while let Some(item) = subscription.next().await {
     ///         match item {
@@ -336,7 +328,8 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
+    pub async fn account_updates(&self, account: impl Into<AccountId>) -> Result<Subscription<AccountUpdate>, Error> {
+        let account = &account.into();
         let request = encoders::encode_request_account_updates(true, account)?;
         let subscription = self.message_bus.send_account_updates_request(account, request).await?;
         Ok(Subscription::new_from_internal(

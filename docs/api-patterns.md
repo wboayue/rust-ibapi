@@ -61,18 +61,20 @@ Gate a feature newer than the connection floor with `check_version` (see
 ```rust
 // Sync mode (in domain/sync.rs as impl Client block)
 impl Client {
-    pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
+    pub fn pnl(&self, account: impl Into<AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
+        let account = account.into();
         let builder = self.request();
-        let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
+        let request = encoders::encode_request_pnl(builder.request_id(), &account, model_code)?;
         builder.send(request)
     }
 }
 
 // Async mode (in domain/async.rs as impl Client block)
 impl Client {
-    pub async fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
+    pub async fn pnl(&self, account: impl Into<AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
+        let account = account.into();
         let builder = self.request();
-        let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
+        let request = encoders::encode_request_pnl(builder.request_id(), &account, model_code)?;
         builder.send(request).await
     }
 }

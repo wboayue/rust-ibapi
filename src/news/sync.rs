@@ -2,6 +2,7 @@
 
 use super::common::{self, decoders, encoders};
 use super::*;
+use crate::accounts::types::ContractId;
 use crate::client::blocking::{ClientRequestBuilders, Subscription, SubscriptionBuilderExt};
 use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
@@ -87,7 +88,7 @@ impl Client {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn historical_news<'a>(&'a self, contract_id: i32, provider_codes: &'a [&'a str]) -> HistoricalNewsBuilder<'a, Self> {
+    pub fn historical_news<'a>(&'a self, contract_id: impl Into<ContractId>, provider_codes: &'a [&'a str]) -> HistoricalNewsBuilder<'a, Self> {
         HistoricalNewsBuilder::new(self, contract_id, provider_codes)
     }
 

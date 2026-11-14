@@ -556,3 +556,41 @@ A 5.x call whose range was not the latest headlines returned the wrong ones; the
 bound now returns what it asked for.
 
 The compiler reports every call. Nothing it can check depends on which bound you choose.
+
+### 27. Id parameters take `impl Into<ContractId>` and `impl Into<AccountId>`
+
+These id parameters now accept both the raw value and the typed id:
+
+| Method (sync and async) | 5.x | 6.0 |
+|---|---|---|
+| `option_chain`, `wsh_event_data_by_contract`, `historical_news` | `contract_id: i32` | `contract_id: impl Into<ContractId>` |
+| `OrderBuilder::account`, `ExerciseOptionsBuilder::account` | `impl Into<String>` | `impl Into<AccountId>` |
+| `pnl`, `pnl_single`, `account_updates` | `account: &AccountId` | `account: impl Into<AccountId>` |
+| `pnl_single` | `contract_id: ContractId` | `contract_id: impl Into<ContractId>` |
+
+The crate hands back raw ids (`managed_accounts()` returns `String`s, `Contract::contract_id` is an `i32`), yet `pnl*` and `account_updates` accepted only the typed ids, while the other inputs accepted only raw ones. Now either passes to all of them. `positions_multi` and `account_updates_multi` keep `Option<&AccountId>`. `AccountId` gains `From<&String>` and `From<&AccountId>`. What goes on the wire is unchanged.
+
+Integer literals, `i32`, `ContractId`, `&str`, `String`, `&String`, `AccountId` and `&AccountId` compile as before. Two kinds of argument stop compiling:
+
+- **An argument whose type came from the parameter.** `.into()`, `.try_into()` or `.parse()` passed straight to an id parameter has no target type any more; name it.
+- **A value that converts only into `String`.** `Cow<str>`, `Box<str>`, `char`, `&mut str`, a user type with only `Into<String>`, or a generic `impl Into<String>` forwarded to `account(..)`: convert to `String` first.
+
+```rust,ignore
+let account: String = client.managed_accounts()?.remove(0);
+let field: &str = "265598";
+let cow: Cow<str> = Cow::Borrowed("DU1234567");
+
+// 5.x
+let pnl = client.pnl(&AccountId(account.clone()), None)?;
+let single = client.pnl_single(&AccountId(account.clone()), ContractId(contract.contract_id), None)?;
+let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse()?);
+let order = client.order(&contract).buy(100).market().account(cow);
+
+// 6.0: the 5.x pnl / pnl_single lines still compile; these are the shorter forms
+let pnl = client.pnl(&account, None)?;
+let single = client.pnl_single(&account, contract.contract_id, None)?;
+let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse::<i32>()?); // was inferred from i32
+let order = client.order(&contract).buy(100).market().account(cow.into_owned());     // Cow<str> isn't Into<AccountId>
+```
+
+The compiler reports every call that no longer compiles. Nothing changes at runtime.
