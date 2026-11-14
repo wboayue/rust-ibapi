@@ -601,7 +601,7 @@ The compiler reports every call that no longer compiles. Nothing changes at runt
 
 ```rust,ignore
 // 5.x
-let (date, rest) = details.contract.last_trade_date_or_contract_month.split_once(' ').unwrap();
+let date = details.contract.last_trade_date_or_contract_month.split_whitespace().next().unwrap_or_default();
 
 // 6.0
 let date = &details.contract.last_trade_date_or_contract_month;
@@ -609,4 +609,4 @@ let time = &details.last_trade_time;
 let zone = &details.time_zone_id;
 ```
 
-Code that split the field itself can drop that step. Nothing fails to compile; check any code that parses the field.
+Code that split the field itself can drop that step. Nothing fails to compile; check any code that parses the field. For a typed date, `details.contract.last_trade_date` (`Option<time::Date>`) already carries the last trading day of a future or option.

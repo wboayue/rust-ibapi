@@ -19,7 +19,7 @@ pub(crate) use crate::market_data::realtime::common::decode_tick_option_computat
 
 pub(in crate::contracts) fn decode_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
     let mut details = decode_contract_data_proto(message.proto()?)?;
-    split_last_trade_date(&mut details, false);
+    split_last_trade_date(&mut details, LastTradeDateSplit::NonBond);
     Ok(details)
 }
 
@@ -28,8 +28,17 @@ pub(in crate::contracts) fn decode_contract_details(message: &ResponseMessage) -
 /// last trade date.
 pub(in crate::contracts) fn decode_bond_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
     let mut details = decode_contract_data_proto(message.proto()?)?;
-    split_last_trade_date(&mut details, true);
+    split_last_trade_date(&mut details, LastTradeDateSplit::Bond);
     Ok(details)
+}
+
+/// Which of C#'s `SetLastTradeDate` rules [`split_last_trade_date`] applies (its `isBond` flag).
+#[derive(Clone, Copy)]
+enum LastTradeDateSplit {
+    /// Date to `maturity`, zone to `time_zone_id`, contract field left as sent.
+    Bond,
+    /// Date stays in the contract field, zone dropped.
+    NonBond,
 }
 
 /// Splits `last_trade_date_or_contract_month`, which TWS sends as
@@ -39,26 +48,31 @@ pub(in crate::contracts) fn decode_bond_contract_details(message: &ResponseMessa
 /// contract field is left as sent. Any other contract keeps only the date in
 /// that field, so a contract sent back carries what IB's own clients send, and
 /// its zone is dropped, as in C#.
-fn split_last_trade_date(details: &mut ContractDetails, is_bond: bool) {
+fn split_last_trade_date(details: &mut ContractDetails, split: LastTradeDateSplit) {
     let raw = &details.contract.last_trade_date_or_contract_month;
     let parts: Vec<String> = if raw.contains('-') {
         raw.split('-').map(str::to_string).collect()
     } else {
         raw.split_whitespace().map(str::to_string).collect()
     };
-    if let Some(date) = parts.first() {
-        if is_bond {
-            details.maturity = date.clone();
-        } else {
-            details.contract.last_trade_date_or_contract_month = date.clone();
+    let mut parts = parts.into_iter();
+    let (date, time, zone) = (parts.next(), parts.next(), parts.next());
+    if let Some(time) = time {
+        details.last_trade_time = time;
+    }
+    match split {
+        LastTradeDateSplit::Bond => {
+            if let Some(date) = date {
+                details.maturity = date;
+            }
+            if let Some(zone) = zone {
+                details.time_zone_id = zone;
+            }
         }
-    }
-    if let Some(time) = parts.get(1) {
-        details.last_trade_time = time.clone();
-    }
-    if is_bond {
-        if let Some(zone) = parts.get(2) {
-            details.time_zone_id = zone.clone();
+        LastTradeDateSplit::NonBond => {
+            if let Some(date) = date {
+                details.contract.last_trade_date_or_contract_month = date;
+            }
         }
     }
 }
