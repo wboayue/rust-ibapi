@@ -36,6 +36,20 @@ mod account_id {
     }
 
     #[test]
+    fn from_string_ref() {
+        let account = "U123456".to_string();
+        let id = AccountId::from(&account);
+        assert_eq!(id.0, "U123456");
+    }
+
+    #[test]
+    fn from_account_id_ref() {
+        let account = AccountId::from("U123456");
+        let id = AccountId::from(&account);
+        assert_eq!(id, account);
+    }
+
+    #[test]
     fn empty_account_id() {
         let id = AccountId::from("");
         assert_eq!(id.0, "");

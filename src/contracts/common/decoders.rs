@@ -18,36 +18,62 @@ pub(crate) use crate::market_data::realtime::common::decode_tick_option_computat
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
 
 pub(in crate::contracts) fn decode_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
-    decode_contract_data_proto(message.proto()?)
-}
-
-/// TWS answers a bond query with `BondContractData` (msg 18): the same
-/// `ContractData` proto as other securities, decoded with C#'s bond-only
-/// handling of the last trade date (`EDecoderUtils.SetLastTradeDate`).
-pub(in crate::contracts) fn decode_bond_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
     let mut details = decode_contract_data_proto(message.proto()?)?;
-    split_bond_last_trade_date(&mut details);
+    split_last_trade_date(&mut details, LastTradeDateSplit::NonBond);
     Ok(details)
 }
 
-/// A bond's `last_trade_date_or_contract_month` carries `maturity [time [zone]]`,
-/// split on `-` if present, otherwise on whitespace. The contract field itself
-/// is left as sent, as C# does for bonds.
-fn split_bond_last_trade_date(details: &mut ContractDetails) {
+/// TWS answers a bond query with `BondContractData` (msg 18): the same
+/// `ContractData` proto as other securities, with the bond handling of the
+/// last trade date.
+pub(in crate::contracts) fn decode_bond_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
+    let mut details = decode_contract_data_proto(message.proto()?)?;
+    split_last_trade_date(&mut details, LastTradeDateSplit::Bond);
+    Ok(details)
+}
+
+/// Which of C#'s `SetLastTradeDate` rules [`split_last_trade_date`] applies (its `isBond` flag).
+#[derive(Clone, Copy)]
+enum LastTradeDateSplit {
+    /// Date to `maturity`, zone to `time_zone_id`, contract field left as sent.
+    Bond,
+    /// Date stays in the contract field, zone dropped.
+    NonBond,
+}
+
+/// Splits `last_trade_date_or_contract_month`, which TWS sends as
+/// `date [time [zone]]` (on `-` if present, otherwise on whitespace), as C#
+/// `EDecoderUtils.SetLastTradeDate` does. The time goes to `last_trade_time`.
+/// A bond's date goes to `maturity` and its zone to `time_zone_id`, and its
+/// contract field is left as sent. Any other contract keeps only the date in
+/// that field, so a contract sent back carries what IB's own clients send, and
+/// its zone is dropped, as in C#.
+fn split_last_trade_date(details: &mut ContractDetails, split: LastTradeDateSplit) {
     let raw = &details.contract.last_trade_date_or_contract_month;
     let parts: Vec<String> = if raw.contains('-') {
         raw.split('-').map(str::to_string).collect()
     } else {
         raw.split_whitespace().map(str::to_string).collect()
     };
-    if let Some(maturity) = parts.first() {
-        details.maturity = maturity.clone();
+    let mut parts = parts.into_iter();
+    let (date, time, zone) = (parts.next(), parts.next(), parts.next());
+    if let Some(time) = time {
+        details.last_trade_time = time;
     }
-    if let Some(time) = parts.get(1) {
-        details.last_trade_time = time.clone();
-    }
-    if let Some(zone) = parts.get(2) {
-        details.time_zone_id = zone.clone();
+    match split {
+        LastTradeDateSplit::Bond => {
+            if let Some(date) = date {
+                details.maturity = date;
+            }
+            if let Some(zone) = zone {
+                details.time_zone_id = zone;
+            }
+        }
+        LastTradeDateSplit::NonBond => {
+            if let Some(date) = date {
+                details.contract.last_trade_date_or_contract_month = date;
+            }
+        }
     }
 }
 

@@ -441,12 +441,14 @@ The compiler does not catch two things. `route_marketable_to_bbo: Some(false)` i
 let total_results: u8 = 255;
 let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total_results)?;
 
-// 6.0
+// 6.0 (with §26's builder)
 let total_results: u16 = 300;
-let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total_results)?;
+let headlines = client.historical_news(contract_id, &["BRFG"]).since(start).limit(total_results).subscribe()?;
 ```
 
 Integer literals and untyped bindings compile unchanged. Where the argument is a typed `u8`, the compiler reports it; convert with `.into()` or declare it `u16`. The compiler does not check the range: the crate sends any `u16` as given. TWS returns at most 300 headlines for a larger value, without a notice, and rejects 0 with error 321 ([wire facts](wire-facts/news.md#historical-news-total_results-range)).
+
+§26 replaces the signature with a builder; `total_results` is now `.limit(n)`.
 
 ### 22. `HistoricalBarUpdate::Historical` carries `Vec<Bar>`
 
@@ -524,7 +526,92 @@ let notices = client.notice_stream();
 
 Drop the `?`, `.expect(..)` or `match` on the result. The compiler reports each of them. No error path is lost, since none existed, and nothing changes at runtime.
 
-### 26. `ExerciseOptions` gains `ExecutionData` and drops `PartialEq` and serde
+### 26. `historical_news` returns a builder
+
+`Client::historical_news` (async and blocking) took `start_time`, `end_time` and
+`total_results` and returned the headline stream. It now takes `contract_id` and
+`provider_codes` and returns a `HistoricalNewsBuilder`:
+
+- `.before(time)`: headlines strictly before `time`.
+- `.since(time)`: headlines at or after `time`.
+- `.limit(n)`: at most `n` headlines, 1 – 300; default 300.
+- `.subscribe()`: the stream `historical_news` returned.
+- `.page()`: a `HistoricalNewsPage`, the headlines plus TWS's `has_more` flag.
+
+```rust,ignore
+// 5.x
+let headlines = client.historical_news(contract_id, &["BRFG"], start, end, 10)?;
+
+// 6.0
+let headlines = client.historical_news(contract_id, &["BRFG"]).since(start).limit(10).subscribe()?;
+```
+
+**Results change.** The 5.x range had no effect: the times were sent in a format TWS ignores
+without a notice, so every request returned the newest headlines. TWS also uses only one bound per
+request: given both, it reads the start time as the newest bound and ignores the end time
+([wire facts](wire-facts/news.md#historical-news-range-and-has_more)). So pick the bound that
+matches the intent. For "what happened since `start`", use `.since(start)`. For "the latest
+headlines before `end`", use `.before(end)`.
+A 5.x call whose range was not the latest headlines returned the wrong ones; the same call with a
+bound now returns what it asked for.
+
+The compiler reports every call. Nothing it can check depends on which bound you choose.
+
+### 27. Id parameters take `impl Into<ContractId>` and `impl Into<AccountId>`
+
+These id parameters now accept both the raw value and the typed id:
+
+| Method (sync and async) | 5.x | 6.0 |
+|---|---|---|
+| `option_chain`, `wsh_event_data_by_contract`, `historical_news` | `contract_id: i32` | `contract_id: impl Into<ContractId>` |
+| `OrderBuilder::account`, `ExerciseOptionsBuilder::account` | `impl Into<String>` | `impl Into<AccountId>` |
+| `pnl`, `pnl_single`, `account_updates` | `account: &AccountId` | `account: impl Into<AccountId>` |
+| `pnl_single` | `contract_id: ContractId` | `contract_id: impl Into<ContractId>` |
+
+The crate hands back raw ids (`managed_accounts()` returns `String`s, `Contract::contract_id` is an `i32`), yet `pnl*` and `account_updates` accepted only the typed ids, while the other inputs accepted only raw ones. Now either passes to all of them. `positions_multi` and `account_updates_multi` keep `Option<&AccountId>`. `AccountId` gains `From<&String>` and `From<&AccountId>`. What goes on the wire is unchanged.
+
+Integer literals, `i32`, `ContractId`, `&str`, `String`, `&String`, `AccountId` and `&AccountId` compile as before. Two kinds of argument stop compiling:
+
+- **An argument whose type came from the parameter.** `.into()`, `.try_into()` or `.parse()` passed straight to an id parameter has no target type any more; name it.
+- **A value that converts only into `String`.** `Cow<str>`, `Box<str>`, `char`, `&mut str`, a user type with only `Into<String>`, or a generic `impl Into<String>` forwarded to `account(..)`: convert to `String` first.
+
+```rust,ignore
+let account: String = client.managed_accounts()?.remove(0);
+let field: &str = "265598";
+let cow: Cow<str> = Cow::Borrowed("DU1234567");
+
+// 5.x
+let pnl = client.pnl(&AccountId(account.clone()), None)?;
+let single = client.pnl_single(&AccountId(account.clone()), ContractId(contract.contract_id), None)?;
+let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse()?);
+let order = client.order(&contract).buy(100).market().account(cow);
+
+// 6.0: the 5.x pnl / pnl_single lines still compile; these are the shorter forms
+let pnl = client.pnl(&account, None)?;
+let single = client.pnl_single(&account, contract.contract_id, None)?;
+let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse::<i32>()?); // was inferred from i32
+let order = client.order(&contract).buy(100).market().account(cow.into_owned());     // Cow<str> isn't Into<AccountId>
+```
+
+The compiler reports every call that no longer compiles. Nothing changes at runtime.
+
+### 28. `last_trade_date_or_contract_month` holds only the date
+
+`contract_details` decoded a future's or option's `last_trade_date_or_contract_month` as TWS sends it, with the last trade time and zone appended (`"20261218 08:30:00 US/Central"`). It now holds the date alone (`"20261218"`), the time goes to `ContractDetails::last_trade_time` (`"08:30:00"`), and the zone is dropped; `ContractDetails::time_zone_id` holds the product's zone. This is what IB's own clients do (`EDecoderUtils.SetLastTradeDate`). Bonds are unchanged.
+
+```rust,ignore
+// 5.x
+let date = details.contract.last_trade_date_or_contract_month.split_whitespace().next().unwrap_or_default();
+
+// 6.0
+let date = &details.contract.last_trade_date_or_contract_month;
+let time = &details.last_trade_time;
+let zone = &details.time_zone_id;
+```
+
+Code that split the field itself can drop that step. Nothing fails to compile; check any code that parses the field. For a typed date, `details.contract.last_trade_date` (`Option<time::Date>`) already carries the last trading day of a future or option.
+
+### 29. `ExerciseOptions` gains `ExecutionData` and drops `PartialEq` and serde
 
 An `exercise_options` subscription now yields `ExerciseOptions::ExecutionData` for the exercise's two executions (the underlying and the option); they were dropped before. An exhaustive `match` needs the arm. `ExerciseOptions` derives only `Debug` and `Clone`, like `PlaceOrder` and `OrderUpdate`, because `ExecutionData` implements neither `PartialEq` nor serde.
 

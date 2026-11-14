@@ -30,6 +30,15 @@ pub(in crate::news) fn decode_historical_news(message: &ResponseMessage) -> Resu
     decode_historical_news_proto(message.proto()?)
 }
 
+/// The `has_more` flag of `historicalNewsEnd`.
+pub(in crate::news) fn decode_historical_news_end(message: &ResponseMessage) -> Result<bool, Error> {
+    Ok(decode_historical_news_end_proto(message.proto()?))
+}
+
+pub(crate) fn decode_historical_news_end_proto(p: crate::proto::HistoricalNewsEnd) -> bool {
+    p.has_more.unwrap_or_default()
+}
+
 /// Parses a `HistoricalNews` `time`: zone-less UTC `YYYY-MM-DD HH:MM:SS.f`
 /// (docs/wire-facts/news.md). Any other shape is `None` with a warning, not an
 /// error: the reference client delivers the article regardless, and an error
