@@ -215,22 +215,29 @@ pub const REQUEST_ERROR_CODES: &[i32] = &[300, 301, 302, 309, 310, 316, 319, 326
 /// into [`Error::ClientIdInUse`](crate::Error::ClientIdInUse).
 pub(crate) const CLIENT_ID_IN_USE_CODE: i32 = 326;
 
-/// Data-farm codes reporting a healthy connection ("…connection is OK").
-/// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Ok`].
-pub(crate) const FARM_OK_CODES: [i32; 3] = [2104, 2106, 2158];
+/// Every data-farm status code, with the farm kind and connectivity state it
+/// reports. The one source for [`ConnectivityStatus::from_code`] and
+/// [`DataFarmKind::from_code`], so a code has a kind exactly when it has a
+/// status. All inside [`WARNING_CODE_RANGE`].
+pub(crate) const FARM_CODES: [(i32, DataFarmKind, ConnectivityStatus); 9] = [
+    (2103, DataFarmKind::MarketData, ConnectivityStatus::Broken),
+    (2104, DataFarmKind::MarketData, ConnectivityStatus::Ok),
+    (2108, DataFarmKind::MarketData, ConnectivityStatus::Inactive),
+    (2119, DataFarmKind::MarketData, ConnectivityStatus::Connecting),
+    (2105, DataFarmKind::HistoricalData, ConnectivityStatus::Broken),
+    (2106, DataFarmKind::HistoricalData, ConnectivityStatus::Ok),
+    (2107, DataFarmKind::HistoricalData, ConnectivityStatus::Inactive),
+    (2157, DataFarmKind::SecurityDefinition, ConnectivityStatus::Broken),
+    (2158, DataFarmKind::SecurityDefinition, ConnectivityStatus::Ok),
+];
 
-/// Data-farm codes reporting a broken connection ("…connection is broken").
-/// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Broken`].
-pub(crate) const FARM_BROKEN_CODES: [i32; 3] = [2103, 2105, 2157];
+/// Separator before the farm name in an inactive-farm notice (2107, 2108), which
+/// ends "…available upon demand.usfarm" where the other farm notices use `:`.
+const FARM_INACTIVE_NAME_SEPARATOR: &str = "upon demand.";
 
-/// Data-farm codes reporting a dormant-but-available connection
-/// ("…inactive but should be available upon demand").
-/// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Inactive`].
-pub(crate) const FARM_INACTIVE_CODES: [i32; 2] = [2107, 2108];
-
-/// Data-farm codes reporting a connection in progress ("…farm is connecting").
-/// Subset of [`WARNING_CODE_RANGE`]; classified [`ConnectivityStatus::Connecting`].
-pub(crate) const FARM_CONNECTING_CODES: [i32; 1] = [2119];
+fn farm_entry(code: i32) -> Option<(DataFarmKind, ConnectivityStatus)> {
+    FARM_CODES.iter().find(|(c, ..)| *c == code).map(|&(_, kind, status)| (kind, status))
+}
 
 /// The order-rejection band (200-399): order parameter validation, margin and
 /// risk-check rejections.
@@ -545,7 +552,7 @@ pub enum NoticeCategory {
 ///     None => {/* not a data-farm notice */}
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ConnectivityStatus {
     /// Data-farm connection is OK.
     Ok,
@@ -574,17 +581,7 @@ impl ConnectivityStatus {
     /// assert_eq!(ConnectivityStatus::from_code(500), None);
     /// ```
     pub fn from_code(code: i32) -> Option<ConnectivityStatus> {
-        if FARM_OK_CODES.contains(&code) {
-            Some(ConnectivityStatus::Ok)
-        } else if FARM_BROKEN_CODES.contains(&code) {
-            Some(ConnectivityStatus::Broken)
-        } else if FARM_INACTIVE_CODES.contains(&code) {
-            Some(ConnectivityStatus::Inactive)
-        } else if FARM_CONNECTING_CODES.contains(&code) {
-            Some(ConnectivityStatus::Connecting)
-        } else {
-            None
-        }
+        farm_entry(code).map(|(_, status)| status)
     }
 }
 
@@ -620,22 +617,22 @@ impl DataFarmKind {
     /// assert_eq!(DataFarmKind::from_code(500), None);
     /// ```
     pub fn from_code(code: i32) -> Option<DataFarmKind> {
-        match code {
-            2103 | 2104 | 2108 | 2119 => Some(DataFarmKind::MarketData),
-            2105..=2107 => Some(DataFarmKind::HistoricalData),
-            2157 | 2158 => Some(DataFarmKind::SecurityDefinition),
-            _ => None,
-        }
+        farm_entry(code).map(|(kind, _)| kind)
     }
 }
 
-/// The data farm a notice reports on, from [`Notice::data_farm`].
+/// The data farm a notice reports on and its state, from [`Notice::data_farm`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DataFarm {
     /// The farm's kind, from the notice code.
     pub kind: DataFarmKind,
-    /// The farm's name, the text after the last `:` of the message (`usfarm` in
-    /// "Market data farm connection is OK:usfarm"); `None` when the message names none.
+    /// The farm's connectivity state, from the notice code; the same value as
+    /// [`Notice::connectivity_status`].
+    pub status: ConnectivityStatus,
+    /// The farm's name, parsed from the message text: `usfarm` in
+    /// "Market data farm connection is OK:usfarm" or in "…available upon
+    /// demand.usfarm". `None` when the message names none. Best-effort: TWS
+    /// carries the name only in free text.
     pub name: Option<String>,
 }
 
@@ -851,30 +848,29 @@ impl Notice {
         ConnectivityStatus::from_code(self.code)
     }
 
-    /// The data farm this notice reports on, so a caller can track each farm's
-    /// [`connectivity_status`](Self::connectivity_status) separately; `None` for a
-    /// notice that is not about a data farm.
+    /// The data farm this notice reports on: its kind, connectivity state and
+    /// name, so a caller can track each farm separately; `None` for a notice that
+    /// is not about a data farm.
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::{ConnectivityStatus, DataFarmKind, Notice};
+    /// use ibapi::{ConnectivityStatus, DataFarm, DataFarmKind, Notice};
     /// # let notice: Notice = unimplemented!();
-    /// if let (Some(farm), Some(ConnectivityStatus::Ok)) = (notice.data_farm(), notice.connectivity_status()) {
-    ///     if farm.kind == DataFarmKind::MarketData {
-    ///         println!("market data farm {:?} is back", farm.name);
-    ///     }
+    /// if let Some(DataFarm { kind: DataFarmKind::MarketData, status: ConnectivityStatus::Ok, name }) = notice.data_farm() {
+    ///     println!("market data farm {name:?} is back");
     /// }
     /// ```
     pub fn data_farm(&self) -> Option<DataFarm> {
-        let kind = DataFarmKind::from_code(self.code)?;
+        let (kind, status) = farm_entry(self.code)?;
         let name = self
             .message
             .rsplit_once(':')
+            .or_else(|| self.message.rsplit_once(FARM_INACTIVE_NAME_SEPARATOR))
             .map(|(_, name)| name.trim())
             .filter(|name| !name.is_empty())
             .map(str::to_owned);
-        Some(DataFarm { kind, name })
+        Some(DataFarm { kind, status, name })
     }
 
     /// Log severity for this notice, derived from [`Notice::category`] so that

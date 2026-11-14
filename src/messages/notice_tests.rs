@@ -359,42 +359,32 @@ fn notice_category_partition() {
     }
 }
 
-#[test]
-fn connectivity_status_from_code_table() {
-    // Derive expectations from the code constants, per
-    // docs/rules/testing/derive-from-constants.md: each farm-code set maps to its
-    // status; everything else maps to None.
-    let cases: &[(&[i32], ConnectivityStatus)] = &[
-        (&FARM_OK_CODES, ConnectivityStatus::Ok),
-        (&FARM_BROKEN_CODES, ConnectivityStatus::Broken),
-        (&FARM_INACTIVE_CODES, ConnectivityStatus::Inactive),
-        (&FARM_CONNECTING_CODES, ConnectivityStatus::Connecting),
-    ];
-    for &(codes, expected) in cases {
-        for &code in codes {
-            assert_eq!(ConnectivityStatus::from_code(code), Some(expected), "code {code} misclassified");
-        }
-    }
-
-    // Non-farm codes — including warning-band neighbors and the range boundaries —
-    // carry no connectivity status.
-    for code in [*WARNING_CODE_RANGE.start(), 2120, *WARNING_CODE_RANGE.end(), 500, 202, 1100] {
-        assert_eq!(ConnectivityStatus::from_code(code), None, "code {code} should have no status");
-    }
+fn farm_codes(status: ConnectivityStatus) -> impl Iterator<Item = i32> {
+    FARM_CODES.iter().filter(move |entry| entry.2 == status).map(|entry| entry.0)
 }
 
 #[test]
-fn data_farm_kind_covers_exactly_the_connectivity_codes() {
-    // Per docs/rules/testing/derive-from-constants.md: every farm status code has
-    // a kind, and the neighbors that have no status have no kind.
-    let farm_codes = FARM_OK_CODES
-        .iter()
-        .chain(&FARM_BROKEN_CODES)
-        .chain(&FARM_INACTIVE_CODES)
-        .chain(&FARM_CONNECTING_CODES);
-    for &code in farm_codes {
-        assert!(DataFarmKind::from_code(code).is_some(), "farm code {code} has no kind");
+fn farm_code_table() {
+    // Written out independently of FARM_CODES, from IB's Message Codes table.
+    let cases = [
+        (2103, DataFarmKind::MarketData, ConnectivityStatus::Broken),
+        (2104, DataFarmKind::MarketData, ConnectivityStatus::Ok),
+        (2108, DataFarmKind::MarketData, ConnectivityStatus::Inactive),
+        (2119, DataFarmKind::MarketData, ConnectivityStatus::Connecting),
+        (2105, DataFarmKind::HistoricalData, ConnectivityStatus::Broken),
+        (2106, DataFarmKind::HistoricalData, ConnectivityStatus::Ok),
+        (2107, DataFarmKind::HistoricalData, ConnectivityStatus::Inactive),
+        (2157, DataFarmKind::SecurityDefinition, ConnectivityStatus::Broken),
+        (2158, DataFarmKind::SecurityDefinition, ConnectivityStatus::Ok),
+    ];
+    for (code, kind, status) in cases {
+        assert_eq!(DataFarmKind::from_code(code), Some(kind), "code {code}");
+        assert_eq!(ConnectivityStatus::from_code(code), Some(status), "code {code}");
     }
+    assert_eq!(FARM_CODES.len(), cases.len(), "FARM_CODES has a code the table above lacks");
+
+    // Non-farm codes, including warning-band neighbors and the range boundaries,
+    // carry neither a kind nor a status.
     for code in [
         *WARNING_CODE_RANGE.start(),
         2102,
@@ -404,72 +394,64 @@ fn data_farm_kind_covers_exactly_the_connectivity_codes() {
         2159,
         *WARNING_CODE_RANGE.end(),
         500,
+        202,
         1100,
     ] {
         assert_eq!(DataFarmKind::from_code(code), None, "code {code} should have no kind");
+        assert_eq!(ConnectivityStatus::from_code(code), None, "code {code} should have no status");
     }
 }
 
 #[test]
-fn data_farm_kind_from_code_table() {
+fn data_farm_reads_kind_status_and_name() {
+    use ConnectivityStatus::*;
+    use DataFarmKind::*;
+    // The OK messages are as paper TWS sent them at connect (server 223,
+    // 2026-11-13/14). The inactive shape, with `.` before the name, is from
+    // IB-reported logs; not yet captured live.
     let cases = [
-        (2103, DataFarmKind::MarketData),
-        (2104, DataFarmKind::MarketData),
-        (2108, DataFarmKind::MarketData),
-        (2119, DataFarmKind::MarketData),
-        (2105, DataFarmKind::HistoricalData),
-        (2106, DataFarmKind::HistoricalData),
-        (2107, DataFarmKind::HistoricalData),
-        (2157, DataFarmKind::SecurityDefinition),
-        (2158, DataFarmKind::SecurityDefinition),
-    ];
-    for (code, kind) in cases {
-        assert_eq!(DataFarmKind::from_code(code), Some(kind), "code {code}");
-    }
-}
-
-#[test]
-fn data_farm_reads_kind_and_name() {
-    // Messages as paper TWS sent them at connect (server 223, 2026-11-13).
-    let cases = [
-        (2104, "Market data farm connection is OK:usopt", DataFarmKind::MarketData, Some("usopt")),
-        (
-            2104,
-            "Market data farm connection is OK:usfarm.nj",
-            DataFarmKind::MarketData,
-            Some("usfarm.nj"),
-        ),
-        (
-            2106,
-            "HMDS data farm connection is OK:ushmds",
-            DataFarmKind::HistoricalData,
-            Some("ushmds"),
-        ),
+        (2104, "Market data farm connection is OK:usopt", MarketData, Ok, Some("usopt")),
+        (2104, "Market data farm connection is OK:usfarm.nj", MarketData, Ok, Some("usfarm.nj")),
+        (2106, "HMDS data farm connection is OK:ushmds", HistoricalData, Ok, Some("ushmds")),
         (
             2158,
             "Sec-def data farm connection is OK:secdefnj",
-            DataFarmKind::SecurityDefinition,
+            SecurityDefinition,
+            Ok,
             Some("secdefnj"),
         ),
+        (2103, "Market data farm connection is broken: usfarm ", MarketData, Broken, Some("usfarm")),
+        (2119, "Market data farm is connecting:usfarm", MarketData, Connecting, Some("usfarm")),
         (
-            2103,
-            "Market data farm connection is broken: usfarm ",
-            DataFarmKind::MarketData,
-            Some("usfarm"),
+            2108,
+            "Market data farm connection is inactive but should be available upon demand.usfarm.nj",
+            MarketData,
+            Inactive,
+            Some("usfarm.nj"),
         ),
-        (2104, "Market data farm connection is OK", DataFarmKind::MarketData, None),
-        (2105, "HMDS data farm connection is broken:", DataFarmKind::HistoricalData, None),
+        (
+            2107,
+            "HMDS data farm connection is inactive but should be available upon demand.ushmds",
+            HistoricalData,
+            Inactive,
+            Some("ushmds"),
+        ),
+        (2104, "Market data farm connection is OK", MarketData, Ok, None),
+        (2105, "HMDS data farm connection is broken:", HistoricalData, Broken, None),
+        (2107, "HMDS data farm connection is inactive.", HistoricalData, Inactive, None),
     ];
-    for (code, message, kind, name) in cases {
-        let farm = helpers::test_notice(code, message).data_farm();
+    for (code, message, kind, status, name) in cases {
+        let notice = helpers::test_notice(code, message);
         assert_eq!(
-            farm,
+            notice.data_farm(),
             Some(DataFarm {
                 kind,
+                status,
                 name: name.map(str::to_owned)
             }),
             "{message:?}"
         );
+        assert_eq!(notice.connectivity_status(), Some(status), "{message:?}");
     }
     assert_eq!(helpers::test_notice(500, "Not connected:usfarm").data_farm(), None);
 }
@@ -478,7 +460,7 @@ fn data_farm_reads_kind_and_name() {
 fn connectivity_status_delegates() {
     // The accessor is a thin wrapper over from_code; assert delegation without
     // re-asserting the whole table.
-    let code = FARM_BROKEN_CODES[0];
+    let code = FARM_CODES[0].0;
     assert_eq!(helpers::test_notice(code, "").connectivity_status(), ConnectivityStatus::from_code(code));
     assert_eq!(helpers::test_notice(500, "").connectivity_status(), None);
 }
@@ -487,12 +469,7 @@ fn connectivity_status_delegates() {
 fn connectivity_status_subset_of_warning() {
     // Additive contract: every farm code is still a Warning under the existing
     // partition — connectivity_status refines, it doesn't repartition.
-    let all_farm = FARM_OK_CODES
-        .iter()
-        .chain(&FARM_BROKEN_CODES)
-        .chain(&FARM_INACTIVE_CODES)
-        .chain(&FARM_CONNECTING_CODES);
-    for &code in all_farm {
+    for &(code, ..) in &FARM_CODES {
         let notice = helpers::test_notice(code, "");
         assert!(notice.is_warning(), "farm code {code} should be a warning");
         assert_eq!(
@@ -601,10 +578,9 @@ fn is_client_synthesized() {
 fn log_level_follows_category() {
     // Farm OK/inactive/connecting, 1102 (restored, data maintained) and the
     // cancellation confirmation: info.
-    for code in FARM_OK_CODES
-        .into_iter()
-        .chain(FARM_INACTIVE_CODES)
-        .chain(FARM_CONNECTING_CODES)
+    for code in farm_codes(ConnectivityStatus::Ok)
+        .chain(farm_codes(ConnectivityStatus::Inactive))
+        .chain(farm_codes(ConnectivityStatus::Connecting))
         .chain([CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE, ORDER_CANCELLED_CODE])
     {
         assert_eq!(Notice::synthesized(code, String::new()).log_level(), log::Level::Info, "code {code}");
@@ -620,7 +596,7 @@ fn log_level_follows_category() {
         CONNECTIVITY_RESTORED_DATA_LOST_CODE,
     ]
     .into_iter()
-    .chain(FARM_BROKEN_CODES)
+    .chain(farm_codes(ConnectivityStatus::Broken))
     .chain(DATA_ADVISORY_CODES.iter().copied())
     {
         assert_eq!(Notice::synthesized(code, String::new()).log_level(), log::Level::Warn, "code {code}");
