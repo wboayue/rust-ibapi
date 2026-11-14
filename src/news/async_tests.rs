@@ -212,32 +212,63 @@ async fn historical_news_page_times_out_at_the_deadline() {
     assert!(matches!(error, crate::Error::Timeout), "got {error:?}");
 }
 
+/// Only the end frame proves the page is complete: a close after an article is
+/// an error, not a short page, and is not retried.
 #[tokio::test]
 async fn historical_news_page_requires_end() {
-    let article = proto_response(
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalNews,
         historical_news().request_id(TEST_REQ_ID_FIRST).article_id("DJ-N$19985fef").encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
+
+    let result = client
+        .historical_news_page(
+            TEST_CONTRACT_ID,
+            &["BZ"],
+            datetime!(2023-01-01 0:00 UTC),
+            datetime!(2023-01-02 0:00 UTC),
+            2,
+        )
+        .await;
+
+    assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
+    assert_eq!(request_message_count(&message_bus), 1, "a closed stream must not be retried");
+}
+
+/// A connection reset resends the request and reads the page from the resend.
+#[tokio::test]
+async fn historical_news_page_retries_a_connection_reset() {
+    let message_bus = Arc::new(
+        MessageBusStub::with_ordered_responses(vec![
+            proto_response(
+                IncomingMessages::HistoricalNews,
+                historical_news().request_id(TEST_REQ_ID_FIRST).article_id("DJ-N$19985fef").encode_proto(),
+            ),
+            proto_response(
+                IncomingMessages::HistoricalNewsEnd,
+                historical_news_end().request_id(TEST_REQ_ID_FIRST).encode_proto(),
+            ),
+        ])
+        .with_connection_resets(1),
     );
-    let wrong_type = proto_response(IncomingMessages::NewsArticle, news_article().request_id(TEST_REQ_ID_FIRST).encode_proto());
-    for (responses, closed) in [(vec![article.clone()], true), (vec![article, wrong_type], false)] {
-        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
-        let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
-        let result = client
-            .historical_news_page(
-                TEST_CONTRACT_ID,
-                &["BZ"],
-                datetime!(2023-01-01 0:00 UTC),
-                datetime!(2023-01-02 0:00 UTC),
-                2,
-            )
-            .await;
-        if closed {
-            assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
-        } else {
-            assert!(matches!(result, Err(crate::Error::UnexpectedResponse(_))), "{result:?}");
-        }
-        assert_eq!(request_message_count(&message_bus), 1);
-    }
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
+
+    let page = client
+        .historical_news_page(
+            TEST_CONTRACT_ID,
+            &["BZ"],
+            datetime!(2023-01-01 0:00 UTC),
+            datetime!(2023-01-02 0:00 UTC),
+            2,
+        )
+        .await
+        .expect("the reset must be retried, not surfaced");
+
+    assert_eq!(page.articles.len(), 1);
+    assert_eq!(page.articles[0].article_id, "DJ-N$19985fef");
+    assert!(!page.has_more, "an end frame without the field reads as false");
+    assert_eq!(request_message_count(&message_bus), 2, "the retry must re-send the request");
 }
 
 #[tokio::test]

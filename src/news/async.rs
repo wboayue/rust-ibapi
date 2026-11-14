@@ -9,7 +9,6 @@ use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};
-use tokio::time::Instant;
 
 impl Client {
     /// Requests news providers which the user has subscribed to.
@@ -131,11 +130,12 @@ impl Client {
     ///   larger value, without a notice, and rejects 0 with error 321 (live: 2026-11-05).
     ///
     /// # Errors
-    /// A TWS rejection as [`Error::Notice`]; [`Error::UnexpectedResponse`] on a frame of
-    /// another type; [`Error::UnexpectedEndOfStream`] if the request's channel closes
-    /// before the end frame; [`Error::Timeout`] if the page has not fully arrived within
-    /// the one-shot timeout (30 seconds by default); [`Error::ConnectionReset`] if the
-    /// connection drops on every retry (three), [`Error::Shutdown`] if the client shuts down.
+    /// A TWS rejection as [`Error::Notice`]; [`Error::UnexpectedEndOfStream`] if the
+    /// request's channel closes before the end frame; [`Error::Timeout`] if the page has
+    /// not fully arrived within the one-shot timeout (30 seconds by default);
+    /// [`Error::ConnectionReset`] if the connection drops on every retry (three),
+    /// [`Error::Shutdown`] if the client shuts down. On the async client, a channel that
+    /// overflows mid-page fails the read rather than return a short page.
     ///
     /// # Examples
     ///
@@ -181,21 +181,18 @@ impl Client {
             let builder = self.request();
             let request =
                 encoders::encode_request_historical_news(builder.request_id(), contract_id, provider_codes, start_time, end_time, total_results)?;
-            let mut subscription = builder.send_raw(request).await?;
+            let mut subscription = builder.send::<HistoricalNewsFrame>(request).await?;
 
             // Only the end frame carries `has_more` and proves the page is
             // complete, so a close before it is an error.
             let mut page = HistoricalNewsPage::default();
             loop {
-                let message = match deadline {
-                    None => subscription.next().await,
-                    // Checked first: `timeout_at` polls the read before the clock.
-                    Some(deadline) if Instant::now() >= deadline => return Err(Error::Timeout),
-                    Some(deadline) => subscription.next_before(deadline).await?,
-                }
-                .ok_or(Error::UnexpectedEndOfStream)??;
-                if common::historical_news_page_step(&mut page, &message)? {
-                    return Ok(page);
+                match request_helpers::next_frame(&mut subscription, deadline).await? {
+                    HistoricalNewsFrame::Article(article) => page.articles.push(article),
+                    HistoricalNewsFrame::End { has_more } => {
+                        page.has_more = has_more;
+                        return Ok(page);
+                    }
                 }
             }
         })

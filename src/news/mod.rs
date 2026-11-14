@@ -96,6 +96,20 @@ pub struct HistoricalNewsPage {
     pub has_more: bool,
 }
 
+/// One frame of a `reqHistoricalNews` reply, read by
+/// [`historical_news_page`](crate::Client::historical_news_page): articles,
+/// then `End`.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum HistoricalNewsFrame {
+    /// One headline.
+    Article(NewsArticle),
+    /// `historicalNewsEnd`: the page is complete.
+    End {
+        /// TWS's flag that more headlines than `total_results` match the range.
+        has_more: bool,
+    },
+}
+
 /// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
