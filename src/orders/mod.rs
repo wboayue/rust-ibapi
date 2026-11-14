@@ -437,8 +437,11 @@ pub struct Order {
     pub model_code: String,
     /// This is a regulatory attribute that applies to all US Commodity (Futures) Exchanges, provided to allow client to comply with CFTC Tag 50 Rules.
     ///
-    /// Use letters and digits only: on paper (live: 2026-11-10) a hyphen draws 201
-    /// "Invalid value in field # 8089".
+    /// Empty, or 1–16 ASCII letters or digits; `place_order` and `submit_order` return
+    /// [`Error::InvalidArgument`](crate::Error::InvalidArgument) for anything else, without
+    /// sending. TWS rejects those with 201 "Invalid value in field # 8089" (live: 2026-11-14,
+    /// paper). See
+    /// `docs/wire-facts/orders.md#ext_operator-and-manual_order_indicator-on-orders-and-cancels`.
     pub ext_operator: String,
     /// The native cash quantity.
     pub cash_qty: Option<f64>,
@@ -1895,10 +1898,11 @@ pub struct OrderCancel {
     /// Operator ID for CFTC Tag 50 rules on US commodity (futures) exchanges, as on
     /// [`Order::ext_operator`]. Empty sends none.
     ///
-    /// Use letters and digits only. On paper (live: 2026-11-10), a cancel whose operator ID
-    /// holds a hyphen gets no reply from TWS and leaves the order stuck in `PendingCancel`,
-    /// where later cancels are refused (10148 / 161), until TWS drops the cancel (seen by the
-    /// next daily reset). The order is then working again. See
+    /// Empty, or 1–16 ASCII letters or digits; `cancel_order_with` and `global_cancel_with`
+    /// return [`Error::InvalidArgument`](crate::Error::InvalidArgument) for anything else,
+    /// without sending. TWS never answers a cancel carrying such an ID (live: 2026-11-14,
+    /// paper): the order sticks in `PendingCancel`, later cancels are refused (10148 / 161),
+    /// and by the next daily reset TWS drops the cancel and the order is working again. See
     /// `docs/wire-facts/orders.md#ext_operator-and-manual_order_indicator-on-orders-and-cancels`.
     pub ext_operator: String,
     /// Manual order indicator, as on [`Order::manual_order_indicator`]. `None` sends none.

@@ -1,5 +1,5 @@
-use crate::orders::Order;
 use crate::orders::OrderId;
+use crate::orders::{Order, OrderCancel};
 use crate::protocol::{check_version, ProtocolFeature};
 use crate::{server_versions, Error};
 
@@ -35,8 +35,11 @@ const ATTACHED_ORDERS: ProtocolFeature = ProtocolFeature::new("attached orders",
 const CONDITIONS_INCLUDE_OVERNIGHT: ProtocolFeature =
     ProtocolFeature::new("conditions include overnight", server_versions::CONDITIONS_INCLUDE_OVERNIGHT);
 
-/// Rejects `order` when it uses a field `server_version` does not support.
+/// Rejects `order` when it uses a field `server_version` does not support, or
+/// carries an `ext_operator` TWS rejects ([`verify_ext_operator`]).
 pub(crate) fn verify_order(server_version: i32, order: &Order) -> Result<(), Error> {
+    verify_ext_operator("Order::ext_operator", &order.ext_operator)?;
+
     if order.hedge_max_size.is_some() {
         check_version(server_version, HEDGE_MAX_SIZE)?;
     }
@@ -80,6 +83,30 @@ pub(crate) fn verify_order(server_version: i32, order: &Order) -> Result<(), Err
     }
 
     Ok(())
+}
+
+/// Rejects `order_cancel` when its `ext_operator` is one TWS rejects ([`verify_ext_operator`]).
+pub(crate) fn verify_order_cancel(order_cancel: &OrderCancel) -> Result<(), Error> {
+    verify_ext_operator("OrderCancel::ext_operator", &order_cancel.ext_operator)
+}
+
+/// Longest `ext_operator` TWS accepts as letters and digits.
+const EXT_OPERATOR_MAX_LEN: usize = 16;
+
+/// Rejects an operator ID outside the set TWS accepts: 1–16 ASCII letters or
+/// digits. Empty passes, since it is not sent.
+///
+/// On an order TWS rejects anything else with 201; on a cancel it never replies and
+/// the order sticks in `PendingCancel`. Probed on paper, server 226 (2026-11-14):
+/// see `docs/wire-facts/orders.md#ext_operator-and-manual_order_indicator-on-orders-and-cancels`.
+/// TWS also accepts 65+ letters and digits, but this function rejects those too.
+fn verify_ext_operator(field: &str, value: &str) -> Result<(), Error> {
+    if value.is_empty() || (value.len() <= EXT_OPERATOR_MAX_LEN && value.bytes().all(|b| b.is_ascii_alphanumeric())) {
+        return Ok(());
+    }
+    Err(Error::InvalidArgument(format!(
+        "{field} {value:?}: TWS accepts 1-{EXT_OPERATOR_MAX_LEN} ASCII letters or digits"
+    )))
 }
 
 #[cfg(test)]

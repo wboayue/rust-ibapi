@@ -69,3 +69,54 @@ fn verify_order_gates_fields_above_the_floor() {
     }
     assert!(verify_order(server_versions::PROTOBUF_REST_MESSAGES_3, &Order::default()).is_ok());
 }
+
+/// Values from the 2026-11-14 paper probe (server 226, AAPL): TWS accepted the first
+/// set on orders and cancels; the second drew 201 on orders, wedged cancels in
+/// PendingCancel, or (non-ASCII) drew 10363.
+#[test]
+fn verify_ext_operator_matches_probed_set() {
+    let alnum = |n: usize| "T1".repeat(n).chars().take(n).collect::<String>();
+    let accepted = ["", "T", "TRADER7", "Trader7", "trader7", "12345", &alnum(EXT_OPERATOR_MAX_LEN)];
+    for value in accepted {
+        assert!(verify_ext_operator("f", value).is_ok(), "{value:?}");
+    }
+    let rejected = [
+        "TRADER_7",
+        "TRADER.7",
+        "TRADER 7",
+        "TRADER/7",
+        "TRADER@7",
+        "probe-op",
+        " TRADER7",
+        " ",
+        "TRADÉR7",
+        &alnum(EXT_OPERATOR_MAX_LEN + 1),
+        &alnum(64),
+        // TWS accepts 65+, but verify_ext_operator rejects it (see its docs).
+        &alnum(65),
+    ];
+    for value in rejected {
+        match verify_ext_operator("Order::ext_operator", value) {
+            Err(Error::InvalidArgument(message)) => assert!(message.starts_with("Order::ext_operator"), "{message}"),
+            other => panic!("{value:?}: expected InvalidArgument, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn verify_order_and_cancel_check_ext_operator() {
+    let order = Order {
+        ext_operator: "probe-op".to_owned(),
+        ..Order::default()
+    };
+    assert!(matches!(
+        verify_order(server_versions::PROTOBUF_REST_MESSAGES_3, &order),
+        Err(Error::InvalidArgument(_))
+    ));
+    let cancel = OrderCancel {
+        ext_operator: "probe-cxl".to_owned(),
+        ..OrderCancel::default()
+    };
+    assert!(matches!(verify_order_cancel(&cancel), Err(Error::InvalidArgument(_))));
+    assert!(verify_order_cancel(&OrderCancel::default()).is_ok());
+}

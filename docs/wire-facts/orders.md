@@ -190,23 +190,37 @@ with `override_natural_action`.*
 
 ### `ext_operator` and `manual_order_indicator` on orders and cancels
 
-*Live 2026-11-10 20:03–20:07 ET (AAPL off-hours, ES Globex overnight), paper Gateway, server 226; #1200.*
+*Live 2026-11-14 16:33–16:42 ET (weekend), paper Gateway, server 226; #1206. Earlier run: live
+2026-11-10 20:03–20:07 ET (AAPL off-hours, ES Globex overnight), server 226; #1200.*
 
-- **Order, `ext_operator`:** `TRADER7` and `12345` accepted on ES and echoed in OpenOrder.
-  `probe-op` (hyphen) → 201 "Order rejected - reason:Invalid value in field # 8089", on AAPL
-  and ES, alone or with `manual_order_indicator`.
+- **Accepted `ext_operator` set, orders and cancels alike:** ASCII letters and digits, either
+  case, 1–16 characters. Tried on AAPL BUY 1 LMT $1 orders: `TRADER7`, `Trader7`, `trader7`,
+  `T`, 8 and 16 characters; `TRADER7` and `12345` on ES (#1200).
+- **Order, rejected (201 "Order rejected - reason:Invalid value in field # 8089", order
+  Inactive):** `-`, `_`, `.`, `/`, `@`, a space anywhere (`TRADER 7`, ` TRADER7`, `" "`), and
+  17–64 letters and digits (tried 17, 18, 19, 20, 32, 33, 64). The rejected order echoes the
+  value sent; an accepted AAPL order echoes `ext_operator` as `""`. In #1200 an ES order echoed `TRADER7`.
+- **65 or more letters and digits are accepted again** (tried 65, 96, 112, 127, 128, 129, 256),
+  on orders and cancels. Whether TWS keeps or drops such a value was not observable from the
+  AAPL echo. The client rejects these anyway (#1206).
+- **Non-ASCII** (`TRADÉR7`): 10363 "Non-ASCII symbol in field
+  PlaceOrderRequest.order.extOperator" (or `CancelOrderRequest.orderCancel.extOperator`). No
+  order is created and the id is not used up. A cancel refused this way leaves the order working.
+- **Cancel (`cancel_order_with`), PreSubmitted AAPL / Submitted ES:** an accepted value, or
+  `manual_order_indicator` 0 or 1, → OrderStatus Cancelled + 202 within ~1s. A value the order
+  side rejects with 201 (`TRADER_7`, 17 characters, `" "`, and in #1200 `probe-cxl`) → **no
+  reply**: the order goes PendingCancel and stays there. A later plain cancel draws 10148
+  "cannot be cancelled, state: PendingCancel"; a global cancel draws 161. In #1200 the orders
+  were still wedged at 20:07 ET. By 01:18 ET (inside the daily reset window) TWS had dropped
+  the cancel: each order was back in its prior state, and a plain cancel then got Cancelled + 202.
+  When between the two it reverted was not observed.
+- **Global cancel (`global_cancel_with`):** `TRADER7` + indicator 1 → 202 for each working order.
+  `probe-gcx` (hyphen) → the order went PendingCancel and wedged, as above (#1200).
+- **What-if** (`what_if = true`) does not check `ext_operator`: `probe-op` returns a normal
+  what-if OpenOrder.
 - **Order, `manual_order_indicator`:** 0 and 1 accepted on AAPL (PreSubmitted). The OpenOrder
   echo reports it absent (`None`); only a rejected order echoed the value sent.
-- **Cancel (`cancel_order_with`), ES Submitted orders:** default (control), `manual_order_indicator`
-  0 or 1, and `ext_operator` `TRADER7` → OrderStatus Cancelled + 202 within ~1s.
-  `ext_operator` `probe-cxl` (hyphen) → **no reply**: the order goes PendingCancel and stays
-  there. A later plain cancel draws 10148 "cannot be cancelled, state: PendingCancel"; a global
-  cancel draws 161. Still wedged at 20:07 ET. By 01:18 ET (inside the daily reset window) the
-  cancel had been dropped: each order was back in its prior state (AAPL PreSubmitted, ES
-  Submitted), and a plain cancel then got Cancelled + 202. When between the two it reverted
-  was not observed.
-- **Global cancel (`global_cancel_with`):** `TRADER7` + indicator 1 → 202 for each working order.
-  `probe-gcx` (hyphen) → the order went PendingCancel and wedged, as above.
-- **Not probed:** which characters besides `-` are rejected, length limits, any indicator value
-  other than 0/1, `ext_operator` on a stock order with a valid value, what reverts a wedged
-  PendingCancel (the reset, or a timeout), and live (non-paper) accounts.
+- **Not probed:** the 1–16 / 65+ sets on futures (#1206 ran on AAPL only; Globex was closed),
+  whether a 65+ value reaches the order, `global_cancel_with` with values other than the
+  hyphen, any indicator value other than 0/1, what reverts a wedged PendingCancel (the reset or
+  a timeout), and live (non-paper) accounts.

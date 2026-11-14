@@ -143,7 +143,8 @@ impl Client {
     /// * `Err(Error)` if validation failed or sending failed
     ///
     /// # Errors
-    /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::InvalidArgument`] if `order.ext_operator` is set to anything but 1–16 ASCII letters or digits; nothing is sent.
     ///
     /// # Examples
     ///
@@ -248,7 +249,8 @@ impl Client {
     /// * `order` - [`crate::orders::Order`] to submit.
     ///
     /// # Errors
-    /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::InvalidArgument`] if `order.ext_operator` is set to anything but 1–16 ASCII letters or digits; nothing is sent.
     ///
     /// # Examples
     ///
@@ -341,7 +343,8 @@ impl Client {
     /// [`cancel_order`](Self::cancel_order).
     ///
     /// # Errors
-    /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::InvalidArgument`] if `order_cancel.ext_operator` is set to anything but 1–16 ASCII letters or digits; nothing is sent. TWS never answers such a cancel, and the order sticks in `PendingCancel`.
     ///
     /// # Examples
     ///
@@ -371,6 +374,7 @@ impl Client {
     /// ```
     pub async fn cancel_order_with(&self, order_id: impl Into<OrderId>, order_cancel: &OrderCancel) -> Result<Subscription<CancelOrder>, Error> {
         let order_id = order_id.into().checked()?;
+        verify::verify_order_cancel(order_cancel)?;
         let request = encoders::encode_cancel_order(order_id.value(), order_cancel)?;
         let internal_subscription = self.send_order(order_id, request).await?;
 
@@ -403,6 +407,9 @@ impl Client {
     /// Use this over [`global_cancel`](Self::global_cancel) to send an operator ID
     /// ([`OrderCancel::ext_operator`]) or [`OrderCancel::manual_order_indicator`] with the cancel.
     ///
+    /// # Errors
+    /// [`Error::InvalidArgument`] if `order_cancel.ext_operator` is set to anything but 1–16 ASCII letters or digits; nothing is sent. TWS never answers such a cancel, and the orders stick in `PendingCancel`.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -419,6 +426,7 @@ impl Client {
     /// }
     /// ```
     pub async fn global_cancel_with(&self, order_cancel: &OrderCancel) -> Result<(), Error> {
+        verify::verify_order_cancel(order_cancel)?;
         let message = encoders::encode_global_cancel(order_cancel)?;
         self.send_message(message).await?;
 
