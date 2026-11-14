@@ -526,19 +526,32 @@ Drop the `?`, `.expect(..)` or `match` on the result. The compiler reports each 
 
 ### 26. Id parameters take `impl Into<ContractId>` and `impl Into<AccountId>`
 
-`Client::option_chain`, `wsh_event_data_by_contract` and `historical_news` (sync and async) took `contract_id: i32`; they now take `contract_id: impl Into<ContractId>`. `OrderBuilder::account` and `ExerciseOptionsBuilder::account` took `impl Into<String>`; they now take `impl Into<AccountId>`. The crate's typed ids are what `pnl_single`, the order condition constructors and `SpreadBuilder` accept, and these five inputs were the ones still asking for the raw `i32` or `String`, so a held `ContractId` or `AccountId` had to be unwrapped to pass it on; now it passes as it is. `AccountId` gains `From<&String>` and `From<&AccountId>`. What goes on the wire is unchanged.
+Every id parameter now accepts both the raw value and the typed id:
 
-Integer literals, `i32` values, `&str`, `String` and `&String` compile as before. Two kinds of argument stop compiling:
+| Method (sync and async) | 5.x | 6.0 |
+|---|---|---|
+| `option_chain`, `wsh_event_data_by_contract`, `historical_news` | `contract_id: i32` | `contract_id: impl Into<ContractId>` |
+| `OrderBuilder::account`, `ExerciseOptionsBuilder::account` | `impl Into<String>` | `impl Into<AccountId>` |
+| `pnl`, `pnl_single`, `account_updates` | `account: &AccountId` | `account: impl Into<AccountId>` |
+| `pnl_single` | `contract_id: ContractId` | `contract_id: impl Into<ContractId>` |
 
-- **An argument whose type came from the `i32` parameter.** `.into()`, `.try_into()` or `.parse()` passed straight to `contract_id` has no target type any more; name it.
+The crate hands back raw ids (`managed_accounts()` returns `String`s, `Contract::contract_id` is an `i32`), yet `pnl*` and `account_updates` accepted only the typed ids, while the other inputs accepted only raw ones. Now either passes everywhere. `AccountId` gains `From<&String>` and `From<&AccountId>`. What goes on the wire is unchanged.
+
+Integer literals, `i32`, `ContractId`, `&str`, `String`, `&String`, `AccountId` and `&AccountId` compile as before. Two kinds of argument stop compiling:
+
+- **An argument whose type came from the parameter.** `.into()`, `.try_into()` or `.parse()` passed straight to an id parameter has no target type any more; name it.
 - **A value that converts only into `String`.** `Cow<str>`, `Box<str>`, `char`, `&mut str`, a user type with only `Into<String>`, or a generic `impl Into<String>` forwarded to `account(..)`: convert to `String` first.
 
 ```rust,ignore
-// 5.x
+// 5.x (the first two lines still compile in 6.0)
+let pnl = client.pnl(&AccountId(account.clone()), None)?;
+let single = client.pnl_single(&AccountId(account.clone()), ContractId(contract.contract_id), None)?;
 let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse()?);
 let order = client.order(&contract).buy(100).market().account(cow_account);
 
 // 6.0
+let pnl = client.pnl(&account, None)?;
+let single = client.pnl_single(&account, contract.contract_id, None)?;
 let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse::<i32>()?);
 let account: String = cow_account.into();
 let order = client.order(&contract).buy(100).market().account(account);

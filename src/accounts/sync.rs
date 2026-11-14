@@ -130,10 +130,7 @@ impl Client {
     /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// use ibapi::accounts::types::AccountId;
-    ///
-    /// let account = AccountId("account id".to_string());
-    /// let subscription = client.pnl(&account, None).expect("error requesting pnl");
+    /// let subscription = client.pnl("DU1234567", None).expect("error requesting pnl");
     /// for pnl in subscription.iter_data() {
     ///     match pnl {
     ///         Ok(pnl) => println!("{pnl:?}"),
@@ -141,9 +138,10 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
+    pub fn pnl(&self, account: impl Into<AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
+        let account = account.into();
         let builder = self.request();
-        let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
+        let request = encoders::encode_request_pnl(builder.request_id(), &account, model_code)?;
         builder.send(request)
     }
 
@@ -161,12 +159,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// use ibapi::accounts::types::{AccountId, ContractId};
-    ///
-    /// let account = AccountId("<account id>".to_string());
-    /// let contract_id = ContractId(1001);
-    ///
-    /// let subscription = client.pnl_single(&account, contract_id, None).expect("error requesting pnl");
+    /// let subscription = client.pnl_single("DU1234567", 1001, None).expect("error requesting pnl");
     /// for pnl in subscription.iter_data() {
     ///     match pnl {
     ///         Ok(pnl) => println!("{pnl:?}"),
@@ -174,9 +167,14 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn pnl_single(&self, account: &AccountId, contract_id: ContractId, model_code: Option<&ModelCode>) -> Result<Subscription<PnLSingle>, Error> {
+    pub fn pnl_single(
+        &self,
+        account: impl Into<AccountId>,
+        contract_id: impl Into<ContractId>,
+        model_code: Option<&ModelCode>,
+    ) -> Result<Subscription<PnLSingle>, Error> {
         let builder = self.request();
-        let request = encoders::encode_request_pnl_single(builder.request_id(), account, contract_id, model_code)?;
+        let request = encoders::encode_request_pnl_single(builder.request_id(), &account.into(), contract_id.into(), model_code)?;
         builder.send(request)
     }
 
@@ -296,11 +294,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// use ibapi::accounts::types::AccountId;
-    ///
-    /// let account = AccountId("U1234567".to_string());
-    ///
-    /// let subscription = client.account_updates(&account).expect("error requesting account updates");
+    /// let subscription = client.account_updates("U1234567").expect("error requesting account updates");
     /// for update in subscription.iter_data() {
     ///     let update = update?;
     ///     println!("{update:?}");
@@ -312,7 +306,8 @@ impl Client {
     /// }
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
+    pub fn account_updates(&self, account: impl Into<AccountId>) -> Result<Subscription<AccountUpdate>, Error> {
+        let account = &account.into();
         let request = encoders::encode_request_account_updates(true, account)?;
         let subscription = self.message_bus.send_account_updates_request(account, &request)?;
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
