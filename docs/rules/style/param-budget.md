@@ -10,7 +10,7 @@ triggers:
   - a public method takes several Option arguments
 symbols: [too_many_arguments]
 related: [domain-module-layout, macros-last-resort, doc-parity-audit]
-precedents: ["#549", "#573", "#660", "#752", "#792", "#901", "#1079", "#1123", "#1212"]
+precedents: ["#549", "#573", "#660", "#752", "#792", "#901", "#1079", "#1123", "#1213"]
 ---
 
 Three parameters is the budget for the **public API** (anything rustdoc shows). The receiver
@@ -52,7 +52,7 @@ functions (module doc explains).
 
 ## Precedents
 
-- #1212 — `historical_news(contract_id, codes, start, end, total)` was kept flat as "all five
+- #1213 — `historical_news(contract_id, codes, start, end, total)` was kept flat as "all five
   required" (#901). A live probe showed TWS uses one bound per request, so two of the five were
   never both meaningful; it became a builder (`.before` / `.since` / `.limit`). Counter-example to
   "all required, no default": probe before accepting it.
