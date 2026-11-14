@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 // Common implementation modules
+mod builder;
 mod common;
+
+pub use builder::HistoricalNewsBuilder;
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
@@ -85,7 +88,7 @@ pub struct NewsArticle {
 }
 
 /// One page of historical news headlines, returned by
-/// [`historical_news_page`](crate::Client::historical_news_page).
+/// [`HistoricalNewsBuilder::page`].
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
 pub struct HistoricalNewsPage {
@@ -97,8 +100,7 @@ pub struct HistoricalNewsPage {
 }
 
 /// One frame of a `reqHistoricalNews` reply, read by
-/// [`historical_news_page`](crate::Client::historical_news_page): articles,
-/// then `End`.
+/// [`HistoricalNewsBuilder::page`]: articles, then `End`.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum HistoricalNewsFrame {
     /// One headline.

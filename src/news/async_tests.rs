@@ -92,11 +92,10 @@ async fn historical_news_works() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
-    let start_time = datetime!(2023-01-01 0:00 UTC);
-    let end_time = datetime!(2023-01-02 0:00 UTC);
-
     let mut subscription = client
-        .historical_news(TEST_CONTRACT_ID, &["BZ", "DJ"], start_time, end_time, 300)
+        .historical_news(TEST_CONTRACT_ID, &["BZ", "DJ"])
+        .before(datetime!(2023-01-02 0:00 UTC))
+        .subscribe()
         .await
         .expect("request historical news failed");
 
@@ -106,8 +105,7 @@ async fn historical_news_works() {
         &historical_news_request()
             .request_id(TEST_REQ_ID_FIRST)
             .provider_codes(&["BZ", "DJ"])
-            .start_time(start_time)
-            .end_time(end_time)
+            .start_date_time("2023-01-02 00:00:00.0")
             .total_results(300),
     );
 
@@ -152,11 +150,11 @@ async fn historical_news_page_works() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
-    let start_time = datetime!(2023-01-01 0:00 UTC);
-    let end_time = datetime!(2023-01-02 0:00 UTC);
-
     let page = client
-        .historical_news_page(TEST_CONTRACT_ID, &["BZ", "DJ"], start_time, end_time, 2)
+        .historical_news(TEST_CONTRACT_ID, &["BZ", "DJ"])
+        .since(datetime!(2023-01-01 0:00 UTC))
+        .limit(2)
+        .page()
         .await
         .expect("request historical news page failed");
 
@@ -166,8 +164,7 @@ async fn historical_news_page_works() {
         &historical_news_request()
             .request_id(TEST_REQ_ID_FIRST)
             .provider_codes(&["BZ", "DJ"])
-            .start_time(start_time)
-            .end_time(end_time)
+            .end_date_time("2023-01-01 00:00:00.0")
             .total_results(2),
     );
 
@@ -198,16 +195,7 @@ async fn historical_news_page_times_out_at_the_deadline() {
     );
     let client = Client::stubbed(message_bus, server_versions::PROTOBUF_NEWS_DATA).with_one_shot_timeout(std::time::Duration::from_millis(50));
 
-    let error = client
-        .historical_news_page(
-            TEST_CONTRACT_ID,
-            &["BZ", "DJ"],
-            datetime!(2023-01-01 0:00 UTC),
-            datetime!(2023-01-02 0:00 UTC),
-            2,
-        )
-        .await
-        .unwrap_err();
+    let error = client.historical_news(TEST_CONTRACT_ID, &["BZ", "DJ"]).limit(2).page().await.unwrap_err();
 
     assert!(matches!(error, crate::Error::Timeout), "got {error:?}");
 }
@@ -222,15 +210,7 @@ async fn historical_news_page_requires_end() {
     )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
-    let result = client
-        .historical_news_page(
-            TEST_CONTRACT_ID,
-            &["BZ"],
-            datetime!(2023-01-01 0:00 UTC),
-            datetime!(2023-01-02 0:00 UTC),
-            2,
-        )
-        .await;
+    let result = client.historical_news(TEST_CONTRACT_ID, &["BZ"]).limit(2).page().await;
 
     assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
     assert_eq!(request_message_count(&message_bus), 1, "a closed stream must not be retried");
@@ -255,13 +235,9 @@ async fn historical_news_page_retries_a_connection_reset() {
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
     let page = client
-        .historical_news_page(
-            TEST_CONTRACT_ID,
-            &["BZ"],
-            datetime!(2023-01-01 0:00 UTC),
-            datetime!(2023-01-02 0:00 UTC),
-            2,
-        )
+        .historical_news(TEST_CONTRACT_ID, &["BZ"])
+        .limit(2)
+        .page()
         .await
         .expect("the reset must be retried, not surfaced");
 

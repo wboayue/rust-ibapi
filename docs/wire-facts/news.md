@@ -37,22 +37,28 @@ News providers, historical news, articles. Format: [README](README.md).
 
 ### Historical news range and has_more
 
-*Live 2026-11-14 11:45 ET Saturday, paper, server 226.*
+*Live 2026-11-14 11:45–12:30 ET Saturday, paper, server 226; gateway login zone US/Eastern. #1212.*
 
-- `reqHistoricalNews` for AAPL (265598), all 8 paper providers, through `historical_news_page`.
-- The crate's time format, `yyyyMMdd HH:mm:ss UTC` (the historical-data form `ToField` gives
-  `OffsetDateTime`), is ignored without a notice. Every request returns the newest headlines,
-  whatever its range: a 30-minute window ending now returned 300 headlines spanning 13 days.
-- The C# reference documents `yyyy-MM-dd HH:mm:ss.0` and passes both times through unchanged
-  (`EClientUtils.createHistoricalNewsRequestProto`). Sent in that form (UTC), TWS returns the
-  newest headlines at or before **`start_time`** and ignores `end_time`. Every case started at or just
-  before `start_time`:
-  - start Nov 1, end Nov 5 and start Nov 1, end now: identical, newest `2026-10-31 21:33`.
-  - start Nov 5, end Nov 1: newest `2026-11-04 22:46`.
-  - start Nov 4 12:00, end Nov 4 13:00: newest `2026-11-04 11:36:08`, oldest Oct 20.
-- `has_more` is `true` whenever more headlines than returned are available: `total_results`
-  1, 10 and 300, and 500 (capped to 300). Since `end_time` is ignored, every probed request
-  had more, so every one was `true`.
-- **Not probed:** a `false` `has_more` (needs a contract with fewer headlines than requested
-  before `start_time`); whether TWS reads the `.0` form as UTC or as the gateway's zone (every
-  first headline fell at or just before `start_time` read as UTC, at minute resolution).
+- `reqHistoricalNews` for AAPL (265598), all 8 paper providers, `totalResults` 300 unless noted,
+  with `startDateTime` / `endDateTime` set as raw text (empty = omitted).
+- **Format.** The historical-data form `yyyyMMdd HH:mm:ss UTC`, which the crate sent before
+  #1212, is ignored without a notice: every request returned the newest headlines, so a 30-minute
+  window returned 300 headlines spanning 13 days. `yyyyMMdd HH:mm:ss` with no zone is ignored too.
+  The C# reference's `yyyy-MM-dd HH:mm:ss.0` is read as **UTC**: start `2026-11-04 12:00:00.0`
+  returned newest `11:36:08` UTC, and AAPL had headlines throughout the hours an Eastern
+  reading (17:00 UTC) would have included. With ` UTC` appended it reads the same. Without the
+  `.0`, `2026-11-04 12:00:00` is read in the **gateway's zone**: newest `16:02` UTC, before
+  12:00 ET = 17:00 UTC.
+- **One bound per request.**
+  - `startDateTime` alone: the newest headlines strictly **before** it (exclusive: start
+    `13:15:00.0` excludes a `13:15:00` headline, `13:15:01.0` includes it).
+  - `endDateTime` alone: the newest headlines **at or after** it (inclusive: end `00:01:00.0`
+    includes a `00:01:00` headline). End Nov 13 00:00 returned 20 headlines, `has_more` false.
+  - Both set: `endDateTime` is ignored. Start Nov 1 with end Nov 5, and with end now, returned
+    the same page; start Nov 4 14:00 with end Nov 4 12:00 returned 300 headlines back to Oct 20.
+  - Neither: the newest headlines.
+- **`has_more`** is `true` when more headlines match than were returned (`totalResults` 1, 10,
+  300, and 500 capped to 300) and `false` when all fit (the 20 since Nov 13).
+- **Not probed:** non-US gateway zones and the gateway's UTC Historical Date Format setting;
+  headlines sharing the timestamp of a `startDateTime` page boundary (skipped by an exclusive
+  bound; timestamps are mostly whole minutes); `historicalNewsOptions`.
