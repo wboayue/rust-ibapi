@@ -126,9 +126,9 @@ impl Client {
     /// `has_more` flag, which [`historical_news`](Self::historical_news)
     /// discards. Waits for TWS's end frame.
     ///
-    /// TWS returns the newest headlines first. To read the next page when `has_more` is
-    /// set, request again with `end_time` set to the oldest article's `time`; `end_time`
-    /// is inclusive, so that article comes back first and should be skipped.
+    /// TWS returns the newest headlines first, and sets `has_more` when more are available
+    /// than it returned (live: 2026-11-14). It ignores the range as this client sends it,
+    /// so a narrower range does not page; see `docs/wire-facts/news.md`.
     ///
     /// # Arguments
     ///
@@ -167,7 +167,7 @@ impl Client {
     ///     println!("{:?}: {}", article.time, article.headline);
     /// }
     /// if page.has_more {
-    ///     println!("more headlines match the range");
+    ///     println!("more headlines are available");
     /// }
     /// # Ok(())
     /// # }

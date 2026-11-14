@@ -91,7 +91,7 @@ pub struct NewsArticle {
 pub struct HistoricalNewsPage {
     /// The headlines, at most `total_results` of them.
     pub articles: Vec<NewsArticle>,
-    /// TWS's flag that more headlines than `total_results` match the range. `false` when TWS
+    /// TWS's flag that more headlines are available than it returned. `false` when TWS
     /// omits the field.
     pub has_more: bool,
 }
@@ -105,7 +105,7 @@ pub(crate) enum HistoricalNewsFrame {
     Article(NewsArticle),
     /// `historicalNewsEnd`: the page is complete.
     End {
-        /// TWS's flag that more headlines than `total_results` match the range.
+        /// TWS's flag that more headlines are available than it returned.
         has_more: bool,
     },
 }
