@@ -240,8 +240,7 @@ pub(crate) const FARM_CODES: [(i32, DataFarmKind, ConnectivityStatus); 9] = [
 
 /// Separator before the farm name in an inactive-farm notice (2107, 2108), which
 /// ends "…available upon demand.usfarm" where the other farm notices use `:`.
-/// That shape is from IB-reported logs, not yet captured live; see
-/// `docs/wire-facts/protocol.md#data-farm-notices`.
+/// Live 2026-11-14 (2108, Gateway 226); see `docs/wire-facts/protocol.md#data-farm-notices`.
 const FARM_INACTIVE_NAME_SEPARATOR: &str = "upon demand.";
 
 fn farm_entry(code: i32) -> Option<(DataFarmKind, ConnectivityStatus)> {
@@ -645,9 +644,8 @@ pub struct DataFarm {
     pub status: ConnectivityStatus,
     /// The farm's name, parsed from the message text: `usfarm` in
     /// "Market data farm connection is OK:usfarm" or in "…available upon
-    /// demand.usfarm" (the inactive shape, 2107 and 2108, is not yet verified
-    /// live). `None` when the message names none. Best-effort: TWS carries the
-    /// name only in free text.
+    /// demand.usfarm" (the inactive shape, 2107 and 2108). `None` when the
+    /// message names none. Best-effort: TWS carries the name only in free text.
     pub name: Option<String>,
 }
 

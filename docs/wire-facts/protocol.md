@@ -104,16 +104,27 @@ longer occurs for them.
 ### Data-farm notices
 
 *Live 2026-11-13 (session not recorded), paper TWS, server 223; live 2026-11-14 weekend, paper Gateway,
-server 226; #1209 (`FARM_CODES`, `Notice::data_farm` in `src/messages/notice.rs`).*
+server 226, connect burst plus a 30-min session (Sat 15:24–15:54 ET) with a forex quote and
+connectivity flaps; #1209 (`FARM_CODES`, `Notice::data_farm` in `src/messages/notice.rs`).*
 
-- At connect, TWS sends one global notice (request id -1) per farm, with the farm name after
-  a `:` and no space:
-  - TWS, server 223: `2104 Market data farm connection is OK:usopt`, `2104 ...OK:usfarm`,
-    `2106 HMDS data farm connection is OK:ushmds`, `2158 Sec-def data farm connection is
-    OK:secdefnj`.
-  - Gateway, server 226: `2104 ...OK:usfuture`, `2104 ...OK:usfarm`, `2106 ...OK:ushmds`,
-    `2158 ...OK:secdefnj`.
-- Only OK codes appeared in either burst.
-- **Not probed:** broken (2103, 2105, 2157), inactive (2107, 2108) and connecting (2119) text.
-  IB-reported logs show the inactive notices ending `...available upon demand.usfarm`, a `.`
-  rather than a `:` before the name; `Notice::data_farm` parses that shape, unverified.
+- Every farm notice is global (request id -1) and carries the farm name in its text. All but
+  the inactive notice put it after a `:` with no space:
+  - connect burst, TWS server 223: `2104 Market data farm connection is OK:usopt`,
+    `2104 ...OK:usfarm`, `2106 HMDS data farm connection is OK:ushmds`,
+    `2158 Sec-def data farm connection is OK:secdefnj`.
+  - connect burst, Gateway server 226: `2104 ...OK:usfuture` (earlier run only),
+    `2104 ...OK:usfarm`, `2106 ...OK:ushmds`, `2158 ...OK:secdefnj`.
+  - connecting, Gateway 226, on the first EUR.USD quote: `2119 Market data farm is
+    connecting:cashfarm`, then `2104 ...OK:cashfarm` in the same second.
+  - broken, Gateway 226, during weekend flaps: `2103 Market data farm connection is
+    broken:usfarm`, `2105 HMDS data farm connection is broken:ushmds`, `2157 Sec-def data farm
+    connection is broken:secdefnj`. Each flap ran broken → 1100 → OK codes → `1102 ...restored
+    - data maintained. All data farms are connected: usfarm; ushmds; secdefnj.`; 1100 can come
+    before or after the broken codes.
+- Inactive uses a `.` instead: `2108 Market data farm connection is inactive but should be
+  available upon demand.cashfarm`, about 2.5 min after the cashfarm quote was cancelled. It
+  arrived as two identical frames (both in the raw capture, so TWS sends it twice).
+  `Notice::data_farm` parsed every notice above to the right kind, status and name.
+- **Not probed:** 2107 (HMDS inactive): `ushmds` stayed up through 30 min idle after one
+  head-timestamp request. Non-OK codes on TWS (only Gateway showed them), and farms other than
+  those named above.

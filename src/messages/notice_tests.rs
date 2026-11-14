@@ -408,9 +408,9 @@ fn farm_code_table() {
 fn data_farm_reads_kind_status_and_name() {
     use ConnectivityStatus::{Broken, Connecting, Inactive, Ok as FarmOk};
     use DataFarmKind::*;
-    // The first four messages are as paper TWS/Gateway sent them at connect
-    // (docs/wire-facts/protocol.md#data-farm-notices). The rest, including the
-    // inactive shape with `.` before the name, are not captured live.
+    // The first nine messages are as paper TWS/Gateway sent them
+    // (docs/wire-facts/protocol.md#data-farm-notices). The rest are edge cases:
+    // padded, dotted, 2107 (not captured) and missing names.
     let cases = [
         (2104, "Market data farm connection is OK:usopt", MarketData, FarmOk, Some("usopt")),
         (2104, "Market data farm connection is OK:usfarm", MarketData, FarmOk, Some("usfarm")),
@@ -422,8 +422,24 @@ fn data_farm_reads_kind_status_and_name() {
             FarmOk,
             Some("secdefnj"),
         ),
+        (2119, "Market data farm is connecting:cashfarm", MarketData, Connecting, Some("cashfarm")),
+        (2103, "Market data farm connection is broken:usfarm", MarketData, Broken, Some("usfarm")),
+        (2105, "HMDS data farm connection is broken:ushmds", HistoricalData, Broken, Some("ushmds")),
+        (
+            2157,
+            "Sec-def data farm connection is broken:secdefnj",
+            SecurityDefinition,
+            Broken,
+            Some("secdefnj"),
+        ),
+        (
+            2108,
+            "Market data farm connection is inactive but should be available upon demand.cashfarm",
+            MarketData,
+            Inactive,
+            Some("cashfarm"),
+        ),
         (2103, "Market data farm connection is broken: usfarm ", MarketData, Broken, Some("usfarm")),
-        (2119, "Market data farm is connecting:usfarm", MarketData, Connecting, Some("usfarm")),
         (
             2108,
             "Market data farm connection is inactive but should be available upon demand.usfarm.nj",
