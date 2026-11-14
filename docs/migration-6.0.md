@@ -635,4 +635,4 @@ match item {
 }
 ```
 
-Rename `ExerciseOptions` to `PlaceOrder` and add the two arms; the compiler reports each site. `ExerciseOptions` derived `PartialEq` and serde; `PlaceOrder` does not, so code that compared or serialized the items compares or serializes the fields it needs instead. The subscription does not end on its own: stop reading after the execution on the option.
+Rename `ExerciseOptions` to `PlaceOrder` and add the two arms; the compiler reports each site. `ExerciseOptions` derived `PartialEq` and serde; `PlaceOrder` does not, so code that compared or serialized the items compares or serializes the fields it needs instead. The subscription does not end on its own: stop reading after the execution on the option (the `ExecutionData` whose `contract.security_type` is the option's). An open order and a `Filled` status follow it and repeat the fill; the earlier `Filled` status is no end marker, since its `filled` counts the underlying's shares (100 for one contract).

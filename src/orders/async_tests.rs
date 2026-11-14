@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{Contract, SecurityIdType, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
-use crate::messages::{IncomingMessages, ORDER_PRESET_TIF_CODE};
+use crate::messages::IncomingMessages;
 use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
 use crate::orders::{OcaType, OrderStatusKind, TimeInForce};
 use crate::proto;
@@ -478,45 +478,16 @@ async fn exercise_options() {
     assert_eq!(request_message_count(&message_bus), 1);
 }
 
-// Live frame order (paper TWS, server 223): 10349 bound to the exercise's order id,
-// then the open order and the executions. 10349 must not end the stream.
+// Replays one live exercise (paper TWS, server 223): 10349 must not end the stream, and every
+// open order, status and execution after it arrives.
 #[tokio::test]
 async fn exercise_options_reads_past_preset_tif_warning_to_executions() {
+    use crate::orders::common::test_tables::{assert_exercise_live_items, exercise_live_frames};
+
     let order_id = 16;
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-        proto_error_response(order_id, ORDER_PRESET_TIF_CODE, "Order TIF was set to DAY based on order preset."),
-        proto_response(
-            IncomingMessages::OpenOrder,
-            open_order()
-                .order_id(order_id)
-                .symbol("SPY")
-                .security_type("OPT")
-                .last_trade_date_or_contract_month("20261120")
-                .strike(755.0)
-                .right("C")
-                .multiplier("100")
-                .exchange("SMART")
-                .total_quantity(1.0)
-                .order_type("LMT")
-                .perm_id(1995911677)
-                .encode_proto(),
-        ),
-        proto_response(
-            IncomingMessages::ExecutionData,
-            execution_data()
-                .order_id(order_id)
-                .contract_id(756733)
-                .symbol("SPY")
-                .security_type("STK")
-                .execution_id("0000fd27.6af734bb.01.01")
-                .side("BOT")
-                .shares(100.0)
-                .price(755.0)
-                .perm_id(1995911677)
-                .option_exercise_type(1)
-                .encode_proto(),
-        ),
-    ]));
+    let frames = exercise_live_frames(order_id);
+    let frame_count = frames.len();
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(frames));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::option("SPY", "20261120", 755.0, OptionRight::Call);
 
@@ -527,27 +498,11 @@ async fn exercise_options_reads_past_preset_tif_warning_to_executions() {
         .await
         .expect("exercise_options failed");
 
-    match subscription.next().await {
-        Some(Ok(SubscriptionItem::Notice(notice))) => {
-            assert_eq!(notice.code, ORDER_PRESET_TIF_CODE);
-            assert!(notice.is_warning(), "10349 should be a warning, got {notice:?}");
-        }
-        other => panic!("expected the 10349 notice, got {other:?}"),
+    let mut items = Vec::new();
+    for _ in 0..frame_count {
+        items.push(subscription.next().await.expect("stream ended early").expect("exercise item failed"));
     }
-    match subscription.next().await {
-        Some(Ok(SubscriptionItem::Data(PlaceOrder::OpenOrder(order)))) => assert_eq!(order.order.perm_id, 1995911677),
-        other => panic!("expected the exercise's open order, got {other:?}"),
-    }
-    match subscription.next().await {
-        Some(Ok(SubscriptionItem::Data(PlaceOrder::ExecutionData(data)))) => {
-            assert_eq!(data.execution.execution_id, "0000fd27.6af734bb.01.01");
-            assert_eq!(data.execution.shares, 100.0);
-            assert_eq!(data.execution.price, 755.0);
-            assert_eq!(data.execution.option_exercise_type, OptionExerciseType::Exercise);
-            assert_eq!(data.contract.security_type, SecurityType::Stock);
-        }
-        other => panic!("expected the exercise execution, got {other:?}"),
-    }
+    assert_exercise_live_items(&items, &contract);
 }
 
 #[tokio::test]

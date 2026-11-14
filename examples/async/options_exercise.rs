@@ -11,6 +11,7 @@
 
 use futures::StreamExt;
 use ibapi::contracts::{Contract, OptionRight, SecurityType};
+use ibapi::orders::PlaceOrder;
 use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 
@@ -57,8 +58,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?
         .filter_data();
 
+    // The subscription does not end on its own: the execution on the option is the exercise's
+    // last one.
     while let Some(event) = events.next().await {
         match event {
+            Ok(PlaceOrder::ExecutionData(data)) if data.contract.security_type == contract.security_type => {
+                println!("Exercised: {:?}", data.execution);
+                break;
+            }
             Ok(event) => println!("Response: {event:?}"),
             Err(e) => {
                 eprintln!("error: {e}");

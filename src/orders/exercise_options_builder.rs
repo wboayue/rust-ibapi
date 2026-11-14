@@ -101,11 +101,16 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
     /// Send the request and return a subscription yielding its order status, open order and
     /// execution updates.
     ///
-    /// TWS reports an exercise as an order on the option, so the items are [`PlaceOrder`]s:
-    /// an open order and its statuses, then one execution on the underlying and one on the
-    /// option, each with [`Execution::option_exercise_type`](super::Execution::option_exercise_type)
-    /// set. No commission report arrives for them (live, paper TWS, server 223). The
-    /// subscription does not end on its own; stop reading once the option's execution arrives.
+    /// TWS reports an exercise as an order on the option, so the items are [`PlaceOrder`]s.
+    /// Exercising a call (live, paper TWS, server 223) yields an open order, an execution on
+    /// the underlying, a `Filled` status, an execution on the option, then one more open order
+    /// and `Filled` status. Both executions have
+    /// [`Execution::option_exercise_type`](super::Execution::option_exercise_type) set; no
+    /// commission report arrives for them. Lapses, puts and futures options are unverified.
+    ///
+    /// The subscription does not end on its own; stop reading once the option's execution
+    /// arrives. The two frames after it repeat the fill, and the first `Filled` status is no
+    /// end marker: its `filled` counts the underlying's shares (100 for one contract).
     ///
     /// Note: a TWS setting decides whether an exercise request must be finalized before it is sent.
     ///
@@ -159,11 +164,16 @@ impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
     /// Send the request and return a subscription yielding its order status, open order and
     /// execution updates.
     ///
-    /// TWS reports an exercise as an order on the option, so the items are [`PlaceOrder`]s:
-    /// an open order and its statuses, then one execution on the underlying and one on the
-    /// option, each with [`Execution::option_exercise_type`](super::Execution::option_exercise_type)
-    /// set. No commission report arrives for them (live, paper TWS, server 223). The
-    /// subscription does not end on its own; stop reading once the option's execution arrives.
+    /// TWS reports an exercise as an order on the option, so the items are [`PlaceOrder`]s.
+    /// Exercising a call (live, paper TWS, server 223) yields an open order, an execution on
+    /// the underlying, a `Filled` status, an execution on the option, then one more open order
+    /// and `Filled` status. Both executions have
+    /// [`Execution::option_exercise_type`](super::Execution::option_exercise_type) set; no
+    /// commission report arrives for them. Lapses, puts and futures options are unverified.
+    ///
+    /// The subscription does not end on its own; stop reading once the option's execution
+    /// arrives. The two frames after it repeat the fill, and the first `Filled` status is no
+    /// end marker: its `filled` counts the underlying's shares (100 for one contract).
     ///
     /// Note: a TWS setting decides whether an exercise request must be finalized before it is sent.
     ///
