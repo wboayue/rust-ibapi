@@ -1,5 +1,5 @@
 use super::*;
-use crate::contracts::LegAction;
+use crate::contracts::{ContractMonth, ExpirationDate, LegAction};
 
 #[test]
 fn contract_builder_new() {
@@ -41,7 +41,7 @@ fn contract_builder_field_setters() {
     assert_eq!(builder.currency, Some("USD".to_string()));
     assert_eq!(builder.strike, Some(150.0));
     assert_eq!(builder.right, Some(OptionRight::Call));
-    assert_eq!(builder.last_trade_date_or_contract_month, Some("20231215".to_string()));
+    assert!(matches!(&builder.last_trade_date_or_contract_month, Some(ExpiryInput::Text(t)) if t == "20231215"));
     assert_eq!(builder.multiplier, Some("100".to_string()));
     assert_eq!(builder.local_symbol, Some("AAPL_123".to_string()));
     assert_eq!(builder.primary_exchange, Some("NASDAQ".to_string()));
@@ -105,7 +105,7 @@ fn contract_builder_build_stock_success() {
     assert_eq!(contract.contract_id, 12345);
     assert_eq!(contract.strike, 0.0);
     assert_eq!(contract.right, None);
-    assert_eq!(contract.last_trade_date_or_contract_month, "");
+    assert_eq!(contract.last_trade_date_or_contract_month, None);
     assert!(!contract.include_expired);
 }
 
@@ -124,7 +124,7 @@ fn contract_builder_build_option_success() {
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.strike, 150.0);
     assert_eq!(contract.right, Some(OptionRight::Call));
-    assert_eq!(contract.last_trade_date_or_contract_month, "20231215");
+    assert_eq!(contract.last_trade_date_or_contract_month, Some("20231215".parse().unwrap()));
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn contract_builder_build_futures_success() {
     assert_eq!(contract.security_type, SecurityType::Future);
     assert_eq!(contract.exchange, "CME");
     assert_eq!(contract.currency, "USD");
-    assert_eq!(contract.last_trade_date_or_contract_month, "202312");
+    assert_eq!(contract.last_trade_date_or_contract_month, Some("202312".parse().unwrap()));
 }
 
 #[test]
@@ -347,7 +347,7 @@ fn contract_builder_defaults() {
     assert_eq!(contract.contract_id, 0);
     assert_eq!(contract.symbol, "TEST");
     assert_eq!(contract.security_type, SecurityType::Stock); // Default
-    assert_eq!(contract.last_trade_date_or_contract_month, "");
+    assert_eq!(contract.last_trade_date_or_contract_month, None);
     assert_eq!(contract.strike, 0.0);
     assert_eq!(contract.right, None);
     assert_eq!(contract.multiplier, "");
@@ -443,7 +443,7 @@ fn setter_parity_with_contract_fields() {
     assert_eq!(contract_id, 99);
     assert_eq!(symbol, "X");
     assert_eq!(security_type, SecurityType::Stock);
-    assert_eq!(last_trade_date_or_contract_month, "20241220");
+    assert_eq!(last_trade_date_or_contract_month, Some("20241220".parse().unwrap()));
     assert_eq!(strike, 150.0);
     assert_eq!(right, Some(OptionRight::Call));
     assert_eq!(multiplier, "100");
@@ -462,4 +462,39 @@ fn setter_parity_with_contract_fields() {
     assert_eq!(last_trade_date, Some(date));
     assert_eq!(issuer_id, "issuer");
     assert_eq!(description, "description");
+}
+
+#[test]
+fn build_parses_last_trade_date_or_contract_month() {
+    let future = |text: &str| {
+        ContractBuilder::futures("ES", "CME", "USD")
+            .last_trade_date_or_contract_month(text)
+            .build()
+    };
+    assert_eq!(
+        future("202612").unwrap().last_trade_date_or_contract_month,
+        Some(Expiry::Month(ContractMonth::new(2026, 12)))
+    );
+    assert_eq!(
+        future("20261218").unwrap().last_trade_date_or_contract_month,
+        Some(Expiry::Date(ExpirationDate::new(2026, 12, 18)))
+    );
+    for bad in ["2026-12", "202613", "", "20261218 08:30:00 US/Central"] {
+        assert!(
+            matches!(future(bad), Err(Error::InvalidArgument(msg)) if msg.contains("last_trade_date_or_contract_month")),
+            "{bad:?}"
+        );
+    }
+}
+
+#[test]
+fn expiry_sets_typed_value() {
+    let contract = ContractBuilder::futures("ES", "CME", "USD")
+        .expiry(ContractMonth::new(2026, 12))
+        .build()
+        .unwrap();
+    assert_eq!(
+        contract.last_trade_date_or_contract_month,
+        Some(Expiry::Month(ContractMonth::new(2026, 12)))
+    );
 }

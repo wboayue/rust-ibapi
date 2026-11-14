@@ -499,7 +499,7 @@ fn encode_limit_order() {
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         local_symbol: "FGBL MAR 23".to_owned(),
-        last_trade_date_or_contract_month: "202303".to_owned(),
+        last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
         ..Contract::default()
     };
     let order = order_builder::limit_order(Action::Buy, 10.0, 500.00);
@@ -585,7 +585,7 @@ fn exercise_options() {
         security_type: SecurityType::FuturesOption,
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: "20250919".to_string(),
+        last_trade_date_or_contract_month: Some("20250919".parse().unwrap()),
         strike: 5800.0,
         right: Some(OptionRight::Call),
         ..Default::default()
@@ -618,7 +618,7 @@ fn exercise_options_reads_past_preset_tif_warning_to_executions() {
     let frame_count = frames.len();
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(frames));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    let contract = Contract::option("SPY", "20261120", 755.0, OptionRight::Call);
+    let contract = Contract::option("SPY", crate::contracts::ExpirationDate::new(2026, 11, 20), 755.0, OptionRight::Call);
 
     let subscription = client.exercise_options(&contract).exercise(1).submit().expect("exercise_options failed");
 

@@ -3,6 +3,19 @@ use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::orders::Order;
 
 #[test]
+fn encode_contract_sends_expiry_as_wire_text() {
+    use crate::contracts::Expiry;
+    // Unknown (a bond's zoned value) goes back byte for byte.
+    for raw in ["20261218", "202612", "20430504 16:00 Europe/London"] {
+        let contract = Contract {
+            last_trade_date_or_contract_month: Expiry::from_wire(raw),
+            ..Default::default()
+        };
+        assert_eq!(encode_contract(&contract).last_trade_date_or_contract_month.as_deref(), Some(raw));
+    }
+}
+
+#[test]
 fn encode_contract_basic() {
     let contract = Contract {
         contract_id: 265598,

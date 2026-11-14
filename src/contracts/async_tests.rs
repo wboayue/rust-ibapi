@@ -388,7 +388,7 @@ async fn request_future_contract_details() {
         security_type: SecurityType::Future,
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: "202506".to_string(),
+        last_trade_date_or_contract_month: Some("202506".parse().unwrap()),
         ..Default::default()
     };
 
@@ -528,7 +528,7 @@ async fn market_rule_skips_another_rule_ids_frame() {
 async fn calculate_option_price_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
-    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
+    let contract = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call);
 
     let err = client.calculate_option_price(&contract, 0.25, 155.0).await.unwrap_err();
     assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
@@ -538,7 +538,7 @@ async fn calculate_option_price_returns_eof_on_empty_stream() {
 async fn calculate_implied_volatility_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_IMPLIED_VOLAT);
-    let contract = Contract::option("AAPL", "20231215", 150.0, OptionRight::Call);
+    let contract = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call);
 
     let err = client.calculate_implied_volatility(&contract, 8.5, 155.0).await.unwrap_err();
     assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");

@@ -156,7 +156,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 symbol: Symbol::from("ES"),
                 security_type: SecurityType::Future,
                 exchange: Exchange::from("CME"),
-                last_trade_date_or_contract_month: "202406".to_string(),
+                last_trade_date_or_contract_month: Some("202406".parse().unwrap()),
                 currency: Currency::from("USD"),
                 ..Default::default()
             },
@@ -195,7 +195,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].contract.exchange, Exchange::from("CME"));
                 assert_eq!(contracts[0].contract.contract_id, 551318584);
                 assert_eq!(contracts[0].contract.multiplier, "50");
-                assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20240621");
+                assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, Some("20240621".parse().unwrap()));
                 assert_eq!(contracts[0].long_name, "E-mini S&P 500");
                 assert_eq!(contracts[0].category, "Indices");
                 assert_eq!(contracts[0].settlement_method, "Cash");
@@ -243,7 +243,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].contract.contract_id, 12345);
                 assert_eq!(contracts[0].long_name, "US Treasury Bond");
                 assert_eq!(contracts[0].industry, "Government");
-                assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20420815");
+                assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, Some("20420815".parse().unwrap()));
                 assert_eq!(contracts[0].maturity, "20420815");
                 assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
                 assert_eq!(contracts[0].market_name, "US Treasury Bond");
@@ -538,7 +538,7 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
             contract: Contract {
                 symbol: Symbol::from("AAPL"),
                 security_type: SecurityType::Option,
-                last_trade_date_or_contract_month: "20231215".to_string(),
+                last_trade_date_or_contract_month: Some("20231215".parse().unwrap()),
                 strike: 150.0,
                 right: Some(OptionRight::Call),
                 exchange: Exchange::from("SMART"),
@@ -572,7 +572,7 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
             contract: Contract {
                 symbol: Symbol::from("AAPL"),
                 security_type: SecurityType::Option,
-                last_trade_date_or_contract_month: "20231215".to_string(),
+                last_trade_date_or_contract_month: Some("20231215".parse().unwrap()),
                 strike: 150.0,
                 right: Some(OptionRight::Call),
                 exchange: Exchange::from("SMART"),
@@ -790,7 +790,7 @@ pub fn client_method_test_cases() -> Vec<ClientMethodTestCase> {
         ClientMethodTestCase {
             name: "calculate option price",
             test_type: ClientMethodTest::CalculateOptionPrice {
-                contract: Contract::option("AAPL", "20231215", 150.0, OptionRight::Call),
+                contract: Contract::option("AAPL", crate::contracts::ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call),
                 volatility: 0.25,
                 underlying_price: 155.0,
             },
@@ -817,7 +817,7 @@ pub fn client_method_test_cases() -> Vec<ClientMethodTestCase> {
         ClientMethodTestCase {
             name: "calculate implied volatility",
             test_type: ClientMethodTest::CalculateImpliedVolatility {
-                contract: Contract::option("AAPL", "20231215", 150.0, OptionRight::Call),
+                contract: Contract::option("AAPL", crate::contracts::ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call),
                 option_price: 8.5,
                 underlying_price: 155.0,
             },

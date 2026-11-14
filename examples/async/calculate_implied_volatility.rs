@@ -20,7 +20,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "Contract: {} {} {} @ {}",
         contract.symbol,
-        contract.last_trade_date_or_contract_month,
+        contract
+            .last_trade_date_or_contract_month
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default(),
         contract.right.map_or("", |r| r.as_str()),
         contract.strike
     );

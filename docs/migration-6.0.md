@@ -604,12 +604,12 @@ The compiler reports every call that no longer compiles. Nothing changes at runt
 let date = details.contract.last_trade_date_or_contract_month.split_whitespace().next().unwrap_or_default();
 
 // 6.0
-let date = &details.contract.last_trade_date_or_contract_month;
+let date = &details.contract.last_trade_date_or_contract_month; // Option<Expiry>, see §30
 let time = &details.last_trade_time;
 let zone = &details.time_zone_id;
 ```
 
-Code that split the field itself can drop that step. Nothing fails to compile; check any code that parses the field. For a typed date, `details.contract.last_trade_date` (`Option<time::Date>`) already carries the last trading day of a future or option.
+Code that split the field itself can drop that step. The field's type changes too (§30). For a typed date, `details.contract.last_trade_date` (`Option<time::Date>`) already carries the last trading day of a future or option.
 
 ### 29. `exercise_options` yields `PlaceOrder`; `ExerciseOptions` is removed
 
@@ -636,3 +636,40 @@ match item {
 ```
 
 Rename `ExerciseOptions` to `PlaceOrder` and add the two arms; the compiler reports each site. `ExerciseOptions` derived `PartialEq` and serde; `PlaceOrder` does not, so code that compared or serialized the items compares or serializes the fields it needs instead. The subscription does not end on its own: stop reading after the execution on the option (the `ExecutionData` whose `contract.security_type` is the option's). An open order and a `Filled` status follow it and repeat the fill; the earlier `Filled` status is no end marker, since its `filled` counts the underlying's shares (100 for one contract).
+
+### 30. `Contract::last_trade_date_or_contract_month` is `Option<Expiry>`
+
+The field was a `String` that held `YYYYMMDD` (last trading day) or `YYYYMM` (contract month), and a typo surfaced only as TWS error 200. It is now `Option<Expiry>`:
+
+- `Expiry::Date(ExpirationDate)` and `Expiry::Month(ContractMonth)` for the two forms.
+- `Expiry::Unknown(String)` for any other text TWS sends: a bond's `"20430504 16:00 Europe/London"`, or a shape not seen yet. It is sent back to TWS as received. Parsing never produces it, only decoding does, so a contract in a position or order stream never fails to decode over this field.
+- `None` where the field was `""`: stocks, an open futures query.
+
+`ExpirationDate` and `ContractMonth` gain `FromStr` and `TryFrom<&str>`, which check that the text is a real date or month. `Contract::option` takes an `ExpirationDate` instead of `&str`: it returns a `Contract`, not a `Result`, so it had no way to report a bad string.
+
+```rust,ignore
+// 5.x
+let contract = Contract { last_trade_date_or_contract_month: "202612".into(), ..Default::default() };
+let call = Contract::option("AAPL", "20261218", 150.0, OptionRight::Call);
+if details.contract.last_trade_date_or_contract_month.is_empty() { /* none */ }
+println!("{}", details.contract.last_trade_date_or_contract_month);
+
+// 6.0
+let contract = Contract { last_trade_date_or_contract_month: Some(ContractMonth::new(2026, 12).into()), ..Default::default() };
+let call = Contract::option("AAPL", ExpirationDate::new(2026, 12, 18), 150.0, OptionRight::Call);
+if details.contract.last_trade_date_or_contract_month.is_none() { /* none */ }
+if let Some(expiry) = &details.contract.last_trade_date_or_contract_month {
+    println!("{expiry}"); // Display is the wire text: "20261218"
+}
+match details.contract.last_trade_date_or_contract_month {
+    Some(Expiry::Date(date)) => {}
+    Some(Expiry::Month(month)) => {}
+    Some(Expiry::Unknown(raw)) => {}
+    None => {}
+}
+```
+
+- `ContractBuilder::last_trade_date_or_contract_month("202612")` still takes a string. `build()` now rejects one that is neither form with `Error::InvalidArgument`. `ContractBuilder::expiry(..)` takes a typed value.
+- A contract sent as a month comes back from TWS as its last trading day: an order on ES `202612` is echoed as `20261218`. Match on the variant you get, not the one you sent.
+- Serialized, the field is the wire string as before (`"20261218"`); an unset field is `null` instead of `""`.
+- `Expiry` is in the prelude. The compiler reports every site that reads or writes the field.

@@ -32,6 +32,9 @@ fn main() {
         call.right.map_or("", |r| r.as_str()),
         call.strike,
         call.last_trade_date_or_contract_month
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default()
     );
 
     // Put option with custom exchange
@@ -56,7 +59,13 @@ fn main() {
     let cl_futures = Contract::futures("CL").expires_in(ContractMonth::new(2024, 6)).multiplier(1000).build();
     println!(
         "Futures: {} multiplier {} expiry {}",
-        cl_futures.symbol, cl_futures.multiplier, cl_futures.last_trade_date_or_contract_month
+        cl_futures.symbol,
+        cl_futures.multiplier,
+        cl_futures
+            .last_trade_date_or_contract_month
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default()
     );
 
     // Forex pair

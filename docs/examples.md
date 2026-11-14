@@ -144,7 +144,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Contract Creation
 ```rust
-use ibapi::contracts::{Contract, ContractMonth, OptionRight};
+use ibapi::contracts::{Contract, ContractMonth, ExpirationDate, OptionRight};
 
 // Stock — `.build()` finalises the typestate builder
 let stock = Contract::stock("AAPL").build();
@@ -155,7 +155,7 @@ let future = Contract::futures("ES")
     .build();
 
 // Option — the loose-typed constructor returns a Contract directly
-let option = Contract::option("AAPL", "20240119", 150.0, OptionRight::Call);
+let option = Contract::option("AAPL", ExpirationDate::new(2024, 1, 19), 150.0, OptionRight::Call);
 
 // Forex
 let forex = Contract::forex("EUR", "USD").build();

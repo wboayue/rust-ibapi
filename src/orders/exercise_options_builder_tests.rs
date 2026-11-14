@@ -8,7 +8,7 @@ use crate::testdata::builders::orders::exercise_options_request;
 use crate::testdata::builders::RequestEncoder;
 
 fn contract() -> Contract {
-    Contract::option("AAPL", "20251219", 150.0, OptionRight::Call)
+    Contract::option("AAPL", crate::contracts::ExpirationDate::new(2025, 12, 19), 150.0, OptionRight::Call)
 }
 
 /// Builder over a unit client: `encode` never touches the client.

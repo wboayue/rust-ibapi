@@ -176,6 +176,18 @@ with `override_natural_action`.*
 - **Not probed:** lapse, assignment, automatic exercise at expiry, puts, futures options, and
   exercising from a client other than the one that bought.
 
+### Weekend cancel of a PreSubmitted ES order wedges in PendingCancel
+
+*Live 2026-11-14 weekend (Sat 16:55 ET, CME closed), paper Gateway, server 226; #1214.*
+
+- Plain `cancel_order(id, "")` on three PreSubmitted ES buy limits (CME, 202612) → no reply
+  within 5s, and `all_open_orders` lists all three as `PendingCancel` afterwards. The same
+  cancel on a PreSubmitted AAPL OPT order (SMART) in the same session → `Cancelled` at once.
+- A different trigger from the hyphenated `ext_operator` wedge above: no `ext_operator`, the
+  exchange closed.
+- **Not probed:** whether the cancel completes at the Sunday 18:00 ET CME open or reverts at the
+  daily reset, as the hyphen wedge did.
+
 ### `nextValidId` can repeat an exercise's order id after a disconnect
 
 *Live 2026-11-13 RTH, paper TWS, server 223; observed while probing `exercise_options` (#1210).*

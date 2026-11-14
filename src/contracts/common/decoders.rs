@@ -1,7 +1,7 @@
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use crate::contracts::{ContractDescription, ContractDetails, IneligibilityReason, MarketRule, OptionChain, SmartComponent};
+use crate::contracts::{ContractDescription, ContractDetails, Expiry, IneligibilityReason, MarketRule, OptionChain, SmartComponent};
 use crate::proto;
 use crate::proto::decoders::{decode_contract, parse_decimal_or_zero, parse_optional, parse_optional_decimal, s, tag_values};
 
@@ -18,17 +18,26 @@ pub(crate) use crate::market_data::realtime::common::decode_tick_option_computat
 // `Error::UnexpectedWireFormat` (docs/rules/wire/proto-only-decoding.md).
 
 pub(in crate::contracts) fn decode_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
-    let mut details = decode_contract_data_proto(message.proto()?)?;
-    split_last_trade_date(&mut details, LastTradeDateSplit::NonBond);
-    Ok(details)
+    decode_contract_data_split(message.proto()?, LastTradeDateSplit::NonBond)
 }
 
 /// TWS answers a bond query with `BondContractData` (msg 18): the same
 /// `ContractData` proto as other securities, with the bond handling of the
 /// last trade date.
 pub(in crate::contracts) fn decode_bond_contract_details(message: &ResponseMessage) -> Result<ContractDetails, Error> {
-    let mut details = decode_contract_data_proto(message.proto()?)?;
-    split_last_trade_date(&mut details, LastTradeDateSplit::Bond);
+    decode_contract_data_split(message.proto()?, LastTradeDateSplit::Bond)
+}
+
+/// Decodes `ContractData`, then splits tag 4 from the raw wire text: the
+/// typed contract field no longer holds the time and zone.
+fn decode_contract_data_split(p: proto::ContractData, split: LastTradeDateSplit) -> Result<ContractDetails, Error> {
+    let raw = p
+        .contract
+        .as_ref()
+        .and_then(|c| c.last_trade_date_or_contract_month.clone())
+        .unwrap_or_default();
+    let mut details = decode_contract_data_proto(p)?;
+    split_last_trade_date(&mut details, &raw, split);
     Ok(details)
 }
 
@@ -45,33 +54,33 @@ enum LastTradeDateSplit {
 /// `date [time [zone]]` (on `-` if present, otherwise on whitespace), as C#
 /// `EDecoderUtils.SetLastTradeDate` does. The time goes to `last_trade_time`.
 /// A bond's date goes to `maturity` and its zone to `time_zone_id`, and its
-/// contract field is left as sent. Any other contract keeps only the date in
+/// contract field is left as sent (a zoned value stays [`Expiry::Unknown`] and
+/// goes back to TWS byte for byte). Any other contract keeps only the date in
 /// that field, so a contract sent back carries what IB's own clients send, and
 /// its zone is dropped, as in C#.
-fn split_last_trade_date(details: &mut ContractDetails, split: LastTradeDateSplit) {
-    let raw = &details.contract.last_trade_date_or_contract_month;
-    let parts: Vec<String> = if raw.contains('-') {
-        raw.split('-').map(str::to_string).collect()
+fn split_last_trade_date(details: &mut ContractDetails, raw: &str, split: LastTradeDateSplit) {
+    let parts: Vec<&str> = if raw.contains('-') {
+        raw.split('-').collect()
     } else {
-        raw.split_whitespace().map(str::to_string).collect()
+        raw.split_whitespace().collect()
     };
     let mut parts = parts.into_iter();
     let (date, time, zone) = (parts.next(), parts.next(), parts.next());
     if let Some(time) = time {
-        details.last_trade_time = time;
+        details.last_trade_time = time.to_owned();
     }
     match split {
         LastTradeDateSplit::Bond => {
             if let Some(date) = date {
-                details.maturity = date;
+                details.maturity = date.to_owned();
             }
             if let Some(zone) = zone {
-                details.time_zone_id = zone;
+                details.time_zone_id = zone.to_owned();
             }
         }
         LastTradeDateSplit::NonBond => {
             if let Some(date) = date {
-                details.contract.last_trade_date_or_contract_month = date;
+                details.contract.last_trade_date_or_contract_month = Expiry::from_wire(date);
             }
         }
     }

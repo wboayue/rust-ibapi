@@ -260,6 +260,34 @@ fn decode_contract_preserves_unknown_sec_type() {
     assert_eq!(contract.security_type, crate::contracts::SecurityType::Other("NOTASECTYPE".into()));
 }
 
+#[test]
+fn decode_contract_types_last_trade_date_or_contract_month() {
+    use crate::contracts::{ContractMonth, ExpirationDate, Expiry};
+    // Open orders echo the date alone (docs/wire-facts/contracts.md); a shape
+    // not seen yet lands in Unknown instead of failing a streaming frame.
+    let cases = [
+        (None, None),
+        (Some(""), None),
+        (Some("20261218"), Some(Expiry::Date(ExpirationDate::new(2026, 12, 18)))),
+        (Some("202612"), Some(Expiry::Month(ContractMonth::new(2026, 12)))),
+        (
+            Some("20261218 08:30:00 US/Central"),
+            Some(Expiry::Unknown("20261218 08:30:00 US/Central".into())),
+        ),
+    ];
+    for (raw, expected) in cases {
+        let proto_contract = proto::Contract {
+            last_trade_date_or_contract_month: raw.map(str::to_owned),
+            ..stk_contract()
+        };
+        assert_eq!(
+            decode_contract(&proto_contract).unwrap().last_trade_date_or_contract_month,
+            expected,
+            "{raw:?}"
+        );
+    }
+}
+
 /// A `proto::Contract` carrying a `sec_type`, for tests that are not about the
 /// `Other("")` fallback above.
 fn stk_contract() -> proto::Contract {

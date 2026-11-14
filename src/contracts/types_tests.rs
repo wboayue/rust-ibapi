@@ -351,3 +351,84 @@ fn bond_identifier_variants_equality_and_match() {
         BondIdentifier::Isin(_) => panic!("expected Cusip"),
     }
 }
+
+#[test]
+fn expiration_date_from_str() {
+    let cases = [
+        ("20261218", Some(ExpirationDate::new(2026, 12, 18))),
+        ("20240229", Some(ExpirationDate::new(2024, 2, 29))), // leap day
+        ("20250229", None),                                   // not a leap year
+        ("20261340", None),                                   // month 13
+        ("20261200", None),                                   // day 0
+        ("202612", None),                                     // a month, not a date
+        ("2026121", None),
+        ("2026-12-18", None),
+        ("2026121a", None),
+        ("", None),
+    ];
+    for (input, expected) in cases {
+        assert_eq!(input.parse::<ExpirationDate>().ok(), expected, "{input:?}");
+    }
+}
+
+#[test]
+fn contract_month_from_str() {
+    let cases = [
+        ("202612", Some(ContractMonth::new(2026, 12))),
+        ("202601", Some(ContractMonth::new(2026, 1))),
+        ("202600", None),
+        ("202613", None),
+        ("20261218", None),
+        ("2026a1", None),
+        ("", None),
+    ];
+    for (input, expected) in cases {
+        assert_eq!(input.parse::<ContractMonth>().ok(), expected, "{input:?}");
+    }
+}
+
+#[test]
+fn expiry_from_str_is_strict() {
+    assert_eq!("20261218".parse::<Expiry>().unwrap(), Expiry::Date(ExpirationDate::new(2026, 12, 18)));
+    assert_eq!("202612".parse::<Expiry>().unwrap(), Expiry::Month(ContractMonth::new(2026, 12)));
+    for bad in ["", "2026", "20261340", "20261218 08:30:00 US/Central", "20430504 16:00 Europe/London"] {
+        assert!(matches!(bad.parse::<Expiry>(), Err(Error::Parse(..))), "{bad:?}");
+    }
+}
+
+#[test]
+fn expiry_from_wire_is_lenient() {
+    // Contracts reach streaming paths; an unseen shape must not end the stream.
+    let cases = [
+        ("", None),
+        ("20261218", Some(Expiry::Date(ExpirationDate::new(2026, 12, 18)))),
+        ("202612", Some(Expiry::Month(ContractMonth::new(2026, 12)))),
+        (
+            "20430504 16:00 Europe/London",
+            Some(Expiry::Unknown("20430504 16:00 Europe/London".into())),
+        ),
+        ("20261340", Some(Expiry::Unknown("20261340".into()))),
+    ];
+    for (raw, expected) in cases {
+        assert_eq!(Expiry::from_wire(raw), expected, "{raw:?}");
+    }
+}
+
+#[test]
+fn expiry_display_is_the_wire_text() {
+    for raw in ["20261218", "202612", "20430504 16:00 Europe/London"] {
+        assert_eq!(Expiry::from_wire(raw).unwrap().to_string(), raw);
+    }
+}
+
+#[test]
+fn expiry_serde_is_the_wire_string() {
+    for raw in ["20261218", "202612", "20430504 16:00 Europe/London"] {
+        let expiry = Expiry::from_wire(raw).unwrap();
+        let json = serde_json::to_string(&expiry).expect("serialize");
+        assert_eq!(json, format!("\"{raw}\""));
+        assert_eq!(serde_json::from_str::<Expiry>(&json).expect("deserialize"), expiry);
+    }
+    assert!(serde_json::from_str::<Expiry>("\"\"").is_err());
+    assert_eq!(serde_json::from_str::<Option<Expiry>>("null").unwrap(), None);
+}

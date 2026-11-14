@@ -25,7 +25,7 @@ fn dollars(strike: StrikeCents) -> f64 {
 /// the first in the map.
 async fn strikes(client: &Client, expiry: &str, right: OptionRight) -> BTreeMap<StrikeCents, i32> {
     let details = client
-        .contract_details(&Contract::option(SYMBOL, expiry, 0.0, right))
+        .contract_details(&Contract::option(SYMBOL, expiry.parse().expect("YYYYMMDD expiry"), 0.0, right))
         .await
         .expect("option contract details failed");
     details

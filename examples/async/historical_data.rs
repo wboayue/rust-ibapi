@@ -82,7 +82,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let front = details.into_iter().next().ok_or("No front-month contract found for ES")?;
             println!(
                 "  Found front-month: local_symbol='{}', contract_month='{}'",
-                front.contract.local_symbol, front.contract.last_trade_date_or_contract_month
+                front.contract.local_symbol,
+                front
+                    .contract
+                    .last_trade_date_or_contract_month
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default()
             );
             front.contract
         }
@@ -90,7 +96,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Requesting historical data for {} ({:?})", contract.symbol, args.asset);
     println!(
         "  local_symbol: '{}', exchange: {}, contract_month: '{}'\n",
-        contract.local_symbol, contract.exchange, contract.last_trade_date_or_contract_month
+        contract.local_symbol,
+        contract.exchange,
+        contract
+            .last_trade_date_or_contract_month
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default()
     );
 
     if !args.streaming_only {

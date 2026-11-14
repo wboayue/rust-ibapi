@@ -359,8 +359,8 @@ fn front_month_es(client: &Client) -> Contract {
     details
         .into_iter()
         .map(|d| d.contract)
-        .filter(|c| c.last_trade_date_or_contract_month > cutoff)
-        .min_by(|a, b| a.last_trade_date_or_contract_month.cmp(&b.last_trade_date_or_contract_month))
+        .filter(|c| expiry_text(c) > cutoff)
+        .min_by_key(expiry_text)
         .expect("no ES listing beyond the cutoff")
 }
 
@@ -552,4 +552,14 @@ fn wait_for_fill_reports_es_market_fill() {
         }
         other => panic!("market order should fill: {other:?}"),
     }
+}
+
+/// The contract's expiry as TWS renders it (`YYYYMMDD`), for lexical comparison
+/// with [`yyyymmdd_from_now`].
+fn expiry_text(contract: &Contract) -> String {
+    contract
+        .last_trade_date_or_contract_month
+        .as_ref()
+        .map(ToString::to_string)
+        .unwrap_or_default()
 }

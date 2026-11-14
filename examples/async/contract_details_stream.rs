@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         security_type: SecurityType::Option,
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: contract_month_from_now(2),
+        last_trade_date_or_contract_month: Some(contract_month_from_now(2).into()),
         right: Some(OptionRight::Call),
         ..Default::default()
     };
@@ -54,8 +54,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// The contract month `months` ahead of the current UTC month, as `YYYYMM`.
-fn contract_month_from_now(months: i32) -> String {
+fn contract_month_from_now(months: i32) -> ContractMonth {
     let today = time::OffsetDateTime::now_utc();
     let index = today.year() * 12 + (today.month() as i32 - 1) + months;
-    format!("{:04}{:02}", index / 12, index % 12 + 1)
+    ContractMonth::new((index / 12) as u16, (index % 12 + 1) as u8)
 }
