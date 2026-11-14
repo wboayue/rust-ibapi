@@ -31,14 +31,19 @@ Contract details and option chains. Format: [README](README.md).
 - Tag 4 arrives as `20261218 08:30:00 US/Central`; `time_zone_id` is `US/Central` too.
 - Sent back as the date alone or in that full form, `contract_details`, `head_timestamp`
   and a market-data snapshot all succeed: this build accepts both forms.
+- **Paper Gateway accepts every form too** (*live 2026-11-14 14:15 ET off-hours, paper
+  Gateway, server 226*): ES sent as `20261218 08:30:00 US/Central`, `20261218 08:30:00`,
+  `20261218` and `202612` each resolved in `contract_details`, `head_timestamp`, a market-data
+  snapshot and a what-if limit order (same margin for all four). No 10372.
 - **Zone equals `time_zone_id`** (*live 2026-11-14 14:00 ET off-hours, paper Gateway, server
   226*): every contract carrying a zone in tag 4 matched its `time_zone_id`. FUT on CME (ES),
   NYMEX (CL), CBOT (ZN), CFE (VIX), EUREX (DAX, ESTX50 → `MET`), ICEEU (Z → `GB-Eire`),
   OSE.JPN (N225 → `Japan`), HKFE (HSI → `Hongkong`); FOP ES 202612 (6943 contracts); OPT SPX
   (`US/Central`) and SAP on EUREX. AAPL OPT on SMART sends the date alone (`20261218`), no time
   or zone. So dropping the zone loses nothing.
-- **Not probed:** IB Gateway 10.51, where an NT adapter note reports 10372 for the full
-  form; orders; bonds.
+- **Not probed:** the gateway build behind server 226 (the handshake doesn't report it), so
+  an NT adapter note of 10372 on Gateway 10.51 is neither confirmed nor ruled out; live
+  (non-what-if) orders; bonds.
 
 ### Option chain `exchange` is a futures-options filter
 
