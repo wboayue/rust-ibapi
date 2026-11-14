@@ -162,7 +162,7 @@ fn example_observe_notices(client: &Client, contract: &Contract) {
         match event {
             Ok(SubscriptionItem::Data(_)) => println!("data tick"),
             // Common codes: 2104 (Market data farm OK), 2107 (HMDS data farm
-            // is inactive), 2108 (data farm connection broken).
+            // is inactive), 2108 (market data farm inactive).
             Ok(SubscriptionItem::Notice(n)) => println!("notice [{}] {}", n.code, n.message),
             Err(e) => {
                 eprintln!("subscription terminated: {e}");
