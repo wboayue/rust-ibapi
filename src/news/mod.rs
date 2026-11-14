@@ -84,6 +84,18 @@ pub struct NewsArticle {
     pub extra_data: String,
 }
 
+/// One page of historical news headlines, returned by
+/// [`historical_news_page`](crate::Client::historical_news_page).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
+pub struct HistoricalNewsPage {
+    /// The headlines, at most `total_results` of them.
+    pub articles: Vec<NewsArticle>,
+    /// TWS's flag that more headlines than `total_results` match the range. `false` when TWS
+    /// omits the field.
+    pub has_more: bool,
+}
+
 /// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]

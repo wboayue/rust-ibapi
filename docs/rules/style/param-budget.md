@@ -47,8 +47,9 @@ not the destination; the builder that later absorbs the split is not undoing it.
 chain: `.ending(date)`, not `.end_date(date)`.
 
 Public signatures over budget are all-required and kept flat with a reason: `historical_news`
-(five arguments), `Contract::option` (superseded by `Contract::call()` / `put()`), and the
-client-less `orders::order_builder` free functions (module doc explains).
+(five arguments; `historical_news_page` mirrors it), `Contract::option` (superseded by
+`Contract::call()` / `put()`), and the client-less `orders::order_builder` free functions (module
+doc explains).
 
 ## Precedents
 
