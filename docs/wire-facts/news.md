@@ -34,3 +34,25 @@ News providers, historical news, articles. Format: [README](README.md).
   an error.
 - **Not probed:** negative values (the public parameter is `u16`, so the crate can't send
   them); a range holding fewer than the requested headlines.
+
+### Historical news range and has_more
+
+*Live 2026-11-14 11:45 ET Saturday, paper, server 226.*
+
+- `reqHistoricalNews` for AAPL (265598), all 8 paper providers, through `historical_news_page`.
+- The crate's time format, `yyyyMMdd HH:mm:ss UTC` (the historical-data form `ToField` gives
+  `OffsetDateTime`), is ignored without a notice. Every request returns the newest headlines,
+  whatever its range: a 30-minute window ending now returned 300 headlines spanning 13 days.
+- The C# reference documents `yyyy-MM-dd HH:mm:ss.0` and passes both times through unchanged
+  (`EClientUtils.createHistoricalNewsRequestProto`). Sent in that form (UTC), TWS returns the
+  newest headlines at or before **`start_time`** and ignores `end_time`. Every case started at or just
+  before `start_time`:
+  - start Nov 1, end Nov 5 and start Nov 1, end now: identical, newest `2026-10-31 21:33`.
+  - start Nov 5, end Nov 1: newest `2026-11-04 22:46`.
+  - start Nov 4 12:00, end Nov 4 13:00: newest `2026-11-04 11:36:08`, oldest Oct 20.
+- `has_more` is `true` whenever more headlines than returned are available: `total_results`
+  1, 10 and 300, and 500 (capped to 300). Since `end_time` is ignored, every probed request
+  had more, so every one was `true`.
+- **Not probed:** a `false` `has_more` (needs a contract with fewer headlines than requested
+  before `start_time`); whether TWS reads the `.0` form as UTC or as the gateway's zone (every
+  first headline fell at or just before `start_time` read as UTC, at minute resolution).
