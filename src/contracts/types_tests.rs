@@ -432,3 +432,31 @@ fn expiry_serde_is_the_wire_string() {
     assert!(serde_json::from_str::<Expiry>("\"\"").is_err());
     assert_eq!(serde_json::from_str::<Option<Expiry>>("null").unwrap(), None);
 }
+
+#[test]
+fn contract_deserializes_unset_expiry_as_none() {
+    let mut json = serde_json::to_value(crate::contracts::Contract::default()).expect("serialize");
+    assert_eq!(json["last_trade_date_or_contract_month"], serde_json::Value::Null);
+
+    // (label, field value or None to drop the key, expected)
+    let cases = [
+        ("null", Some(serde_json::json!(null)), None),
+        ("5.x empty string", Some(serde_json::json!("")), None),
+        ("absent", None, None),
+        (
+            "date",
+            Some(serde_json::json!("20261218")),
+            Some(Expiry::Date(ExpirationDate::new(2026, 12, 18))),
+        ),
+    ];
+    for (label, value, expected) in cases {
+        match value {
+            Some(value) => json["last_trade_date_or_contract_month"] = value,
+            None => {
+                json.as_object_mut().unwrap().remove("last_trade_date_or_contract_month");
+            }
+        }
+        let contract: crate::contracts::Contract = serde_json::from_value(json.clone()).expect(label);
+        assert_eq!(contract.last_trade_date_or_contract_month, expected, "{label}");
+    }
+}

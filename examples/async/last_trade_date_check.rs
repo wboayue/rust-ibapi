@@ -15,7 +15,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (i, d) in details.iter().enumerate() {
         println!("--- Contract {} ---", i + 1);
         println!("  symbol:                            {}", d.contract.symbol);
-        println!("  last_trade_date_or_contract_month: {:?}", d.contract.last_trade_date_or_contract_month);
+        println!(
+            "  last_trade_date_or_contract_month: {}",
+            d.contract
+                .last_trade_date_or_contract_month
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_default()
+        );
         println!("  last_trade_date:                   {:?}", d.contract.last_trade_date);
         println!("  strike:                            {}", d.contract.strike);
         println!("  right:                             {}", d.contract.right.map_or("", |r| r.as_str()));
@@ -30,7 +37,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (i, d) in details.iter().enumerate() {
         println!("\n--- Future {} ---", i + 1);
         println!("  symbol:                            {}", d.contract.symbol);
-        println!("  last_trade_date_or_contract_month: {:?}", d.contract.last_trade_date_or_contract_month);
+        println!(
+            "  last_trade_date_or_contract_month: {}",
+            d.contract
+                .last_trade_date_or_contract_month
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_default()
+        );
         println!("  last_trade_date:                   {:?}", d.contract.last_trade_date);
         println!("  local_symbol:                      {}", d.contract.local_symbol);
     }

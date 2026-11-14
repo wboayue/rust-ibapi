@@ -12,6 +12,7 @@ fn utoipa_schemas_resolve() {
 
     for (name, schema) in [
         ("OrderStatusKind", json(orders::OrderStatusKind::schema())),
+        ("Expiry", json(contracts::Expiry::schema())),
         ("TimeInForce", json(orders::TimeInForce::schema())),
     ] {
         assert_eq!(schema, string, "{name} schema");

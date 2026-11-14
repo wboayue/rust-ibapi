@@ -642,7 +642,7 @@ Rename `ExerciseOptions` to `PlaceOrder` and add the two arms; the compiler repo
 The field was a `String` that held `YYYYMMDD` (last trading day) or `YYYYMM` (contract month), and a typo surfaced only as TWS error 200. It is now `Option<Expiry>`:
 
 - `Expiry::Date(ExpirationDate)` and `Expiry::Month(ContractMonth)` for the two forms.
-- `Expiry::Unknown(String)` for any other text TWS sends: a bond's `"20430504 16:00 Europe/London"`, or a shape not seen yet. It is sent back to TWS as received. Parsing never produces it, only decoding does, so a contract in a position or order stream never fails to decode over this field.
+- `Expiry::Unknown(String)` for any other text TWS sends: a bond's `"20430504 16:00 Europe/London"`, or a shape not seen yet. It is sent back to TWS as received. Parsing never produces it; decoding and deserializing do, so a contract in a position or order stream never fails to decode over this field.
 - `None` where the field was `""`: stocks, an open futures query.
 
 `ExpirationDate` and `ContractMonth` gain `FromStr` and `TryFrom<&str>`, which check that the text is a real date or month. `Contract::option` takes an `ExpirationDate` instead of `&str`: it returns a `Contract`, not a `Result`, so it had no way to report a bad string.
@@ -669,7 +669,7 @@ match details.contract.last_trade_date_or_contract_month {
 }
 ```
 
-- `ContractBuilder::last_trade_date_or_contract_month("202612")` still takes a string. `build()` now rejects one that is neither form with `Error::InvalidArgument`. `ContractBuilder::expiry(..)` takes a typed value.
+- `ContractBuilder::last_trade_date_or_contract_month("202612")` still takes a string. `build()` now rejects one that is neither form with `Error::InvalidArgument`, including `""` (omit the call instead) and the zoned `"20261218 08:30:00 US/Central"` form TWS also accepts (send the date alone). `ContractBuilder::expiry(..)` takes a typed value.
 - A contract sent as a month comes back from TWS as its last trading day: an order on ES `202612` is echoed as `20261218`. Match on the variant you get, not the one you sent.
-- Serialized, the field is the wire string as before (`"20261218"`); an unset field is `null` instead of `""`.
+- Serialized, the field is the wire string as before (`"20261218"`); an unset field is `null` instead of `""`. Deserializing still reads `""` as `None`, so 5.x JSON loads. Any other text loads as `Expiry::Unknown`, unchecked.
 - `Expiry` is in the prelude. The compiler reports every site that reads or writes the field.

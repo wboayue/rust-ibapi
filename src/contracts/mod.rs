@@ -173,6 +173,7 @@ pub struct Contract {
     /// The contract's last trading day ([`Expiry::Date`], `YYYYMMDD`) or contract
     /// month ([`Expiry::Month`], `YYYYMM`), for options and futures. `None` when
     /// unset (stocks, an open futures query).
+    #[serde(default, deserialize_with = "types::deserialize_optional_expiry")]
     pub last_trade_date_or_contract_month: Option<Expiry>,
     /// The option's strike price.
     pub strike: f64,

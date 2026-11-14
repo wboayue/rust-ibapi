@@ -558,7 +558,7 @@ pub enum Expiry {
     Month(ContractMonth),
     /// Any other text TWS sent, kept verbatim and sent back as is: a bond's
     /// `"20430504 16:00 Europe/London"`, or a shape not seen yet. Parsing a
-    /// string never produces it; only decoding does.
+    /// string never produces it; only decoding and deserializing do.
     Unknown(String),
 }
 
@@ -621,7 +621,7 @@ impl From<ContractMonth> for Expiry {
 
 // Serde as the wire string, so a contract serializes `"20261218"` as before
 // rather than `{"Date":{"year":..}}`. Deserialize is lenient like the
-// decoder, so `Unknown` round-trips. The utoipa schema is hand-written to
+// decoder, so `Unknown` round-trips (and unchecked text loads as `Unknown`). The utoipa schema is hand-written to
 // match: exactly a string.
 #[cfg(feature = "utoipa")]
 impl utoipa::PartialSchema for Expiry {
@@ -644,6 +644,13 @@ impl<'de> serde::Deserialize<'de> for Expiry {
         let raw = String::deserialize(deserializer)?;
         Expiry::from_wire(&raw).ok_or_else(|| serde::de::Error::custom("empty expiry; use null"))
     }
+}
+
+/// `Contract::last_trade_date_or_contract_month` deserializer: `null` and `""`
+/// are `None`. 5.x serialized an unset field as `""`, so its JSON still loads.
+pub(crate) fn deserialize_optional_expiry<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Expiry>, D::Error> {
+    use serde::Deserialize;
+    Ok(Option::<String>::deserialize(deserializer)?.as_deref().and_then(Expiry::from_wire))
 }
 
 /// CUSIP identifier

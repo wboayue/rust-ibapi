@@ -13,6 +13,14 @@ fn encode_contract_sends_expiry_as_wire_text() {
         };
         assert_eq!(encode_contract(&contract).last_trade_date_or_contract_month.as_deref(), Some(raw));
     }
+    // A hand-built empty Unknown is absent on the wire, as an unset field is.
+    for expiry in [None, Some(Expiry::Unknown(String::new()))] {
+        let contract = Contract {
+            last_trade_date_or_contract_month: expiry,
+            ..Default::default()
+        };
+        assert_eq!(encode_contract(&contract).last_trade_date_or_contract_month, None);
+    }
 }
 
 #[test]

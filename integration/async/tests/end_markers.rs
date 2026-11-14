@@ -25,7 +25,7 @@ use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::{Client, Error};
 use ibapi_integration_async::connect;
-use ibapi_test::{require_globex_open, yyyymmdd_from_now, ClientId};
+use ibapi_test::{require_globex_open, ClientId};
 use serial_test::serial;
 use tokio::time::{sleep, timeout, Duration, Instant};
 
@@ -118,12 +118,12 @@ fn market_order(action: Action) -> Order {
 async fn front_month_es(client: &Client) -> Contract {
     let query = Contract::futures("ES").on_exchange("CME").any_month().build();
     let details = client.contract_details(&query).await.expect("contract_details failed");
-    let cutoff = yyyymmdd_from_now(7);
+    let cutoff = time::OffsetDateTime::now_utc().date() + time::Duration::days(7);
     details
         .into_iter()
         .map(|d| d.contract)
-        .filter(|c| expiry_text(c) > cutoff)
-        .min_by_key(expiry_text)
+        .filter(|c| c.last_trade_date.is_some_and(|d| d > cutoff))
+        .min_by_key(|c| c.last_trade_date)
         .expect("no ES listing beyond the cutoff")
 }
 
@@ -300,14 +300,4 @@ async fn account_summary_end_markers_by_tag_set() {
         sub.cancel().await;
         eprintln!("{label:<11} {}", runs.join(", "));
     }
-}
-
-/// The contract's expiry as TWS renders it (`YYYYMMDD`), for lexical comparison
-/// with [`yyyymmdd_from_now`].
-fn expiry_text(contract: &Contract) -> String {
-    contract
-        .last_trade_date_or_contract_month
-        .as_ref()
-        .map(ToString::to_string)
-        .unwrap_or_default()
 }
