@@ -15,4 +15,4 @@ pub(crate) use decoders::{decode_commission_and_fees_report, decode_completed_or
 #[cfg(all(test, feature = "sync"))]
 pub(crate) use encoders::encode_place_order;
 #[cfg(test)]
-pub(crate) use encoders::{encode_execution_filter, encode_order, encode_order_cancel};
+pub(crate) use encoders::{encode_execution_filter, encode_order};

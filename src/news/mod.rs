@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 // Common implementation modules
+mod builder;
 mod common;
+
+pub use builder::HistoricalNewsBuilder;
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
@@ -82,6 +85,31 @@ pub struct NewsArticle {
     pub headline: String,
     /// Returns any additional data available about the article.
     pub extra_data: String,
+}
+
+/// One page of historical news headlines, returned by
+/// [`HistoricalNewsBuilder::page`].
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
+pub struct HistoricalNewsPage {
+    /// The headlines, at most `total_results` of them.
+    pub articles: Vec<NewsArticle>,
+    /// TWS's flag that more headlines are available than it returned. `false` when TWS
+    /// omits the field.
+    pub has_more: bool,
+}
+
+/// One frame of a `reqHistoricalNews` reply, read by
+/// [`HistoricalNewsBuilder::page`]: articles, then `End`.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum HistoricalNewsFrame {
+    /// One headline.
+    Article(NewsArticle),
+    /// `historicalNewsEnd`: the page is complete.
+    End {
+        /// TWS's flag that more headlines are available than it returned.
+        has_more: bool,
+    },
 }
 
 /// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)

@@ -441,12 +441,14 @@ The compiler does not catch two things. `route_marketable_to_bbo: Some(false)` i
 let total_results: u8 = 255;
 let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total_results)?;
 
-// 6.0
+// 6.0 (with §26's builder)
 let total_results: u16 = 300;
-let headlines = client.historical_news(contract_id, &["BRFG"], start, end, total_results)?;
+let headlines = client.historical_news(contract_id, &["BRFG"]).since(start).limit(total_results).subscribe()?;
 ```
 
 Integer literals and untyped bindings compile unchanged. Where the argument is a typed `u8`, the compiler reports it; convert with `.into()` or declare it `u16`. The compiler does not check the range: the crate sends any `u16` as given. TWS returns at most 300 headlines for a larger value, without a notice, and rejects 0 with error 321 ([wire facts](wire-facts/news.md#historical-news-total_results-range)).
+
+§26 replaces the signature with a builder; `total_results` is now `.limit(n)`.
 
 ### 22. `HistoricalBarUpdate::Historical` carries `Vec<Bar>`
 
@@ -524,9 +526,40 @@ let notices = client.notice_stream();
 
 Drop the `?`, `.expect(..)` or `match` on the result. The compiler reports each of them. No error path is lost, since none existed, and nothing changes at runtime.
 
-### 26. Id parameters take `impl Into<ContractId>` and `impl Into<AccountId>`
+### 26. `historical_news` returns a builder
 
-Every id parameter now accepts both the raw value and the typed id:
+`Client::historical_news` (async and blocking) took `start_time`, `end_time` and
+`total_results` and returned the headline stream. It now takes `contract_id` and
+`provider_codes` and returns a `HistoricalNewsBuilder`:
+
+- `.before(time)`: headlines strictly before `time`.
+- `.since(time)`: headlines at or after `time`.
+- `.limit(n)`: at most `n` headlines, 1 – 300; default 300.
+- `.subscribe()`: the stream `historical_news` returned.
+- `.page()`: a `HistoricalNewsPage`, the headlines plus TWS's `has_more` flag.
+
+```rust,ignore
+// 5.x
+let headlines = client.historical_news(contract_id, &["BRFG"], start, end, 10)?;
+
+// 6.0
+let headlines = client.historical_news(contract_id, &["BRFG"]).since(start).limit(10).subscribe()?;
+```
+
+**Results change.** The 5.x range had no effect: the times were sent in a format TWS ignores
+without a notice, so every request returned the newest headlines. TWS also uses only one bound per
+request: given both, it reads the start time as the newest bound and ignores the end time
+([wire facts](wire-facts/news.md#historical-news-range-and-has_more)). So pick the bound that
+matches the intent. For "what happened since `start`", use `.since(start)`. For "the latest
+headlines before `end`", use `.before(end)`.
+A 5.x call whose range was not the latest headlines returned the wrong ones; the same call with a
+bound now returns what it asked for.
+
+The compiler reports every call. Nothing it can check depends on which bound you choose.
+
+### 27. Id parameters take `impl Into<ContractId>` and `impl Into<AccountId>`
+
+These id parameters now accept both the raw value and the typed id:
 
 | Method (sync and async) | 5.x | 6.0 |
 |---|---|---|
@@ -535,7 +568,7 @@ Every id parameter now accepts both the raw value and the typed id:
 | `pnl`, `pnl_single`, `account_updates` | `account: &AccountId` | `account: impl Into<AccountId>` |
 | `pnl_single` | `contract_id: ContractId` | `contract_id: impl Into<ContractId>` |
 
-The crate hands back raw ids (`managed_accounts()` returns `String`s, `Contract::contract_id` is an `i32`), yet `pnl*` and `account_updates` accepted only the typed ids, while the other inputs accepted only raw ones. Now either passes everywhere. `AccountId` gains `From<&String>` and `From<&AccountId>`. What goes on the wire is unchanged.
+The crate hands back raw ids (`managed_accounts()` returns `String`s, `Contract::contract_id` is an `i32`), yet `pnl*` and `account_updates` accepted only the typed ids, while the other inputs accepted only raw ones. Now either passes to all of them. `positions_multi` and `account_updates_multi` keep `Option<&AccountId>`. `AccountId` gains `From<&String>` and `From<&AccountId>`. What goes on the wire is unchanged.
 
 Integer literals, `i32`, `ContractId`, `&str`, `String`, `&String`, `AccountId` and `&AccountId` compile as before. Two kinds of argument stop compiling:
 

@@ -160,7 +160,7 @@ fn check_all() -> Roster {
     use crate::display_groups::DisplayGroupUpdate;
     use crate::market_data::historical::{HistoricalBarUpdate, HistoricalDataFrame, TickBidAsk, TickLast, TickMidpoint};
     use crate::market_data::realtime::{Bar, BidAsk, MarketDepths, MidPoint, TickTypes, Trade};
-    use crate::news::{NewsArticle, NewsBulletin};
+    use crate::news::{HistoricalNewsFrame, NewsArticle, NewsBulletin};
     use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderStatus, OrderUpdate, Orders, PlaceOrder};
     use crate::scanner::ScannerData;
     use crate::wsh::WshEventData;
@@ -186,6 +186,7 @@ fn check_all() -> Roster {
     check_stream::<TickTypes>(&mut roster);
     check_stream::<Trade>(&mut roster);
     check_stream::<NewsArticle>(&mut roster);
+    check_stream::<HistoricalNewsFrame>(&mut roster);
     check_stream::<NewsBulletin>(&mut roster);
     check_stream::<CancelOrder>(&mut roster);
     check_stream::<OrderStatus>(&mut roster);

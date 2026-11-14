@@ -156,3 +156,26 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   position exists in this option in account <X>"; for `""` X was the login's account. Account
   is optional on a single-account login.
 - **Not probed:** multi-account (FA) logins.
+
+### `ext_operator` and `manual_order_indicator` on orders and cancels
+
+*Live 2026-11-10 20:03–20:07 ET (AAPL off-hours, ES Globex overnight), paper Gateway, server 226; #1200.*
+
+- **Order, `ext_operator`:** `TRADER7` and `12345` accepted on ES and echoed in OpenOrder.
+  `probe-op` (hyphen) → 201 "Order rejected - reason:Invalid value in field # 8089", on AAPL
+  and ES, alone or with `manual_order_indicator`.
+- **Order, `manual_order_indicator`:** 0 and 1 accepted on AAPL (PreSubmitted). The OpenOrder
+  echo reports it absent (`None`); only a rejected order echoed the value sent.
+- **Cancel (`cancel_order_with`), ES Submitted orders:** default (control), `manual_order_indicator`
+  0 or 1, and `ext_operator` `TRADER7` → OrderStatus Cancelled + 202 within ~1s.
+  `ext_operator` `probe-cxl` (hyphen) → **no reply**: the order goes PendingCancel and stays
+  there. A later plain cancel draws 10148 "cannot be cancelled, state: PendingCancel"; a global
+  cancel draws 161. Still wedged at 20:07 ET. By 01:18 ET (inside the daily reset window) the
+  cancel had been dropped: each order was back in its prior state (AAPL PreSubmitted, ES
+  Submitted), and a plain cancel then got Cancelled + 202. When between the two it reverted
+  was not observed.
+- **Global cancel (`global_cancel_with`):** `TRADER7` + indicator 1 → 202 for each working order.
+  `probe-gcx` (hyphen) → the order went PendingCancel and wedged, as above.
+- **Not probed:** which characters besides `-` are rejected, length limits, any indicator value
+  other than 0/1, `ext_operator` on a stock order with a valid value, what reverts a wedged
+  PendingCancel (the reset, or a timeout), and live (non-paper) accounts.

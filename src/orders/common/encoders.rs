@@ -2,7 +2,7 @@ use time::OffsetDateTime;
 
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
-use crate::orders::{ExecutionFilter, ExerciseAction, Order, OrderCondition, SoftDollarTier};
+use crate::orders::{ExecutionFilter, ExerciseAction, Order, OrderCancel, OrderCondition, SoftDollarTier};
 use crate::proto;
 use crate::proto::encoders::{some_bool, some_display, some_f64_ne, some_i32_ne, some_i64_ne, some_str, tag_values_to_map};
 use crate::Error;
@@ -21,11 +21,11 @@ pub(crate) fn encode_place_order(order_id: i32, contract: &Contract, order: &Ord
     ))
 }
 
-pub(crate) fn encode_cancel_order(order_id: i32, manual_order_cancel_time: &str) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_cancel_order(order_id: i32, order_cancel: &OrderCancel) -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::CancelOrderRequest {
         order_id: Some(order_id),
-        order_cancel: Some(encode_order_cancel(manual_order_cancel_time)),
+        order_cancel: Some(encode_order_cancel(order_cancel)),
     };
     Ok(crate::messages::encode_protobuf_message(
         OutgoingMessages::CancelOrder as i32,
@@ -75,10 +75,10 @@ pub(crate) fn encode_executions(request_id: i32, filter: &ExecutionFilter) -> Re
     ))
 }
 
-pub(crate) fn encode_global_cancel() -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_global_cancel(order_cancel: &OrderCancel) -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::GlobalCancelRequest {
-        order_cancel: Some(encode_order_cancel("")),
+        order_cancel: Some(encode_order_cancel(order_cancel)),
     };
     Ok(crate::messages::encode_protobuf_message(
         OutgoingMessages::RequestGlobalCancel as i32,
@@ -406,11 +406,11 @@ pub(crate) fn encode_attached_orders(order: &Order) -> Option<proto::AttachedOrd
     })
 }
 
-pub(crate) fn encode_order_cancel(manual_order_cancel_time: &str) -> proto::OrderCancel {
+fn encode_order_cancel(order_cancel: &OrderCancel) -> proto::OrderCancel {
     proto::OrderCancel {
-        manual_order_cancel_time: some_str(manual_order_cancel_time),
-        ext_operator: None,
-        manual_order_indicator: None,
+        manual_order_cancel_time: some_str(&order_cancel.manual_order_cancel_time),
+        ext_operator: some_str(&order_cancel.ext_operator),
+        manual_order_indicator: order_cancel.manual_order_indicator,
     }
 }
 

@@ -1,13 +1,12 @@
 //! Synchronous implementation of news functionality
 
-use time::OffsetDateTime;
-
 use super::common::{self, decoders, encoders};
 use super::*;
 use crate::accounts::types::ContractId;
 use crate::client::blocking::{ClientRequestBuilders, Subscription, SubscriptionBuilderExt};
 use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
+use crate::common::retry::blocking::retry_on_connection_reset;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::Error;
@@ -62,70 +61,35 @@ impl Client {
         self.subscription().send_shared(OutgoingMessages::RequestNewsBulletins, request)
     }
 
-    /// Requests historical news headlines.
+    /// Starts a historical news request for a contract: the newest headlines from
+    /// `provider_codes`, narrowed with [`before`](HistoricalNewsBuilder::before) or
+    /// [`since`](HistoricalNewsBuilder::since) and sized with
+    /// [`limit`](HistoricalNewsBuilder::limit). Send it with
+    /// [`page`](HistoricalNewsBuilder::page) for the headlines and TWS's `has_more` flag, or
+    /// [`subscribe`](HistoricalNewsBuilder::subscribe) to stream them.
     ///
     /// # Arguments
     ///
     /// * `contract_id`    - Contract ID of ticker. See [contract_details](Client::contract_details) for how to retrieve contract ID.
-    /// * `provider_codes` - A list of provider codes.
-    /// * `start_time`     - Marks the (exclusive) start of the date range.
-    /// * `end_time`       - Marks the (inclusive) end of the date range.
-    /// * `total_results`  - The maximum number of headlines to fetch (1 – 300). TWS returns at most 300 for a
-    ///   larger value, without a notice, and rejects 0 with error 321 (live: 2026-11-05).
+    /// * `provider_codes` - The provider codes to search, from [news_providers](Client::news_providers).
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract; // Or remove if conId is always known
-    /// use time::macros::datetime;
     ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// # fn main() -> Result<(), ibapi::Error> {
+    /// let client = Client::connect("127.0.0.1:4002", 100)?;
     ///
-    /// // Example: Fetch historical news for a known contract ID (e.g., AAPL's conId)
-    /// let contract_id = 265598;
-    /// let provider_codes = &["DJNL", "BRFG"]; // Example provider codes
-    /// // Define a past date range for the news query
-    /// let start_time = datetime!(2023-01-01 0:00 UTC);
-    /// let end_time = datetime!(2023-01-02 0:00 UTC);
-    /// let total_results = 5; // Request a small number of articles for the example
-    ///
-    /// let articles_subscription = client.historical_news(
-    ///     contract_id,
-    ///     provider_codes,
-    ///     start_time,
-    ///     end_time,
-    ///     total_results,
-    /// ).expect("request historical news failed");
-    ///
-    /// println!("Requested historical news articles:");
-    /// for article in articles_subscription.iter_data().take(total_results as usize) {
-    ///     let article = article?;
-    ///     println!("- Headline: {}, ID: {}, Provider: {}, Time: {:?}",
-    ///              article.headline, article.article_id, article.provider_code, article.time);
+    /// let page = client.historical_news(265598, &["DJ-N", "BRFG"]).limit(10).page()?; // AAPL
+    /// for article in &page.articles {
+    ///     println!("{:?}: {}", article.time, article.headline);
     /// }
-    /// # Ok::<(), ibapi::Error>(())
+    /// # Ok(())
+    /// # }
     /// ```
-    // Flat by design (#901): all five arguments are required with no meaningful default, so a
-    // builder would buy nothing over positional args (docs/rules/style/param-budget.md).
-    pub fn historical_news(
-        &self,
-        contract_id: impl Into<ContractId>,
-        provider_codes: &[&str],
-        start_time: OffsetDateTime,
-        end_time: OffsetDateTime,
-        total_results: u16,
-    ) -> Result<Subscription<NewsArticle>, Error> {
-        let builder = self.request();
-        let request = encoders::encode_request_historical_news(
-            builder.request_id(),
-            contract_id.into().value(),
-            provider_codes,
-            start_time,
-            end_time,
-            total_results,
-        )?;
-        builder.send(request)
+    pub fn historical_news<'a>(&'a self, contract_id: impl Into<ContractId>, provider_codes: &'a [&'a str]) -> HistoricalNewsBuilder<'a, Self> {
+        HistoricalNewsBuilder::new(self, contract_id, provider_codes)
     }
 
     /// Requests news article body given articleId.
@@ -221,6 +185,38 @@ impl Client {
         let request = encoders::encode_broad_tape_news_request(builder.request_id(), provider_code)?;
         builder.send_with_context(request, common::tick_news_context(self.decoder_context()))
     }
+}
+
+/// The headline stream behind [`HistoricalNewsBuilder::subscribe`].
+pub(super) fn historical_news_subscription(request: &HistoricalNewsBuilder<'_, Client>) -> Result<Subscription<NewsArticle>, Error> {
+    let builder = request.client.request();
+    let message = request.encode(builder.request_id())?;
+    builder.send(message)
+}
+
+/// The page behind [`HistoricalNewsBuilder::page`].
+pub(super) fn historical_news_page(request: &HistoricalNewsBuilder<'_, Client>) -> Result<HistoricalNewsPage, Error> {
+    let client = request.client;
+    let deadline = request_helpers::blocking::one_shot_deadline(client);
+    retry_on_connection_reset(client, deadline, || {
+        request_helpers::blocking::check_deadline(deadline)?;
+        let builder = client.request();
+        let message = request.encode(builder.request_id())?;
+        let subscription = builder.send::<HistoricalNewsFrame>(message)?;
+
+        // Only the end frame carries `has_more` and proves the page is
+        // complete, so a close before it is an error.
+        let mut page = HistoricalNewsPage::default();
+        loop {
+            match request_helpers::blocking::next_frame(&subscription, deadline)? {
+                HistoricalNewsFrame::Article(article) => page.articles.push(article),
+                HistoricalNewsFrame::End { has_more } => {
+                    page.has_more = has_more;
+                    return Ok(page);
+                }
+            }
+        }
+    })
 }
 
 #[cfg(test)]

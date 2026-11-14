@@ -1,5 +1,11 @@
 use time::OffsetDateTime;
 
+use crate::news::builder::NewsBound;
+
+#[cfg(test)]
+#[path = "encoders_tests.rs"]
+mod tests;
+
 pub(in crate::news) fn encode_request_news_providers() -> Result<Vec<u8>, crate::Error> {
     crate::proto::encoders::encode_empty_proto!(NewsProvidersRequest, crate::messages::OutgoingMessages::RequestNewsProviders)
 }
@@ -25,19 +31,22 @@ pub(in crate::news) fn encode_request_historical_news(
     request_id: i32,
     contract_id: i32,
     provider_codes: &[&str],
-    start_time: OffsetDateTime,
-    end_time: OffsetDateTime,
+    bound: Option<NewsBound>,
     total_results: u16,
 ) -> Result<Vec<u8>, crate::Error> {
     use crate::messages::{encode_protobuf_message, OutgoingMessages};
-    use crate::ToField;
     use prost::Message;
+    let (start_date_time, end_date_time) = match bound {
+        None => (None, None),
+        Some(NewsBound::Before(time)) => (Some(format_news_time(time)), None),
+        Some(NewsBound::Since(time)) => (None, Some(format_news_time(time))),
+    };
     let request = crate::proto::HistoricalNewsRequest {
         req_id: Some(request_id),
         con_id: Some(contract_id),
         provider_codes: Some(provider_codes.join("+")),
-        start_date_time: Some(start_time.to_field()),
-        end_date_time: Some(end_time.to_field()),
+        start_date_time,
+        end_date_time,
         total_results: Some(i32::from(total_results)),
         historical_news_options: Default::default(),
     };
@@ -45,6 +54,17 @@ pub(in crate::news) fn encode_request_historical_news(
         OutgoingMessages::RequestHistoricalNews as i32,
         &request.encode_to_vec(),
     ))
+}
+
+/// `yyyy-MM-dd HH:mm:ss.0` in UTC, the form the C# reference documents for
+/// `reqHistoricalNews`. TWS reads it as UTC; it ignores the historical-data
+/// form `yyyyMMdd HH:mm:ss UTC` without a notice, and reads the form without
+/// `.0` in the gateway's zone (live: 2026-11-14, `docs/wire-facts/news.md`).
+fn format_news_time(time: OffsetDateTime) -> String {
+    let utc = time.to_offset(time::UtcOffset::UTC);
+    // The format is static and every field fits it, so formatting can't fail.
+    utc.format(time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second].0"))
+        .expect("news time format")
 }
 
 pub(in crate::news) fn encode_request_news_article(request_id: i32, provider_code: &str, article_id: &str) -> Result<Vec<u8>, crate::Error> {
