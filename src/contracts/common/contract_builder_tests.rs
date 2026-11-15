@@ -479,12 +479,19 @@ fn build_parses_last_trade_date_or_contract_month() {
         future("20261218").unwrap().last_trade_date_or_contract_month,
         Some(Expiry::Date(ExpirationDate::new(2026, 12, 18)))
     );
-    for bad in ["2026-12", "202613", "", "20261218 08:30:00 US/Central"] {
+    for bad in ["2026-12", "202613", "20261218 08:30:00 US/Central"] {
         assert!(
             matches!(future(bad), Err(Error::InvalidArgument(msg)) if msg.contains("last_trade_date_or_contract_month")),
             "{bad:?}"
         );
     }
+    // Empty is unset, as in 5.x: a future reports the missing month, a stock builds.
+    assert!(matches!(future(""), Err(Error::InvalidArgument(msg)) if msg.contains("Contract month is required")));
+    let stock = ContractBuilder::stock("AAPL", "SMART", "USD")
+        .last_trade_date_or_contract_month("")
+        .build()
+        .unwrap();
+    assert_eq!(stock.last_trade_date_or_contract_month, None);
 }
 
 #[test]

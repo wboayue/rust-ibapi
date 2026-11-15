@@ -460,3 +460,10 @@ fn contract_deserializes_unset_expiry_as_none() {
         assert_eq!(contract.last_trade_date_or_contract_month, expected, "{label}");
     }
 }
+
+#[test]
+fn expiration_date_and_contract_month_order_chronologically() {
+    assert!(ExpirationDate::new(2026, 12, 18) < ExpirationDate::new(2027, 1, 15));
+    assert!(ExpirationDate::new(2026, 3, 31) < ExpirationDate::new(2026, 12, 1));
+    assert!(ContractMonth::new(2026, 12) < ContractMonth::new(2027, 1));
+}

@@ -169,10 +169,12 @@ impl ContractBuilder {
     /// - Format YYYYMMDD for specific expiration date (e.g., "20241220")
     ///
     /// [`build`](Self::build) parses the string and returns
-    /// [`Error::InvalidArgument`] if it is neither. For a typed value use
-    /// [`expiry`](Self::expiry).
+    /// [`Error::InvalidArgument`] if it is neither. An empty string clears the
+    /// field, as in 5.x, so an option or future then fails the required check.
+    /// For a typed value use [`expiry`](Self::expiry).
     pub fn last_trade_date_or_contract_month<S: Into<String>>(mut self, date: S) -> Self {
-        self.last_trade_date_or_contract_month = Some(ExpiryInput::Text(date.into()));
+        let date = date.into();
+        self.last_trade_date_or_contract_month = (!date.is_empty()).then_some(ExpiryInput::Text(date));
         self
     }
 

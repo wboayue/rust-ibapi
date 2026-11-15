@@ -288,7 +288,8 @@ impl Strike {
 
 /// Date for option expiration
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Field order (year, month, day) makes the derived `Ord` chronological.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ExpirationDate {
     year: u16,
     month: u8,
@@ -384,7 +385,8 @@ impl fmt::Display for ExpirationDate {
 
 /// Contract month for futures
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Field order (year, month) makes the derived `Ord` chronological.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ContractMonth {
     year: u16,
     month: u8,
@@ -476,14 +478,12 @@ impl FromStr for ExpirationDate {
         if s.len() != 8 || !s.bytes().all(|b| b.is_ascii_digit()) {
             return Err(invalid());
         }
-        let (year, month, day) = (
-            s[..4].parse().map_err(|_| invalid())?,
-            s[4..6].parse().map_err(|_| invalid())?,
-            s[6..].parse().map_err(|_| invalid())?,
-        );
-        let month_enum = Month::try_from(month).map_err(|_| invalid())?;
-        Date::from_calendar_date(i32::from(year), month_enum, day).map_err(|_| invalid())?;
-        Ok(ExpirationDate { year, month, day })
+        let date = Date::parse(s, time::macros::format_description!("[year][month][day]")).map_err(|_| invalid())?;
+        Ok(ExpirationDate {
+            year: u16::try_from(date.year()).map_err(|_| invalid())?,
+            month: date.month().into(),
+            day: date.day(),
+        })
     }
 }
 
@@ -558,7 +558,9 @@ pub enum Expiry {
     Month(ContractMonth),
     /// Any other text TWS sent, kept verbatim and sent back as is: a bond's
     /// `"20430504 16:00 Europe/London"`, or a shape not seen yet. Parsing a
-    /// string never produces it; only decoding and deserializing do.
+    /// string never produces it; decoding and deserializing do. It is the
+    /// unchecked escape hatch: a hand-built `Unknown` is sent as is, so holding
+    /// an `Expiry` does not mean the value was validated.
     Unknown(String),
 }
 
@@ -621,8 +623,8 @@ impl From<ContractMonth> for Expiry {
 
 // Serde as the wire string, so a contract serializes `"20261218"` as before
 // rather than `{"Date":{"year":..}}`. Deserialize is lenient like the
-// decoder, so `Unknown` round-trips (and unchecked text loads as `Unknown`). The utoipa schema is hand-written to
-// match: exactly a string.
+// decoder, so `Unknown` round-trips, and unchecked text loads as `Unknown`.
+// The utoipa schema is hand-written to match: exactly a string.
 #[cfg(feature = "utoipa")]
 impl utoipa::PartialSchema for Expiry {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {

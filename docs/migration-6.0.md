@@ -669,7 +669,9 @@ match details.contract.last_trade_date_or_contract_month {
 }
 ```
 
-- `ContractBuilder::last_trade_date_or_contract_month("202612")` still takes a string. `build()` now rejects one that is neither form with `Error::InvalidArgument`, including `""` (omit the call instead) and the zoned `"20261218 08:30:00 US/Central"` form TWS also accepts (send the date alone). `ContractBuilder::expiry(..)` takes a typed value.
+- `ContractBuilder::last_trade_date_or_contract_month("202612")` still takes a string. `build()` now rejects one that is neither form with `Error::InvalidArgument`, including the zoned `"20261218 08:30:00 US/Central"` form TWS also accepts (send the date alone). `ContractBuilder::expiry(..)` takes a typed value.
+- `""` passed to the string setter still means unset, as in 5.x.
+- `Expiry` is not ordered: a month and a date don't compare. To sort or filter contracts by expiry, use `contract.last_trade_date` (`Option<time::Date>`), or compare `ExpirationDate` / `ContractMonth`, which are `Ord` and `Hash`.
 - A contract sent as a month comes back from TWS as its last trading day: an order on ES `202612` is echoed as `20261218`. Match on the variant you get, not the one you sent.
 - Serialized, the field is the wire string as before (`"20261218"`); an unset field is `null` instead of `""`. Deserializing still reads `""` as `None`, so 5.x JSON loads. Any other text loads as `Expiry::Unknown`, unchecked.
 - `Expiry` is in the prelude. The compiler reports every site that reads or writes the field.

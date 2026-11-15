@@ -80,6 +80,8 @@ fn split_last_trade_date(details: &mut ContractDetails, raw: &str, split: LastTr
         }
         LastTradeDateSplit::NonBond => {
             if let Some(date) = date {
+                // Overwrites the lenient whole-string value decode_contract set
+                // (Unknown for "20261218 08:30:00 US/Central") with the date token.
                 details.contract.last_trade_date_or_contract_month = Expiry::from_wire(date);
             }
         }
