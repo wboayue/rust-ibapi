@@ -343,6 +343,20 @@ fn decode_account_multi_value_proto_via_builder() {
 }
 
 #[test]
+fn decode_account_multi_value_proto_keeps_ledger_prefix() {
+    use crate::testdata::builders::accounts::account_update_multi;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let p = account_update_multi().key("$LEDGER-CashBalance").currency("BASE").to_proto();
+
+    let result = super::decode_account_multi_value_proto(p).unwrap();
+
+    assert_eq!(result.key, "$LEDGER-CashBalance");
+    assert!(result.has_ledger_prefix());
+    assert_eq!(result.base_key(), "CashBalance");
+}
+
+#[test]
 fn decode_pnl_proto_via_builder() {
     use crate::testdata::builders::accounts::pnl;
     use crate::testdata::builders::ResponseProtoEncoder;

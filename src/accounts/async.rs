@@ -344,6 +344,8 @@ impl Client {
     /// Subscribe to account updates scoped by account and model code.
     ///
     /// Each subscription is routed by its own request id, so several accounts or models can stream at once.
+    /// Per-currency ledger values arrive keyed `$LEDGER-<key>` when the TWS setting is on; see
+    /// [`AccountMultiValue::base_key`].
     ///
     /// # Arguments
     /// * `account`        - Account values can be requested for a particular account.
