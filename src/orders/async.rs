@@ -135,6 +135,8 @@ impl Client {
     ///
     /// # Arguments
     /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
+    ///   A caller-chosen ID moves the client's order-ID generator past it and past the order's
+    ///   preset attached-order IDs, so IDs the client allocates later don't reuse them.
     /// * `contract` - [Contract] to submit order for.
     /// * `order` - [`crate::orders::Order`] to submit.
     ///
@@ -184,6 +186,8 @@ impl Client {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
         verify::verify_order(self.server_version(), order)?;
         verify::verify_order_ext_operator(order)?;
+        // Ids the client allocates later must not reuse this one
+        self.raise_next_order_id(verify::order_id_after(checked_id, order));
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request).await?;
@@ -246,6 +250,8 @@ impl Client {
     ///
     /// # Arguments
     /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
+    ///   A caller-chosen ID moves the client's order-ID generator past it and past the order's
+    ///   preset attached-order IDs, so IDs the client allocates later don't reuse them.
     /// * `contract` - [Contract] to submit order for.
     /// * `order` - [`crate::orders::Order`] to submit.
     ///
@@ -285,6 +291,8 @@ impl Client {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
         verify::verify_order(self.server_version(), order)?;
         verify::verify_order_ext_operator(order)?;
+        // Ids the client allocates later must not reuse this one
+        self.raise_next_order_id(verify::order_id_after(checked_id, order));
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let internal_subscription = self.send_order(checked_id, request).await?;

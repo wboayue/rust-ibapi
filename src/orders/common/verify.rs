@@ -20,6 +20,17 @@ pub(crate) fn verify_order_ids(order_id: OrderId, order: &Order) -> Result<Order
     Ok(order_id)
 }
 
+/// The lowest order id the client may still allocate after sending `order` under `order_id`:
+/// one past the highest of `order_id` and the preset attached-order ids, which TWS creates
+/// orders under. Call after [`verify_order_ids`], which keeps each id below the request range.
+pub(crate) fn order_id_after(order_id: OrderId, order: &Order) -> OrderId {
+    let highest = [order.preset_stop_loss_order_id, order.preset_profit_taker_order_id]
+        .into_iter()
+        .flatten()
+        .fold(order_id.value(), i32::max);
+    OrderId::from(highest + 1)
+}
+
 // Gates whose server version is at or below the connection floor
 // (`PROTOBUF_REST_MESSAGES_3`, 213) are omitted: they always pass, since the
 // handshake rejects older servers.

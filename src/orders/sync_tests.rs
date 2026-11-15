@@ -6,7 +6,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, LegAction, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, OrderCondition, OrderStatusKind, OrderType, TimeInForce};
+use crate::orders::{Action, ExecutionFilterSide, ExecutionSide, OcaType, Order, OrderCondition, OrderStatusKind, OrderType, TimeInForce};
 use crate::proto;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -1419,4 +1419,29 @@ fn order_status_stream_yields_statuses_and_writes_nothing() {
 
     assert_eq!(filled, [40.0, 100.0]);
     assert_eq!(request_message_count(&message_bus), 0);
+}
+
+// A caller-chosen id must keep later client-allocated ids (next_order_id, the order
+// builder's submit, exercise_options) from reusing it, or TWS rejects the later order.
+#[test]
+fn caller_chosen_order_id_raises_the_generator() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus, server_versions::ATTACHED_ORDERS);
+    let contract = Contract::stock("AAPL").build();
+    let order = order_builder::limit_order(Action::Buy, 1.0, 1.0);
+    let chosen = client.next_order_id() + 1000;
+
+    client.submit_order(chosen, &contract, &order).expect("submit_order");
+    assert_eq!(client.next_order_id(), chosen + 1);
+
+    let bracket = Order {
+        preset_stop_loss_order_id: Some(chosen + 20),
+        preset_profit_taker_order_id: Some(chosen + 10),
+        ..order_builder::limit_order(Action::Buy, 1.0, 1.0)
+    };
+    let _subscription = client.place_order(chosen + 5, &contract, &bracket).expect("place_order");
+    assert_eq!(client.next_order_id(), chosen + 21, "past the preset attached-order ids");
+
+    client.submit_order(chosen, &contract, &order).expect("modify submit_order");
+    assert_eq!(client.next_order_id(), chosen + 22, "a lower id never rewinds the generator");
 }

@@ -22,6 +22,20 @@ fn verify_order_ids_accepts_order_range() {
     assert!(verify_order_ids(OrderId::from(1), &Order::default()).is_ok());
 }
 
+#[test]
+fn order_id_after_passes_the_order_and_preset_ids() {
+    let presets = Order {
+        parent_id: 50,
+        preset_stop_loss_order_id: Some(12),
+        preset_profit_taker_order_id: Some(11),
+        ..Order::default()
+    };
+    // The parent is an existing, earlier order, so it does not move the floor.
+    assert_eq!(order_id_after(OrderId::from(10), &presets), OrderId::from(13));
+    assert_eq!(order_id_after(OrderId::from(20), &presets), OrderId::from(21));
+    assert_eq!(order_id_after(OrderId::from(7), &Order::default()), OrderId::from(8));
+}
+
 /// Every order id an `Order` carries is checked: TWS routes frames for the
 /// attached orders by their ids (#789).
 #[test]
