@@ -13,6 +13,7 @@ use serde::Serialize;
 use tick_types::TickType;
 
 use crate::encode_option_field;
+use crate::Error;
 use crate::ToField;
 
 // Re-export builder and contract types
@@ -765,6 +766,44 @@ impl ContractDetails {
             .iter()
             .zip(&self.market_rule_ids)
             .find_map(|(valid, &id)| (valid == exchange).then_some(id))
+    }
+
+    /// The sessions of [`trading_hours`](Self::trading_hours), in the order TWS lists them.
+    ///
+    /// Times are wall clock in [`time_zone_id`](Self::time_zone_id); see [`TradingSession`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Parse`] for an entry that is neither `YYYYMMDD:HHMM-YYYYMMDD:HHMM` nor
+    /// `YYYYMMDD:CLOSED`, the forms TWS 970 and later send.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{ContractDetails, TradingSession};
+    /// use time::macros::{date, datetime};
+    ///
+    /// let details = ContractDetails {
+    ///     trading_hours: vec!["20261112:1700-20261113:1600".into(), "20261114:CLOSED".into()],
+    ///     ..Default::default()
+    /// };
+    /// assert_eq!(
+    ///     details.trading_sessions()?,
+    ///     vec![
+    ///         TradingSession::Open { start: datetime!(2026-11-12 17:00), end: datetime!(2026-11-13 16:00) },
+    ///         TradingSession::Closed(date!(2026 - 11 - 14)),
+    ///     ]
+    /// );
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn trading_sessions(&self) -> Result<Vec<TradingSession>, Error> {
+        common::trading_sessions::parse_trading_sessions(&self.trading_hours)
+    }
+
+    /// The sessions of [`liquid_hours`](Self::liquid_hours) (regular trading hours), in the
+    /// order TWS lists them. Same forms and errors as [`trading_sessions`](Self::trading_sessions).
+    pub fn liquid_sessions(&self) -> Result<Vec<TradingSession>, Error> {
+        common::trading_sessions::parse_trading_sessions(&self.liquid_hours)
     }
 }
 

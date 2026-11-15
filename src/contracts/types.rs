@@ -3,7 +3,7 @@
 use crate::{Error, ToField};
 use std::fmt;
 use std::str::FromStr;
-use time::{Date, Duration, Month, OffsetDateTime, Weekday};
+use time::{Date, Duration, Month, OffsetDateTime, PrimitiveDateTime, Weekday};
 
 #[cfg(test)]
 #[path = "types_tests.rs"]
@@ -712,6 +712,26 @@ impl<'de> serde::Deserialize<'de> for Expiry {
 pub(crate) fn deserialize_optional_expiry<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Expiry>, D::Error> {
     use serde::Deserialize;
     Ok(Option::<String>::deserialize(deserializer)?.as_deref().and_then(Expiry::from_wire))
+}
+
+/// One trading session from [`ContractDetails::trading_sessions`](crate::contracts::ContractDetails::trading_sessions)
+/// or [`liquid_sessions`](crate::contracts::ContractDetails::liquid_sessions).
+///
+/// Times are wall clock in the product's
+/// [`time_zone_id`](crate::contracts::ContractDetails::time_zone_id), as TWS sends them: no zone
+/// is applied, so turning one into an instant is the caller's step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TradingSession {
+    /// The product trades from `start` to `end`. A session can span midnight (17:00 to 16:00
+    /// the next day), so the end carries its own date.
+    Open {
+        /// Session open.
+        start: PrimitiveDateTime,
+        /// Session close.
+        end: PrimitiveDateTime,
+    },
+    /// The product does not trade on this date.
+    Closed(Date),
 }
 
 /// CUSIP identifier

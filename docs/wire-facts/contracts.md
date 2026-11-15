@@ -75,6 +75,20 @@ Contract details and option chains. Format: [README](README.md).
   depends on the answer.
 - **Not probed:** an account with bond permissions.
 
+### `tradingHours` and `liquidHours` sessions
+
+*Live 2026-11-13 09:55 ET RTH, paper TWS, server 223; contract_details for ES 202612.*
+
+- Both fields arrive as `;`-separated entries, each `YYYYMMDD:HHMM-YYYYMMDD:HHMM` or
+  `YYYYMMDD:CLOSED`, covering about a week: `20261112:1700-20261113:1600;20261114:CLOSED;...`.
+- The close carries its own date, so an overnight session (17:00 to 16:00) needs no rule. The
+  pre-970 form (`20090507:0700-1830,1830-2330`) did not appear.
+- `liquidHours` lists a closed day the full session still trades (`20261115:CLOSED` beside
+  `20261115:1700-20261116:1600` in `tradingHours`) and can hold two sessions for one date
+  (`20261118:0830-20261118:1600;20261118:1700-20261119:1600`).
+- Times are wall clock in `timeZoneId` (`US/Central` here).
+- **Not probed:** stocks, options, and products whose `timeZoneId` differs from the exchange's.
+
 ### Option chain `exchange` is a futures-options filter
 
 *Live 2026-09-03, paper Gateway, server 220, `reqSecDefOptParams`; #792.*
