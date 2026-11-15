@@ -95,8 +95,8 @@ pub(crate) fn encode_next_valid_order_id() -> Result<Vec<u8>, Error> {
     ))
 }
 
-// Called only from the `ExerciseOptionsBuilder` finaliser; the flat-arg encoder is the seam to
-// prost (the builder-fed exception in docs/rules/style/param-budget.md).
+// Internal seam between `ExerciseOptionsBuilder`'s finalizer and prost; see
+// docs/rules/style/param-budget.md.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn encode_exercise_options(
     order_id: i32,
