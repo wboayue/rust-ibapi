@@ -75,6 +75,13 @@ impl OrderId {
         self.0
     }
 
+    /// The id one past this one: the lowest the client may allocate once
+    /// this one is used. Call on a [`checked`](Self::checked) id, which sits
+    /// below the request range, so the `+ 1` cannot overflow.
+    pub(crate) fn next(self) -> Self {
+        Self(self.0 + 1)
+    }
+
     /// This id, or [`Error::OrderIdInRequestRange`] if it falls in the
     /// request range, where its error frames would route as a request's.
     pub(crate) fn checked(self) -> Result<Self, Error> {
