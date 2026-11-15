@@ -11,7 +11,9 @@ use crate::proto::encoders::{encode_contract, encode_contract_with_order, some_b
 
 const TEST_PERM_ID: i64 = 1376327563;
 const TEST_EXEC_ID: &str = "00025b46.63f8f39c.01.01";
-const TEST_TIME: &str = "20230224  12:04:56";
+/// `Execution.time` as the gateway renders it under its default (instrument timezone)
+/// setting; captured live 2026-11-11, server 226.
+const TEST_TIME: &str = "20261110 20:17:28 US/Central";
 
 // =============================================================================
 // Response builders

@@ -40,7 +40,7 @@ fn main() {
     // Put option with custom exchange
     let put = Contract::put("SPY")
         .strike(450.0)
-        .expires(ExpirationDate::new(2024, 3, 15))
+        .expires(ExpirationDate::new(2024, 3, 15).expect("valid date"))
         .on_exchange("CBOE")
         .build()
         .expect("valid option contract");
@@ -52,11 +52,16 @@ fn main() {
     );
 
     // Futures contract with auto-calculated multiplier
-    let es_futures = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).build();
+    let es_futures = Contract::futures("ES")
+        .expires_in(ContractMonth::new(2024, 3).expect("valid month"))
+        .build();
     println!("Futures: {} multiplier '{}'", es_futures.symbol, es_futures.multiplier);
 
     // Futures with specific month
-    let cl_futures = Contract::futures("CL").expires_in(ContractMonth::new(2024, 6)).multiplier(1000).build();
+    let cl_futures = Contract::futures("CL")
+        .expires_in(ContractMonth::new(2024, 6).expect("valid month"))
+        .multiplier(1000)
+        .build();
     println!(
         "Futures: {} multiplier {} expiry {}",
         cl_futures.symbol,

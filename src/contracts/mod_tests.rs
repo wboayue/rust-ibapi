@@ -51,7 +51,7 @@ fn v2_builders() {
     assert_eq!(news.exchange, Exchange::from("BZ"));
 
     // Test backward compatibility with option constructor
-    let option = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call);
+    let option = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15).unwrap(), 150.0, OptionRight::Call);
     assert_eq!(option.symbol, Symbol::from("AAPL"));
     assert_eq!(option.security_type, SecurityType::Option);
     assert_eq!(option.strike, 150.0);
@@ -300,7 +300,7 @@ fn is_bag() {
     assert!(!stock_contract.is_bag(), "Stock contract should not be a bag");
 
     // Test with a regular option contract (not a bag/spread)
-    let option_contract = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call);
+    let option_contract = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15).unwrap(), 150.0, OptionRight::Call);
     assert!(!option_contract.is_bag(), "Option contract should not be a bag");
 
     // Test with a futures contract (not a bag/spread)

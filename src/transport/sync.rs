@@ -16,6 +16,7 @@ use log::{debug, error, info, trace, warn};
 use crate::accounts::types::AccountId;
 use crate::client::handshake_state::HandshakeState;
 use crate::client::ids::{OrderId, RequestId, WireId};
+use crate::connection::common::STARTUP_STALL;
 use crate::connection::sync::Connection;
 
 use super::common::{lock, log_orphan, read_lock, report_unroutable_frame, validate_frame_length, write_lock, Lease, LeaseRef};
@@ -46,11 +47,6 @@ const MID_FRAME_STALL: Duration = Duration::from_secs(30);
 /// than reading a clock.
 const MID_FRAME_TIMEOUT_LIMIT: u32 = (MID_FRAME_STALL.as_millis() / TWS_READ_TIMEOUT.as_millis()) as u32;
 const _: () = assert!(MID_FRAME_TIMEOUT_LIMIT > 0, "MID_FRAME_STALL must exceed TWS_READ_TIMEOUT");
-
-/// How long connect waits for each startup frame (handshake ack, account
-/// info) before giving up. A loaded gateway can take longer than one read
-/// timeout to answer.
-const STARTUP_STALL: Duration = Duration::from_secs(30);
 
 /// [`STARTUP_STALL`] in read timeouts, counted like [`MID_FRAME_TIMEOUT_LIMIT`].
 pub(crate) const STARTUP_TIMEOUT_LIMIT: u32 = (STARTUP_STALL.as_millis() / TWS_READ_TIMEOUT.as_millis()) as u32;

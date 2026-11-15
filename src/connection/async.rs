@@ -7,8 +7,8 @@ use log::{debug, info};
 use tokio::sync::{broadcast, Mutex};
 
 use super::common::{
-    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionConfig, ConnectionHandler, ConnectionProtocol,
-    StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS,
+    parse_handshake_ack, parse_raw_message, require_protobuf_support, startup_stall_error, AccountInfo, ConnectionConfig, ConnectionHandler,
+    ConnectionProtocol, StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS, STARTUP_STALL,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -248,12 +248,28 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
     /// Read a message from the connection
     pub(crate) async fn read_message(&self) -> Response {
-        let data = self.socket.read_message().await?;
+        self.decode_frame(&self.socket.read_message().await?)
+    }
 
-        let message = parse_raw_message(&data)?;
+    fn decode_frame(&self, data: &[u8]) -> Response {
+        let message = parse_raw_message(data)?;
         self.recorder.record_response(&message);
 
         Ok(message)
+    }
+
+    /// Read one startup frame body, giving up with `TimedOut` after
+    /// [`STARTUP_STALL`] without it: a gateway that accepts the TCP connection
+    /// but never answers must not hang connect, or a reconnect's retry loop.
+    ///
+    /// The timeout can cancel the read mid-frame, leaving the stream out of
+    /// sync, so callers must discard the socket on `Err`: `connect` drops the
+    /// connection and `reconnect` dials a fresh socket for its next attempt.
+    async fn read_startup_frame(&self) -> Result<Vec<u8>, Error> {
+        match tokio::time::timeout(STARTUP_STALL, self.socket.read_message()).await {
+            Ok(result) => result,
+            Err(_elapsed) => Err(startup_stall_error()),
+        }
     }
 
     /// Write raw bytes with a length prefix
@@ -270,7 +286,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
         self.socket.write_all(&handshake).await?;
 
-        let ack = parse_handshake_ack(&self.connection_handler, self.socket.read_message().await)?;
+        let ack = parse_handshake_ack(&self.connection_handler, self.read_startup_frame().await)?;
 
         let mut connection_metadata = self.connection_metadata.lock().await;
         self.server_version_cache.store(ack.server_version, Ordering::Release);
@@ -293,7 +309,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
         let mut attempts = 0;
         let ctx = self.handshake_context();
         loop {
-            let message = self.read_message().await?;
+            let message = self.decode_frame(&self.read_startup_frame().await?)?;
             let info = self.connection_handler.parse_account_info(&message, &ctx)?;
 
             attempts += 1;

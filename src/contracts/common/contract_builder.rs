@@ -189,10 +189,10 @@ impl ContractBuilder {
     ///     .symbol("ES")
     ///     .security_type(SecurityType::Future)
     ///     .exchange("CME")
-    ///     .expiry(ContractMonth::new(2026, 12))
+    ///     .expiry(ContractMonth::new(2026, 12).unwrap())
     ///     .build()
     ///     .unwrap();
-    /// assert_eq!(contract.last_trade_date_or_contract_month, Some(Expiry::Month(ContractMonth::new(2026, 12))));
+    /// assert_eq!(contract.last_trade_date_or_contract_month, Some(Expiry::Month(ContractMonth::new(2026, 12).unwrap())));
     /// ```
     pub fn expiry(mut self, expiry: impl Into<Expiry>) -> Self {
         self.last_trade_date_or_contract_month = Some(ExpiryInput::Typed(expiry.into()));

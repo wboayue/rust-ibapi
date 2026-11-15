@@ -113,7 +113,7 @@ let call = Contract::call("AAPL")
 // Put option with custom exchange
 let put = Contract::put("SPY")
     .strike(450.0)
-    .expires(ExpirationDate::new(2024, 3, 15))
+    .expires(ExpirationDate::new(2024, 3, 15)?)
     .on_exchange("CBOE")
     .multiplier(100)
     .build()?;
@@ -154,12 +154,12 @@ let nq_quarter = Contract::futures("NQ")
 
 // Futures with specific expiration
 let cl_futures = Contract::futures("CL")
-    .expires_in(ContractMonth::new(2024, 6))
+    .expires_in(ContractMonth::new(2024, 6)?)
     .build();
 
 // Custom futures on specific exchange
 let zc_futures = Contract::futures("ZC")
-    .expires_in(ContractMonth::new(2024, 12))
+    .expires_in(ContractMonth::new(2024, 12)?)
     .on_exchange("ECBOT")
     .build();
 
@@ -433,6 +433,11 @@ assert!(empty_spread.is_err());  // Spreads need at least one leg
 // Option strike validation happens in build()
 let bad_strike = Contract::call("AAPL").strike(-10.0).expires_on(2024, 12, 20).build();
 assert!(bad_strike.is_err());  // Strikes must be positive and finite
+
+// So does the expires_on date; ExpirationDate::new and ContractMonth::new check theirs
+let bad_date = Contract::call("AAPL").strike(150.0).expires_on(2024, 2, 30).build();
+assert!(bad_date.is_err());  // Not a calendar date
+assert!(ContractMonth::new(2024, 13).is_err());
 
 // Missing option fields are caught at compile time
 // This won't compile:

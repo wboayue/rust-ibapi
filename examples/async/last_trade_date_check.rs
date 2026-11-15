@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ES future — should also have a last_trade_date
-    let contract = Contract::futures("ES").expires_in(ContractMonth::new(2026, 6)).build();
+    let contract = Contract::futures("ES").expires_in(ContractMonth::new(2026, 6)?).build();
 
     let details = client.contract_details(&contract).await?;
 
