@@ -538,6 +538,19 @@ fn accu_distr_builder() {
 }
 
 #[test]
+fn accu_distr_route_order_type_sends_unlisted_code_unchanged() {
+    let params = AccuDistrBuilder::new()
+        .route_order_type(OrderType::Unknown("SNAP MID".into()))
+        .build()
+        .unwrap();
+    assert_eq!(params.params.len(), 1);
+    assert_eq!(
+        (params.params[0].tag.as_str(), params.params[0].value.as_str()),
+        ("routeOrderType", "SNAP MID")
+    );
+}
+
+#[test]
 fn accu_distr_builder_minimal() {
     let params = AccuDistrBuilder::new().build().unwrap();
     assert_eq!(params.strategy, "AccuDistr");

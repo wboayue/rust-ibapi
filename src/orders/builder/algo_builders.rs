@@ -1280,7 +1280,7 @@ impl AccuDistrBuilder {
         let mut params = Vec::new();
 
         push_param_if_some(&mut params, "timeBetweenOrders", self.time_between_orders.map(|v| v.to_string()));
-        push_param_if_some(&mut params, "routeOrderType", self.route_order_type.map(|t| t.to_string()));
+        push_param_if_some(&mut params, "routeOrderType", self.route_order_type.map(|t| t.as_str().to_owned()));
         push_param_if_some(&mut params, "componentSize", self.component_size.map(|v| v.to_string()));
         push_param_if_some(&mut params, "activeTimeStart", self.active_time_start);
         push_param_if_some(&mut params, "activeTimeEnd", self.active_time_end);

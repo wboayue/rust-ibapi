@@ -94,8 +94,8 @@ pub enum OrderType {
     /// read from TWS round-trips. Matching is exact and case-sensitive, and only the
     /// canonical code maps to a named variant: aliases IB's Java client also accepts
     /// (`"STOP LIMIT"`, `"MKT TO LMT"`, `"TRAILLMT"`, ...) parse as `Unknown` and round-trip,
-    /// but don't equal [`StopLimit`](Self::StopLimit) and the rest. The #1220 probe saw TWS echo
-    /// only canonical codes (`docs/wire-facts/orders.md`). To send a code
+    /// but don't equal [`StopLimit`](Self::StopLimit) and the rest. Whether TWS echoes an alias
+    /// as sent or as its canonical code is unverified. To send a code
     /// this version does not list, build one (`OrderType::Unknown("SNAP MID".into())`) or
     /// parse it (`"SNAP MID".parse::<OrderType>()`). Not for a listed code: `Unknown("LMT")`
     /// sends the same string as [`Limit`](Self::Limit) but is not equal to it, and parsing

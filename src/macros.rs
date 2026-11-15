@@ -60,7 +60,8 @@ macro_rules! impl_str_partial_eq {
 /// Deserialize goes through `FromStr`, so it rejects `""`; serde is not on the
 /// wire path (decoding goes through `parse_required` / `parse_optional`). The
 /// utoipa schema is exactly a string, because the derive would mirror serde's
-/// default representation, which is not what these impls emit.
+/// default representation, which is not what these impls emit. A closed enum
+/// has no `Unknown` payload, so it keeps the serde derives instead.
 macro_rules! impl_wire_enum {
     ($name:ident) => {
         impl_wire_enum!(@common $name);
