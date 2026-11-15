@@ -772,20 +772,21 @@ compiler finds every `new` call; it does not find an `expires_on` date that used
 fails at `build()`. `ExpirationDate::next_friday()`, `third_friday_of_month()`,
 `ContractMonth::front()` and `next_quarter()` are unchanged.
 
-### 35. Decoded market-data, contract-details and scanner structs are `#[non_exhaustive]`
+### 35. `ContractDetails`, `ScannerData` and `TickRequestParameters` are `#[non_exhaustive]`
 
-`ContractDetails`, `ScannerData`, historical and realtime `Bar`, `BidAsk`, `MidPoint`, `Trade`,
-`TickPrice`, `TickSize`, `MarketDepth`, `MarketDepthL2` and `TickRequestParameters` are now
-`#[non_exhaustive]`. TWS keeps adding fields to these messages, and with this attribute a later
-6.x release can add them too, without another major version. The crate only hands these types
-out; no API takes one as input. The change affects only code that builds one itself, usually a
-test or a mock.
+TWS sends fields on these three messages that the crate doesn't decode yet:
+
+- `ContractDetails`: `min_algo_size`, last price and size precision, and the event-contract
+  fields.
+- `ScannerData`: `distance`, `benchmark` and `projection`.
+- `TickRequestParameters`: last price and size precision.
+
+With the attribute, a 6.x release can add them without another major version. The crate only
+hands these types out; no API takes one as input. The change affects only code that builds one
+itself, usually a test or a mock.
 
 Outside the crate, a struct literal, including `..Default::default()`, no longer compiles. Start
-from `default()` and assign fields. Historical and realtime `Bar`, `BidAsk`, `MidPoint` and
-`Trade` now implement `Default` for this: zero values, empty strings, a Unix-epoch timestamp,
-and `count` `-1` on a historical `Bar`, its value when TWS sends none. `BidAskAttribute` and
-`TradeAttribute` also implement `Default`.
+from `default()` and assign fields:
 
 ```rust,ignore
 // 5.x
@@ -796,5 +797,5 @@ let mut details = ContractDetails::default();
 details.liquid_hours = hours;
 ```
 
-A destructuring pattern needs a trailing `..`: `let Bar { open, close, .. } = bar;`. Reading
-fields is unchanged, and so is serde `Deserialize`. The compiler finds every site.
+A destructuring pattern needs a trailing `..`: `let ScannerData { rank, contract_details, .. } =
+row;`. Reading fields is unchanged, and so is serde `Deserialize`. The compiler finds every site.

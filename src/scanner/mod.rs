@@ -99,8 +99,9 @@ impl Default for ScannerSubscription {
 
 /// Provides the data resulting from the market scanner request.
 ///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`ScannerData::default`] and assign fields.
+/// `#[non_exhaustive]`: TWS sends `distance`, `benchmark` and `projection`, not decoded yet,
+/// so fields will be added. Outside this crate, start from [`ScannerData::default`] and assign
+/// fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[non_exhaustive]

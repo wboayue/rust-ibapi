@@ -594,7 +594,8 @@ pub struct DeltaNeutralContract {
 
 /// ContractDetails provides extended contract details.
 ///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// `#[non_exhaustive]`: TWS sends fields not decoded yet (`min_algo_size`, price and size
+/// precision, event-contract details), so fields will be added. Outside this crate, start from
 /// [`ContractDetails::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]

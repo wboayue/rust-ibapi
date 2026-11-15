@@ -47,12 +47,8 @@ use crate::contracts::tick_types::TickType;
 // === Models ===
 
 /// Represents `BidAsk` tick by tick realtime tick.
-///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`BidAsk::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[non_exhaustive]
 pub struct BidAsk {
     /// The spread's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -114,12 +110,8 @@ pub struct BidAskAttribute {
 }
 
 /// Represents `MidPoint` tick by tick realtime tick.
-///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`MidPoint::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[non_exhaustive]
 pub struct MidPoint {
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -159,12 +151,8 @@ impl StreamDecoder<MidPoint> for MidPoint {
 }
 
 /// Represents a real-time bar with OHLCV data
-///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`Bar::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[non_exhaustive]
 pub struct Bar {
     /// The timestamp of the bar in market timezone
     pub date: OffsetDateTime,
@@ -222,12 +210,8 @@ impl StreamDecoder<Bar> for Bar {
 }
 
 /// Represents `Last` or `AllLast` tick-by-tick real-time tick.
-///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`Trade::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[non_exhaustive]
 pub struct Trade {
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -399,12 +383,8 @@ impl_wire_code!(DepthSide {
 });
 
 /// Returns the order book.
-///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`MarketDepth::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-#[non_exhaustive]
 pub struct MarketDepth {
     /// The order book's row being updated
     pub position: i32,
@@ -419,12 +399,8 @@ pub struct MarketDepth {
 }
 
 /// Returns the order book.
-///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`MarketDepthL2::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-#[non_exhaustive]
 pub struct MarketDepthL2 {
     /// The order book's row being updated
     pub position: i32,
@@ -570,12 +546,8 @@ impl StreamDecoder<TickTypes> for TickTypes {
 }
 
 /// Price tick data.
-///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`TickPrice::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
-#[non_exhaustive]
 pub struct TickPrice {
     /// Type of price tick (bid, ask, last, etc.).
     pub tick_type: TickType,
@@ -598,12 +570,8 @@ pub struct TickAttribute {
 }
 
 /// Size tick data.
-///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`TickSize::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
-#[non_exhaustive]
 pub struct TickSize {
     /// Type of size tick (bid size, ask size, etc.).
     pub tick_type: TickType,
@@ -649,8 +617,9 @@ pub struct TickGeneric {
 
 /// Parameters related to tick data requests.
 ///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`TickRequestParameters::default`] and assign fields.
+/// `#[non_exhaustive]`: TWS sends last price and size precision, not decoded yet, so fields
+/// will be added. Outside this crate, start from [`TickRequestParameters::default`] and assign
+/// fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 #[non_exhaustive]

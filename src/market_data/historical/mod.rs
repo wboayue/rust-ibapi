@@ -161,12 +161,8 @@ impl From<OffsetDateTime> for BarTimestamp {
 }
 
 /// Bar describes the historical data bar.
-///
-/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
-/// [`Bar::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Copy, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct Bar {
     /// The bar's timestamp — either a calendar date (daily+ bars) or a full
     /// datetime (intraday bars). See [`BarTimestamp`] for details.
@@ -188,6 +184,9 @@ pub struct Bar {
     pub count: i32,
 }
 
+/// `Bar::count` when TWS sends no bar count, the reference client's default.
+pub(crate) const NO_BAR_COUNT: i32 = -1;
+
 impl Default for Bar {
     /// A zero bar with `count` `-1`, timestamped at the Unix epoch.
     fn default() -> Self {
@@ -199,7 +198,7 @@ impl Default for Bar {
             close: 0.0,
             volume: 0.0,
             wap: 0.0,
-            count: -1,
+            count: NO_BAR_COUNT,
         }
     }
 }

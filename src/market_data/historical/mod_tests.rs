@@ -316,6 +316,8 @@ fn trim_to_daily_bars() {
     assert_eq!(bar_dates(&trimmed), vec![BarTimestamp::from(date!(2026 - 04 - 15))]);
 }
 
+// Destructures every field without `..`, so a new field fails to compile here until its
+// default is chosen.
 #[test]
 fn bar_default_is_zero_at_epoch_with_no_count() {
     let Bar {
@@ -330,5 +332,5 @@ fn bar_default_is_zero_at_epoch_with_no_count() {
     } = Bar::default();
     assert_eq!(date, BarTimestamp::DateTime(OffsetDateTime::UNIX_EPOCH));
     assert_eq!((open, high, low, close, volume, wap), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
-    assert_eq!(count, -1);
+    assert_eq!(count, NO_BAR_COUNT);
 }

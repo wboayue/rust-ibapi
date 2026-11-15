@@ -75,8 +75,9 @@ unknown codes, so `ConnectivityStatus` stays exhaustive (#689) though its siblin
   match `NoticeCategory`.
 - #1081 — removed `#[non_exhaustive]` from `ExecutionFilterSide`, `OptionRight`, `LegAction`:
   closed TWS vocabularies; the one stated reason (on `ExecutionFilterSide`) was headroom.
-- #1232 — `#[non_exhaustive]` on eleven decoded output structs (`ContractDetails`,
-  `ScannerData`, bars, ticks, depth). The justification is a wire that grows fields, not
-  headroom: dropped proto fields and `Option` sizes were queued behind a major. No outside
-  caller built one, so no PR-A; doctests were the only casualties. Types that lacked `Default`
-  gained one so `default()` plus field assignment stays the escape hatch.
+- #1232 — `#[non_exhaustive]` on `ContractDetails`, `ScannerData` and
+  `TickRequestParameters`, each with fields TWS sends that the decoder drops. It was first
+  applied to twelve output structs; review cut it to the three with a named missing field, since
+  the rest were headroom. The attribute makes only *adding* fields non-breaking: a field type
+  change (`f64` → `Option<f64>`) breaks callers either way, so it is no reason to apply one. No
+  outside caller built these types, so there was no PR-A; doctests were the only casualties.
