@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
     // First, get contract details to find market rule IDs
-    let contract = Contract::futures("ES").expires_in(ContractMonth::new(2025, 3)).build();
+    let contract = Contract::futures("ES").expires_in(ContractMonth::new(2025, 3)?).build();
 
     println!("Getting contract details for ES futures...");
     let contract_details = client.contract_details(&contract).await?;

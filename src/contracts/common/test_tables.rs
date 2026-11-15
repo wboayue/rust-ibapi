@@ -790,7 +790,12 @@ pub fn client_method_test_cases() -> Vec<ClientMethodTestCase> {
         ClientMethodTestCase {
             name: "calculate option price",
             test_type: ClientMethodTest::CalculateOptionPrice {
-                contract: Contract::option("AAPL", crate::contracts::ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call),
+                contract: Contract::option(
+                    "AAPL",
+                    crate::contracts::ExpirationDate::new(2023, 12, 15).unwrap(),
+                    150.0,
+                    OptionRight::Call,
+                ),
                 volatility: 0.25,
                 underlying_price: 155.0,
             },
@@ -817,7 +822,12 @@ pub fn client_method_test_cases() -> Vec<ClientMethodTestCase> {
         ClientMethodTestCase {
             name: "calculate implied volatility",
             test_type: ClientMethodTest::CalculateImpliedVolatility {
-                contract: Contract::option("AAPL", crate::contracts::ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call),
+                contract: Contract::option(
+                    "AAPL",
+                    crate::contracts::ExpirationDate::new(2023, 12, 15).unwrap(),
+                    150.0,
+                    OptionRight::Call,
+                ),
                 option_price: 8.5,
                 underlying_price: 155.0,
             },

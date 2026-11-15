@@ -42,7 +42,7 @@ fn call_option_builder() {
 fn put_option_builder() {
     let put = Contract::put("SPY")
         .strike(450.0)
-        .expires(ExpirationDate::new(2024, 3, 15))
+        .expires(ExpirationDate::new(2024, 3, 15).unwrap())
         .on_exchange("CBOE")
         .in_currency("USD")
         .primary("CBOE")
@@ -76,6 +76,22 @@ fn invalid_strike_price() {
     assert_eq!(result.unwrap().value(), 100.0);
 }
 
+/// `expires_on()` takes any components; `build()` rejects a date that is not on the calendar.
+#[test]
+fn option_build_rejects_invalid_expires_on() {
+    let result = Contract::call("AAPL").strike(150.0).expires_on(2026, 2, 30).build();
+    assert!(
+        matches!(result, Err(Error::InvalidArgument(ref message)) if message == "invalid expiration date 2026-02-30"),
+        "got {result:?}"
+    );
+
+    let contract = Contract::put("AAPL").strike(150.0).expires_on(2024, 2, 29).build().unwrap();
+    assert_eq!(
+        contract.last_trade_date_or_contract_month,
+        Some(Expiry::Date(ExpirationDate::new(2024, 2, 29).unwrap()))
+    );
+}
+
 /// `strike()` takes any `f64`; `build()` rejects one that is not positive and finite.
 #[test]
 fn option_build_rejects_invalid_strike() {
@@ -100,7 +116,7 @@ fn option_build_rejects_invalid_strike() {
 #[test]
 fn futures_builder_with_manual_expiry() {
     let futures = Contract::futures("ES")
-        .expires_in(ContractMonth::new(2024, 3))
+        .expires_in(ContractMonth::new(2024, 3).unwrap())
         .on_exchange("CME")
         .in_currency("USD")
         .multiplier(50)
@@ -142,17 +158,23 @@ fn futures_builder_any_month() {
 #[test]
 fn futures_multiplier() {
     // Default: no multiplier set (empty string)
-    let es = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).build();
+    let es = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3).unwrap()).build();
     assert_eq!(es.multiplier, "");
 
-    let nq = Contract::futures("NQ").expires_in(ContractMonth::new(2024, 3)).build();
+    let nq = Contract::futures("NQ").expires_in(ContractMonth::new(2024, 3).unwrap()).build();
     assert_eq!(nq.multiplier, "");
 
     // Explicit multiplier is used when specified
-    let custom = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).multiplier(50).build();
+    let custom = Contract::futures("ES")
+        .expires_in(ContractMonth::new(2024, 3).unwrap())
+        .multiplier(50)
+        .build();
     assert_eq!(custom.multiplier, "50");
 
-    let cl = Contract::futures("CL").expires_in(ContractMonth::new(2024, 3)).multiplier(1000).build();
+    let cl = Contract::futures("CL")
+        .expires_in(ContractMonth::new(2024, 3).unwrap())
+        .multiplier(1000)
+        .build();
     assert_eq!(cl.multiplier, "1000");
 }
 
@@ -378,19 +400,19 @@ fn symbol_conversion() {
 
 #[test]
 fn expiration_date_formatting() {
-    let date = ExpirationDate::new(2024, 12, 20);
+    let date = ExpirationDate::new(2024, 12, 20).unwrap();
     assert_eq!(date.to_string(), "20241220");
 
-    let date = ExpirationDate::new(2025, 1, 5);
+    let date = ExpirationDate::new(2025, 1, 5).unwrap();
     assert_eq!(date.to_string(), "20250105");
 }
 
 #[test]
 fn contract_month_formatting() {
-    let month = ContractMonth::new(2024, 3);
+    let month = ContractMonth::new(2024, 3).unwrap();
     assert_eq!(month.to_string(), "202403");
 
-    let month = ContractMonth::new(2025, 12);
+    let month = ContractMonth::new(2025, 12).unwrap();
     assert_eq!(month.to_string(), "202512");
 }
 

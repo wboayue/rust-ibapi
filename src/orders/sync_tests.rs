@@ -626,7 +626,12 @@ fn exercise_options_reads_past_preset_tif_warning_to_executions() {
     let frame_count = frames.len();
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(frames));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    let contract = Contract::option("SPY", crate::contracts::ExpirationDate::new(2026, 11, 20), 755.0, OptionRight::Call);
+    let contract = Contract::option(
+        "SPY",
+        crate::contracts::ExpirationDate::new(2026, 11, 20).unwrap(),
+        755.0,
+        OptionRight::Call,
+    );
 
     let subscription = client.exercise_options(&contract).exercise(1).submit().expect("exercise_options failed");
 

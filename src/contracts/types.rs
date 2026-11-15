@@ -298,8 +298,52 @@ pub struct ExpirationDate {
 
 impl ExpirationDate {
     /// Create an option expiration date from year/month/day components.
-    pub fn new(year: u16, month: u8, day: u8) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidArgument`] unless the components form a real calendar
+    /// date with a year of at most 9999 (the wire form is `YYYYMMDD`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::ExpirationDate;
+    ///
+    /// let date = ExpirationDate::new(2026, 12, 18)?;
+    /// assert_eq!(date.to_string(), "20261218");
+    ///
+    /// assert!(ExpirationDate::new(2026, 2, 30).is_err());
+    /// assert!(ExpirationDate::new(2026, 13, 1).is_err());
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn new(year: u16, month: u8, day: u8) -> Result<Self, Error> {
+        Self::unchecked(year, month, day).validated()
+    }
+
+    /// Store the components without checking them. Only for a builder that
+    /// calls [`validated`](Self::validated) before the value leaves it.
+    pub(crate) fn unchecked(year: u16, month: u8, day: u8) -> Self {
         ExpirationDate { year, month, day }
+    }
+
+    /// `Ok(self)` if the components form a real date with a 4-digit year.
+    pub(crate) fn validated(self) -> Result<Self, Error> {
+        let invalid = || Error::InvalidArgument(format!("invalid expiration date {:04}-{:02}-{:02}", self.year, self.month, self.day));
+        if self.year > 9999 {
+            return Err(invalid());
+        }
+        let month = Month::try_from(self.month).map_err(|_| invalid())?;
+        Date::from_calendar_date(i32::from(self.year), month, self.day).map_err(|_| invalid())?;
+        Ok(self)
+    }
+
+    /// From a calendar date, valid by construction for years 0–9999.
+    fn from_date(date: Date) -> Self {
+        ExpirationDate {
+            year: date.year() as u16,
+            month: date.month().into(),
+            day: date.day(),
+        }
     }
 
     /// Helper to calculate days until next Friday from a given weekday
@@ -325,13 +369,7 @@ impl ExpirationDate {
             Weekday::Friday => 7,
             other => Self::days_until_friday(other),
         };
-        let next_friday = today + Duration::days(days_to_add);
-
-        ExpirationDate {
-            year: next_friday.year() as u16,
-            month: next_friday.month() as u8,
-            day: next_friday.day(),
-        }
+        Self::from_date(today + Duration::days(days_to_add))
     }
 
     /// Get the third Friday of the current month (standard monthly options expiration)
@@ -360,19 +398,9 @@ impl ExpirationDate {
             .expect("Valid date");
 
             let days_to_first_friday_next = Self::days_until_friday(next_month.weekday());
-            let third_friday_next = next_month + Duration::days(days_to_first_friday_next + 14);
-
-            ExpirationDate {
-                year: third_friday_next.year() as u16,
-                month: third_friday_next.month() as u8,
-                day: third_friday_next.day(),
-            }
+            Self::from_date(next_month + Duration::days(days_to_first_friday_next + 14))
         } else {
-            ExpirationDate {
-                year: third_friday.year() as u16,
-                month: third_friday.month() as u8,
-                day: third_friday.day(),
-            }
+            Self::from_date(third_friday)
         }
     }
 }
@@ -394,8 +422,28 @@ pub struct ContractMonth {
 
 impl ContractMonth {
     /// Construct a futures contract month given year and month.
-    pub fn new(year: u16, month: u8) -> Self {
-        ContractMonth { year, month }
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidArgument`] unless `month` is 1–12 and `year` is at most
+    /// 9999 (the wire form is `YYYYMM`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::ContractMonth;
+    ///
+    /// let month = ContractMonth::new(2026, 12)?;
+    /// assert_eq!(month.to_string(), "202612");
+    ///
+    /// assert!(ContractMonth::new(2026, 13).is_err());
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn new(year: u16, month: u8) -> Result<Self, Error> {
+        if year > 9999 || !(1..=12).contains(&month) {
+            return Err(Error::InvalidArgument(format!("invalid contract month {year:04}-{month:02}")));
+        }
+        Ok(ContractMonth { year, month })
     }
 
     /// Get the front month contract (next expiring)
@@ -404,17 +452,28 @@ impl ContractMonth {
         Self::front_from(now.year() as u16, now.month() as u8, now.day())
     }
 
+    // Builds the struct directly: `current_month` is 1–12 and every month
+    // computed from it stays in range, so `new` has nothing to reject.
     fn front_from(current_year: u16, current_month: u8, current_day: u8) -> Self {
         // Futures typically expire around the third Friday of the month
         // If we're past the 15th, assume current month has expired
         if current_day > 15 {
             if current_month == 12 {
-                ContractMonth::new(current_year + 1, 1)
+                ContractMonth {
+                    year: current_year + 1,
+                    month: 1,
+                }
             } else {
-                ContractMonth::new(current_year, current_month + 1)
+                ContractMonth {
+                    year: current_year,
+                    month: current_month + 1,
+                }
             }
         } else {
-            ContractMonth::new(current_year, current_month)
+            ContractMonth {
+                year: current_year,
+                month: current_month,
+            }
         }
     }
 
@@ -424,6 +483,7 @@ impl ContractMonth {
         Self::next_quarter_from(now.year() as u16, now.month() as u8, now.day())
     }
 
+    // Builds the struct directly: the month is always 3, 6, 9 or 12.
     fn next_quarter_from(current_year: u16, current_month: u8, current_day: u8) -> Self {
         // Find next quarterly month
         let next_quarter_month = match current_month {
@@ -449,7 +509,10 @@ impl ContractMonth {
             current_year
         };
 
-        ContractMonth::new(year, next_quarter_month)
+        ContractMonth {
+            year,
+            month: next_quarter_month,
+        }
     }
 }
 
@@ -467,8 +530,9 @@ impl fmt::Display for ContractMonth {
 /// use ibapi::contracts::ExpirationDate;
 ///
 /// let date: ExpirationDate = "20261218".parse().unwrap();
-/// assert_eq!(date, ExpirationDate::new(2026, 12, 18));
+/// assert_eq!(date, ExpirationDate::new(2026, 12, 18)?);
 /// assert!("20261340".parse::<ExpirationDate>().is_err());
+/// # Ok::<(), ibapi::Error>(())
 /// ```
 impl FromStr for ExpirationDate {
     type Err = Error;
@@ -479,11 +543,7 @@ impl FromStr for ExpirationDate {
             return Err(invalid());
         }
         let date = Date::parse(s, time::macros::format_description!("[year][month][day]")).map_err(|_| invalid())?;
-        Ok(ExpirationDate {
-            year: u16::try_from(date.year()).map_err(|_| invalid())?,
-            month: date.month().into(),
-            day: date.day(),
-        })
+        Ok(Self::from_date(date))
     }
 }
 
@@ -503,8 +563,9 @@ impl TryFrom<&str> for ExpirationDate {
 /// use ibapi::contracts::ContractMonth;
 ///
 /// let month: ContractMonth = "202612".parse().unwrap();
-/// assert_eq!(month, ContractMonth::new(2026, 12));
+/// assert_eq!(month, ContractMonth::new(2026, 12)?);
 /// assert!("202613".parse::<ContractMonth>().is_err());
+/// # Ok::<(), ibapi::Error>(())
 /// ```
 impl FromStr for ContractMonth {
     type Err = Error;
@@ -515,10 +576,7 @@ impl FromStr for ContractMonth {
             return Err(invalid());
         }
         let (year, month) = (s[..4].parse().map_err(|_| invalid())?, s[4..].parse().map_err(|_| invalid())?);
-        if !(1..=12).contains(&month) {
-            return Err(invalid());
-        }
-        Ok(ContractMonth { year, month })
+        ContractMonth::new(year, month).map_err(|_| invalid())
     }
 }
 
@@ -545,10 +603,11 @@ impl TryFrom<&str> for ContractMonth {
 /// use ibapi::contracts::{ContractMonth, ExpirationDate, Expiry};
 ///
 /// let month: Expiry = "202612".parse().unwrap();
-/// assert_eq!(month, Expiry::Month(ContractMonth::new(2026, 12)));
+/// assert_eq!(month, Expiry::Month(ContractMonth::new(2026, 12)?));
 ///
-/// let date = Expiry::from(ExpirationDate::new(2026, 12, 18));
+/// let date = Expiry::from(ExpirationDate::new(2026, 12, 18)?);
 /// assert_eq!(date.to_string(), "20261218");
+/// # Ok::<(), ibapi::Error>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expiry {
