@@ -177,6 +177,12 @@ fn expiration_date_display_format() {
 }
 
 #[test]
+fn expiration_date_accessors_return_components() {
+    let d = ExpirationDate::new(2025, 3, 21).unwrap();
+    assert_eq!((d.year(), d.month(), d.day()), (2025, 3, 21));
+}
+
+#[test]
 fn expiration_date_days_until_friday_table() {
     use time::Weekday::*;
     assert_eq!(ExpirationDate::days_until_friday(Friday), 0);
@@ -249,6 +255,12 @@ fn third_friday_december_rolls_to_january_next_year() {
 fn contract_month_display_format() {
     let m = ContractMonth::new(2025, 6).unwrap();
     assert_eq!(format!("{}", m), "202506");
+}
+
+#[test]
+fn contract_month_accessors_return_components() {
+    let m = ContractMonth::new(2025, 6).unwrap();
+    assert_eq!((m.year(), m.month()), (2025, 6));
 }
 
 #[test]

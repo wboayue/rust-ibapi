@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ExpirationDate::year()`, `month()` and `day()`, and `ContractMonth::year()` and `month()`: the components of an expiry, which had no accessors, so reading the year of a contract's `Expiry` meant slicing its `Display` text (#1229).
 - `Notice::data_farm()` returns the data farm a farm-status notice reports on: a `DataFarm` with its `DataFarmKind` (`MarketData`, `HistoricalData`, `SecurityDefinition`) and `ConnectivityStatus` from the code, and the farm's name from the message (`usfarm` in "Market data farm connection is OK:usfarm"). A caller can track each farm, or each kind, without parsing codes or text. `DataFarmKind::from_code` classifies a raw code; `ConnectivityStatus` is now `Hash`. `DataFarm` and `DataFarmKind` are in the prelude (#1209).
 - `orders::OrderCancel` with `cancel_order_with(order_id, &OrderCancel)` and `global_cancel_with(&OrderCancel)` (sync and async): a cancel can carry an operator ID (`ext_operator`, CFTC Tag 50 / CME Rule 576) and `manual_order_indicator`, which `cancel_order` and `global_cancel` always sent empty. `OrderCancel` is in the prelude (#1200).
 - `ContractDetails::market_rule_id(exchange)`: the market rule id for one of the contract's valid exchanges. `market_rule_ids` is one id per entry of `valid_exchanges`, in the same order, and ids can differ by exchange (#1198).
