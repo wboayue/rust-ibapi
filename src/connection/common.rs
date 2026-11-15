@@ -1,6 +1,7 @@
 //! Common connection logic shared between sync and async implementations
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use log::{debug, error, warn};
 use time::macros::format_description;
@@ -112,6 +113,19 @@ pub(crate) struct ConnectionConfig {
     pub(crate) startup_callback: Option<StartupCallback>,
     /// `None` means retry forever.
     pub(crate) max_reconnect_attempts: Option<u32>,
+}
+
+/// How long connect, and each reconnect attempt, waits for each startup frame
+/// (handshake ack, account info) before giving up: bounds a gateway that
+/// accepts TCP but never answers, while leaving a loaded one time to reply.
+pub(crate) const STARTUP_STALL: Duration = Duration::from_secs(30);
+
+/// The error a startup read fails with after [`STARTUP_STALL`] without a frame.
+pub(crate) fn startup_stall_error() -> Error {
+    Error::Io(std::io::Error::new(
+        std::io::ErrorKind::TimedOut,
+        format!("no startup reply from TWS within {STARTUP_STALL:?}"),
+    ))
 }
 
 /// Data exchanged during the connection handshake

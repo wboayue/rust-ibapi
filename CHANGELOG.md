@@ -66,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning` on any order. TWS goes on with the order after it. It arrives on every `exercise_options` request, where it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading (#1210).
 - `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
+- Async `connect` fails with `Error::Io` of kind `TimedOut` when TWS accepts the TCP connection but a startup frame (the handshake acknowledgement or an account-info frame) does not arrive within 30 seconds, the limit the blocking client already applied. Previously it waited forever, and so did an automatic reconnect that reached such a gateway, so `max_reconnect_attempts` never ran out (#1224).
 
 ## [5.7.0] - 2026-11-05
 
