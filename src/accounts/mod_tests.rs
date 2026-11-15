@@ -2,6 +2,7 @@ use super::*;
 
 #[test]
 fn ledger_prefix_split() {
+    // (key, has_ledger_prefix, base_key)
     let cases = [
         ("$LEDGER-AccruedCash", true, "AccruedCash"),
         ("AccruedCash", false, "AccruedCash"),
@@ -10,19 +11,12 @@ fn ledger_prefix_split() {
         ("$LEDGER-", true, ""),
         ("", false, ""),
     ];
-    for (key, per_currency, base) in cases {
-        let value = AccountValue {
+    for (key, prefixed, base) in cases {
+        let value = AccountMultiValue {
             key: key.to_string(),
             ..Default::default()
         };
-        assert_eq!(value.is_per_currency(), per_currency, "{key}");
+        assert_eq!(value.has_ledger_prefix(), prefixed, "{key}");
         assert_eq!(value.base_key(), base, "{key}");
-
-        let multi = AccountMultiValue {
-            key: key.to_string(),
-            ..Default::default()
-        };
-        assert_eq!(multi.is_per_currency(), per_currency, "{key}");
-        assert_eq!(multi.base_key(), base, "{key}");
     }
 }
