@@ -655,8 +655,8 @@ if details.contract.last_trade_date_or_contract_month.is_empty() { /* none */ }
 println!("{}", details.contract.last_trade_date_or_contract_month);
 
 // 6.0
-let contract = Contract { last_trade_date_or_contract_month: Some(ContractMonth::new(2026, 12).into()), ..Default::default() };
-let call = Contract::option("AAPL", ExpirationDate::new(2026, 12, 18), 150.0, OptionRight::Call);
+let contract = Contract { last_trade_date_or_contract_month: Some(ContractMonth::new(2026, 12)?.into()), ..Default::default() };
+let call = Contract::option("AAPL", ExpirationDate::new(2026, 12, 18)?, 150.0, OptionRight::Call); // §34
 if details.contract.last_trade_date_or_contract_month.is_none() { /* none */ }
 if let Some(expiry) = &details.contract.last_trade_date_or_contract_month {
     println!("{expiry}"); // Display is the wire text: "20261218"
@@ -747,3 +747,27 @@ accu_distr().route_order_type(OrderType::Limit)
 ```
 
 The wire value is unchanged (`OrderType::as_str` lists the codes). A code the enum does not list is `OrderType::Unknown("CODE".into())`. The compiler finds every call.
+
+### 34. `ExpirationDate::new` and `ContractMonth::new` return `Result`
+
+Both built any value they were given: `ExpirationDate::new(2026, 13, 40)` was sent to TWS as
+`20261340` and surfaced only as TWS error 200. They now return `Result<Self, Error>`, with
+`Error::InvalidArgument` unless the components form a real calendar date (`ExpirationDate`) or
+month 1–12 (`ContractMonth`), with a year of at most 9999. `FromStr` and `TryFrom<&str>` already
+checked text this way.
+
+```rust,ignore
+// 5.x
+let date = ExpirationDate::new(2026, 12, 18);
+let es = Contract::futures("ES").expires_in(ContractMonth::new(2026, 12)).build();
+
+// 6.0
+let date = ExpirationDate::new(2026, 12, 18)?;
+let es = Contract::futures("ES").expires_in(ContractMonth::new(2026, 12)?).build();
+```
+
+`OptionBuilder::expires_on(year, month, day)` still chains: `build()`, which already returns
+`Result` (§13), now also returns `Error::InvalidArgument` for a date that isn't real. The
+compiler finds every `new` call; it does not find an `expires_on` date that used to pass and now
+fails at `build()`. `ExpirationDate::next_friday()`, `third_friday_of_month()`,
+`ContractMonth::front()` and `next_quarter()` are unchanged.

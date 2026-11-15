@@ -57,5 +57,5 @@ fn main() -> anyhow::Result<()> {
 fn contract_month_from_now(months: i32) -> ContractMonth {
     let today = time::OffsetDateTime::now_utc();
     let index = today.year() * 12 + (today.month() as i32 - 1) + months;
-    ContractMonth::new((index / 12) as u16, (index % 12 + 1) as u8)
+    ContractMonth::new((index / 12) as u16, (index % 12 + 1) as u8).expect("month is 1-12")
 }

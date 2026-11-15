@@ -308,7 +308,7 @@ impl Contract {
     /// use ibapi::contracts::{Contract, ContractMonth};
     ///
     /// let es = Contract::futures("ES")
-    ///     .expires_in(ContractMonth::new(2024, 3))
+    ///     .expires_in(ContractMonth::new(2024, 3).expect("valid month"))
     ///     .build();
     /// ```
     ///
@@ -505,7 +505,7 @@ impl Contract {
     /// ```
     /// use ibapi::contracts::{Contract, ExpirationDate, OptionRight, Symbol};
     ///
-    /// let call = Contract::option("AAPL", ExpirationDate::new(2024, 1, 19), 150.0, OptionRight::Call);
+    /// let call = Contract::option("AAPL", ExpirationDate::new(2024, 1, 19).expect("valid date"), 150.0, OptionRight::Call);
     /// assert_eq!(call.symbol, Symbol::from("AAPL"));
     /// assert_eq!(call.strike, 150.0);
     /// assert_eq!(call.right, Some(OptionRight::Call));

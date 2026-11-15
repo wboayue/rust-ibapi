@@ -172,7 +172,7 @@ fn strike_new_rejects_non_positive_and_non_finite() {
 
 #[test]
 fn expiration_date_display_format() {
-    let d = ExpirationDate::new(2025, 3, 21);
+    let d = ExpirationDate::new(2025, 3, 21).unwrap();
     assert_eq!(format!("{}", d), "20250321");
 }
 
@@ -247,7 +247,7 @@ fn third_friday_december_rolls_to_january_next_year() {
 
 #[test]
 fn contract_month_display_format() {
-    let m = ContractMonth::new(2025, 6);
+    let m = ContractMonth::new(2025, 6).unwrap();
     assert_eq!(format!("{}", m), "202506");
 }
 
@@ -353,14 +353,61 @@ fn bond_identifier_variants_equality_and_match() {
 }
 
 #[test]
+fn expiration_date_new_checks_calendar() {
+    let cases: [(u16, u8, u8, Option<&str>); 9] = [
+        (2026, 12, 18, Some("20261218")),
+        (2024, 2, 29, Some("20240229")), // leap day
+        (9999, 12, 31, Some("99991231")),
+        (2025, 2, 29, None), // not a leap year
+        (2026, 4, 31, None),
+        (2026, 0, 1, None),
+        (2026, 13, 1, None),
+        (2026, 12, 0, None),
+        (10000, 1, 1, None), // wire form is a 4-digit year
+    ];
+    for (year, month, day, expected) in cases {
+        match (ExpirationDate::new(year, month, day), expected) {
+            (Ok(date), Some(text)) => assert_eq!(date.to_string(), text),
+            (Err(Error::InvalidArgument(message)), None) => assert_eq!(
+                message,
+                format!("invalid expiration date {year:04}-{month:02}-{day:02}"),
+                "{year}-{month}-{day}"
+            ),
+            (other, _) => panic!("{year}-{month}-{day}: got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn contract_month_new_checks_range() {
+    let cases: [(u16, u8, Option<&str>); 6] = [
+        (2026, 1, Some("202601")),
+        (2026, 12, Some("202612")),
+        (9999, 12, Some("999912")),
+        (2026, 0, None),
+        (2026, 13, None),
+        (10000, 1, None), // wire form is a 4-digit year
+    ];
+    for (year, month, expected) in cases {
+        match (ContractMonth::new(year, month), expected) {
+            (Ok(m), Some(text)) => assert_eq!(m.to_string(), text),
+            (Err(Error::InvalidArgument(message)), None) => {
+                assert_eq!(message, format!("invalid contract month {year:04}-{month:02}"), "{year}-{month}")
+            }
+            (other, _) => panic!("{year}-{month}: got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn expiration_date_from_str() {
     let cases = [
-        ("20261218", Some(ExpirationDate::new(2026, 12, 18))),
-        ("20240229", Some(ExpirationDate::new(2024, 2, 29))), // leap day
-        ("20250229", None),                                   // not a leap year
-        ("20261340", None),                                   // month 13
-        ("20261200", None),                                   // day 0
-        ("202612", None),                                     // a month, not a date
+        ("20261218", Some(ExpirationDate::new(2026, 12, 18).unwrap())),
+        ("20240229", Some(ExpirationDate::new(2024, 2, 29).unwrap())), // leap day
+        ("20250229", None),                                            // not a leap year
+        ("20261340", None),                                            // month 13
+        ("20261200", None),                                            // day 0
+        ("202612", None),                                              // a month, not a date
         ("2026121", None),
         ("2026-12-18", None),
         ("2026121a", None),
@@ -374,8 +421,8 @@ fn expiration_date_from_str() {
 #[test]
 fn contract_month_from_str() {
     let cases = [
-        ("202612", Some(ContractMonth::new(2026, 12))),
-        ("202601", Some(ContractMonth::new(2026, 1))),
+        ("202612", Some(ContractMonth::new(2026, 12).unwrap())),
+        ("202601", Some(ContractMonth::new(2026, 1).unwrap())),
         ("202600", None),
         ("202613", None),
         ("20261218", None),
@@ -389,8 +436,11 @@ fn contract_month_from_str() {
 
 #[test]
 fn expiry_from_str_is_strict() {
-    assert_eq!("20261218".parse::<Expiry>().unwrap(), Expiry::Date(ExpirationDate::new(2026, 12, 18)));
-    assert_eq!("202612".parse::<Expiry>().unwrap(), Expiry::Month(ContractMonth::new(2026, 12)));
+    assert_eq!(
+        "20261218".parse::<Expiry>().unwrap(),
+        Expiry::Date(ExpirationDate::new(2026, 12, 18).unwrap())
+    );
+    assert_eq!("202612".parse::<Expiry>().unwrap(), Expiry::Month(ContractMonth::new(2026, 12).unwrap()));
     for bad in ["", "2026", "20261340", "20261218 08:30:00 US/Central", "20430504 16:00 Europe/London"] {
         assert!(matches!(bad.parse::<Expiry>(), Err(Error::Parse(..))), "{bad:?}");
     }
@@ -401,8 +451,8 @@ fn expiry_from_wire_is_lenient() {
     // Contracts reach streaming paths; an unseen shape must not end the stream.
     let cases = [
         ("", None),
-        ("20261218", Some(Expiry::Date(ExpirationDate::new(2026, 12, 18)))),
-        ("202612", Some(Expiry::Month(ContractMonth::new(2026, 12)))),
+        ("20261218", Some(Expiry::Date(ExpirationDate::new(2026, 12, 18).unwrap()))),
+        ("202612", Some(Expiry::Month(ContractMonth::new(2026, 12).unwrap()))),
         (
             "20430504 16:00 Europe/London",
             Some(Expiry::Unknown("20430504 16:00 Europe/London".into())),
@@ -446,7 +496,7 @@ fn contract_deserializes_unset_expiry_as_none() {
         (
             "date",
             Some(serde_json::json!("20261218")),
-            Some(Expiry::Date(ExpirationDate::new(2026, 12, 18))),
+            Some(Expiry::Date(ExpirationDate::new(2026, 12, 18).unwrap())),
         ),
     ];
     for (label, value, expected) in cases {
@@ -463,7 +513,7 @@ fn contract_deserializes_unset_expiry_as_none() {
 
 #[test]
 fn expiration_date_and_contract_month_order_chronologically() {
-    assert!(ExpirationDate::new(2026, 12, 18) < ExpirationDate::new(2027, 1, 15));
-    assert!(ExpirationDate::new(2026, 3, 31) < ExpirationDate::new(2026, 12, 1));
-    assert!(ContractMonth::new(2026, 12) < ContractMonth::new(2027, 1));
+    assert!(ExpirationDate::new(2026, 12, 18).unwrap() < ExpirationDate::new(2027, 1, 15).unwrap());
+    assert!(ExpirationDate::new(2026, 3, 31).unwrap() < ExpirationDate::new(2026, 12, 1).unwrap());
+    assert!(ContractMonth::new(2026, 12).unwrap() < ContractMonth::new(2027, 1).unwrap());
 }

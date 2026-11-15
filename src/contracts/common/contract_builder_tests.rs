@@ -473,11 +473,11 @@ fn build_parses_last_trade_date_or_contract_month() {
     };
     assert_eq!(
         future("202612").unwrap().last_trade_date_or_contract_month,
-        Some(Expiry::Month(ContractMonth::new(2026, 12)))
+        Some(Expiry::Month(ContractMonth::new(2026, 12).unwrap()))
     );
     assert_eq!(
         future("20261218").unwrap().last_trade_date_or_contract_month,
-        Some(Expiry::Date(ExpirationDate::new(2026, 12, 18)))
+        Some(Expiry::Date(ExpirationDate::new(2026, 12, 18).unwrap()))
     );
     for bad in ["2026-12", "202613", "20261218 08:30:00 US/Central"] {
         assert!(
@@ -497,11 +497,11 @@ fn build_parses_last_trade_date_or_contract_month() {
 #[test]
 fn expiry_sets_typed_value() {
     let contract = ContractBuilder::futures("ES", "CME", "USD")
-        .expiry(ContractMonth::new(2026, 12))
+        .expiry(ContractMonth::new(2026, 12).unwrap())
         .build()
         .unwrap();
     assert_eq!(
         contract.last_trade_date_or_contract_month,
-        Some(Expiry::Month(ContractMonth::new(2026, 12)))
+        Some(Expiry::Month(ContractMonth::new(2026, 12).unwrap()))
     );
 }
