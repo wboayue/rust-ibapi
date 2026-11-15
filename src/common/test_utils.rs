@@ -212,6 +212,14 @@ pub mod helpers {
 
     /// Connect-time frames a server sends: [`handshake_response_frame`], then
     /// `NextValidId` and `ManagedAccounts` (for [`TEST_ACCOUNT`]).
+    /// Assert `err` is the startup-stall timeout: `Error::Io` of kind `TimedOut`.
+    pub fn assert_startup_stall(err: &crate::Error) {
+        match err {
+            crate::Error::Io(io_err) => assert_eq!(io_err.kind(), std::io::ErrorKind::TimedOut, "unexpected error: {err:?}"),
+            other => panic!("expected Error::Io(TimedOut), got {other:?}"),
+        }
+    }
+
     pub fn handshake_frames(server_version: i32, zone: &str, next_order_id: i32) -> Vec<Vec<u8>> {
         vec![
             handshake_response_frame(server_version, zone),

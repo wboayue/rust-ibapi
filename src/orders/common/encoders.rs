@@ -95,6 +95,9 @@ pub(crate) fn encode_next_valid_order_id() -> Result<Vec<u8>, Error> {
     ))
 }
 
+// Internal seam between `ExerciseOptionsBuilder`'s finalizer and prost; see
+// docs/rules/style/param-budget.md.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn encode_exercise_options(
     order_id: i32,
     contract: &Contract,
@@ -103,6 +106,8 @@ pub(crate) fn encode_exercise_options(
     account: &str,
     ovrd: bool,
     manual_order_time: Option<OffsetDateTime>,
+    customer_account: &str,
+    professional_customer: bool,
 ) -> Result<Vec<u8>, Error> {
     use prost::Message;
     use time::macros::format_description;
@@ -122,8 +127,8 @@ pub(crate) fn encode_exercise_options(
         account: some_str(account),
         r#override: some_bool(ovrd),
         manual_order_time: manual_order_time_str,
-        customer_account: None,
-        professional_customer: None,
+        customer_account: some_str(customer_account),
+        professional_customer: some_bool(professional_customer),
     };
     Ok(crate::messages::encode_protobuf_message(
         OutgoingMessages::ExerciseOptions as i32,

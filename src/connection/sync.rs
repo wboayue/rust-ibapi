@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use log::{debug, info};
 
 use super::common::{
-    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionConfig, ConnectionHandler, ConnectionProtocol,
-    StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS,
+    parse_handshake_ack, parse_raw_message, require_protobuf_support, startup_stall_error, AccountInfo, ConnectionConfig, ConnectionHandler,
+    ConnectionProtocol, StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -240,7 +240,7 @@ impl<S: Stream> Connection<S> {
 
     /// Read one startup frame body, waiting out read timeouts: a loaded
     /// gateway can take longer than one socket timeout to answer. Gives up
-    /// after [`STARTUP_TIMEOUT_LIMIT`] consecutive timeouts.
+    /// after [`STARTUP_TIMEOUT_LIMIT`] consecutive timeouts ([`STARTUP_STALL`](super::common::STARTUP_STALL)).
     fn read_startup_frame(&self) -> Result<Vec<u8>, Error> {
         let mut timeouts = 0;
         loop {
@@ -248,10 +248,7 @@ impl<S: Stream> Connection<S> {
                 Err(e) if e.is_read_timeout() => {
                     timeouts += 1;
                     if timeouts >= STARTUP_TIMEOUT_LIMIT {
-                        return Err(Error::Io(std::io::Error::new(
-                            std::io::ErrorKind::TimedOut,
-                            format!("no startup reply from TWS after {timeouts} read timeouts"),
-                        )));
+                        return Err(startup_stall_error());
                     }
                 }
                 result => return result,

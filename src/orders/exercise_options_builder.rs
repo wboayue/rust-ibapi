@@ -27,6 +27,8 @@ pub struct ExerciseOptionsBuilder<'a, C> {
     account: Option<AccountId>,
     override_natural_action: bool,
     manual_order_time: Option<OffsetDateTime>,
+    customer_account: Option<String>,
+    professional_customer: bool,
 }
 
 impl<'a, C> ExerciseOptionsBuilder<'a, C> {
@@ -38,6 +40,8 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
             account: None,
             override_natural_action: false,
             manual_order_time: None,
+            customer_account: None,
+            professional_customer: false,
         }
     }
 
@@ -74,6 +78,20 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
         self
     }
 
+    /// Customer account to send with the request: the `customerAccount` parameter of IBKR's
+    /// `exerciseOptions`. If unset or empty, none is sent.
+    pub fn customer_account(mut self, customer_account: impl Into<String>) -> Self {
+        self.customer_account = Some(customer_account.into());
+        self
+    }
+
+    /// Flag the request as from a professional customer: the `professionalCustomer` parameter of
+    /// IBKR's `exerciseOptions`. Off by default.
+    pub fn professional_customer(mut self) -> Self {
+        self.professional_customer = true;
+        self
+    }
+
     /// Validate the request and encode it under the next order id. Validation runs first, so a
     /// rejected request doesn't use up an order id.
     fn encode(&self, next_order_id: impl FnOnce() -> i32) -> Result<(OrderId, Vec<u8>), Error> {
@@ -91,6 +109,8 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
             self.account.as_deref().unwrap_or_default(),
             self.override_natural_action,
             self.manual_order_time,
+            self.customer_account.as_deref().unwrap_or_default(),
+            self.professional_customer,
         )?;
         Ok((order_id, request))
     }

@@ -11,7 +11,9 @@ use crate::proto::encoders::{encode_contract, encode_contract_with_order, some_b
 
 const TEST_PERM_ID: i64 = 1376327563;
 const TEST_EXEC_ID: &str = "00025b46.63f8f39c.01.01";
-const TEST_TIME: &str = "20230224  12:04:56";
+/// `Execution.time` as the gateway renders it under its default (instrument timezone)
+/// setting; captured live 2026-11-11, server 226.
+const TEST_TIME: &str = "20261110 20:17:28 US/Central";
 
 // =============================================================================
 // Response builders
@@ -1102,6 +1104,8 @@ pub struct ExerciseOptionsRequestBuilder {
     pub account: String,
     pub r#override: bool,
     pub manual_order_time: Option<String>,
+    pub customer_account: String,
+    pub professional_customer: bool,
 }
 
 impl Default for ExerciseOptionsRequestBuilder {
@@ -1114,6 +1118,8 @@ impl Default for ExerciseOptionsRequestBuilder {
             account: String::new(),
             r#override: false,
             manual_order_time: None,
+            customer_account: String::new(),
+            professional_customer: false,
         }
     }
 }
@@ -1143,6 +1149,14 @@ impl ExerciseOptionsRequestBuilder {
         self.r#override = v;
         self
     }
+    pub fn customer_account(mut self, v: impl Into<String>) -> Self {
+        self.customer_account = v.into();
+        self
+    }
+    pub fn professional_customer(mut self, v: bool) -> Self {
+        self.professional_customer = v;
+        self
+    }
 }
 
 impl RequestEncoder for ExerciseOptionsRequestBuilder {
@@ -1158,8 +1172,8 @@ impl RequestEncoder for ExerciseOptionsRequestBuilder {
             account: some_str(&self.account),
             r#override: some_bool(self.r#override),
             manual_order_time: self.manual_order_time.clone(),
-            customer_account: None,
-            professional_customer: None,
+            customer_account: some_str(&self.customer_account),
+            professional_customer: some_bool(self.professional_customer),
         }
     }
 }

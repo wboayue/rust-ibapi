@@ -320,6 +320,31 @@ impl ExpirationDate {
         Self::unchecked(year, month, day).validated()
     }
 
+    /// The year, 0–9999.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::ExpirationDate;
+    ///
+    /// let date: ExpirationDate = "20261218".parse()?;
+    /// assert_eq!((date.year(), date.month(), date.day()), (2026, 12, 18));
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn year(&self) -> u16 {
+        self.year
+    }
+
+    /// The month, 1–12.
+    pub fn month(&self) -> u8 {
+        self.month
+    }
+
+    /// The day of the month, 1–31.
+    pub fn day(&self) -> u8 {
+        self.day
+    }
+
     /// Store the components without checking them. Only for a builder that
     /// calls [`validated`](Self::validated) before the value leaves it.
     pub(crate) fn unchecked(year: u16, month: u8, day: u8) -> Self {
@@ -444,6 +469,26 @@ impl ContractMonth {
             return Err(Error::InvalidArgument(format!("invalid contract month {year:04}-{month:02}")));
         }
         Ok(ContractMonth { year, month })
+    }
+
+    /// The year, 0–9999.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::ContractMonth;
+    ///
+    /// let month: ContractMonth = "202612".parse()?;
+    /// assert_eq!((month.year(), month.month()), (2026, 12));
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn year(&self) -> u16 {
+        self.year
+    }
+
+    /// The month, 1–12.
+    pub fn month(&self) -> u8 {
+        self.month
     }
 
     /// Get the front month contract (next expiring)

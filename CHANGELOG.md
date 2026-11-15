@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `ContractDetails::trading_sessions()` and `liquid_sessions()` parse `trading_hours` and `liquid_hours` into `TradingSession`s: `Open { start, end }` as `time::PrimitiveDateTime`s, or `Closed(Date)`. The times stay wall clock in `time_zone_id`, as TWS sends them, so finding a day's close no longer means slicing `"20261112:1700-20261113:1600"`. `TradingSession` also parses one entry with `FromStr`; an entry in another form is `Error::Parse`. It is `Serialize`/`Deserialize` and in the prelude (#1230).
+- `ExpirationDate::year()`, `month()` and `day()`, and `ContractMonth::year()` and `month()`: the components of an expiry, which had no accessors, so reading the year of a contract's `Expiry` meant slicing its `Display` text (#1229).
 - `Notice::data_farm()` returns the data farm a farm-status notice reports on: a `DataFarm` with its `DataFarmKind` (`MarketData`, `HistoricalData`, `SecurityDefinition`) and `ConnectivityStatus` from the code, and the farm's name from the message (`usfarm` in "Market data farm connection is OK:usfarm"). A caller can track each farm, or each kind, without parsing codes or text. `DataFarmKind::from_code` classifies a raw code; `ConnectivityStatus` is now `Hash`. `DataFarm` and `DataFarmKind` are in the prelude (#1209).
 - `orders::OrderCancel` with `cancel_order_with(order_id, &OrderCancel)` and `global_cancel_with(&OrderCancel)` (sync and async): a cancel can carry an operator ID (`ext_operator`, CFTC Tag 50 / CME Rule 576) and `manual_order_indicator`, which `cancel_order` and `global_cancel` always sent empty. `OrderCancel` is in the prelude (#1200).
 - `ContractDetails::market_rule_id(exchange)`: the market rule id for one of the contract's valid exchanges. `market_rule_ids` is one id per entry of `valid_exchanges`, in the same order, and ids can differ by exchange (#1198).
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `news::HistoricalNewsPage`, from `historical_news(..).page()` (async and blocking): the headlines as `articles`, and `has_more`, TWS's flag that more headlines are available than it returned (#1211).
 - `AccountId` converts from `&String` and `&AccountId`, so a borrowed account id passes to any `impl Into<AccountId>` parameter (#1204).
 - `AccountMultiValue::has_ledger_prefix` and `base_key`, and `accounts::LEDGER_PREFIX`: split the `$LEDGER-` prefix off `account_updates_multi` keys. With the TWS API setting "Prepend '$LEDGER-' prefix to per-currency account values" on, per-currency ledger rows arrive as `$LEDGER-AccruedCash` and account-level rows keep the bare key; with it off, no key carries the prefix and the two can collide. `account_updates` never sends the prefix (#1223).
+- `ExerciseOptionsBuilder::customer_account` and `ExerciseOptionsBuilder::professional_customer` send a customer account and the professional-customer flag with an exercise request, the `customerAccount` and `professionalCustomer` parameters of IBKR's `exerciseOptions`. Previously neither was sent (#1226).
 
 ### Changed
 
@@ -66,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning` on any order. TWS goes on with the order after it. It arrives on every `exercise_options` request, where it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading (#1210).
 - `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
+- Async `connect` fails with `Error::Io` of kind `TimedOut` when TWS accepts the TCP connection but a startup frame (the handshake acknowledgement or an account-info frame) does not arrive within 30 seconds, the limit the blocking client already applied. Previously it waited forever, and so did an automatic reconnect that reached such a gateway, so `max_reconnect_attempts` never ran out (#1224).
 
 ## [5.7.0] - 2026-11-05
 
