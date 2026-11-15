@@ -78,13 +78,15 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
         self
     }
 
-    /// Account holder identifier within a non-disclosed omnibus account. Not for other accounts.
+    /// Customer account to send with the request: the `customerAccount` parameter of IBKR's
+    /// `exerciseOptions`. If unset or empty, none is sent.
     pub fn customer_account(mut self, customer_account: impl Into<String>) -> Self {
         self.customer_account = Some(customer_account.into());
         self
     }
 
-    /// Mark the account as an institutional or professional trader's.
+    /// Flag the request as from a professional customer: the `professionalCustomer` parameter of
+    /// IBKR's `exerciseOptions`. Off by default.
     pub fn professional_customer(mut self) -> Self {
         self.professional_customer = true;
         self
