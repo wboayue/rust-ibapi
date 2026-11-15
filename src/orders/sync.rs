@@ -231,10 +231,10 @@ impl Client {
     /// Unlike [Self::next_order_id], this function requests the next valid order ID from the TWS server.
     /// This can be for ensuring that order IDs are unique across multiple clients.
     ///
-    /// The returned value also raises the client's order-ID generator to at
-    /// least that value — monotonically, never lowering it below locally
-    /// allocated order IDs, including IDs whose order has not yet reached the
-    /// server.
+    /// The returned id is reserved: the client's order-ID generator moves past
+    /// it, so [Self::next_order_id] and the order builders never hand it out.
+    /// The generator only moves up, never below order IDs already allocated
+    /// locally, including IDs whose order has not yet reached the server.
     ///
     /// Use this method when coordinating order IDs across multiple client instances or when you need to synchronize with the server's order ID sequence at the start of a session.
     ///
@@ -263,7 +263,9 @@ impl Client {
         )?;
 
         let next_order_id = OrderId::from(next_order_id).checked()?;
-        self.raise_next_order_id(next_order_id);
+        // Reserve the id handed to the caller, as `next_order_id` does: raising only to it
+        // left it free, so the next client-allocated id repeated it.
+        self.id_manager().raise_order_id(next_order_id.next());
         Ok(next_order_id.value())
     }
 
@@ -299,6 +301,10 @@ impl Client {
     ///
     /// # Arguments
     /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
+    ///   The client's order-ID generator moves past this ID and every ID the order carries
+    ///   (preset attached orders, parent), so IDs it allocates later don't reuse them. If you
+    ///   number orders from your own range, client-allocated IDs (the order builder's `submit`,
+    ///   `exercise_options`) then continue from your highest ID, inside that range.
     /// * `contract` - [Contract] to submit order for.
     /// * `order` - [`crate::orders::Order`] to submit.
     ///
@@ -337,8 +343,7 @@ impl Client {
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
-        let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self.server_version(), order)?;
+        let checked_id = verify::verify_and_reserve_order_ids(self.id_manager(), self.server_version(), order_id.into(), order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let subscription = self.send_order(checked_id, request)?;
@@ -355,6 +360,10 @@ impl Client {
     ///
     /// # Arguments
     /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
+    ///   The client's order-ID generator moves past this ID and every ID the order carries
+    ///   (preset attached orders, parent), so IDs it allocates later don't reuse them. If you
+    ///   number orders from your own range, client-allocated IDs (the order builder's `submit`,
+    ///   `exercise_options`) then continue from your highest ID, inside that range.
     /// * `contract` - [Contract] to submit order for.
     /// * `order` - [`crate::orders::Order`] to submit.
     ///
@@ -402,8 +411,7 @@ impl Client {
     /// # }
     /// ```
     pub fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &super::Order) -> Result<(), Error> {
-        let checked_id = verify::verify_order_ids(order_id.into(), order)?;
-        verify::verify_order(self.server_version(), order)?;
+        let checked_id = verify::verify_and_reserve_order_ids(self.id_manager(), self.server_version(), order_id.into(), order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request)?;
