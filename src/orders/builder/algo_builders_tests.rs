@@ -503,7 +503,7 @@ fn pct_vol_time_validates_both_rates() {
 fn accu_distr_builder() {
     let params = AccuDistrBuilder::new()
         .time_between_orders(60)
-        .route_order_type("LMT")
+        .route_order_type(OrderType::Limit)
         .component_size(100)
         .active_time_start("20260101-09:30:00")
         .active_time_end("20260101-16:00:00")
@@ -535,6 +535,19 @@ fn accu_distr_builder() {
     assert_eq!(find_param("activeTimeStart"), Some(&"20260101-09:30:00".to_string()));
     assert_eq!(find_param("activeTimeEnd"), Some(&"20260101-16:00:00".to_string()));
     assert_eq!(find_param("activeTimeTz"), Some(&"US/Eastern".to_string()));
+}
+
+#[test]
+fn accu_distr_route_order_type_sends_unlisted_code_unchanged() {
+    let params = AccuDistrBuilder::new()
+        .route_order_type(OrderType::Unknown("SNAP MID".into()))
+        .build()
+        .unwrap();
+    assert_eq!(params.params.len(), 1);
+    assert_eq!(
+        (params.params[0].tag.as_str(), params.params[0].value.as_str()),
+        ("routeOrderType", "SNAP MID")
+    );
 }
 
 #[test]

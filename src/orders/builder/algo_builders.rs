@@ -7,6 +7,7 @@
 
 use super::types::ValidationError;
 use crate::contracts::TagValue;
+use crate::orders::OrderType;
 use crate::ToField;
 
 /// Minimum allowed participation rate (10%).
@@ -1199,8 +1200,8 @@ impl PctVolTimeBuilder {
 /// (`active_time_tz`) and a `route_order_type` knob. Strategy string on the
 /// wire is `"AccuDistr"`.
 ///
-/// `route_order_type` is a free-form string per IBKR's sample code (typical
-/// values: `"LMT"`, `"MKT"`, `"REL"`). The IBKR algo docs page does not
+/// `route_order_type` is the [`OrderType`] of the child orders (IBKR's sample
+/// code uses `LMT`, `MKT` and `REL`). The IBKR algo docs page does not
 /// enumerate the parameters of this algo; the parameter shape is taken from
 /// the canonical Testbed sample (`samples/CSharp/Testbed/AvailableAlgoParams.cs`).
 ///
@@ -1208,10 +1209,11 @@ impl PctVolTimeBuilder {
 ///
 /// ```no_run
 /// use ibapi::orders::builder::accu_distr;
+/// use ibapi::orders::OrderType;
 ///
 /// let algo = accu_distr()
 ///     .time_between_orders(60)
-///     .route_order_type("LMT")
+///     .route_order_type(OrderType::Limit)
 ///     .component_size(100)
 ///     .active_time_start("20260101-09:30:00")
 ///     .active_time_end("20260101-16:00:00")
@@ -1223,7 +1225,7 @@ impl PctVolTimeBuilder {
 #[must_use = "AccuDistrBuilder does nothing until you call .build()"]
 pub struct AccuDistrBuilder {
     time_between_orders: Option<i32>,
-    route_order_type: Option<String>,
+    route_order_type: Option<OrderType>,
     component_size: Option<i32>,
     active_time_start: Option<String>,
     active_time_end: Option<String>,
@@ -1242,9 +1244,9 @@ impl AccuDistrBuilder {
         self
     }
 
-    /// Set the route order type (e.g., "LMT", "MKT", "REL").
-    pub fn route_order_type(mut self, order_type: impl Into<String>) -> Self {
-        self.route_order_type = Some(order_type.into());
+    /// Set the order type of the child orders (e.g. `Limit`, `Market`, `Relative`).
+    pub fn route_order_type(mut self, order_type: OrderType) -> Self {
+        self.route_order_type = Some(order_type);
         self
     }
 
@@ -1278,7 +1280,7 @@ impl AccuDistrBuilder {
         let mut params = Vec::new();
 
         push_param_if_some(&mut params, "timeBetweenOrders", self.time_between_orders.map(|v| v.to_string()));
-        push_param_if_some(&mut params, "routeOrderType", self.route_order_type);
+        push_param_if_some(&mut params, "routeOrderType", self.route_order_type.map(|t| t.as_str().to_owned()));
         push_param_if_some(&mut params, "componentSize", self.component_size.map(|v| v.to_string()));
         push_param_if_some(&mut params, "activeTimeStart", self.active_time_start);
         push_param_if_some(&mut params, "activeTimeEnd", self.active_time_end);

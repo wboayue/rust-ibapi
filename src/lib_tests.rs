@@ -1,7 +1,8 @@
 #[cfg(feature = "utoipa")]
 use super::*;
 
-// Guards the crate-root `utoipa` alias and the hand-written wire-string schemas.
+// Guards the crate-root `utoipa` alias and the wire-string schemas, hand-written (`Expiry`) or
+// from `impl_wire_enum!(.., serde)`.
 #[cfg(feature = "utoipa")]
 #[test]
 fn utoipa_schemas_resolve() {
@@ -14,6 +15,7 @@ fn utoipa_schemas_resolve() {
         ("OrderStatusKind", json(orders::OrderStatusKind::schema())),
         ("Expiry", json(contracts::Expiry::schema())),
         ("TimeInForce", json(orders::TimeInForce::schema())),
+        ("OrderType", json(orders::OrderType::schema())),
     ] {
         assert_eq!(schema, string, "{name} schema");
     }

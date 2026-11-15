@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -42,8 +42,9 @@ the compiler points callers at the new arm; the payload variant costs `Copy` and
 return `&str`. No decode-time log — callers own the signal (`docs/migration-4.0.md` §9).
 One-shot and outbound-only enums stay closed: a hard error there fails one call, not a stream.
 
-Serde: if the enum serializes as the wire string (`OrderStatusKind`, `TimeInForce`), serde and the
-`utoipa` schema (`PartialSchema` delegating to `String`) must be hand-written, or the derive emits
+Serde: if an open enum serializes as the wire string (`OrderStatusKind`, `TimeInForce`,
+`OrderType`), use `impl_wire_enum!(Name, fallback Unknown, serde)`, which generates serde and the
+`utoipa` schema (`PartialSchema` delegating to `String`); a derive would emit
 `{"Unknown":"..."}`. If it serializes as the derived variant name (`Rule80A`, `OrderOpenClose`),
 keep the derives; `Unknown` takes the tagged form.
 
@@ -152,3 +153,5 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
   `Option<OrderType>` (open, `fallback Unknown`). TWS echoes the string `"None"` for an unset
   adjusted or delta-neutral type (`docs/wire-facts/orders.md`), so the decoder maps `""` and
   `"None"` to `None` before `FromStr`, which keeps the bare `"None"` as `Unknown("None")`.
+- #1222 — wire-string serde for open enums moved from hand-written impls to
+  `impl_wire_enum!(Name, fallback Unknown, serde)`.

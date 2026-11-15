@@ -9,7 +9,7 @@ triggers:
   - reviewing a PR that adds a macro
 symbols: [macro_rules, macro_use, macro_export, impl_str_partial_eq, impl_wire_enum, impl_wire_code]
 related: [param-budget, fixture-builders]
-precedents: ["#548", "#554", "#1180"]
+precedents: ["#548", "#554", "#1180", "#1222"]
 ---
 
 Before writing a `macro_rules!`, ask whether a generic function with a trait bound, a
@@ -42,7 +42,7 @@ The macros in `src/` today (`grep -rn 'macro_rules!' src --include=*.rs`):
 | Macro | Home | Why not a function |
 |---|---|---|
 | `impl_str_partial_eq!` | `macros.rs` | Case 1: `impl PartialEq<Symbol> for str` cannot be blanket. 3 newtypes × 4 directions |
-| `impl_wire_enum!` | `macros.rs` | Case 1: `Display` / `FromStr` / `ToField` are foreign traits. The `as_str` / `from_wire` tables stay in plain Rust; only the plumbing expands |
+| `impl_wire_enum!` | `macros.rs` | Case 1: `Display` / `FromStr` / `ToField` (and, with `serde`, `Serialize` / `Deserialize` / `PartialSchema`) are foreign traits. The `as_str` / `from_wire` tables stay in plain Rust; only the plumbing expands |
 | `impl_wire_code!` | `macros.rs` | Case 1: `From<T> for i32` cannot be blanket (orphan rule). 14 integer enums (12 two-way pairs + 2 one-way); one `Variant = code` table writes both directions, which hand-written pairs kept twice |
 | `string_newtype_surface!` | `contracts/types_tests.rs` | Case 2: calls inherent `<$t>::new` and `.as_str()` |
 | `single_req_id_request_builder!`, `request_id_response_builder!`, `empty_request_builder!` | `testdata/builders/mod.rs` | Case 3: a new named struct per fixture |
@@ -73,3 +73,6 @@ there; a `pub(crate) use name;` re-export adds nothing and trips `unused_imports
   "macro does not earn it" case.
 - #1180 — `impl_wire_code!` collapsed the hand-written `From` impls on 13 integer-coded enums (11
   two-way pairs + 2 one-way) into one table each, about −140 lines.
+- #1222 — `impl_wire_enum!` gained a `serde` arm, replacing hand-written wire-string serde + utoipa
+  impls on `OrderStatusKind`, `TimeInForce` and `OrderType` (third copy tripped it). Folded into
+  the existing macro rather than a new one.
