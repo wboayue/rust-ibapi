@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -153,3 +153,5 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
   `Option<OrderType>` (open, `fallback Unknown`). TWS echoes the string `"None"` for an unset
   adjusted or delta-neutral type (`docs/wire-facts/orders.md`), so the decoder maps `""` and
   `"None"` to `None` before `FromStr`, which keeps the bare `"None"` as `Unknown("None")`.
+- #1222 — wire-string serde for open enums moved from hand-written impls to
+  `impl_wire_enum!(Name, fallback Unknown, serde)`.

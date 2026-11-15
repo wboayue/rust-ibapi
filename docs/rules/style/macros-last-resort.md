@@ -9,7 +9,7 @@ triggers:
   - reviewing a PR that adds a macro
 symbols: [macro_rules, macro_use, macro_export, impl_str_partial_eq, impl_wire_enum, impl_wire_code]
 related: [param-budget, fixture-builders]
-precedents: ["#548", "#554", "#1180"]
+precedents: ["#548", "#554", "#1180", "#1222"]
 ---
 
 Before writing a `macro_rules!`, ask whether a generic function with a trait bound, a
@@ -73,3 +73,6 @@ there; a `pub(crate) use name;` re-export adds nothing and trips `unused_imports
   "macro does not earn it" case.
 - #1180 — `impl_wire_code!` collapsed the hand-written `From` impls on 13 integer-coded enums (11
   two-way pairs + 2 one-way) into one table each, about −140 lines.
+- #1222 — `impl_wire_enum!` gained a `serde` arm, replacing hand-written wire-string serde + utoipa
+  impls on `OrderStatusKind`, `TimeInForce` and `OrderType` (third copy tripped it). Folded into
+  the existing macro rather than a new one.
