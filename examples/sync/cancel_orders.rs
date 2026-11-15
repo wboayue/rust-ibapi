@@ -9,6 +9,7 @@
 use clap::{arg, Command};
 
 use ibapi::client::blocking::Client;
+use ibapi::orders::OrderCancel;
 use ibapi::subscriptions::SubscriptionItem;
 
 fn main() -> anyhow::Result<()> {
@@ -31,14 +32,19 @@ fn main() -> anyhow::Result<()> {
 
     let client = Client::connect(connection_string, 100)?;
 
+    let cancel = OrderCancel {
+        manual_order_cancel_time: manual_order_cancel_time.clone(),
+        ..OrderCancel::default()
+    };
+
     if *global {
         println!("Requesting global cancel.");
 
-        client.global_cancel()?
+        client.global_cancel_with(&cancel)?
     } else {
         println!("Cancelling order {order_id}");
 
-        let results = client.cancel_order(*order_id, manual_order_cancel_time)?;
+        let results = client.cancel_order_with(*order_id, &cancel)?;
         // The cancellation confirmation (code 202) is a non-terminal notice;
         // the subscription stays open, so break once it arrives.
         for result in results {

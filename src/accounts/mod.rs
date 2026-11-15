@@ -502,18 +502,25 @@ pub struct UserInfo {
 
 /// Which keys an [`account_updates_multi`](crate::Client::account_updates_multi) subscription delivers.
 ///
-/// `Yes` delivers only the per-currency `$LEDGER-*` keys (`$LEDGER-CashBalance`,
-/// `$LEDGER-NetLiquidationByCurrency`, ..., one set per currency and for `BASE`), TWS's
-/// light-weight request. `No` delivers those same keys plus the account-level keys without the
-/// prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...).
+/// `Yes` delivers only the per-currency ledger keys (`CashBalance`,
+/// `NetLiquidationByCurrency`, ..., one set per currency and for `BASE`), TWS's light-weight
+/// request. `No` delivers those same keys plus the account-level keys (`NetLiquidation`,
+/// `BuyingPower`, `AvailableFunds`, ...).
+///
+/// Whether the ledger keys carry a `$LEDGER-` prefix (`$LEDGER-CashBalance`) is a TWS/Gateway
+/// setting, "Prepend '$LEDGER-' prefix to per-currency account values" (Global Configuration →
+/// API → Settings). With it off, a key that is both a ledger and an account-level key (such as
+/// `AccruedCash`) can arrive twice under `No` with the same key and currency, and nothing in
+/// the row tells the two apart; turn the setting on, or request `Yes`, to separate them
+/// (live: 2026-11-14).
 ///
 /// Sent as TWS's `ledgerAndNLV` flag: `Yes` is `true`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LedgerOnly {
-    /// Only the `$LEDGER-*` keys.
+    /// Only the per-currency ledger keys.
     Yes,
-    /// The `$LEDGER-*` keys plus the account-level keys.
+    /// The per-currency ledger keys plus the account-level keys.
     No,
 }
 

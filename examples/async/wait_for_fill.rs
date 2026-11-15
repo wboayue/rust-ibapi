@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     report(&client.wait_for_fill(order_id, Duration::from_secs(3)).await?);
 
     // Held so its route stays open; the wait below gets its own copy of each status.
-    let _cancellation = client.cancel_order(order_id, "").await?;
+    let _cancellation = client.cancel_order(order_id).await?;
     report(&client.wait_for_fill(order_id, Duration::from_secs(10)).await?);
 
     Ok(())

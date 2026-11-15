@@ -1829,7 +1829,7 @@ impl_wire_enum!(ExecutionSide);
 /// Optional attributes sent with an order cancel.
 ///
 /// Passed to `cancel_order_with` and `global_cancel_with`. The [`Default`] value is what
-/// `cancel_order(id, "")` and `global_cancel()` send: an immediate cancel with no
+/// `cancel_order(id)` and `global_cancel()` send: an immediate cancel with no
 /// operator attributes. Mirrors the C# client's `OrderCancel`.
 ///
 /// # Examples

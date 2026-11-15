@@ -49,7 +49,7 @@ fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
         .submit()
         .expect("placing order after cancel should succeed");
     assert!(order_id.0 > 0, "new order id should be positive");
-    let _ = client.cancel_order(order_id, "").expect("cleanup cancel failed");
+    let _ = client.cancel_order(order_id).expect("cleanup cancel failed");
     order_id
 }
 
@@ -114,7 +114,7 @@ fn place_limit_buy() {
     assert!(item.is_some(), "expected order status update");
 
     // Cancel the order
-    let _ = client.cancel_order(order_id, "").expect("cancel_order failed");
+    let _ = client.cancel_order(order_id).expect("cancel_order failed");
 }
 
 /// An order with a live `place_order` subscription still answers this
@@ -149,7 +149,7 @@ fn open_orders_include_order_with_live_subscription() {
         assert!(found, "{name} is missing order {order_id}: {rows:?}");
     }
 
-    let _ = client.cancel_order(order_id, "").expect("cancel_order failed");
+    let _ = client.cancel_order(order_id).expect("cancel_order failed");
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn place_limit_sell() {
     let item = subscription.next_timeout(Duration::from_secs(10));
     assert!(item.is_some(), "expected order status update");
 
-    let _ = client.cancel_order(order_id, "").expect("cancel_order failed");
+    let _ = client.cancel_order(order_id).expect("cancel_order failed");
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn cancel_order_succeeds() {
 
     std::thread::sleep(Duration::from_millis(500));
 
-    let cancel_sub = client.cancel_order(order_id, "").expect("cancel_order failed");
+    let cancel_sub = client.cancel_order(order_id).expect("cancel_order failed");
     let _item = cancel_sub.next_timeout(Duration::from_secs(10));
 }
 
@@ -206,7 +206,7 @@ fn order_builder_limit() {
     assert!(order_id.0 > 0, "order id should be positive");
 
     // Cancel the placed order
-    let _ = client.cancel_order(order_id, "").expect("cancel_order failed");
+    let _ = client.cancel_order(order_id).expect("cancel_order failed");
 }
 
 // Regression test for https://github.com/wboayue/rust-ibapi/issues/426
@@ -217,7 +217,7 @@ fn cancel_bracket_order() {
     let contract = Contract::stock("AAPL").build();
     let ids = place_bracket_order(&client, &contract);
 
-    let cancel_sub = client.cancel_order(ids.parent, "").expect("cancel_order failed");
+    let cancel_sub = client.cancel_order(ids.parent).expect("cancel_order failed");
 
     // TWS may push the parent's current working status (Submitted / PendingCancel)
     // before the terminal Cancelled confirmation, so drain status updates until
@@ -260,7 +260,7 @@ fn cancel_bracket_order_then_place_new_order() {
     let contract = Contract::stock("AAPL").build();
     let ids = place_bracket_order(&client, &contract);
 
-    let _cancel_sub = client.cancel_order(ids.parent, "").expect("cancel_order failed");
+    let _cancel_sub = client.cancel_order(ids.parent).expect("cancel_order failed");
     std::thread::sleep(Duration::from_millis(500));
 
     place_and_cleanup(&client, &contract);
@@ -338,7 +338,7 @@ fn place_pegged_to_benchmark() {
     }
     assert!(acknowledged, "no acknowledgement from TWS within timeout");
 
-    let _ = client.cancel_order(order_id, "");
+    let _ = client.cancel_order(order_id);
 }
 
 fn market_order(action: Action, quantity: f64) -> Order {
@@ -476,7 +476,7 @@ fn preset_attached_orders_accepted() {
     };
     println!("preset attached orders: {outcome}");
 
-    let _ = client.cancel_order(ids.parent, "");
+    let _ = client.cancel_order(ids.parent);
 }
 
 // #951: a working order times out with its latest status; once cancelled, a
@@ -491,7 +491,7 @@ fn wait_for_fill_times_out_then_ends_after_cancel() {
     let order_id = client.order(&contract).buy(1).limit(1.0).submit().expect("submit failed");
 
     let working = client.wait_for_fill(order_id, Duration::from_secs(3));
-    let _cancellation = client.cancel_order(order_id, "").expect("cancel_order failed");
+    let _cancellation = client.cancel_order(order_id).expect("cancel_order failed");
     let ended = client.wait_for_fill(order_id, Duration::from_secs(10));
 
     match working.expect("first wait failed") {
@@ -520,7 +520,7 @@ fn wait_for_fill_reports_rejection_without_status() {
 
     let outcome = client.wait_for_fill(order_id, Duration::from_secs(10));
     if !matches!(outcome, Ok(OrderOutcome::Rejected(_))) {
-        let _ = client.cancel_order(order_id, "");
+        let _ = client.cancel_order(order_id);
     }
     match outcome.expect("wait failed") {
         OrderOutcome::Rejected(notice) => assert_eq!(notice.code, 110, "{notice}"),
@@ -543,7 +543,7 @@ fn wait_for_fill_reports_es_market_fill() {
     if matches!(outcome, Ok(OrderOutcome::Filled(_))) {
         flatten(&client, &contract);
     } else {
-        let _ = client.cancel_order(order_id, "");
+        let _ = client.cancel_order(order_id);
     }
     match outcome.expect("wait failed") {
         OrderOutcome::Filled(status) => {

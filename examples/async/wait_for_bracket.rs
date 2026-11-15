@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     report(&ids, &wait_for_bracket(&client, &ids, Duration::from_secs(5)).await?);
 
     // Held so its route stays open; the waits below get their own copy of each status.
-    let _cancellation = client.cancel_order(ids.parent, "").await?;
+    let _cancellation = client.cancel_order(ids.parent).await?;
     println!("entry cancelled");
     report(&ids, &wait_for_bracket(&client, &ids, Duration::from_secs(10)).await?);
 
