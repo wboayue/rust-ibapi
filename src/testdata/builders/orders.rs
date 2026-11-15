@@ -1104,6 +1104,8 @@ pub struct ExerciseOptionsRequestBuilder {
     pub account: String,
     pub r#override: bool,
     pub manual_order_time: Option<String>,
+    pub customer_account: String,
+    pub professional_customer: bool,
 }
 
 impl Default for ExerciseOptionsRequestBuilder {
@@ -1116,6 +1118,8 @@ impl Default for ExerciseOptionsRequestBuilder {
             account: String::new(),
             r#override: false,
             manual_order_time: None,
+            customer_account: String::new(),
+            professional_customer: false,
         }
     }
 }
@@ -1145,6 +1149,14 @@ impl ExerciseOptionsRequestBuilder {
         self.r#override = v;
         self
     }
+    pub fn customer_account(mut self, v: impl Into<String>) -> Self {
+        self.customer_account = v.into();
+        self
+    }
+    pub fn professional_customer(mut self, v: bool) -> Self {
+        self.professional_customer = v;
+        self
+    }
 }
 
 impl RequestEncoder for ExerciseOptionsRequestBuilder {
@@ -1160,8 +1172,8 @@ impl RequestEncoder for ExerciseOptionsRequestBuilder {
             account: some_str(&self.account),
             r#override: some_bool(self.r#override),
             manual_order_time: self.manual_order_time.clone(),
-            customer_account: None,
-            professional_customer: None,
+            customer_account: some_str(&self.customer_account),
+            professional_customer: some_bool(self.professional_customer),
         }
     }
 }

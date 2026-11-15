@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `news::HistoricalNewsPage`, from `historical_news(..).page()` (async and blocking): the headlines as `articles`, and `has_more`, TWS's flag that more headlines are available than it returned (#1211).
 - `AccountId` converts from `&String` and `&AccountId`, so a borrowed account id passes to any `impl Into<AccountId>` parameter (#1204).
 - `AccountMultiValue::has_ledger_prefix` and `base_key`, and `accounts::LEDGER_PREFIX`: split the `$LEDGER-` prefix off `account_updates_multi` keys. With the TWS API setting "Prepend '$LEDGER-' prefix to per-currency account values" on, per-currency ledger rows arrive as `$LEDGER-AccruedCash` and account-level rows keep the bare key; with it off, no key carries the prefix and the two can collide. `account_updates` never sends the prefix (#1223).
+- `ExerciseOptionsBuilder::customer_account` and `ExerciseOptionsBuilder::professional_customer` send a customer account and the professional-customer flag with an exercise request, the `customerAccount` and `professionalCustomer` parameters of IBKR's `exerciseOptions`. Previously neither was sent (#1226).
 
 ### Changed
 
