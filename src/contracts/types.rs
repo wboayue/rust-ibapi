@@ -3,7 +3,7 @@
 use crate::{Error, ToField};
 use std::fmt;
 use std::str::FromStr;
-use time::{Date, Duration, Month, OffsetDateTime, Weekday};
+use time::{Date, Duration, Month, OffsetDateTime, PrimitiveDateTime, Weekday};
 
 #[cfg(test)]
 #[path = "types_tests.rs"]
@@ -757,6 +757,64 @@ impl<'de> serde::Deserialize<'de> for Expiry {
 pub(crate) fn deserialize_optional_expiry<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Expiry>, D::Error> {
     use serde::Deserialize;
     Ok(Option::<String>::deserialize(deserializer)?.as_deref().and_then(Expiry::from_wire))
+}
+
+/// One trading session from [`ContractDetails::trading_sessions`](crate::contracts::ContractDetails::trading_sessions)
+/// or [`liquid_sessions`](crate::contracts::ContractDetails::liquid_sessions).
+///
+/// Times are wall clock in the product's
+/// [`time_zone_id`](crate::contracts::ContractDetails::time_zone_id), as TWS sends them: no zone
+/// is applied, so turning one into an instant is the caller's step.
+///
+/// Parses from one `;`-separated entry with [`FromStr`]:
+///
+/// ```
+/// use ibapi::contracts::TradingSession;
+/// use time::macros::date;
+///
+/// let session: TradingSession = "20261114:CLOSED".parse()?;
+/// assert_eq!(session, TradingSession::Closed(date!(2026 - 11 - 14)));
+/// # Ok::<(), ibapi::Error>(())
+/// ```
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TradingSession {
+    /// The product trades from `start` to `end`. A session can span midnight (17:00 to 16:00
+    /// the next day), so the end carries its own date.
+    Open {
+        /// Session open.
+        start: PrimitiveDateTime,
+        /// Session close.
+        end: PrimitiveDateTime,
+    },
+    /// The product does not trade on this date.
+    Closed(Date),
+}
+
+const EXPECTED_SESSION_FORMAT: &str = "expected YYYYMMDD:HHMM-YYYYMMDD:HHMM or YYYYMMDD:CLOSED";
+
+impl FromStr for TradingSession {
+    type Err = Error;
+
+    /// Parses one entry in the form TWS 970 and later sends: `YYYYMMDD:HHMM-YYYYMMDD:HHMM`
+    /// or `YYYYMMDD:CLOSED`. The pre-970 form (`20090507:0700-1830`) is an [`Error::Parse`].
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let invalid = || Error::parse_field(s, EXPECTED_SESSION_FORMAT);
+
+        if let Some(date) = s.strip_suffix(":CLOSED") {
+            let date = Date::parse(date, time::macros::format_description!("[year][month][day]")).map_err(|_| invalid())?;
+            return Ok(TradingSession::Closed(date));
+        }
+
+        let (start, end) = s.split_once('-').ok_or_else(invalid)?;
+        let parse = |value: &str| {
+            PrimitiveDateTime::parse(value, time::macros::format_description!("[year][month][day]:[hour][minute]")).map_err(|_| invalid())
+        };
+        Ok(TradingSession::Open {
+            start: parse(start)?,
+            end: parse(end)?,
+        })
+    }
 }
 
 /// CUSIP identifier
