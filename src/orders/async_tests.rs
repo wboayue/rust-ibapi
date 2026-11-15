@@ -523,7 +523,7 @@ async fn next_valid_order_id() {
     let order_id = client.next_valid_order_id().await.expect("failed to get next valid order id");
 
     assert_eq!(order_id, 9123, "Expected order ID 9123");
-    assert_eq!(client.next_order_id(), 9123, "Client's order ID should be raised to 9123");
+    assert_eq!(client.next_order_id(), 9124, "the returned id is reserved");
     assert_ne!(client.next_order_id(), initial_order_id, "Client's order ID should have changed");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -948,7 +948,7 @@ async fn analyze_returns_order_state_for_the_matching_order() {
         IncomingMessages::OpenOrder,
         open_order().order_id(9090).status(OrderStatusKind::PreSubmitted).encode_proto(),
     )]);
-    client.raise_next_order_id(OrderId::from(9090));
+    client.id_manager().raise_order_id(OrderId::from(9090));
     let contract = Contract::stock("AAPL").build();
 
     let state = client
@@ -981,7 +981,7 @@ async fn analyze_reports_end_of_stream_when_no_order_arrives() {
 #[tokio::test]
 async fn submit_assigns_the_next_order_id_and_sends_the_order() {
     let (client, bus) = create_test_client();
-    client.raise_next_order_id(OrderId::from(9100));
+    client.id_manager().raise_order_id(OrderId::from(9100));
     let contract = Contract::stock("AAPL").build();
 
     let order_id = client
@@ -1025,7 +1025,7 @@ async fn submit_rejects_an_invalid_order_before_sending() {
 #[tokio::test]
 async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     let (client, bus) = create_test_client();
-    client.raise_next_order_id(OrderId::from(9200));
+    client.id_manager().raise_order_id(OrderId::from(9200));
     let contract = Contract::stock("AAPL").build();
 
     let ids = client
@@ -1078,7 +1078,7 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
 #[tokio::test]
 async fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
     let (client, bus) = create_test_client();
-    client.raise_next_order_id(OrderId::from(9300));
+    client.id_manager().raise_order_id(OrderId::from(9300));
     let apple = Contract::stock("AAPL").build();
     let microsoft = Contract::stock("MSFT").build();
 
@@ -1197,7 +1197,7 @@ async fn order_update_stream_delivers_order_binding() {
 #[tokio::test]
 async fn preset_legs_submit_one_request_with_attached_ids() {
     let (client, bus) = crate::common::test_utils::helpers::create_test_client_with_version(server_versions::ATTACHED_ORDERS);
-    client.raise_next_order_id(OrderId::from(9400));
+    client.id_manager().raise_order_id(OrderId::from(9400));
     let contract = Contract::stock("AAPL").build();
 
     let ids = client
@@ -1264,7 +1264,7 @@ async fn order_entry_points_reject_request_range_ids() {
     rejected(client.order_status_stream(floor).await.map(|_| ()), "order_status_stream");
     rejected(client.wait_for_fill(floor, std::time::Duration::ZERO).await.map(|_| ()), "wait_for_fill");
 
-    client.raise_next_order_id(OrderId::from(floor));
+    client.id_manager().raise_order_id(OrderId::from(floor));
     rejected(
         client.exercise_options(&contract).exercise(1).submit().await.map(|_| ()),
         "exercise_options",
@@ -1398,4 +1398,51 @@ async fn order_status_stream_yields_statuses_and_writes_nothing() {
 
     assert_eq!(filled, [40.0, 100.0]);
     assert_eq!(request_message_count(&message_bus), 0);
+}
+
+// A caller-chosen id must keep later client-allocated ids (next_order_id, the order
+// builder's submit, exercise_options) from reusing it, or TWS reads the later order as a
+// modification of the earlier one.
+#[tokio::test]
+async fn caller_chosen_order_id_raises_the_generator() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus, server_versions::ATTACHED_ORDERS);
+    let contract = Contract::stock("AAPL").build();
+    let order = order_builder::limit_order(Action::Buy, 1.0, 1.0);
+    let chosen = client.next_order_id() + 1000;
+
+    client.submit_order(chosen, &contract, &order).await.expect("submit_order");
+    assert_eq!(client.id_manager().current_order_id(), chosen + 1);
+
+    let bracket = Order {
+        preset_stop_loss_order_id: Some(chosen + 20),
+        preset_profit_taker_order_id: Some(chosen + 10),
+        ..order_builder::limit_order(Action::Buy, 1.0, 1.0)
+    };
+    let _subscription = client.place_order(chosen + 5, &contract, &bracket).await.expect("place_order");
+    assert_eq!(client.id_manager().current_order_id(), chosen + 21, "past the preset attached-order ids");
+
+    client.submit_order(chosen, &contract, &order).await.expect("modify submit_order");
+    assert_eq!(
+        client.id_manager().current_order_id(),
+        chosen + 21,
+        "a lower id never rewinds the generator"
+    );
+}
+
+// The documented flow: fetch an id from TWS, place it yourself, then let the client allocate.
+// The client-allocated id must not repeat the one already placed.
+#[tokio::test]
+async fn next_valid_order_id_then_submit_order_does_not_reissue_the_id() {
+    let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::NextValidId,
+        next_valid_id().order_id(9123).encode_proto(),
+    )]);
+    let contract = Contract::stock("AAPL").build();
+    let order = order_builder::limit_order(Action::Buy, 1.0, 1.0);
+
+    let order_id = client.next_valid_order_id().await.expect("next_valid_order_id");
+    client.submit_order(order_id, &contract, &order).await.expect("submit_order");
+
+    assert_eq!(client.next_order_id(), order_id + 1);
 }

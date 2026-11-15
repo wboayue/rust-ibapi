@@ -34,7 +34,7 @@ async fn accessors_round_trip() {
     let r2 = client.mint_request_id();
     assert!(r2 > r1, "request ids should increment");
 
-    client.raise_next_order_id(OrderId::from(9000));
+    client.id_manager().raise_order_id(OrderId::from(9000));
     let o1 = client.next_order_id();
     let o2 = client.next_order_id();
     assert_eq!(o1, 9000);

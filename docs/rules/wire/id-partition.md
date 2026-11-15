@@ -8,9 +8,9 @@ triggers:
   - adding a request that allocates a request id
   - routing an inbound frame or error by its id
   - adding an Order field that carries another order's id
-symbols: [REQUEST_ID_FLOOR, RequestId, OrderId, WireId, WireId::classify, OrderId::checked, verify_order_ids, Client::mint_request_id]
+symbols: [REQUEST_ID_FLOOR, RequestId, OrderId, WireId, WireId::classify, OrderId::checked, verify_and_reserve_order_ids, carried_order_ids, Client::mint_request_id]
 related: [proto-aware-accessors]
-precedents: ["#789", "#1069"]
+precedents: ["#789", "#1069", "#1231"]
 ---
 
 An error frame carries one integer for both requests and orders, so the two id domains must
@@ -25,12 +25,14 @@ are crate-minted only; callers read a live request's id from `Subscription::requ
 `OptionChainBuilder::request_id()`.
 
 **Accepting an order id from a caller** → take `impl Into<OrderId>` (`orders::OrderId`, public;
-`i32` converts), then check at the entry point: `verify::verify_order_ids(order_id.into(), &order)?`
-for anything that places an order (it also checks `parent_id` and the preset attached-order ids,
-since TWS routes frames for those orders by them), or `order_id.into().checked()?` for a bare id
-(`cancel_order`). Both return `Error::OrderIdInRequestRange`. Check where the id enters the
-crate, never at `OrderId` construction. An `Order` field naming another order's id belongs in
-`verify_order_ids`.
+`i32` converts), then check at the entry point. Anything that places an order goes through
+`verify::verify_and_reserve_order_ids(self.id_manager(), self.server_version(), order_id.into(), order)?`:
+it checks the id and every id the order carries (`parent_id`, the preset attached-order ids,
+since TWS routes frames for those orders by them), then moves the order-id generator past them
+so a client-allocated id never repeats one already sent. A bare id (`cancel_order`) takes
+`order_id.into().checked()?`. Both return `Error::OrderIdInRequestRange`. Check where the id
+enters the crate, never at `OrderId` construction. An `Order` field naming another order's id
+belongs in `carried_order_ids`, which checking and reserving both read.
 
 **Routing by an inbound id** → `WireId::classify(id)` and match: `Request` looks only in the
 request table, `Order` only in the order table, `None` (TWS's `-1`) is request-less. A frame with
@@ -60,3 +62,6 @@ only on user demand.
 
 - #789 — partitioned the id space and routed by range (fixed in #912).
 - #1069 — range-checked the order id in `order_status_stream` / `wait_for_fill`.
+- #1231 — the generator ignored caller-chosen ids, so `next_valid_order_id()` then
+  `submit_order(id, ..)` let the next builder `submit` reuse `id`. Checking and reserving merged
+  into one entry point over one carried-id list; `next_valid_order_id` reserves what it returns.
