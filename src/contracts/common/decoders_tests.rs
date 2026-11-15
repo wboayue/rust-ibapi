@@ -216,7 +216,11 @@ fn decode_bond_contract_details_splits_last_trade_date() {
         assert_eq!(details.maturity, maturity, "maturity for {raw:?}");
         assert_eq!(details.last_trade_time, time, "time for {raw:?}");
         assert_eq!(details.time_zone_id, zone, "zone for {raw:?}");
-        assert_eq!(details.contract.last_trade_date_or_contract_month, raw);
+        assert_eq!(
+            details.contract.last_trade_date_or_contract_month,
+            Expiry::from_wire(raw),
+            "field for {raw:?}"
+        );
     }
 }
 
@@ -266,7 +270,11 @@ fn decode_contract_details_splits_last_trade_date() {
                 .encode_proto(),
         );
         let details = decode_contract_details(&frame).unwrap();
-        assert_eq!(details.contract.last_trade_date_or_contract_month, date, "date for {raw:?}");
+        assert_eq!(
+            details.contract.last_trade_date_or_contract_month,
+            Expiry::from_wire(date),
+            "date for {raw:?}"
+        );
         assert_eq!(details.last_trade_time, time, "time for {raw:?}");
         assert_eq!(details.time_zone_id, "US/Eastern", "zone for {raw:?}");
         assert_eq!(details.maturity, "", "maturity for {raw:?}");

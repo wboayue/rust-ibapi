@@ -123,11 +123,11 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::{Contract, OptionRight};
+    /// use ibapi::contracts::{Contract, ExpirationDate, OptionRight};
     /// use ibapi::orders::PlaceOrder;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let contract = Contract::option("AAPL", "20251219", 150.0, OptionRight::Call);
+    /// let contract = Contract::option("AAPL", ExpirationDate::new(2025, 12, 19), 150.0, OptionRight::Call);
     /// let subscription = client
     ///     .exercise_options(&contract)
     ///     .exercise(1)
@@ -190,7 +190,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let contract = Contract::option("AAPL", "20251219", 150.0, OptionRight::Call);
+    ///     let contract = Contract::option("AAPL", ExpirationDate::new(2025, 12, 19), 150.0, OptionRight::Call);
     ///     let subscription = client
     ///         .exercise_options(&contract)
     ///         .exercise(1)

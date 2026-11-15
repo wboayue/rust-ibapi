@@ -1,7 +1,8 @@
 //! Strong types for contract building with validation.
 
-use crate::ToField;
+use crate::{Error, ToField};
 use std::fmt;
+use std::str::FromStr;
 use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 
 #[cfg(test)]
@@ -287,7 +288,8 @@ impl Strike {
 
 /// Date for option expiration
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Field order (year, month, day) makes the derived `Ord` chronological.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ExpirationDate {
     year: u16,
     month: u8,
@@ -383,7 +385,8 @@ impl fmt::Display for ExpirationDate {
 
 /// Contract month for futures
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Field order (year, month) makes the derived `Ord` chronological.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ContractMonth {
     year: u16,
     month: u8,
@@ -454,6 +457,202 @@ impl fmt::Display for ContractMonth {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:04}{:02}", self.year, self.month)
     }
+}
+
+/// `YYYYMMDD` (8 digits, a real calendar date) → [`ExpirationDate`].
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::contracts::ExpirationDate;
+///
+/// let date: ExpirationDate = "20261218".parse().unwrap();
+/// assert_eq!(date, ExpirationDate::new(2026, 12, 18));
+/// assert!("20261340".parse::<ExpirationDate>().is_err());
+/// ```
+impl FromStr for ExpirationDate {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let invalid = || Error::parse_field(s, "expected an expiration date as YYYYMMDD");
+        if s.len() != 8 || !s.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(invalid());
+        }
+        let date = Date::parse(s, time::macros::format_description!("[year][month][day]")).map_err(|_| invalid())?;
+        Ok(ExpirationDate {
+            year: u16::try_from(date.year()).map_err(|_| invalid())?,
+            month: date.month().into(),
+            day: date.day(),
+        })
+    }
+}
+
+impl TryFrom<&str> for ExpirationDate {
+    type Error = Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
+/// `YYYYMM` (6 digits, month 01–12) → [`ContractMonth`].
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::contracts::ContractMonth;
+///
+/// let month: ContractMonth = "202612".parse().unwrap();
+/// assert_eq!(month, ContractMonth::new(2026, 12));
+/// assert!("202613".parse::<ContractMonth>().is_err());
+/// ```
+impl FromStr for ContractMonth {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let invalid = || Error::parse_field(s, "expected a contract month as YYYYMM");
+        if s.len() != 6 || !s.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(invalid());
+        }
+        let (year, month) = (s[..4].parse().map_err(|_| invalid())?, s[4..].parse().map_err(|_| invalid())?);
+        if !(1..=12).contains(&month) {
+            return Err(invalid());
+        }
+        Ok(ContractMonth { year, month })
+    }
+}
+
+impl TryFrom<&str> for ContractMonth {
+    type Error = Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
+/// A contract's last trading day or contract month: the typed form of
+/// [`Contract::last_trade_date_or_contract_month`](crate::contracts::Contract::last_trade_date_or_contract_month)
+/// (TWS tag 4).
+///
+/// TWS reads `YYYYMMDD` as the last trading day and `YYYYMM` as the contract
+/// month. A contract sent as a month comes back from TWS as its last trading
+/// day (an order placed on ES `202612` is echoed as `20261218`), so don't
+/// expect the variant to round-trip.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::contracts::{ContractMonth, ExpirationDate, Expiry};
+///
+/// let month: Expiry = "202612".parse().unwrap();
+/// assert_eq!(month, Expiry::Month(ContractMonth::new(2026, 12)));
+///
+/// let date = Expiry::from(ExpirationDate::new(2026, 12, 18));
+/// assert_eq!(date.to_string(), "20261218");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expiry {
+    /// Last trading day, `YYYYMMDD`.
+    Date(ExpirationDate),
+    /// Contract month, `YYYYMM`.
+    Month(ContractMonth),
+    /// Any other text TWS sent, kept verbatim and sent back as is: a bond's
+    /// `"20430504 16:00 Europe/London"`, or a shape not seen yet. Parsing a
+    /// string never produces it; decoding and deserializing do. It is the
+    /// unchecked escape hatch: a hand-built `Unknown` is sent as is, so holding
+    /// an `Expiry` does not mean the value was validated.
+    Unknown(String),
+}
+
+impl Expiry {
+    /// Lenient decode of the wire text: empty is `None`, a date or month
+    /// types, anything else is [`Expiry::Unknown`]. Contracts arrive on
+    /// streaming paths (positions, open orders, executions), where a parse
+    /// error would end the subscription (docs/rules/wire/enum-typing.md).
+    pub(crate) fn from_wire(raw: &str) -> Option<Expiry> {
+        if raw.is_empty() {
+            return None;
+        }
+        Some(raw.parse().unwrap_or_else(|_| Expiry::Unknown(raw.to_owned())))
+    }
+}
+
+impl fmt::Display for Expiry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expiry::Date(date) => date.fmt(f),
+            Expiry::Month(month) => month.fmt(f),
+            Expiry::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+
+/// Strict: `YYYYMMDD` → [`Expiry::Date`], `YYYYMM` → [`Expiry::Month`], anything
+/// else is an error.
+impl FromStr for Expiry {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.len() {
+            8 => s.parse().map(Expiry::Date),
+            6 => s.parse().map(Expiry::Month),
+            _ => Err(Error::parse_field(s, "expected YYYYMMDD (last trading day) or YYYYMM (contract month)")),
+        }
+    }
+}
+
+impl TryFrom<&str> for Expiry {
+    type Error = Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
+impl From<ExpirationDate> for Expiry {
+    fn from(date: ExpirationDate) -> Self {
+        Expiry::Date(date)
+    }
+}
+
+impl From<ContractMonth> for Expiry {
+    fn from(month: ContractMonth) -> Self {
+        Expiry::Month(month)
+    }
+}
+
+// Serde as the wire string, so a contract serializes `"20261218"` as before
+// rather than `{"Date":{"year":..}}`. Deserialize is lenient like the
+// decoder, so `Unknown` round-trips, and unchecked text loads as `Unknown`.
+// The utoipa schema is hand-written to match: exactly a string.
+#[cfg(feature = "utoipa")]
+impl utoipa::PartialSchema for Expiry {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        <String as utoipa::PartialSchema>::schema()
+    }
+}
+
+#[cfg(feature = "utoipa")]
+impl utoipa::ToSchema for Expiry {}
+
+impl serde::Serialize for Expiry {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Expiry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Expiry::from_wire(&raw).ok_or_else(|| serde::de::Error::custom("empty expiry; use null"))
+    }
+}
+
+/// `Contract::last_trade_date_or_contract_month` deserializer: `null` and `""`
+/// are `None`. 5.x serialized an unset field as `""`, so its JSON still loads.
+pub(crate) fn deserialize_optional_expiry<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Expiry>, D::Error> {
+    use serde::Deserialize;
+    Ok(Option::<String>::deserialize(deserializer)?.as_deref().and_then(Expiry::from_wire))
 }
 
 /// CUSIP identifier

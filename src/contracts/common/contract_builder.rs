@@ -1,4 +1,4 @@
-use super::super::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, OptionRight, SecurityIdType, SecurityType, Symbol};
+use super::super::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, Expiry, OptionRight, SecurityIdType, SecurityType, Symbol};
 use crate::Error;
 
 /// Builder for creating and validating [Contract] instances
@@ -81,7 +81,7 @@ pub struct ContractBuilder {
     pub(crate) contract_id: Option<i32>,
     pub(crate) symbol: Option<String>,
     pub(crate) security_type: Option<SecurityType>,
-    pub(crate) last_trade_date_or_contract_month: Option<String>,
+    pub(crate) last_trade_date_or_contract_month: Option<ExpiryInput>,
     pub(crate) strike: Option<f64>,
     pub(crate) right: Option<OptionRight>,
     pub(crate) multiplier: Option<String>,
@@ -99,6 +99,15 @@ pub struct ContractBuilder {
     pub(crate) last_trade_date: Option<time::Date>,
     pub(crate) issuer_id: Option<String>,
     pub(crate) description: Option<String>,
+}
+
+/// What [`ContractBuilder::last_trade_date_or_contract_month`] or
+/// [`ContractBuilder::expiry`] stored; text is parsed in `build()`, which can
+/// return the error.
+#[derive(Clone, Debug)]
+pub(crate) enum ExpiryInput {
+    Text(String),
+    Typed(Expiry),
 }
 
 impl ContractBuilder {
@@ -158,8 +167,35 @@ impl ContractBuilder {
     /// For futures and options, this field is required:
     /// - Format YYYYMM for contract month (e.g., "202412")
     /// - Format YYYYMMDD for specific expiration date (e.g., "20241220")
+    ///
+    /// [`build`](Self::build) parses the string and returns
+    /// [`Error::InvalidArgument`] if it is neither. An empty string clears the
+    /// field, as in 5.x, so an option or future then fails the required check.
+    /// For a typed value use [`expiry`](Self::expiry).
     pub fn last_trade_date_or_contract_month<S: Into<String>>(mut self, date: S) -> Self {
-        self.last_trade_date_or_contract_month = Some(date.into());
+        let date = date.into();
+        self.last_trade_date_or_contract_month = (!date.is_empty()).then_some(ExpiryInput::Text(date));
+        self
+    }
+
+    /// Sets the last trade date or contract month from a typed value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{ContractBuilder, ContractMonth, Expiry, SecurityType};
+    ///
+    /// let contract = ContractBuilder::new()
+    ///     .symbol("ES")
+    ///     .security_type(SecurityType::Future)
+    ///     .exchange("CME")
+    ///     .expiry(ContractMonth::new(2026, 12))
+    ///     .build()
+    ///     .unwrap();
+    /// assert_eq!(contract.last_trade_date_or_contract_month, Some(Expiry::Month(ContractMonth::new(2026, 12))));
+    /// ```
+    pub fn expiry(mut self, expiry: impl Into<Expiry>) -> Self {
+        self.last_trade_date_or_contract_month = Some(ExpiryInput::Typed(expiry.into()));
         self
     }
 
@@ -477,11 +513,21 @@ impl ContractBuilder {
             return Err(Error::InvalidArgument("Contract month is required for futures".into()));
         }
 
+        let expiry = match self.last_trade_date_or_contract_month {
+            None => None,
+            Some(ExpiryInput::Typed(expiry)) => Some(expiry),
+            Some(ExpiryInput::Text(text)) => Some(text.parse::<Expiry>().map_err(|_| {
+                Error::InvalidArgument(format!(
+                    "last_trade_date_or_contract_month {text:?}: expected YYYYMMDD (last trading day) or YYYYMM (contract month)"
+                ))
+            })?),
+        };
+
         Ok(Contract {
             contract_id: self.contract_id.unwrap_or(0),
             symbol: Symbol::from(self.symbol.unwrap_or_default()),
             security_type,
-            last_trade_date_or_contract_month: self.last_trade_date_or_contract_month.unwrap_or_default(),
+            last_trade_date_or_contract_month: expiry,
             strike: self.strike.unwrap_or(0.0),
             right: self.right,
             multiplier: self.multiplier.unwrap_or_default(),

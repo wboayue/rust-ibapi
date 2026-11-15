@@ -45,6 +45,36 @@ Contract details and option chains. Format: [README](README.md).
   an NT adapter note of 10372 on Gateway 10.51 is neither confirmed nor ruled out; live
   (non-what-if) orders; bonds.
 
+### Open-order echo of `lastTradeDateOrContractMonth` (tag 4)
+
+*Live 2026-11-14 weekend, paper Gateway, server 226; #1214.*
+
+- Buy limits far from the market, read back with `open_orders`. ES on CME sent as `202612`,
+  as `20261218` and as `20261218 08:30:00 US/Central` all came back as `20261218` (conid
+  515416632, PreSubmitted). AAPL OPT sent as `20261218` came back as `20261218`.
+- So TWS normalizes tag 4 to the last trading day: a contract sent as a month comes back as a
+  date, and the open-order echo carries no time or zone. `Expiry` therefore doesn't promise the
+  variant round-trips.
+- **Not probed:** positions and portfolio (the account held no FUT/OPT), executions (need a
+  fill), and live TWS.
+
+### Bond contract details on a paper account
+
+*Live 2026-11-14 weekend, paper Gateway, server 226; #1214.*
+
+- `Contract::bond_cusip("912810TW8")` (UST 4¾ 11/15/43) → one contract (conid 667573987) with
+  tag 4, symbol, currency, exchange, `maturity` and `coupon` all empty. Only `contract_month`
+  `204311`, `desc_append` `T 4 3/4 11/15/43`, the CUSIP/ISIN, trading class `US-T` and
+  `time_zone_id` `US/Eastern` were filled. It looks permission-stripped.
+- Re-querying by conid resolves. With conid 0 the query draws 200, even with the fields as
+  returned.
+- `UKT`/GBP bonds → 190 contracts, all with tag 4 empty.
+- So the zoned bond form (`"20430504 16:00 Europe/London"`, from C#'s `isBond` split) was not
+  seen here, and whether a bond sent back with the date alone resolves is unanswered. The
+  decoder leaves a bond's tag 4 as sent (`Expiry::Unknown` when zoned), as C# does, so nothing
+  depends on the answer.
+- **Not probed:** an account with bond permissions.
+
 ### Option chain `exchange` is a futures-options filter
 
 *Live 2026-09-03, paper Gateway, server 220, `reqSecDefOptParams`; #792.*

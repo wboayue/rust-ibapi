@@ -65,7 +65,7 @@ async fn realtime_bars() {
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         local_symbol: "FGBL MAR 23".to_owned(),
-        last_trade_date_or_contract_month: "202303".to_owned(),
+        last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
         ..Contract::default()
     };
     let what_to_show = WhatToShow::Trades;
@@ -154,7 +154,7 @@ async fn tick_by_tick_all_last() {
         security_type: SecurityType::Future,
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
+        last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
         ..Contract::default()
     };
     let number_of_ticks = 2;
@@ -222,7 +222,7 @@ async fn tick_by_tick_last() {
         security_type: SecurityType::Future,
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
+        last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
         ..Contract::default()
     };
     let number_of_ticks = 1;
@@ -277,7 +277,7 @@ async fn tick_by_tick_bid_ask() {
         security_type: SecurityType::Future,
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
+        last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
         ..Contract::default()
     };
     let number_of_ticks = 1;
@@ -335,7 +335,7 @@ async fn tick_by_tick_midpoint() {
         security_type: SecurityType::Future,
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
+        last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
         ..Contract::default()
     };
     let number_of_ticks = 0;
@@ -419,7 +419,7 @@ async fn market_depth() {
         security_type: SecurityType::Future,
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
+        last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
         ..Contract::default()
     };
     let number_of_rows = 10;
@@ -676,7 +676,7 @@ async fn market_data_regulatory_snapshot() {
         security_type: SecurityType::Future,
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
+        last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
         ..Contract::default()
     };
     let generic_ticks: Vec<&str> = vec![];

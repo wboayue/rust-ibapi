@@ -74,7 +74,7 @@ fn spy_calls_one_month() -> Contract {
         security_type: SecurityType::Option,
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
-        last_trade_date_or_contract_month: yyyymm_months_from_now(2),
+        last_trade_date_or_contract_month: Some(yyyymm_months_from_now(2).parse().expect("YYYYMM")),
         right: Some(OptionRight::Call),
         ..Default::default()
     }

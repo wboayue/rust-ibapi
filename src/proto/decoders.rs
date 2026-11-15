@@ -1,5 +1,6 @@
 use crate::contracts::{
-    ComboLeg, ComboLegOpenClose, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityIdType, SecurityType, Symbol, TagValue,
+    ComboLeg, ComboLegOpenClose, Contract, Currency, DeltaNeutralContract, Exchange, Expiry, LegAction, SecurityIdType, SecurityType, Symbol,
+    TagValue,
 };
 use crate::orders::SoftDollarTier;
 use crate::proto;
@@ -190,7 +191,7 @@ pub fn decode_contract(proto: &proto::Contract) -> Result<Contract, Error> {
         contract_id: proto.con_id.unwrap_or_default(),
         symbol: Symbol::from(s(&proto.symbol)),
         security_type: parse_optional(proto.sec_type.as_deref())?.unwrap_or_else(|| SecurityType::Other(String::new())),
-        last_trade_date_or_contract_month: s(&proto.last_trade_date_or_contract_month),
+        last_trade_date_or_contract_month: proto.last_trade_date_or_contract_month.as_deref().and_then(Expiry::from_wire),
         strike: proto.strike.unwrap_or_default(),
         right: parse_optional(proto.right.as_deref())?,
         multiplier: proto.multiplier.map(|m| m.to_string()).unwrap_or_default(),

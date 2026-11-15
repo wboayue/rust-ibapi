@@ -170,9 +170,11 @@ pub struct Contract {
     pub symbol: Symbol,
     /// Type of security (stock, option, future, etc.).
     pub security_type: SecurityType,
-    /// The contract's last trading day or contract month (for Options and Futures).
-    /// Strings with format YYYYMM will be interpreted as the Contract Month whereas YYYYMMDD will be interpreted as Last Trading Day.
-    pub last_trade_date_or_contract_month: String,
+    /// The contract's last trading day ([`Expiry::Date`], `YYYYMMDD`) or contract
+    /// month ([`Expiry::Month`], `YYYYMM`), for options and futures. `None` when
+    /// unset (stocks, an open futures query).
+    #[serde(default, deserialize_with = "types::deserialize_optional_expiry")]
+    pub last_trade_date_or_contract_month: Option<Expiry>,
     /// The option's strike price.
     pub strike: f64,
     /// Option type (only meaningful when `security_type == SecurityType::Option`).
@@ -221,7 +223,7 @@ impl Default for Contract {
             contract_id: 0,
             symbol: Symbol::default(),
             security_type: SecurityType::default(),
-            last_trade_date_or_contract_month: String::new(),
+            last_trade_date_or_contract_month: None,
             strike: 0.0,
             right: None,
             multiplier: String::new(),
@@ -501,22 +503,22 @@ impl Contract {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::contracts::{Contract, OptionRight, Symbol};
+    /// use ibapi::contracts::{Contract, ExpirationDate, OptionRight, Symbol};
     ///
-    /// let call = Contract::option("AAPL", "20240119", 150.0, OptionRight::Call);
+    /// let call = Contract::option("AAPL", ExpirationDate::new(2024, 1, 19), 150.0, OptionRight::Call);
     /// assert_eq!(call.symbol, Symbol::from("AAPL"));
     /// assert_eq!(call.strike, 150.0);
     /// assert_eq!(call.right, Some(OptionRight::Call));
     /// ```
     // Legacy all-required convenience kept flat; `call()` / `put()` are the builder path
     // (docs/rules/style/param-budget.md).
-    pub fn option(symbol: &str, expiration_date: &str, strike: f64, right: OptionRight) -> Contract {
+    pub fn option(symbol: &str, expiration_date: ExpirationDate, strike: f64, right: OptionRight) -> Contract {
         Contract {
             symbol: symbol.into(),
             security_type: SecurityType::Option,
             exchange: "SMART".into(),
             currency: "USD".into(),
-            last_trade_date_or_contract_month: expiration_date.into(),
+            last_trade_date_or_contract_month: Some(expiration_date.into()),
             strike,
             right: Some(right),
             ..Default::default()

@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The chain's strikes span every expiration. A strike of 0 asks TWS for each strike this
     // expiration lists; take the middle one.
     let mut calls = client
-        .contract_details(&Contract::option("SPY", expiration, 0.0, OptionRight::Call))
+        .contract_details(&Contract::option("SPY", expiration.parse()?, 0.0, OptionRight::Call))
         .await?;
     calls.sort_by(|a, b| a.contract.strike.total_cmp(&b.contract.strike));
     let contract = calls.get(calls.len() / 2).ok_or("no listed strikes")?.contract.clone();

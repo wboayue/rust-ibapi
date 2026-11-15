@@ -214,7 +214,7 @@ impl OptionBuilder<Symbol, f64, ExpirationDate> {
             security_type: SecurityType::Option,
             strike: strike.value(),
             right: Some(self.right),
-            last_trade_date_or_contract_month: self.expiry.to_string(),
+            last_trade_date_or_contract_month: Some(self.expiry.into()),
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier.to_string(),
@@ -325,7 +325,7 @@ impl FuturesBuilder<Symbol, ContractMonth> {
         Contract {
             symbol: self.symbol,
             security_type: SecurityType::Future,
-            last_trade_date_or_contract_month: self.contract_month.to_string(),
+            last_trade_date_or_contract_month: Some(self.contract_month.into()),
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier.map(|m| m.to_string()).unwrap_or_default(),

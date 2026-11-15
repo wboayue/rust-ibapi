@@ -31,7 +31,7 @@ fn test_contract() -> Contract {
         security_type: SecurityType::Future,
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
+        last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
         ..Contract::default()
     }
 }

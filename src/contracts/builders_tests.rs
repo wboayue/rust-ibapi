@@ -34,7 +34,7 @@ fn call_option_builder() {
     assert_eq!(call.security_type, SecurityType::Option);
     assert_eq!(call.strike, 150.0);
     assert_eq!(call.right, Some(OptionRight::Call));
-    assert_eq!(call.last_trade_date_or_contract_month, "20241220");
+    assert_eq!(call.last_trade_date_or_contract_month, Some("20241220".parse().unwrap()));
     assert_eq!(call.multiplier, "100");
 }
 
@@ -55,7 +55,7 @@ fn put_option_builder() {
     assert_eq!(put.security_type, SecurityType::Option);
     assert_eq!(put.strike, 450.0);
     assert_eq!(put.right, Some(OptionRight::Put));
-    assert_eq!(put.last_trade_date_or_contract_month, "20240315");
+    assert_eq!(put.last_trade_date_or_contract_month, Some("20240315".parse().unwrap()));
     assert_eq!(put.exchange, Exchange::from("CBOE"));
     assert_eq!(put.multiplier, "100");
     assert_eq!(put.primary_exchange, Exchange::from("CBOE"));
@@ -108,7 +108,7 @@ fn futures_builder_with_manual_expiry() {
 
     assert_eq!(futures.symbol, Symbol::from("ES"));
     assert_eq!(futures.security_type, SecurityType::Future);
-    assert_eq!(futures.last_trade_date_or_contract_month, "202403");
+    assert_eq!(futures.last_trade_date_or_contract_month, Some("202403".parse().unwrap()));
     assert_eq!(futures.exchange, Exchange::from("CME"));
     assert_eq!(futures.currency, Currency::from("USD"));
     assert_eq!(futures.multiplier, "50");
@@ -122,20 +122,20 @@ fn futures_builder_any_month() {
 
     assert_eq!(query.symbol, Symbol::from("ES"));
     assert_eq!(query.security_type, SecurityType::Future);
-    assert!(query.last_trade_date_or_contract_month.is_empty());
+    assert_eq!(query.last_trade_date_or_contract_month, None);
     assert_eq!(query.exchange, Exchange::from("NYMEX"));
     assert_eq!(query.currency, Currency::from("EUR"));
     assert_eq!(query.multiplier, "");
 
     // Defaults are copied through .any_month() when no setters are applied.
     let defaults = Contract::futures("ES").any_month().build();
-    assert!(defaults.last_trade_date_or_contract_month.is_empty());
+    assert_eq!(defaults.last_trade_date_or_contract_month, None);
     assert_eq!(defaults.exchange, Exchange::from("CME"));
     assert_eq!(defaults.currency, Currency::from("USD"));
 
     // Setters also compose *after* .any_month() (on the AnyMonth state).
     let with_multiplier = Contract::futures("ES").any_month().multiplier(50).build();
-    assert!(with_multiplier.last_trade_date_or_contract_month.is_empty());
+    assert_eq!(with_multiplier.last_trade_date_or_contract_month, None);
     assert_eq!(with_multiplier.multiplier, "50");
 }
 
@@ -518,29 +518,25 @@ fn option_convenience_date_methods() {
     let weekly_option = Contract::call("SPY").strike(450.0).expires_weekly().build().unwrap();
 
     // Weekly expiration should be set
-    assert!(!weekly_option.last_trade_date_or_contract_month.is_empty());
     // Should be a Friday date in format YYYYMMDD
-    assert_eq!(weekly_option.last_trade_date_or_contract_month.len(), 8);
+    assert!(matches!(weekly_option.last_trade_date_or_contract_month, Some(Expiry::Date(_))));
 
     // Test expires_monthly - should set third Friday of month
     let monthly_option = Contract::put("AAPL").strike(150.0).expires_monthly().build().unwrap();
 
     // Monthly expiration should be set
-    assert!(!monthly_option.last_trade_date_or_contract_month.is_empty());
-    assert_eq!(monthly_option.last_trade_date_or_contract_month.len(), 8);
+    assert!(matches!(monthly_option.last_trade_date_or_contract_month, Some(Expiry::Date(_))));
 
     // Test front_month for futures
     let front_month_future = Contract::futures("ES").front_month().build();
 
     // Front month should be set (actual value depends on current date)
-    assert!(!front_month_future.last_trade_date_or_contract_month.is_empty());
     // Should be in YYYYMM format for futures
-    assert_eq!(front_month_future.last_trade_date_or_contract_month.len(), 6);
+    assert!(matches!(front_month_future.last_trade_date_or_contract_month, Some(Expiry::Month(_))));
 
     // Test next_quarter for futures
     let next_quarter_future = Contract::futures("ES").next_quarter().build();
 
     // Next quarter should be set
-    assert!(!next_quarter_future.last_trade_date_or_contract_month.is_empty());
-    assert_eq!(next_quarter_future.last_trade_date_or_contract_month.len(), 6);
+    assert!(matches!(next_quarter_future.last_trade_date_or_contract_month, Some(Expiry::Month(_))));
 }

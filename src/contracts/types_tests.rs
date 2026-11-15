@@ -351,3 +351,119 @@ fn bond_identifier_variants_equality_and_match() {
         BondIdentifier::Isin(_) => panic!("expected Cusip"),
     }
 }
+
+#[test]
+fn expiration_date_from_str() {
+    let cases = [
+        ("20261218", Some(ExpirationDate::new(2026, 12, 18))),
+        ("20240229", Some(ExpirationDate::new(2024, 2, 29))), // leap day
+        ("20250229", None),                                   // not a leap year
+        ("20261340", None),                                   // month 13
+        ("20261200", None),                                   // day 0
+        ("202612", None),                                     // a month, not a date
+        ("2026121", None),
+        ("2026-12-18", None),
+        ("2026121a", None),
+        ("", None),
+    ];
+    for (input, expected) in cases {
+        assert_eq!(input.parse::<ExpirationDate>().ok(), expected, "{input:?}");
+    }
+}
+
+#[test]
+fn contract_month_from_str() {
+    let cases = [
+        ("202612", Some(ContractMonth::new(2026, 12))),
+        ("202601", Some(ContractMonth::new(2026, 1))),
+        ("202600", None),
+        ("202613", None),
+        ("20261218", None),
+        ("2026a1", None),
+        ("", None),
+    ];
+    for (input, expected) in cases {
+        assert_eq!(input.parse::<ContractMonth>().ok(), expected, "{input:?}");
+    }
+}
+
+#[test]
+fn expiry_from_str_is_strict() {
+    assert_eq!("20261218".parse::<Expiry>().unwrap(), Expiry::Date(ExpirationDate::new(2026, 12, 18)));
+    assert_eq!("202612".parse::<Expiry>().unwrap(), Expiry::Month(ContractMonth::new(2026, 12)));
+    for bad in ["", "2026", "20261340", "20261218 08:30:00 US/Central", "20430504 16:00 Europe/London"] {
+        assert!(matches!(bad.parse::<Expiry>(), Err(Error::Parse(..))), "{bad:?}");
+    }
+}
+
+#[test]
+fn expiry_from_wire_is_lenient() {
+    // Contracts reach streaming paths; an unseen shape must not end the stream.
+    let cases = [
+        ("", None),
+        ("20261218", Some(Expiry::Date(ExpirationDate::new(2026, 12, 18)))),
+        ("202612", Some(Expiry::Month(ContractMonth::new(2026, 12)))),
+        (
+            "20430504 16:00 Europe/London",
+            Some(Expiry::Unknown("20430504 16:00 Europe/London".into())),
+        ),
+        ("20261340", Some(Expiry::Unknown("20261340".into()))),
+    ];
+    for (raw, expected) in cases {
+        assert_eq!(Expiry::from_wire(raw), expected, "{raw:?}");
+    }
+}
+
+#[test]
+fn expiry_display_is_the_wire_text() {
+    for raw in ["20261218", "202612", "20430504 16:00 Europe/London"] {
+        assert_eq!(Expiry::from_wire(raw).unwrap().to_string(), raw);
+    }
+}
+
+#[test]
+fn expiry_serde_is_the_wire_string() {
+    for raw in ["20261218", "202612", "20430504 16:00 Europe/London"] {
+        let expiry = Expiry::from_wire(raw).unwrap();
+        let json = serde_json::to_string(&expiry).expect("serialize");
+        assert_eq!(json, format!("\"{raw}\""));
+        assert_eq!(serde_json::from_str::<Expiry>(&json).expect("deserialize"), expiry);
+    }
+    assert!(serde_json::from_str::<Expiry>("\"\"").is_err());
+    assert_eq!(serde_json::from_str::<Option<Expiry>>("null").unwrap(), None);
+}
+
+#[test]
+fn contract_deserializes_unset_expiry_as_none() {
+    let mut json = serde_json::to_value(crate::contracts::Contract::default()).expect("serialize");
+    assert_eq!(json["last_trade_date_or_contract_month"], serde_json::Value::Null);
+
+    // (label, field value or None to drop the key, expected)
+    let cases = [
+        ("null", Some(serde_json::json!(null)), None),
+        ("5.x empty string", Some(serde_json::json!("")), None),
+        ("absent", None, None),
+        (
+            "date",
+            Some(serde_json::json!("20261218")),
+            Some(Expiry::Date(ExpirationDate::new(2026, 12, 18))),
+        ),
+    ];
+    for (label, value, expected) in cases {
+        match value {
+            Some(value) => json["last_trade_date_or_contract_month"] = value,
+            None => {
+                json.as_object_mut().unwrap().remove("last_trade_date_or_contract_month");
+            }
+        }
+        let contract: crate::contracts::Contract = serde_json::from_value(json.clone()).expect(label);
+        assert_eq!(contract.last_trade_date_or_contract_month, expected, "{label}");
+    }
+}
+
+#[test]
+fn expiration_date_and_contract_month_order_chronologically() {
+    assert!(ExpirationDate::new(2026, 12, 18) < ExpirationDate::new(2027, 1, 15));
+    assert!(ExpirationDate::new(2026, 3, 31) < ExpirationDate::new(2026, 12, 1));
+    assert!(ContractMonth::new(2026, 12) < ContractMonth::new(2027, 1));
+}
