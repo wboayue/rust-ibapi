@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `place_order` and `submit_order` (sync and async) move the client's order-ID generator past a caller-chosen order ID and the order's preset attached-order IDs. The generator ignored them, so an ID the client allocated afterwards (`next_order_id`, the order builder's `submit`, `exercise_options`) could repeat one already sent, and TWS rejected the later order or treated it as a modification of the earlier one.
+- `place_order` and `submit_order` (sync and async) move the client's order-ID generator past a caller-chosen order ID and the order's preset attached-order IDs. The generator ignored them, so an ID the client allocated afterwards (`next_order_id`, the order builder's `submit`, `exercise_options`) could repeat one already sent, and TWS rejected the later order or treated it as a modification of the earlier one (#1231).
 - Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning` on any order. TWS goes on with the order after it. It arrives on every `exercise_options` request, where it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading (#1210).
 - `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
 
