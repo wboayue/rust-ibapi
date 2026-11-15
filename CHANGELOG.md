@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ClientBuilder::connector` (async): connect over a stream you open, any tokio `AsyncRead + AsyncWrite`, in place of `address`, such as a TLS or SSH tunnel or a proxy. The client calls it to connect and on every reconnect. Framing, frame validation, raw capture and reconnect work as they do over TCP (#1304).
 - The async client builds for `wasm32-wasip2` (`--no-default-features --features async`). It has no built-in TCP socket there, so `connector` is the way to connect; see `examples/wasi` (#1304).
 
+### Fixed
+
+- Async `connect` fails with `Error::Io` of kind `TimedOut` when TWS accepts the TCP connection but a startup frame (the handshake acknowledgement or an account-info frame) does not arrive within 30 seconds, the limit the blocking client already applied. Previously it waited forever, and so did an automatic reconnect that reached such a gateway, so `max_reconnect_attempts` never ran out (#1224).
+
 ## [5.7.0] - 2026-11-05
 
 ### Added
