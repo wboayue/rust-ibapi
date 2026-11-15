@@ -183,7 +183,7 @@ fn debug_impl_formats_connection() {
 }
 
 /// A gateway that accepts the TCP connection but never answers fails connect
-/// with `TimedOut` once the handshake timeout passes, instead of hanging.
+/// with `TimedOut` once [`STARTUP_STALL`] passes, instead of hanging.
 #[tokio::test(start_paused = true)]
 async fn establish_connection_times_out_when_gateway_silent() {
     let stream = MemoryStream::default();
@@ -195,7 +195,7 @@ async fn establish_connection_times_out_when_gateway_silent() {
         Error::Io(ref io_err) => assert_eq!(io_err.kind(), std::io::ErrorKind::TimedOut, "unexpected error: {err:?}"),
         other => panic!("expected Error::Io(TimedOut), got {other:?}"),
     }
-    assert!(started.elapsed() >= DEFAULT_HANDSHAKE_TIMEOUT, "gave up after {:?}", started.elapsed());
+    assert!(started.elapsed() >= STARTUP_STALL, "gave up after {:?}", started.elapsed());
     assert_eq!(
         stream.captured(),
         connection.connection_handler.format_handshake(),
@@ -203,13 +203,12 @@ async fn establish_connection_times_out_when_gateway_silent() {
     );
 }
 
-/// The bound is per startup frame and is the configured one: the handshake
-/// acknowledgement arrives in time, the account-info frames never do.
+/// The account-info reads are bounded too: the handshake acknowledgement
+/// arrives, the account-info frames never do.
 #[tokio::test(start_paused = true)]
-async fn receive_account_info_times_out_after_configured_handshake_timeout() {
+async fn receive_account_info_times_out_when_gateway_stalls() {
     let stream = MemoryStream::default();
-    let mut connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
-    connection.handshake_timeout = Duration::from_secs(5);
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
     stream.push_inbound(handshake_response_frame(SERVER_VERSION, "EST"));
 
     let started = tokio::time::Instant::now();
@@ -222,15 +221,12 @@ async fn receive_account_info_times_out_after_configured_handshake_timeout() {
         other => panic!("expected Error::Io(TimedOut), got {other:?}"),
     }
     let elapsed = started.elapsed();
-    assert!(
-        elapsed >= Duration::from_secs(5) && elapsed < DEFAULT_HANDSHAKE_TIMEOUT,
-        "gave up after {elapsed:?}"
-    );
+    assert!(elapsed >= STARTUP_STALL && elapsed < STARTUP_STALL * 2, "gave up after {elapsed:?}");
     assert_eq!(connection.server_version(), SERVER_VERSION, "the handshake itself completed");
 }
 
-/// A gateway that takes 10 s per startup frame, within the 30 s default,
-/// must not fail connect.
+/// The bound is per startup frame: a gateway that takes 20 s per frame,
+/// 60 s in all, must not fail connect.
 #[tokio::test(start_paused = true)]
 async fn establish_connection_waits_for_a_slow_gateway() {
     let stream = MemoryStream::default();
@@ -239,7 +235,7 @@ async fn establish_connection_waits_for_a_slow_gateway() {
     let late = stream.clone();
     tokio::spawn(async move {
         for frame in handshake_frames(SERVER_VERSION, "EST", 90) {
-            tokio::time::sleep(Duration::from_secs(10)).await;
+            tokio::time::sleep(Duration::from_secs(20)).await;
             late.push_inbound(frame);
         }
     });

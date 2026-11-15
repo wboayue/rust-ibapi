@@ -1,9 +1,6 @@
 //! Unit tests for `ClientBuilder` — exercise the validation paths without a
 //! gateway. Live-handshake assertions live in `integration/{sync,async}/tests/connection.rs`.
 
-use std::time::Duration;
-
-use crate::connection::common::DEFAULT_HANDSHAKE_TIMEOUT;
 use crate::errors::Error;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 use crate::transport::rate_limiter::RateLimiter;
@@ -44,25 +41,6 @@ fn connectable() -> BuilderState {
         client_id: Some(100),
         ..Default::default()
     }
-}
-
-#[test]
-fn validate_passes_handshake_timeout_through() {
-    assert_eq!(
-        connectable().validate().expect("validate").connection.handshake_timeout,
-        DEFAULT_HANDSHAKE_TIMEOUT
-    );
-
-    let mut state = connectable();
-    state.handshake_timeout = Duration::from_secs(120);
-    assert_eq!(state.validate().expect("validate").connection.handshake_timeout, Duration::from_secs(120));
-}
-
-#[test]
-fn validate_rejects_zero_handshake_timeout() {
-    let mut state = connectable();
-    state.handshake_timeout = Duration::ZERO;
-    assert_invalid_argument(state.validate().err(), "handshake_timeout must be greater than zero");
 }
 
 #[test]
@@ -154,13 +132,6 @@ mod sync_tests {
         let builder = ClientBuilder::default().one_shot_timeout(std::time::Duration::from_secs(5));
         assert_eq!(builder.state.one_shot_timeout, Some(std::time::Duration::from_secs(5)));
     }
-
-    #[test]
-    fn handshake_timeout_configurator_sets_state() {
-        assert_eq!(ClientBuilder::default().state.handshake_timeout, super::DEFAULT_HANDSHAKE_TIMEOUT);
-        let builder = ClientBuilder::default().handshake_timeout(std::time::Duration::from_secs(120));
-        assert_eq!(builder.state.handshake_timeout, std::time::Duration::from_secs(120));
-    }
 }
 
 #[cfg(feature = "async")]
@@ -219,12 +190,5 @@ mod async_tests {
     fn one_shot_timeout_configurator_sets_state() {
         let builder = ClientBuilder::default().one_shot_timeout(std::time::Duration::from_secs(5));
         assert_eq!(builder.state.one_shot_timeout, Some(std::time::Duration::from_secs(5)));
-    }
-
-    #[test]
-    fn handshake_timeout_configurator_sets_state() {
-        assert_eq!(ClientBuilder::default().state.handshake_timeout, super::DEFAULT_HANDSHAKE_TIMEOUT);
-        let builder = ClientBuilder::default().handshake_timeout(std::time::Duration::from_secs(120));
-        assert_eq!(builder.state.handshake_timeout, std::time::Duration::from_secs(120));
     }
 }

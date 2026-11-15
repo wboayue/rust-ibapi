@@ -16,6 +16,7 @@ use log::{debug, error, info, trace, warn};
 use crate::accounts::types::AccountId;
 use crate::client::handshake_state::HandshakeState;
 use crate::client::ids::{OrderId, RequestId, WireId};
+use crate::connection::common::STARTUP_STALL;
 use crate::connection::sync::Connection;
 
 use super::common::{lock, log_orphan, read_lock, report_unroutable_frame, validate_frame_length, write_lock, Lease, LeaseRef};
@@ -47,15 +48,9 @@ const MID_FRAME_STALL: Duration = Duration::from_secs(30);
 const MID_FRAME_TIMEOUT_LIMIT: u32 = (MID_FRAME_STALL.as_millis() / TWS_READ_TIMEOUT.as_millis()) as u32;
 const _: () = assert!(MID_FRAME_TIMEOUT_LIMIT > 0, "MID_FRAME_STALL must exceed TWS_READ_TIMEOUT");
 
-/// The configured handshake timeout in read timeouts, counted like
-/// [`MID_FRAME_TIMEOUT_LIMIT`]: how many timeouts a startup frame may take
-/// before connect gives up. Rounded up, at least one.
-pub(crate) fn startup_timeout_limit(handshake_timeout: Duration) -> u32 {
-    handshake_timeout
-        .as_millis()
-        .div_ceil(TWS_READ_TIMEOUT.as_millis())
-        .clamp(1, u32::MAX as u128) as u32
-}
+/// [`STARTUP_STALL`] in read timeouts, counted like [`MID_FRAME_TIMEOUT_LIMIT`].
+pub(crate) const STARTUP_TIMEOUT_LIMIT: u32 = (STARTUP_STALL.as_millis() / TWS_READ_TIMEOUT.as_millis()) as u32;
+const _: () = assert!(STARTUP_TIMEOUT_LIMIT > 0, "STARTUP_STALL must exceed TWS_READ_TIMEOUT");
 
 /// Queue depth at which (and at every further multiple of which) a growing
 /// sync channel logs a warning. Sync channels are unbounded — they never drop,

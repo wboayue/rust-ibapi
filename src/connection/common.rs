@@ -113,25 +113,12 @@ pub(crate) struct ConnectionConfig {
     pub(crate) startup_callback: Option<StartupCallback>,
     /// `None` means retry forever.
     pub(crate) max_reconnect_attempts: Option<u32>,
-    /// How long each startup frame may take to arrive; see
-    /// [`DEFAULT_HANDSHAKE_TIMEOUT`].
-    pub(crate) handshake_timeout: Duration,
 }
 
-/// How long connect waits for each startup frame (handshake acknowledgement,
-/// account info) before giving up, unless `ClientBuilder::handshake_timeout`
-/// says otherwise. A loaded gateway, or one waiting for the user to accept the
-/// connection, can take a while to answer.
-pub(crate) const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// The error a startup read fails with once `handshake_timeout` passes
-/// without a frame.
-pub(crate) fn startup_timed_out(handshake_timeout: Duration) -> Error {
-    Error::Io(std::io::Error::new(
-        std::io::ErrorKind::TimedOut,
-        format!("no startup reply from TWS within {handshake_timeout:?}"),
-    ))
-}
+/// How long connect, and each reconnect attempt, waits for each startup frame
+/// (handshake ack, account info) before giving up. A loaded gateway can take
+/// longer than one read timeout to answer.
+pub(crate) const STARTUP_STALL: Duration = Duration::from_secs(30);
 
 /// Data exchanged during the connection handshake
 #[derive(Debug, Clone)]

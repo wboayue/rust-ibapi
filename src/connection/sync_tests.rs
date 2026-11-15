@@ -15,7 +15,7 @@ use crate::market_data::realtime::common::encode_request_market_data_type;
 use crate::market_data::MarketDataType;
 use crate::messages::{encode_raw_length, IncomingMessages};
 use crate::server_versions;
-use crate::transport::sync::{startup_timeout_limit, Io, MemoryStream, Reconnect, ShutdownSignal, Stream, TcpMessageBus};
+use crate::transport::sync::{Io, MemoryStream, Reconnect, ShutdownSignal, Stream, TcpMessageBus, STARTUP_TIMEOUT_LIMIT};
 use crate::transport::MessageBus;
 
 const CLIENT_ID: i32 = 100;
@@ -371,24 +371,19 @@ fn establish_connection_waits_out_read_timeouts() {
     assert_eq!(metadata.managed_accounts, TEST_ACCOUNT);
 }
 
-/// A gateway that never answers fails connect with `TimedOut` after the
-/// handshake timeout's worth of read timeouts rather than hanging: 30 by
-/// default, fewer when the builder sets a shorter timeout.
+/// A gateway that never answers fails connect with `TimedOut` after
+/// [`STARTUP_TIMEOUT_LIMIT`] read timeouts rather than hanging.
 #[test]
 fn establish_connection_times_out_when_gateway_silent() {
-    for (handshake_timeout, expected_reads) in [(DEFAULT_HANDSHAKE_TIMEOUT, 30), (Duration::from_secs(5), 5)] {
-        let stream = MemoryStream::default();
-        let mut connection = Connection::stubbed(SlowSocket::new(stream, u32::MAX), CLIENT_ID);
-        connection.handshake_timeout = handshake_timeout;
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(SlowSocket::new(stream, u32::MAX), CLIENT_ID);
 
-        let err = connection.establish_connection().expect_err("silent gateway must fail connect");
-        match err {
-            Error::Io(ref io_err) => assert_eq!(io_err.kind(), std::io::ErrorKind::TimedOut, "unexpected error: {err:?}"),
-            other => panic!("expected Error::Io(TimedOut), got {other:?}"),
-        }
-        assert_eq!(connection.socket.reads.load(Ordering::SeqCst), expected_reads, "{handshake_timeout:?}");
-        assert_eq!(startup_timeout_limit(handshake_timeout), expected_reads);
+    let err = connection.establish_connection().expect_err("silent gateway must fail connect");
+    match err {
+        Error::Io(ref io_err) => assert_eq!(io_err.kind(), std::io::ErrorKind::TimedOut, "unexpected error: {err:?}"),
+        other => panic!("expected Error::Io(TimedOut), got {other:?}"),
     }
+    assert_eq!(connection.socket.reads.load(Ordering::SeqCst), STARTUP_TIMEOUT_LIMIT);
 }
 
 /// Socket for the shutdown-during-reconnect tests. Reads and writes delegate

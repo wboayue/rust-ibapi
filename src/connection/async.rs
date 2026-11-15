@@ -2,14 +2,13 @@
 
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use log::{debug, info};
 use tokio::sync::{broadcast, Mutex};
 
 use super::common::{
-    parse_handshake_ack, parse_raw_message, require_protobuf_support, startup_timed_out, AccountInfo, ConnectionConfig, ConnectionHandler,
-    ConnectionProtocol, StartupCallback, StartupHandshakeContext, DEFAULT_HANDSHAKE_TIMEOUT, MAX_ACCOUNT_INFO_ATTEMPTS,
+    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionConfig, ConnectionHandler, ConnectionProtocol,
+    StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS, STARTUP_STALL,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -40,9 +39,6 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     /// Reconnection attempts before `reconnect` gives up; `None` retries
     /// forever. Defaults to `Some(`[`MAX_RECONNECT_ATTEMPTS`]`)`.
     pub(crate) max_reconnect_attempts: Option<u32>,
-    /// How long `establish_connection` waits for each startup frame. Defaults
-    /// to [`DEFAULT_HANDSHAKE_TIMEOUT`].
-    pub(crate) handshake_timeout: Duration,
     /// Shared with the bus so `reconnect` can abandon its backoff as soon as
     /// shutdown is requested. See [`AsyncConnection::shutdown_signal`].
     shutdown: Arc<ShutdownSignal>,
@@ -73,7 +69,6 @@ impl AsyncConnection<AsyncTcpSocket> {
         let socket = AsyncTcpSocket::connect(&config.address, config.tcp_no_delay).await?;
         let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_sender);
         connection.max_reconnect_attempts = config.max_reconnect_attempts;
-        connection.handshake_timeout = config.handshake_timeout;
         connection.establish_connection().await?;
         Ok(connection)
     }
@@ -99,7 +94,6 @@ impl<S: AsyncStream> AsyncConnection<S> {
             startup_callback,
             notice_broadcaster: NoticeBroadcaster::new(notice_sender),
             max_reconnect_attempts: Some(MAX_RECONNECT_ATTEMPTS),
-            handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
             shutdown: Arc::new(ShutdownSignal::default()),
             market_data_type_request: std::sync::Mutex::new(None),
         }
@@ -264,13 +258,16 @@ impl<S: AsyncStream> AsyncConnection<S> {
         Ok(message)
     }
 
-    /// Read one startup frame body, giving up with `TimedOut` once
-    /// `handshake_timeout` passes without it: a gateway that accepts the TCP
-    /// connection but never answers must not hang connect.
+    /// Read one startup frame body, giving up with `TimedOut` after
+    /// [`STARTUP_STALL`] without it: a gateway that accepts the TCP connection
+    /// but never answers must not hang connect, or a reconnect's retry loop.
     async fn read_startup_frame(&self) -> Result<Vec<u8>, Error> {
-        match tokio::time::timeout(self.handshake_timeout, self.socket.read_message()).await {
+        match tokio::time::timeout(STARTUP_STALL, self.socket.read_message()).await {
             Ok(result) => result,
-            Err(_elapsed) => Err(startup_timed_out(self.handshake_timeout)),
+            Err(_elapsed) => Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("no startup reply from TWS within {STARTUP_STALL:?}"),
+            ))),
         }
     }
 
