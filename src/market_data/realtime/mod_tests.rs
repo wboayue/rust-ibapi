@@ -55,3 +55,61 @@ fn market_depths_data_from_notice() {
         );
     }
 }
+
+// The `Default` tests destructure every field without `..`, so a new field fails to compile
+// here until its default is chosen.
+
+#[test]
+fn bid_ask_default_is_zero_at_epoch() {
+    let BidAsk {
+        time,
+        bid_price,
+        ask_price,
+        bid_size,
+        ask_size,
+        bid_ask_attribute,
+    } = BidAsk::default();
+    assert_eq!(time, OffsetDateTime::UNIX_EPOCH);
+    assert_eq!((bid_price, ask_price, bid_size, ask_size), (0.0, 0.0, 0.0, 0.0));
+    let BidAskAttribute { bid_past_low, ask_past_high } = bid_ask_attribute;
+    assert!(!bid_past_low && !ask_past_high);
+}
+
+#[test]
+fn mid_point_default_is_zero_at_epoch() {
+    let MidPoint { time, mid_point } = MidPoint::default();
+    assert_eq!((time, mid_point), (OffsetDateTime::UNIX_EPOCH, 0.0));
+}
+
+#[test]
+fn bar_default_is_zero_at_epoch() {
+    let Bar {
+        date,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        wap,
+        count,
+    } = Bar::default();
+    assert_eq!(date, OffsetDateTime::UNIX_EPOCH);
+    assert_eq!((open, high, low, close, volume, wap, count), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0));
+}
+
+#[test]
+fn trade_default_is_zero_at_epoch_with_empty_strings() {
+    let Trade {
+        time,
+        price,
+        size,
+        trade_attribute,
+        exchange,
+        special_conditions,
+    } = Trade::default();
+    assert_eq!(time, OffsetDateTime::UNIX_EPOCH);
+    assert_eq!((price, size), (0.0, 0.0));
+    let TradeAttribute { past_limit, unreported } = trade_attribute;
+    assert!(!past_limit && !unreported);
+    assert_eq!((exchange.as_str(), special_conditions.as_str()), ("", ""));
+}

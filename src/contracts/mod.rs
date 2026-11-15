@@ -593,8 +593,13 @@ pub struct DeltaNeutralContract {
 }
 
 /// ContractDetails provides extended contract details.
+///
+/// `#[non_exhaustive]`: TWS sends fields not decoded yet (`min_algo_size`, price and size
+/// precision, event-contract details), so fields will be added. Outside this crate, start from
+/// [`ContractDetails::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ContractDetails {
     /// A fully-defined Contract object.
     pub contract: Contract,
@@ -759,11 +764,9 @@ impl ContractDetails {
     /// ```
     /// use ibapi::contracts::ContractDetails;
     ///
-    /// let details = ContractDetails {
-    ///     valid_exchanges: vec!["SMART".into(), "IBIS".into()],
-    ///     market_rule_ids: vec![1874, 1943],
-    ///     ..Default::default()
-    /// };
+    /// let mut details = ContractDetails::default();
+    /// details.valid_exchanges = vec!["SMART".into(), "IBIS".into()];
+    /// details.market_rule_ids = vec![1874, 1943];
     /// assert_eq!(details.market_rule_id("IBIS"), Some(1943));
     /// assert_eq!(details.market_rule_id("NYSE"), None);
     /// ```
@@ -794,10 +797,8 @@ impl ContractDetails {
     /// use ibapi::contracts::{ContractDetails, TradingSession};
     /// use time::macros::{date, datetime};
     ///
-    /// let details = ContractDetails {
-    ///     trading_hours: vec!["20261112:1700-20261113:1600".into(), "20261114:CLOSED".into()],
-    ///     ..Default::default()
-    /// };
+    /// let mut details = ContractDetails::default();
+    /// details.trading_hours = vec!["20261112:1700-20261113:1600".into(), "20261114:CLOSED".into()];
     /// assert_eq!(
     ///     details.trading_sessions()?,
     ///     vec![
@@ -822,10 +823,8 @@ impl ContractDetails {
     /// use ibapi::contracts::{ContractDetails, TradingSession};
     /// use time::macros::datetime;
     ///
-    /// let details = ContractDetails {
-    ///     liquid_hours: vec!["20261118:0830-20261118:1600".into(), "20261118:1700-20261119:1600".into()],
-    ///     ..Default::default()
-    /// };
+    /// let mut details = ContractDetails::default();
+    /// details.liquid_hours = vec!["20261118:0830-20261118:1600".into(), "20261118:1700-20261119:1600".into()];
     /// assert_eq!(
     ///     details.liquid_sessions()?,
     ///     vec![

@@ -8,7 +8,7 @@ use crate::messages::ResponseMessage;
 use crate::Error;
 
 use crate::market_data::historical::{
-    Bar, BarTimestamp, HistogramEntry, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint,
+    Bar, BarTimestamp, HistogramEntry, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint, NO_BAR_COUNT,
 };
 
 fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
@@ -110,10 +110,6 @@ pub(crate) fn decode_historical_data_proto(msg: crate::proto::HistoricalData) ->
     }
     Ok(bars)
 }
-
-/// `Bar::count` when the frame carries no `bar_count`, the reference
-/// client's default.
-const NO_BAR_COUNT: i32 = -1;
 
 fn decode_historical_data_bar(b: &proto::HistoricalDataBar) -> Result<Bar, Error> {
     let date = required(b.date.as_deref(), "date", "HistoricalDataBar")?.parse::<BarTimestamp>()?;

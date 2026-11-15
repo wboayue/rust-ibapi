@@ -771,3 +771,31 @@ let es = Contract::futures("ES").expires_in(ContractMonth::new(2026, 12)?).build
 compiler finds every `new` call; it does not find an `expires_on` date that used to pass and now
 fails at `build()`. `ExpirationDate::next_friday()`, `third_friday_of_month()`,
 `ContractMonth::front()` and `next_quarter()` are unchanged.
+
+### 35. `ContractDetails`, `ScannerData` and `TickRequestParameters` are `#[non_exhaustive]`
+
+TWS sends fields on these three messages that the crate doesn't decode yet:
+
+- `ContractDetails`: `min_algo_size`, last price and size precision, and the event-contract
+  fields.
+- `ScannerData`: `distance`, `benchmark` and `projection`.
+- `TickRequestParameters`: last price and size precision.
+
+With the attribute, a 6.x release can add them without another major version. The crate only
+hands these types out; no API takes one as input. The change affects only code that builds one
+itself, usually a test or a mock.
+
+Outside the crate, a struct literal, including `..Default::default()`, no longer compiles. Start
+from `default()` and assign fields:
+
+```rust,ignore
+// 5.x
+let details = ContractDetails { liquid_hours: hours, ..Default::default() };
+
+// 6.0
+let mut details = ContractDetails::default();
+details.liquid_hours = hours;
+```
+
+A destructuring pattern needs a trailing `..`: `let ScannerData { rank, contract_details, .. } =
+row;`. Reading fields is unchanged, and so is serde `Deserialize`. The compiler finds every site.

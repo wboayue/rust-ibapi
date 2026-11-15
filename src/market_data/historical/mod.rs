@@ -184,6 +184,25 @@ pub struct Bar {
     pub count: i32,
 }
 
+/// `Bar::count` when TWS sends no bar count, the reference client's default.
+pub(crate) const NO_BAR_COUNT: i32 = -1;
+
+impl Default for Bar {
+    /// A zero bar with `count` `-1`, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            date: BarTimestamp::DateTime(OffsetDateTime::UNIX_EPOCH),
+            open: 0.0,
+            high: 0.0,
+            low: 0.0,
+            close: 0.0,
+            volume: 0.0,
+            wap: 0.0,
+            count: NO_BAR_COUNT,
+        }
+    }
+}
+
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 /// Request granularity for historical bars.
@@ -460,15 +479,10 @@ impl HistoricalData {
     /// use ibapi::market_data::historical::{Bar, BarTimestamp, HistoricalData};
     /// use time::macros::datetime;
     ///
-    /// let bar = |at| Bar {
-    ///     date: BarTimestamp::DateTime(at),
-    ///     open: 1.0,
-    ///     high: 1.0,
-    ///     low: 1.0,
-    ///     close: 1.0,
-    ///     volume: 0.0,
-    ///     wap: 0.0,
-    ///     count: 0,
+    /// let bar = |at| {
+    ///     let mut bar = Bar::default();
+    ///     bar.date = BarTimestamp::DateTime(at);
+    ///     bar
     /// };
     /// let data = HistoricalData {
     ///     start: datetime!(2026-04-14 0:00 UTC),

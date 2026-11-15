@@ -64,6 +64,20 @@ pub struct BidAsk {
     pub bid_ask_attribute: BidAskAttribute,
 }
 
+impl Default for BidAsk {
+    /// Zero prices and sizes, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            time: OffsetDateTime::UNIX_EPOCH,
+            bid_price: 0.0,
+            ask_price: 0.0,
+            bid_size: 0.0,
+            ask_size: 0.0,
+            bid_ask_attribute: BidAskAttribute::default(),
+        }
+    }
+}
+
 impl StreamDecoder<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
@@ -87,7 +101,7 @@ impl StreamDecoder<BidAsk> for BidAsk {
 
 /// Attributes for bid/ask tick data.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct BidAskAttribute {
     /// Indicates if the bid price is past the daily low.
     pub bid_past_low: bool,
@@ -103,6 +117,16 @@ pub struct MidPoint {
     pub time: OffsetDateTime,
     /// mid point
     pub mid_point: f64,
+}
+
+impl Default for MidPoint {
+    /// A zero midpoint, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            time: OffsetDateTime::UNIX_EPOCH,
+            mid_point: 0.0,
+        }
+    }
 }
 
 impl StreamDecoder<MidPoint> for MidPoint {
@@ -148,6 +172,22 @@ pub struct Bar {
     pub count: i32,
 }
 
+impl Default for Bar {
+    /// A zero bar, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            date: OffsetDateTime::UNIX_EPOCH,
+            open: 0.0,
+            high: 0.0,
+            low: 0.0,
+            close: 0.0,
+            volume: 0.0,
+            wap: 0.0,
+            count: 0,
+        }
+    }
+}
+
 impl StreamDecoder<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
@@ -187,6 +227,20 @@ pub struct Trade {
     pub special_conditions: String,
 }
 
+impl Default for Trade {
+    /// A zero trade with empty exchange and conditions, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            time: OffsetDateTime::UNIX_EPOCH,
+            price: 0.0,
+            size: 0.0,
+            trade_attribute: TradeAttribute::default(),
+            exchange: String::new(),
+            special_conditions: String::new(),
+        }
+    }
+}
+
 impl StreamDecoder<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
@@ -210,7 +264,7 @@ impl StreamDecoder<Trade> for Trade {
 
 /// Attributes for trade tick data.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct TradeAttribute {
     /// Indicates if the trade occurred past the limit price.
     pub past_limit: bool,
@@ -328,9 +382,9 @@ impl_wire_code!(DepthSide {
     Bid = 1,
 });
 
+/// Returns the order book.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-/// Returns the order book.
 pub struct MarketDepth {
     /// The order book's row being updated
     pub position: i32,
@@ -562,8 +616,13 @@ pub struct TickGeneric {
 }
 
 /// Parameters related to tick data requests.
+///
+/// `#[non_exhaustive]`: TWS sends last price and size precision, not decoded yet, so fields
+/// will be added. Outside this crate, start from [`TickRequestParameters::default`] and assign
+/// fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
+#[non_exhaustive]
 pub struct TickRequestParameters {
     /// Minimum tick increment.
     pub min_tick: f64,
