@@ -76,7 +76,7 @@ fn invalid_strike_price() {
     assert_eq!(result.unwrap().value(), 100.0);
 }
 
-/// `strike()` takes any `f64`; `build()` rejects one that is not positive and finite.
+/// `expires_on()` takes any components; `build()` rejects a date that is not on the calendar.
 #[test]
 fn option_build_rejects_invalid_expires_on() {
     let result = Contract::call("AAPL").strike(150.0).expires_on(2026, 2, 30).build();
@@ -92,6 +92,7 @@ fn option_build_rejects_invalid_expires_on() {
     );
 }
 
+/// `strike()` takes any `f64`; `build()` rejects one that is not positive and finite.
 #[test]
 fn option_build_rejects_invalid_strike() {
     let cases = [

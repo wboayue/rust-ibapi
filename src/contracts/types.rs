@@ -452,6 +452,8 @@ impl ContractMonth {
         Self::front_from(now.year() as u16, now.month() as u8, now.day())
     }
 
+    // Builds the struct directly: `current_month` is 1–12 and every month
+    // computed from it stays in range, so `new` has nothing to reject.
     fn front_from(current_year: u16, current_month: u8, current_day: u8) -> Self {
         // Futures typically expire around the third Friday of the month
         // If we're past the 15th, assume current month has expired
@@ -481,6 +483,7 @@ impl ContractMonth {
         Self::next_quarter_from(now.year() as u16, now.month() as u8, now.day())
     }
 
+    // Builds the struct directly: the month is always 3, 6, 9 or 12.
     fn next_quarter_from(current_year: u16, current_month: u8, current_day: u8) -> Self {
         // Find next quarterly month
         let next_quarter_month = match current_month {
