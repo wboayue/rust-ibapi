@@ -309,6 +309,28 @@ fn cancel_order_with_rejects_request_range_id() {
     assert_eq!(request_message_count(&message_bus), 0);
 }
 
+// A bad operator ID fails before anything is sent: on a cancel, TWS would never
+// reply and the order would stick in PendingCancel (#1206).
+#[test]
+fn invalid_ext_operator_is_rejected_before_sending() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let cancel = crate::orders::OrderCancel {
+        ext_operator: "TRADER_7".to_owned(),
+        ..Default::default()
+    };
+    let contract = Contract::stock("AAPL").build();
+    let mut order = order_builder::limit_order(Action::Buy, 1.0, 1.0);
+    order.ext_operator = "TRADER_7".to_owned();
+
+    let rejected = |result: Result<(), Error>, what: &str| assert!(matches!(result, Err(Error::InvalidArgument(_))), "{what}: {result:?}");
+    rejected(client.cancel_order_with(41, &cancel).map(drop), "cancel_order_with");
+    rejected(client.global_cancel_with(&cancel), "global_cancel_with");
+    rejected(client.place_order(41, &contract, &order).map(drop), "place_order");
+    rejected(client.submit_order(41, &contract, &order), "submit_order");
+    assert_eq!(request_message_count(&message_bus), 0);
+}
+
 #[test]
 fn global_cancel_with_sends_operator_fields() {
     let message_bus = Arc::new(MessageBusStub::default());

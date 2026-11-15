@@ -143,7 +143,8 @@ impl Client {
     /// * `Err(Error)` if validation failed or sending failed
     ///
     /// # Errors
-    /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::InvalidArgument`], with nothing sent, for an [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
     ///
     /// # Examples
     ///
@@ -182,6 +183,7 @@ impl Client {
     pub async fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<(), Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
         verify::verify_order(self.server_version(), order)?;
+        verify::verify_order_ext_operator(order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request).await?;
@@ -248,7 +250,8 @@ impl Client {
     /// * `order` - [`crate::orders::Order`] to submit.
     ///
     /// # Errors
-    /// [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::InvalidArgument`], with nothing sent, for an [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
     ///
     /// # Examples
     ///
@@ -281,6 +284,7 @@ impl Client {
     pub async fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
         verify::verify_order(self.server_version(), order)?;
+        verify::verify_order_ext_operator(order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let internal_subscription = self.send_order(checked_id, request).await?;
@@ -341,7 +345,8 @@ impl Client {
     /// [`cancel_order`](Self::cancel_order).
     ///
     /// # Errors
-    /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::InvalidArgument`], with nothing sent, for an [`OrderCancel::ext_operator`] TWS would leave unanswered.
     ///
     /// # Examples
     ///
@@ -371,6 +376,7 @@ impl Client {
     /// ```
     pub async fn cancel_order_with(&self, order_id: impl Into<OrderId>, order_cancel: &OrderCancel) -> Result<Subscription<CancelOrder>, Error> {
         let order_id = order_id.into().checked()?;
+        verify::verify_order_cancel(order_cancel)?;
         let request = encoders::encode_cancel_order(order_id.value(), order_cancel)?;
         let internal_subscription = self.send_order(order_id, request).await?;
 
@@ -403,6 +409,9 @@ impl Client {
     /// Use this over [`global_cancel`](Self::global_cancel) to send an operator ID
     /// ([`OrderCancel::ext_operator`]) or [`OrderCancel::manual_order_indicator`] with the cancel.
     ///
+    /// # Errors
+    /// [`Error::InvalidArgument`], with nothing sent, for an [`OrderCancel::ext_operator`] TWS would leave unanswered.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -419,6 +428,7 @@ impl Client {
     /// }
     /// ```
     pub async fn global_cancel_with(&self, order_cancel: &OrderCancel) -> Result<(), Error> {
+        verify::verify_order_cancel(order_cancel)?;
         let message = encoders::encode_global_cancel(order_cancel)?;
         self.send_message(message).await?;
 
