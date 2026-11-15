@@ -21,7 +21,7 @@ use futures::StreamExt;
 use ibapi::accounts::types::{AccountGroup, AccountId};
 use ibapi::accounts::{AccountSummaryResult, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, LedgerOnly, PositionUpdate, PositionUpdateMulti};
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};
+use ibapi::orders::{Action, Order, OrderStatusKind, OrderType, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::{Client, Error};
 use ibapi_integration_async::connect;
@@ -110,7 +110,7 @@ fn market_order(action: Action) -> Order {
     Order {
         action,
         total_quantity: 1.0,
-        order_type: "MKT".to_string(),
+        order_type: Some(OrderType::Market),
         ..Default::default()
     }
 }

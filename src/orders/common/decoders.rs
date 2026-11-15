@@ -1,8 +1,9 @@
 use crate::messages::ResponseMessage;
 use crate::orders::conditions::TriggerMethod;
+use crate::orders::order_type::is_unset_order_type;
 use crate::orders::{
     Action, Execution, ExecutionSide, Liquidity, OcaType, OptionExerciseType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin,
-    OrderState, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
+    OrderState, OrderType, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
 };
 use crate::orders::{CommissionAndFeesReport, ExecutionData, OrderBound, OrderData, OrderStatus};
 use crate::proto;
@@ -11,6 +12,13 @@ use crate::proto::decoders::{
     s, tag_values,
 };
 use crate::Error;
+
+/// An order-type field as TWS sends it. Absent, empty and `"None"` in any case (how TWS
+/// echoes an unset `adjusted_order_type` or `delta_neutral_order_type`; `docs/wire-facts/orders.md`)
+/// are `None`; a code this version does not list is `Some(OrderType::Unknown(code))`.
+fn parse_order_type(opt: Option<&str>) -> Result<Option<OrderType>, Error> {
+    parse_optional(opt.filter(|code| !is_unset_order_type(code)))
+}
 
 // All originating outgoing-request gates for OpenOrder, CompletedOrder,
 // OrderStatus, ExecutionData, and CommissionAndFeesReport are <= the connection floor.
@@ -129,7 +137,9 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     // Absent means 0 upstream (Order.cs leaves TotalQuantity at decimal's default).
     order.total_quantity = parse_decimal_or_zero(proto.total_quantity.as_deref())?;
     order.display_size = proto.display_size.map(Some).unwrap_or(Some(0));
-    order.order_type = s(&proto.order_type);
+    // Absent, empty and "None" are the unset order type, None; any other code this
+    // crate does not list is preserved as Unknown(raw) rather than ending the stream.
+    order.order_type = parse_order_type(proto.order_type.as_deref())?;
     order.limit_price = optional_f64(proto.lmt_price);
     order.aux_price = optional_f64(proto.aux_price);
     // Absent means the field is unset upstream, not GTZ-style unknown:
@@ -177,7 +187,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.volatility_type = proto.volatility_type.map(VolatilityType::from);
     order.continuous_update = proto.continuous_update.unwrap_or_default();
     order.reference_price_type = proto.reference_price_type.map(ReferencePriceType::from);
-    order.delta_neutral_order_type = s(&proto.delta_neutral_order_type);
+    order.delta_neutral_order_type = parse_order_type(proto.delta_neutral_order_type.as_deref())?;
     order.delta_neutral_aux_price = optional_f64(proto.delta_neutral_aux_price);
     order.delta_neutral_con_id = proto.delta_neutral_con_id.unwrap_or_default();
     order.delta_neutral_open_close = s(&proto.delta_neutral_open_close);
@@ -261,7 +271,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.is_pegged_change_amount_decrease = proto.is_pegged_change_amount_decrease.unwrap_or_default();
     order.reference_change_amount = optional_f64(proto.reference_change_amount);
     order.reference_exchange = s(&proto.reference_exchange_id);
-    order.adjusted_order_type = s(&proto.adjusted_order_type);
+    order.adjusted_order_type = parse_order_type(proto.adjusted_order_type.as_deref())?;
     order.trigger_price = optional_f64(proto.trigger_price);
     order.adjusted_stop_price = optional_f64(proto.adjusted_stop_price);
     order.adjusted_stop_limit_price = optional_f64(proto.adjusted_stop_limit_price);

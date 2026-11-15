@@ -1371,10 +1371,10 @@ advanced / BYO-id path: build an `Order` value directly, allocate the id with
 
 ```rust
 use ibapi::contracts::TagValue;
-use ibapi::orders::{Order, Action};
+use ibapi::orders::{Order, Action, OrderType};
 
 let order = Order {
-    order_type: "LMT".to_string(),
+    order_type: Some(OrderType::Limit),
     action: Action::Buy,
     total_quantity: 1000.0,
     limit_price: Some(150.0),
@@ -1516,12 +1516,12 @@ match result {
 While the fluent API provides a convenient interface for creating common order types, you can also manually construct `Order` objects for more advanced or specialized scenarios. Orders can be submitted using either `place_order` or `submit_order` methods. This is the BYO-id / advanced path; reach for it when you need to set order fields not exposed by the fluent builder.
 
 ```rust
-use ibapi::orders::{Order, Action, TimeInForce};
+use ibapi::orders::{Order, Action, OrderType, TimeInForce};
 
 // Manually construct an order.
 let order = Order {
     action: Action::Buy,
-    order_type: "LMT".to_string(),
+    order_type: Some(OrderType::Limit),
     total_quantity: 100.0,
     limit_price: Some(150.50),
     tif: TimeInForce::GoodTillCanceled,

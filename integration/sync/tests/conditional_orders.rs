@@ -5,7 +5,7 @@ use ibapi::contracts::Contract;
 use ibapi::orders::conditions::{
     ExecutionCondition, MarginCondition, PercentChangeCondition, PriceCondition, TimeCondition, TriggerMethod, VolumeCondition,
 };
-use ibapi::orders::{Action, Order, OrderCondition, PlaceOrder};
+use ibapi::orders::{Action, Order, OrderCondition, OrderType, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Error;
 use ibapi_test::{condition_time_today, ClientId, AAPL_CON_ID, SPY_CON_ID, TSLA_CON_ID};
@@ -65,7 +65,7 @@ fn conditional_limit_order(action: Action, quantity: f64, conditions: Vec<OrderC
     Order {
         action,
         total_quantity: quantity,
-        order_type: "LMT".to_string(),
+        order_type: Some(OrderType::Limit),
         limit_price: Some(limit_price),
         conditions,
         ..Default::default()

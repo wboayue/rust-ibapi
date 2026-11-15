@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("  Symbol: {}", order_data.contract.symbol);
                     println!("  Action: {:?}", order_data.order.action);
                     println!("  Quantity: {}", order_data.order.total_quantity);
-                    println!("  Order Type: {}", order_data.order.order_type);
+                    println!("  Order Type: {:?}", order_data.order.order_type);
                     println!("  Status: {}", order_data.order_state.status);
                 }
                 Ok(OrderUpdate::ExecutionData(exec_data)) => {

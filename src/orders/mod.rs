@@ -40,6 +40,7 @@ pub mod builder;
 /// Order condition types for conditional orders.
 pub mod conditions;
 mod exercise_options_builder;
+mod order_type;
 
 /// Convenience re-export for low-level order builder helpers.
 pub use common::order_builder;
@@ -50,6 +51,7 @@ pub use crate::client::ids::OrderId;
 pub use builder::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBound, Detached, OrderBuilder};
 pub use builder::types::{AttachedOrderIds, BracketOrderIds};
 pub use exercise_options_builder::ExerciseOptionsBuilder;
+pub use order_type::OrderType;
 
 // Re-export condition types and builders
 pub use conditions::{
@@ -94,8 +96,11 @@ pub struct Order {
     /// In completed-order reports, TWS sends the quantity left unfilled instead (`0` once
     /// filled); the size ordered is `total_quantity + filled_quantity`.
     pub total_quantity: f64,
-    /// The order's type.
-    pub order_type: String,
+    /// The order's type. `None` when unset (`Order::default()`, and an order TWS reports
+    /// without one), sent as no order type. A type this version does not list is
+    /// `Some(OrderType::Unknown(code))`.
+    #[serde(default, deserialize_with = "order_type::deserialize_optional_order_type")]
+    pub order_type: Option<OrderType>,
     /// The LIMIT price.
     /// Used for limit, stop-limit and relative orders. In all other cases specify zero. For relative orders with no limit price, also specify zero.
     pub limit_price: Option<f64>,
@@ -285,8 +290,11 @@ pub struct Order {
     ///
     /// See [`ReferencePriceType`] for available options.
     pub reference_price_type: Option<ReferencePriceType>,
-    /// Enter an order type to instruct TWS to submit a delta neutral trade on full or partial execution of the VOL order. VOL orders only. For no hedge delta order to be sent, specify NONE.
-    pub delta_neutral_order_type: String,
+    /// Type of the delta-neutral hedge TWS submits on full or partial execution of the VOL order;
+    /// `None` for no hedge. VOL orders only. TWS echoes an unset value as the string `"None"`,
+    /// which decodes to `None` (`docs/wire-facts/orders.md`).
+    #[serde(default, deserialize_with = "order_type::deserialize_optional_order_type")]
+    pub delta_neutral_order_type: Option<OrderType>,
     /// Use this field to enter a value if the value in the deltaNeutralOrderType field is an order type that requires an Aux price, such as a REL order. VOL orders only.
     pub delta_neutral_aux_price: Option<f64>,
     /// The unique contract identifier specifying the security in Delta Neutral order.
@@ -513,8 +521,11 @@ pub struct Order {
     pub reference_change_amount: Option<f64>,
     /// Pegged-to-benchmark orders: the exchange against which we want to observe the reference contract.
     pub reference_exchange: String,
-    /// Adjusted Stop orders: the parent order will be adjusted to the given type when the adjusted trigger price is penetrated.
-    pub adjusted_order_type: String,
+    /// Adjusted Stop orders: the type the order becomes when `trigger_price` is penetrated;
+    /// `None` for an order without an adjustment. TWS echoes an unset value as the string
+    /// `"None"`, which decodes to `None` (`docs/wire-facts/orders.md`).
+    #[serde(default, deserialize_with = "order_type::deserialize_optional_order_type")]
+    pub adjusted_order_type: Option<OrderType>,
     /// Adjusted Stop orders: specifies the trigger price to execute.
     pub trigger_price: Option<f64>,
     /// Adjusted Stop orders: specifies the price offset for the stop to move in increments.
@@ -574,7 +585,7 @@ impl Default for Order {
             perm_id: 0,
             action: Action::Buy,
             total_quantity: 0.0,
-            order_type: "".to_owned(),
+            order_type: None,
             limit_price: None,
             aux_price: None,
             tif: TimeInForce::Day,
@@ -623,7 +634,7 @@ impl Default for Order {
             volatility_type: None,
             continuous_update: false,
             reference_price_type: None,
-            delta_neutral_order_type: "".to_owned(),
+            delta_neutral_order_type: None,
             delta_neutral_aux_price: None,
             delta_neutral_con_id: 0,
             delta_neutral_settling_firm: "".to_owned(),
@@ -693,7 +704,7 @@ impl Default for Order {
             pegged_change_amount: Some(0.0),
             reference_change_amount: Some(0.0),
             reference_exchange: "".to_owned(),
-            adjusted_order_type: "".to_owned(),
+            adjusted_order_type: None,
             trigger_price: None,
             limit_price_offset: None,
             adjusted_stop_price: None,
@@ -723,7 +734,7 @@ impl Default for Order {
 impl Order {
     /// Returns `true` if delta-neutral parameters are configured.
     pub fn is_delta_neutral(&self) -> bool {
-        !self.delta_neutral_order_type.is_empty()
+        self.delta_neutral_order_type.is_some()
     }
 
     /// Returns `true` if scale order parameters are configured.

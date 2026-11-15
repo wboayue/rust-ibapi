@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -114,7 +114,7 @@ exists.
 
 Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §30;
 `docs/migration-4.0.md` §2, §9, §13–§15; `docs/migration-5.0.md` §1, §7;
-`docs/migration-6.0.md` §2–§3, §6–§7. Consult it rather than re-deriving which fields were converted.
+`docs/migration-6.0.md` §2–§3, §6–§7, §32. Consult it rather than re-deriving which fields were converted.
 
 - #518 — established the pattern (`OrderStatus.status` → `OrderStatusKind`).
 - #556, #558 — the generic `parse_required` / `parse_optional` shape.
@@ -148,3 +148,7 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
 - #1180 — `impl_wire_code!` replaced the hand-written `From` impls on 13 integer-coded enums (11
   two-way pairs, each listing its table twice, and 2 one-way) with one `Variant = code` table per
   enum; `wire_code_docs_match_impl_wire_code_tables` keeps the variant docs in step.
+- #1220 — `Order::order_type`, `adjusted_order_type` and `delta_neutral_order_type` became
+  `Option<OrderType>` (open, `fallback Unknown`). TWS echoes the string `"None"` for an unset
+  adjusted or delta-neutral type (`docs/wire-facts/orders.md`), so the decoder maps `""` and
+  `"None"` to `None` before `FromStr`, which keeps the bare `"None"` as `Unknown("None")`.

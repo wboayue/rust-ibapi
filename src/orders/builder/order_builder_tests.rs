@@ -2,6 +2,7 @@ use super::*;
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::market_data::TradingHours;
 use crate::orders::common::encoders::encode_order;
+use crate::orders::common::test_tables::ALL_ORDER_TYPES;
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
     Action, OcaType, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
@@ -27,7 +28,7 @@ fn stop_order() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).stop(95.50);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "STP");
+    assert_eq!(order.order_type, Some(OrderType::Stop));
     assert_eq!(order.aux_price, Some(95.50));
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
@@ -41,7 +42,7 @@ fn stop_limit_order() {
     let builder = OrderBuilder::new(&client, &contract).buy(200).stop_limit(145.00, 148.00);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "STP LMT");
+    assert_eq!(order.order_type, Some(OrderType::StopLimit));
     assert_eq!(order.aux_price, Some(145.00));
     assert_eq!(order.limit_price, Some(148.00));
 }
@@ -56,7 +57,7 @@ fn trailing_stop_limit() {
         .trailing_stop_limit(TrailBy::Percent(5.0), 95.0, 0.50);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "TRAIL LIMIT");
+    assert_eq!(order.order_type, Some(OrderType::TrailingStopLimit));
     assert_eq!(order.trailing_percent, Some(5.0));
     assert_eq!(order.trail_stop_price, Some(95.0));
     assert_eq!(order.limit_price_offset, Some(0.50));
@@ -70,7 +71,7 @@ fn market_if_touched() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).market_if_touched(99.50);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "MIT");
+    assert_eq!(order.order_type, Some(OrderType::MarketIfTouched));
     assert_eq!(order.aux_price, Some(99.50));
 }
 
@@ -82,7 +83,7 @@ fn limit_if_touched() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).limit_if_touched(99.50, 100.00);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "LIT");
+    assert_eq!(order.order_type, Some(OrderType::LimitIfTouched));
     assert_eq!(order.aux_price, Some(99.50));
     assert_eq!(order.limit_price, Some(100.00));
 }
@@ -95,7 +96,7 @@ fn market_to_limit() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).market_to_limit();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "MTL");
+    assert_eq!(order.order_type, Some(OrderType::MarketToLimit));
 }
 
 #[test]
@@ -106,7 +107,7 @@ fn block_order() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).block(50.00);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "LMT");
+    assert_eq!(order.order_type, Some(OrderType::Limit));
     assert_eq!(order.limit_price, Some(50.00));
     assert!(order.block_order);
 }
@@ -119,7 +120,7 @@ fn relative_order() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).relative(0.05, Some(100.00));
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "REL");
+    assert_eq!(order.order_type, Some(OrderType::Relative));
     assert_eq!(order.aux_price, Some(0.05));
     assert_eq!(order.limit_price, Some(100.00));
 }
@@ -132,7 +133,7 @@ fn passive_relative() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).passive_relative(0.05);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "PASSV REL");
+    assert_eq!(order.order_type, Some(OrderType::PassiveRelative));
     assert_eq!(order.aux_price, Some(0.05));
 }
 
@@ -144,7 +145,7 @@ fn midprice_order() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).midprice(Some(50.00));
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "MIDPRICE");
+    assert_eq!(order.order_type, Some(OrderType::Midprice));
     assert_eq!(order.limit_price, Some(50.00));
 }
 
@@ -156,7 +157,7 @@ fn midprice_order_without_price_cap() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).midprice(None);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "MIDPRICE");
+    assert_eq!(order.order_type, Some(OrderType::Midprice));
     assert_eq!(order.limit_price, None);
 }
 
@@ -168,7 +169,7 @@ fn at_auction() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).at_auction(100.00);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "MTL");
+    assert_eq!(order.order_type, Some(OrderType::MarketToLimit));
     assert_eq!(order.limit_price, Some(100.00));
     assert_eq!(order.tif, TimeInForce::Auction);
 }
@@ -778,7 +779,7 @@ fn custom_order_type() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).order_type(OrderType::PegBest);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "PEG BEST");
+    assert_eq!(order.order_type, Some(OrderType::PegBest));
 }
 
 #[test]
@@ -805,7 +806,7 @@ fn vol_order_type_with_volatility_builds() {
         .volatility(0.15);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "VOL");
+    assert_eq!(order.order_type, Some(OrderType::Volatility));
 }
 
 #[test]
@@ -819,7 +820,7 @@ fn volatility_order_sets_type_figure_and_volatility_type() {
         .build()
         .unwrap();
 
-    assert_eq!(order.order_type, "VOL");
+    assert_eq!(order.order_type, Some(OrderType::Volatility));
     assert_eq!(order.volatility, Some(40.0));
     assert_eq!(order.volatility_type, Some(VolatilityType::Daily));
 
@@ -908,14 +909,14 @@ fn bracket_order_build_details() {
     // Verify parent order details
     let parent = &orders[0];
     assert_eq!(parent.action, Action::Buy);
-    assert_eq!(parent.order_type, "LMT");
+    assert_eq!(parent.order_type, Some(OrderType::Limit));
     assert_eq!(parent.limit_price, Some(50.0));
     assert!(!parent.transmit);
 
     // Verify take profit details
     let tp = &orders[1];
     assert_eq!(tp.action, Action::Sell); // Reverse of Buy
-    assert_eq!(tp.order_type, "LMT");
+    assert_eq!(tp.order_type, Some(OrderType::Limit));
     assert_eq!(tp.limit_price, Some(55.0));
     assert_eq!(tp.parent_id, parent.order_id);
     assert!(!tp.transmit);
@@ -923,7 +924,7 @@ fn bracket_order_build_details() {
     // Verify stop loss details
     let sl = &orders[2];
     assert_eq!(sl.action, Action::Sell); // Reverse of Buy
-    assert_eq!(sl.order_type, "STP");
+    assert_eq!(sl.order_type, Some(OrderType::Stop));
     assert_eq!(sl.aux_price, Some(45.0));
     assert_eq!(sl.parent_id, parent.order_id);
     assert!(sl.transmit);
@@ -1172,9 +1173,9 @@ fn bracket_order_types() {
     let orders = bracket.build().unwrap();
 
     // Check order types
-    assert_eq!(orders[0].order_type, "LMT"); // Parent is limit
-    assert_eq!(orders[1].order_type, "LMT"); // Take profit is limit
-    assert_eq!(orders[2].order_type, "STP"); // Stop loss is stop
+    assert_eq!(orders[0].order_type, Some(OrderType::Limit)); // Parent is limit
+    assert_eq!(orders[1].order_type, Some(OrderType::Limit)); // Take profit is limit
+    assert_eq!(orders[2].order_type, Some(OrderType::Stop)); // Stop loss is stop
 }
 
 #[test]
@@ -1250,14 +1251,14 @@ fn bracket_order_market_entry_buy() {
     // Verify parent order is market order
     let parent = &orders[0];
     assert_eq!(parent.action, Action::Buy);
-    assert_eq!(parent.order_type, "MKT");
+    assert_eq!(parent.order_type, Some(OrderType::Market));
     assert_eq!(parent.limit_price, None);
     assert!(!parent.transmit);
 
     // Verify take profit details
     let tp = &orders[1];
     assert_eq!(tp.action, Action::Sell);
-    assert_eq!(tp.order_type, "LMT");
+    assert_eq!(tp.order_type, Some(OrderType::Limit));
     assert_eq!(tp.limit_price, Some(55.0));
     assert_eq!(tp.parent_id, parent.order_id);
     assert!(!tp.transmit);
@@ -1265,7 +1266,7 @@ fn bracket_order_market_entry_buy() {
     // Verify stop loss details
     let sl = &orders[2];
     assert_eq!(sl.action, Action::Sell);
-    assert_eq!(sl.order_type, "STP");
+    assert_eq!(sl.order_type, Some(OrderType::Stop));
     assert_eq!(sl.aux_price, Some(45.0));
     assert_eq!(sl.parent_id, parent.order_id);
     assert!(sl.transmit);
@@ -1289,7 +1290,7 @@ fn bracket_order_market_entry_sell() {
     // Verify parent order is market order with Sell action
     let parent = &orders[0];
     assert_eq!(parent.action, Action::Sell);
-    assert_eq!(parent.order_type, "MKT");
+    assert_eq!(parent.order_type, Some(OrderType::Market));
 
     // Verify child orders have reversed action
     let tp = &orders[1];
@@ -1367,7 +1368,7 @@ fn market_on_close() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).market_on_close();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "MOC");
+    assert_eq!(order.order_type, Some(OrderType::MarketOnClose));
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
     assert_eq!(order.limit_price, None);
@@ -1381,7 +1382,7 @@ fn limit_on_close() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).limit_on_close(50.50);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "LOC");
+    assert_eq!(order.order_type, Some(OrderType::LimitOnClose));
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
     assert_eq!(order.limit_price, Some(50.50));
@@ -1395,7 +1396,7 @@ fn market_on_open() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).market_on_open();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "MKT");
+    assert_eq!(order.order_type, Some(OrderType::Market));
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
     assert_eq!(order.tif, TimeInForce::OnOpen);
@@ -1410,7 +1411,7 @@ fn limit_on_open() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).limit_on_open(50.50);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "LMT");
+    assert_eq!(order.order_type, Some(OrderType::Limit));
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
     assert_eq!(order.limit_price, Some(50.50));
@@ -1425,7 +1426,7 @@ fn market_with_protection() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).market_with_protection();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "MKT PRT");
+    assert_eq!(order.order_type, Some(OrderType::MarketWithProtection));
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
     assert_eq!(order.limit_price, None);
@@ -1440,7 +1441,7 @@ fn stop_with_protection() {
     let builder = OrderBuilder::new(&client, &contract).sell(100).stop_with_protection(95.00);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "STP PRT");
+    assert_eq!(order.order_type, Some(OrderType::StopWithProtection));
     assert_eq!(order.action, Action::Sell);
     assert_eq!(order.total_quantity, 100.0);
     assert_eq!(order.aux_price, Some(95.00));
@@ -1454,7 +1455,7 @@ fn market_on_close_sell() {
     let builder = OrderBuilder::new(&client, &contract).sell(200).market_on_close();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "MOC");
+    assert_eq!(order.order_type, Some(OrderType::MarketOnClose));
     assert_eq!(order.action, Action::Sell);
     assert_eq!(order.total_quantity, 200.0);
 }
@@ -1467,7 +1468,7 @@ fn limit_on_close_sell() {
     let builder = OrderBuilder::new(&client, &contract).sell(200).limit_on_close(100.00);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "LOC");
+    assert_eq!(order.order_type, Some(OrderType::LimitOnClose));
     assert_eq!(order.action, Action::Sell);
     assert_eq!(order.total_quantity, 200.0);
     assert_eq!(order.limit_price, Some(100.00));
@@ -1481,7 +1482,7 @@ fn stop_with_protection_buy() {
     let builder = OrderBuilder::new(&client, &contract).buy(50).stop_with_protection(105.00);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.order_type, "STP PRT");
+    assert_eq!(order.order_type, Some(OrderType::StopWithProtection));
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 50.0);
     assert_eq!(order.aux_price, Some(105.00));
@@ -1757,7 +1758,7 @@ fn sell_short_sets_action_and_quantity() {
     assert_eq!(order.action, Action::SellShort);
     assert_eq!(order.action.to_string(), "SSHORT");
     assert_eq!(order.total_quantity, 100.0);
-    assert_eq!(order.order_type, "LMT");
+    assert_eq!(order.order_type, Some(OrderType::Limit));
     assert_eq!(order.limit_price, Some(50.0));
 }
 
@@ -1771,7 +1772,7 @@ fn sell_long_sets_action_and_quantity() {
     assert_eq!(order.action, Action::SellLong);
     assert_eq!(order.action.to_string(), "SLONG");
     assert_eq!(order.total_quantity, 75.0);
-    assert_eq!(order.order_type, "MKT");
+    assert_eq!(order.order_type, Some(OrderType::Market));
 }
 
 #[test]
@@ -1885,7 +1886,7 @@ fn detached_builder_validates() {
 #[test]
 fn trailing_stop_by_amount_sets_aux_price() {
     let order = Order::builder().sell(100).trailing_stop(TrailBy::Amount(2.0), 95.0).build().unwrap();
-    assert_eq!(order.order_type, "TRAIL");
+    assert_eq!(order.order_type, Some(OrderType::TrailingStop));
     assert_eq!(order.aux_price, Some(2.0));
     assert_eq!(order.trailing_percent, None);
     assert_eq!(order.trail_stop_price, Some(95.0));
@@ -1906,7 +1907,7 @@ fn trailing_stop_limit_by_amount() {
         .build()
         .unwrap();
 
-    assert_eq!(order.order_type, "TRAIL LIMIT");
+    assert_eq!(order.order_type, Some(OrderType::TrailingStopLimit));
     assert_eq!(order.aux_price, Some(1.0));
     assert_eq!(order.limit_price_offset, Some(0.25));
     assert_eq!(order.trail_stop_price, Some(105.0));
@@ -2065,7 +2066,7 @@ fn pegged_to_midpoint_type_does_not_require_aux() {
 fn peg_best_sends_the_c_sharp_shape() {
     let base = Order {
         action: Action::Buy,
-        order_type: "PEG BEST".to_owned(),
+        order_type: Some(OrderType::PegBest),
         total_quantity: 100.0,
         limit_price: Some(111.11),
         not_held: true,
@@ -2121,7 +2122,7 @@ fn peg_mid_sends_the_c_sharp_shape() {
     let order = Order::builder().buy(100).peg_mid(111.11, UP_TO_MID).build().unwrap();
     let expected = Order {
         action: Action::Buy,
-        order_type: "PEG MID".to_owned(),
+        order_type: Some(OrderType::PeggedToMidpoint),
         total_quantity: 100.0,
         limit_price: Some(111.11),
         not_held: true,
@@ -2182,40 +2183,6 @@ fn peg_mid_forms_replace_each_other() {
     assert_eq!(ibkrats_form.mid_offset_at_whole, Some(0.02));
 }
 
-// Every variant; add a new one here and in `sent_price_fields`.
-const ALL_ORDER_TYPES: [OrderType; 30] = [
-    OrderType::Market,
-    OrderType::Limit,
-    OrderType::Stop,
-    OrderType::StopLimit,
-    OrderType::TrailingStop,
-    OrderType::TrailingStopLimit,
-    OrderType::MarketOnClose,
-    OrderType::LimitOnClose,
-    OrderType::MarketOnOpen,
-    OrderType::LimitOnOpen,
-    OrderType::AtAuction,
-    OrderType::MarketIfTouched,
-    OrderType::LimitIfTouched,
-    OrderType::MarketWithProtection,
-    OrderType::StopWithProtection,
-    OrderType::MarketToLimit,
-    OrderType::Midprice,
-    OrderType::PeggedToMarket,
-    OrderType::PeggedToStock,
-    OrderType::PeggedToMidpoint,
-    OrderType::PeggedToBenchmark,
-    OrderType::PegBest,
-    OrderType::Relative,
-    OrderType::PassiveRelative,
-    OrderType::Volatility,
-    OrderType::BoxTop,
-    OrderType::ComboLimit,
-    OrderType::ComboMarket,
-    OrderType::RelativeLimitCombo,
-    OrderType::RelativeMarketCombo,
-];
-
 /// A builder that sets every price field and every field a type requires, then switches to
 /// `order_type`.
 fn every_price_field(order_type: OrderType) -> OrderBuilder<Detached> {
@@ -2244,25 +2211,47 @@ const PEG_MID: MidOffsets = MidOffsets {
 };
 
 /// Which price fields each type sends: (limit_price, aux_price, trail fields), per C#
-/// `OrderSamples.cs` plus `OrderType::uses_*` for PEG BEST and the REL combos. Exhaustive, so a
-/// new `OrderType` variant needs a row.
+/// `OrderSamples.cs` plus `OrderType::uses_*` for PEG BEST, MTL and the REL combos. Exhaustive, so
+/// a new `OrderType` variant needs a row.
 fn sent_price_fields(order_type: &OrderType) -> (bool, bool, bool) {
     use OrderType::*;
     match order_type {
-        Limit | LimitOnClose | LimitOnOpen | AtAuction | Midprice | PegBest | ComboLimit => (true, false, false),
+        Limit | LimitOnClose | MarketToLimit | Midprice | PegBest => (true, false, false),
         StopLimit | LimitIfTouched | Relative | PeggedToMidpoint | RelativeLimitCombo => (true, true, false),
         Stop | StopWithProtection | MarketIfTouched | PassiveRelative | PeggedToMarket | RelativeMarketCombo => (false, true, false),
         TrailingStop | TrailingStopLimit => (false, true, true),
-        Market | MarketOnClose | MarketOnOpen | MarketWithProtection | MarketToLimit | PeggedToStock | PeggedToBenchmark | Volatility | BoxTop
-        | ComboMarket => (false, false, false),
+        Market | MarketOnClose | MarketWithProtection | PeggedToStock | PeggedToBenchmark | Volatility | BoxTop => (false, false, false),
+        // Not in ALL_ORDER_TYPES; see unlisted_type_sends_every_price_the_caller_set.
+        Unknown(_) => (true, true, true),
     }
+}
+
+/// The builder can't know which prices an unlisted code takes, so it sends all of them.
+#[test]
+fn unlisted_type_sends_every_price_the_caller_set() {
+    let snap_mid = || OrderType::Unknown("SNAP MID".into());
+    let order = every_price_field(snap_mid()).build().unwrap();
+    assert_eq!(order.order_type, Some(snap_mid()));
+    assert_eq!(order.limit_price, Some(100.0));
+    assert_eq!(order.aux_price, Some(98.0));
+    assert_eq!(order.trailing_percent, Some(5.0));
+    assert_eq!(order.trail_stop_price, Some(95.0));
+    assert_eq!(order.limit_price_offset, Some(0.5));
+
+    // With no aux price set, the stop price goes out as aux.
+    let order = Order::builder().buy(1).stop(99.0).order_type(snap_mid()).build().unwrap();
+    assert_eq!(order.aux_price, Some(99.0));
+
+    // Nothing set, nothing sent, and no price is required.
+    let order = Order::builder().buy(1).order_type(snap_mid()).build().unwrap();
+    assert_eq!((order.limit_price, order.aux_price, order.trailing_percent), (None, None, None));
 }
 
 #[test]
 fn each_type_sends_exactly_the_price_fields_it_uses() {
-    for order_type in ALL_ORDER_TYPES {
+    for (order_type, _) in ALL_ORDER_TYPES {
         let order = every_price_field(order_type.clone()).build().unwrap();
-        let (limit, aux, trail) = sent_price_fields(&order_type);
+        let (limit, aux, trail) = sent_price_fields(order_type);
         // Stop types send `.stop(99.0)` as aux; the rest send `.market_if_touched(98.0)`'s trigger.
         let expected_aux = if order_type.uses_stop_price() { 99.0 } else { 98.0 };
 
@@ -2272,13 +2261,13 @@ fn each_type_sends_exactly_the_price_fields_it_uses() {
         assert_eq!(order.trail_stop_price, trail.then_some(95.0), "{order_type:?}");
         assert_eq!(
             order.limit_price_offset,
-            (order_type == OrderType::TrailingStopLimit).then_some(0.5),
+            (*order_type == OrderType::TrailingStopLimit).then_some(0.5),
             "{order_type:?}"
         );
 
         // IBKRATS fields: compete fields on PEG BEST only; mid offsets on PEG MID (from
         // `peg_mid`) and on PEG BEST up to the midpoint.
-        let peg_best = order_type == OrderType::PegBest;
+        let peg_best = *order_type == OrderType::PegBest;
         let mid_offsets = match order_type {
             OrderType::PegBest => Some(UP_TO_MID),
             OrderType::PeggedToMidpoint => Some(PEG_MID),
@@ -2291,37 +2280,49 @@ fn each_type_sends_exactly_the_price_fields_it_uses() {
     }
 }
 
-/// The on-open and auction types send a plain `MKT` / `LMT` / `MTL`; the time in force is what
-/// makes them, so `.order_type(..)` sets it as their named setters do.
+/// The on-open and auction orders are a plain `MKT` / `LMT` / `MTL` whose time in force is what
+/// makes them; `.order_type(..)` sets no time in force, the named setters set both.
 #[test]
-fn order_type_sets_the_time_in_force_its_type_implies() {
-    for order_type in ALL_ORDER_TYPES {
+fn order_type_leaves_the_time_in_force_alone() {
+    for (order_type, _) in ALL_ORDER_TYPES {
         let order = every_price_field(order_type.clone()).build().unwrap();
-        let expected = match order_type {
-            OrderType::MarketOnOpen | OrderType::LimitOnOpen => TimeInForce::OnOpen,
-            OrderType::AtAuction => TimeInForce::Auction,
-            _ => TimeInForce::Day,
-        };
-        assert_eq!(order.tif, expected, "{order_type:?}");
+        assert_eq!(order.tif, TimeInForce::Day, "{order_type:?}");
     }
 
-    let order = Order::builder().buy(100).order_type(OrderType::MarketOnOpen).build().unwrap();
+    let order = Order::builder()
+        .buy(100)
+        .order_type(OrderType::Market)
+        .time_in_force(TimeInForce::OnOpen)
+        .build()
+        .unwrap();
     assert_eq!(order, Order::builder().buy(100).market_on_open().build().unwrap());
+    assert_eq!((order.order_type, order.tif), (Some(OrderType::Market), TimeInForce::OnOpen));
+
+    let order = Order::builder().buy(100).limit_on_open(50.0).build().unwrap();
+    assert_eq!((order.order_type, order.tif), (Some(OrderType::Limit), TimeInForce::OnOpen));
+
+    let order = Order::builder().buy(100).at_auction(50.0).build().unwrap();
+    assert_eq!((order.order_type, order.tif), (Some(OrderType::MarketToLimit), TimeInForce::Auction));
+    assert_eq!(order.limit_price, Some(50.0), "an auction order carries its limit price");
+
+    let order = Order::builder().buy(100).at_auction(50.0).good_till_canceled().build().unwrap();
+    assert_eq!(order.limit_price, Some(50.0), "a later time in force keeps the auction price");
+
+    let order = Order::builder().buy(100).limit(50.0).market_to_limit().build().unwrap();
+    assert_eq!(order.limit_price, None, "market_to_limit() clears an earlier limit price");
 
     let order = Order::builder()
         .buy(100)
-        .order_type(OrderType::MarketOnOpen)
-        .good_till_canceled()
+        .limit(50.0)
+        .order_type(OrderType::MarketToLimit)
         .build()
         .unwrap();
+    assert_eq!(order.limit_price, Some(50.0), "the generic setter keeps an earlier limit price for MTL");
+
+    let order = Order::builder().buy(100).market_on_open().good_till_canceled().build().unwrap();
     assert_eq!(order.tif, TimeInForce::GoodTillCanceled, "a later time-in-force setter wins");
 
-    let order = Order::builder()
-        .buy(100)
-        .good_till_canceled()
-        .order_type(OrderType::MarketOnOpen)
-        .build()
-        .unwrap();
+    let order = Order::builder().buy(100).good_till_canceled().market_on_open().build().unwrap();
     assert_eq!(order.tif, TimeInForce::OnOpen, "replaces an earlier time in force");
 }
 
@@ -2355,7 +2356,7 @@ fn pegged_to_stock_with_reference_price() {
         .unwrap();
     let expected = Order {
         action: Action::Buy,
-        order_type: "PEG STK".to_owned(),
+        order_type: Some(OrderType::PeggedToStock),
         total_quantity: 1.0,
         delta: Some(0.5),
         stock_ref_price: Some(150.0),
@@ -2370,7 +2371,7 @@ fn pegged_to_stock_without_reference_price() {
     let order = Order::builder().buy(1).pegged_to_stock(0.5, 2.10).build().unwrap();
     let expected = Order {
         action: Action::Buy,
-        order_type: "PEG STK".to_owned(),
+        order_type: Some(OrderType::PeggedToStock),
         total_quantity: 1.0,
         delta: Some(0.5),
         starting_price: Some(2.10),
@@ -2419,7 +2420,7 @@ fn pegged_to_benchmark_sets_every_field() {
         .unwrap();
     let expected = Order {
         action: Action::Buy,
-        order_type: "PEG BENCH".to_owned(),
+        order_type: Some(OrderType::PeggedToBenchmark),
         total_quantity: 100.0,
         starting_price: Some(50.0),
         is_pegged_change_amount_decrease: true,

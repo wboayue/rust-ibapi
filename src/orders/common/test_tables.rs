@@ -3,7 +3,7 @@
 use crate::common::test_utils::helpers::{proto_error_response, proto_response};
 use crate::contracts::{Contract, SecurityType};
 use crate::messages::{IncomingMessages, ResponseMessage, ORDER_PRESET_TIF_CODE};
-use crate::orders::{OptionExerciseType, Order, OrderStatusKind, PlaceOrder, WhatIfType};
+use crate::orders::{OptionExerciseType, Order, OrderStatusKind, OrderType, PlaceOrder, WhatIfType};
 use crate::server_versions;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{execution_data, open_order, order_status};
@@ -246,3 +246,34 @@ pub(crate) fn assert_exercise_live_items(items: &[SubscriptionItem<PlaceOrder>],
     };
     assert_eq!(last.filled, 1.0);
 }
+
+/// Every modeled `OrderType` with its wire code. `all_order_types_covers_every_variant`
+/// (`src/orders/tests.rs`) fails to compile when `OrderType` gains a variant, and fails when
+/// this table lacks one; the builder tests drive the same list through `build()`.
+pub(crate) const ALL_ORDER_TYPES: &[(OrderType, &str)] = &[
+    (OrderType::Market, "MKT"),
+    (OrderType::Limit, "LMT"),
+    (OrderType::Stop, "STP"),
+    (OrderType::StopLimit, "STP LMT"),
+    (OrderType::TrailingStop, "TRAIL"),
+    (OrderType::TrailingStopLimit, "TRAIL LIMIT"),
+    (OrderType::MarketOnClose, "MOC"),
+    (OrderType::LimitOnClose, "LOC"),
+    (OrderType::MarketIfTouched, "MIT"),
+    (OrderType::LimitIfTouched, "LIT"),
+    (OrderType::MarketWithProtection, "MKT PRT"),
+    (OrderType::StopWithProtection, "STP PRT"),
+    (OrderType::MarketToLimit, "MTL"),
+    (OrderType::Midprice, "MIDPRICE"),
+    (OrderType::PeggedToMarket, "PEG MKT"),
+    (OrderType::PeggedToStock, "PEG STK"),
+    (OrderType::PeggedToMidpoint, "PEG MID"),
+    (OrderType::PeggedToBenchmark, "PEG BENCH"),
+    (OrderType::PegBest, "PEG BEST"),
+    (OrderType::Relative, "REL"),
+    (OrderType::PassiveRelative, "PASSV REL"),
+    (OrderType::Volatility, "VOL"),
+    (OrderType::BoxTop, "BOX TOP"),
+    (OrderType::RelativeLimitCombo, "REL + LMT"),
+    (OrderType::RelativeMarketCombo, "REL + MKT"),
+];
