@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::wire_enum::{check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
-use time::macros::date;
+use time::macros::{date, datetime};
 use time::{Date, Month};
 
 /// Round-trip the `PartialEq<str>` / `PartialEq<&str>` impls in both
@@ -516,4 +516,38 @@ fn expiration_date_and_contract_month_order_chronologically() {
     assert!(ExpirationDate::new(2026, 12, 18).unwrap() < ExpirationDate::new(2027, 1, 15).unwrap());
     assert!(ExpirationDate::new(2026, 3, 31).unwrap() < ExpirationDate::new(2026, 12, 1).unwrap());
     assert!(ContractMonth::new(2026, 12).unwrap() < ContractMonth::new(2027, 1).unwrap());
+}
+
+#[test]
+fn trading_session_parses_open_and_closed() {
+    let cases = [
+        (
+            "overnight session",
+            "20261112:1700-20261113:1600",
+            TradingSession::Open {
+                start: datetime!(2026-11-12 17:00),
+                end: datetime!(2026-11-13 16:00),
+            },
+        ),
+        ("closed date", "20261114:CLOSED", TradingSession::Closed(date!(2026 - 11 - 14))),
+    ];
+    for (label, raw, expected) in cases {
+        assert_eq!(raw.parse::<TradingSession>().unwrap(), expected, "{label}");
+    }
+}
+
+#[test]
+fn trading_session_rejects_malformed_entries() {
+    let cases = [
+        ("pre-970 form, close without date", "20090507:0700-1830"),
+        ("no close", "20261113:0830"),
+        ("short date", "2026111:0830-20261113:1600"),
+        ("hour out of range", "20261113:2500-20261113:1600"),
+        ("invalid closed date", "20261332:CLOSED"),
+        ("unknown keyword", "20261113:OPEN"),
+    ];
+    for (label, raw) in cases {
+        let err = raw.parse::<TradingSession>().unwrap_err();
+        assert!(matches!(&err, Error::Parse(_, value, _) if value == raw), "{label}: {err:?}");
+    }
 }

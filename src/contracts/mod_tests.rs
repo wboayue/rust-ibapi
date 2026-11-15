@@ -462,3 +462,74 @@ fn market_rule_id_by_exchange() {
         assert_eq!(details.market_rule_id(exchange), expected, "{label}");
     }
 }
+
+fn hours(raw: &str) -> Vec<String> {
+    raw.split(';').map(str::to_string).collect()
+}
+
+#[test]
+fn trading_sessions_parses_live_trading_hours() {
+    use time::macros::{date, datetime};
+
+    // ES 202612 contract details, paper TWS, server 223, 2026-11-13.
+    let details = ContractDetails {
+        trading_hours: hours("20261112:1700-20261113:1600;20261114:CLOSED;20261115:1700-20261116:1600"),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        details.trading_sessions().unwrap(),
+        vec![
+            TradingSession::Open {
+                start: datetime!(2026-11-12 17:00),
+                end: datetime!(2026-11-13 16:00),
+            },
+            TradingSession::Closed(date!(2026 - 11 - 14)),
+            TradingSession::Open {
+                start: datetime!(2026-11-15 17:00),
+                end: datetime!(2026-11-16 16:00),
+            },
+        ]
+    );
+}
+
+#[test]
+fn liquid_sessions_parses_live_liquid_hours() {
+    use time::macros::{date, datetime};
+
+    // Same capture: 2026-11-15 is CLOSED here though trading_hours trades it, and
+    // 2026-11-18 holds two sessions.
+    let details = ContractDetails {
+        liquid_hours: hours("20261115:CLOSED;20261118:0830-20261118:1600;20261118:1700-20261119:1600"),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        details.liquid_sessions().unwrap(),
+        vec![
+            TradingSession::Closed(date!(2026 - 11 - 15)),
+            TradingSession::Open {
+                start: datetime!(2026-11-18 08:30),
+                end: datetime!(2026-11-18 16:00),
+            },
+            TradingSession::Open {
+                start: datetime!(2026-11-18 17:00),
+                end: datetime!(2026-11-19 16:00),
+            },
+        ]
+    );
+}
+
+#[test]
+fn sessions_skip_empty_entries_and_fail_on_one_bad_entry() {
+    let details = ContractDetails {
+        // EUR.USD IDEALPRO trading_hours opens with an empty entry (server 226, 2026-11-15).
+        trading_hours: hours(";20261115:1715-20261116:1700;"),
+        liquid_hours: hours("20261113:0830-20261113:1600;20090507:0700-1830"),
+        ..Default::default()
+    };
+
+    assert_eq!(details.trading_sessions().unwrap().len(), 1);
+    assert_eq!(ContractDetails::default().trading_sessions().unwrap(), vec![]);
+    assert!(matches!(details.liquid_sessions(), Err(Error::Parse(_, value, _)) if value == "20090507:0700-1830"));
+}

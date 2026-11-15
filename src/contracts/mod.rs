@@ -623,9 +623,18 @@ pub struct ContractDetails {
     pub subcategory: String,
     /// The time zone for the trading hours of the product. For example, EST.
     pub time_zone_id: String,
-    /// The trading hours of the product. This value will contain the trading hours of the current day as well as the next's. For example, 20090507:0700-1830,1830-2330;20090508:CLOSED. In TWS versions 965+ there is an option in the Global Configuration API settings to return 1 month of trading hours. In TWS version 970+, the format includes the date of the closing time to clarify potential ambiguity, ex: 20180323:0400-20180323:2000;20180326:0400-20180326:2000 The trading hours will correspond to the hours for the product on the associated exchange. The same instrument can have different hours on different exchanges.
+    /// The trading hours of the product on the requested exchange, one entry per session, in
+    /// wall clock time in [`time_zone_id`](Self::time_zone_id). TWS 970 and later send
+    /// `YYYYMMDD:HHMM-YYYYMMDD:HHMM` or `YYYYMMDD:CLOSED`, covering about a week from the
+    /// request date (a TWS setting extends it to a month), e.g.
+    /// `["20261112:1700-20261113:1600", "20261114:CLOSED"]`. The same instrument can have
+    /// different hours on different exchanges. [`trading_sessions`](Self::trading_sessions)
+    /// parses them.
     pub trading_hours: Vec<String>,
-    /// The liquid hours of the product. This value will contain the liquid hours (regular trading hours) of the contract on the specified exchange. Format for TWS versions until 969: 20090507:0700-1830,1830-2330;20090508:CLOSED. In TWS versions 965+ there is an option in the Global Configuration API settings to return 1 month of trading hours. In TWS v970 and above, the format includes the date of the closing time to clarify potential ambiguity, e.g. 20180323:0930-20180323:1600;20180326:0930-20180326:1600.
+    /// The liquid hours (regular trading hours) of the product on the requested exchange, in the
+    /// same form as [`trading_hours`](Self::trading_hours). A date can hold two sessions, and a
+    /// date the full session trades can be `CLOSED` here.
+    /// [`liquid_sessions`](Self::liquid_sessions) parses them.
     pub liquid_hours: Vec<String>,
     /// Contains the Economic Value Rule name and the respective optional argument. The two values should be separated by a colon. For example, aussieBond:YearsToExpiration=3. When the optional argument is not present, the first value will be followed by a colon.
     pub ev_rule: String,
@@ -770,7 +779,9 @@ impl ContractDetails {
 
     /// The sessions of [`trading_hours`](Self::trading_hours), in the order TWS lists them.
     ///
-    /// Times are wall clock in [`time_zone_id`](Self::time_zone_id); see [`TradingSession`].
+    /// Times are wall clock in [`time_zone_id`](Self::time_zone_id); see [`TradingSession`]. The
+    /// list covers about a week from the request date, so a date outside it (a distant expiry)
+    /// has no session here.
     ///
     /// # Errors
     ///
@@ -797,14 +808,46 @@ impl ContractDetails {
     /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn trading_sessions(&self) -> Result<Vec<TradingSession>, Error> {
-        common::trading_sessions::parse_trading_sessions(&self.trading_hours)
+        parse_sessions(&self.trading_hours)
     }
 
     /// The sessions of [`liquid_hours`](Self::liquid_hours) (regular trading hours), in the
     /// order TWS lists them. Same forms and errors as [`trading_sessions`](Self::trading_sessions).
+    ///
+    /// # Examples
+    ///
+    /// A date can hold two liquid sessions:
+    ///
+    /// ```
+    /// use ibapi::contracts::{ContractDetails, TradingSession};
+    /// use time::macros::datetime;
+    ///
+    /// let details = ContractDetails {
+    ///     liquid_hours: vec!["20261118:0830-20261118:1600".into(), "20261118:1700-20261119:1600".into()],
+    ///     ..Default::default()
+    /// };
+    /// assert_eq!(
+    ///     details.liquid_sessions()?,
+    ///     vec![
+    ///         TradingSession::Open { start: datetime!(2026-11-18 08:30), end: datetime!(2026-11-18 16:00) },
+    ///         TradingSession::Open { start: datetime!(2026-11-18 17:00), end: datetime!(2026-11-19 16:00) },
+    ///     ]
+    /// );
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
     pub fn liquid_sessions(&self) -> Result<Vec<TradingSession>, Error> {
-        common::trading_sessions::parse_trading_sessions(&self.liquid_hours)
+        parse_sessions(&self.liquid_hours)
     }
+}
+
+/// Parses `trading_hours` / `liquid_hours` entries, skipping empty ones.
+fn parse_sessions(entries: &[String]) -> Result<Vec<TradingSession>, Error> {
+    entries
+        .iter()
+        .map(|entry| entry.trim())
+        .filter(|entry| !entry.is_empty())
+        .map(str::parse)
+        .collect()
 }
 
 /// Fund distribution policy indicator (`fundDistributionPolicyIndicator`).
