@@ -676,6 +676,30 @@ match details.contract.last_trade_date_or_contract_month {
 - Serialized, the field is the wire string as before (`"20261218"`); an unset field is `null` instead of `""`. Deserializing still reads `""` as `None`, so 5.x JSON loads. Any other text loads as `Expiry::Unknown`, unchecked.
 - `Expiry` is in the prelude. The compiler reports every site that reads or writes the field.
 
+### 31. `cancel_order` takes only the order id
+
+`Client::cancel_order(order_id, manual_order_cancel_time)` (async and blocking) took the manual cancel time as a `&str`. It now takes only the order id and sends an immediate cancel with default `OrderCancel` fields (no manual cancel time, operator ID or manual order indicator), as `cancel_order(id, "")` did. `cancel_order_with(order_id, &OrderCancel)`, new in 6.0, carries the time in `OrderCancel::manual_order_cancel_time`, beside the operator ID and manual order indicator. `global_cancel()` and `global_cancel_with(&OrderCancel)` are unchanged.
+
+```rust,ignore
+// 5.x
+client.cancel_order(order_id, "")?;
+client.cancel_order(order_id, "20260101-15:30:00")?;
+
+// 6.0
+use ibapi::orders::OrderCancel;
+
+client.cancel_order(order_id)?;
+client.cancel_order_with(
+    order_id,
+    &OrderCancel {
+        manual_order_cancel_time: "20260101-15:30:00".to_owned(),
+        ..OrderCancel::default()
+    },
+)?;
+```
+
+The compiler flags every call. `cancel_order(id)` sends the same request as 5.x's `cancel_order(id, "")`; nothing changes on the wire.
+
 ### 32. `Order`'s order-type fields are `Option<OrderType>`, not `String`
 
 | Field | 5.x | 6.0 |
