@@ -144,7 +144,7 @@ impl Client {
     ///
     /// # Errors
     /// - [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
-    /// - [`Error::InvalidArgument`] if `order.ext_operator` is set to anything but 1–16 ASCII letters or digits; nothing is sent.
+    /// - [`Error::InvalidArgument`], with nothing sent, for an [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
     ///
     /// # Examples
     ///
@@ -183,6 +183,7 @@ impl Client {
     pub async fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<(), Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
         verify::verify_order(self.server_version(), order)?;
+        verify::verify_order_ext_operator(order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         self.send_message(request).await?;
@@ -250,7 +251,7 @@ impl Client {
     ///
     /// # Errors
     /// - [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
-    /// - [`Error::InvalidArgument`] if `order.ext_operator` is set to anything but 1–16 ASCII letters or digits; nothing is sent.
+    /// - [`Error::InvalidArgument`], with nothing sent, for an [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
     ///
     /// # Examples
     ///
@@ -283,6 +284,7 @@ impl Client {
     pub async fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
         let checked_id = verify::verify_order_ids(order_id.into(), order)?;
         verify::verify_order(self.server_version(), order)?;
+        verify::verify_order_ext_operator(order)?;
 
         let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
         let internal_subscription = self.send_order(checked_id, request).await?;
@@ -344,7 +346,7 @@ impl Client {
     ///
     /// # Errors
     /// - [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
-    /// - [`Error::InvalidArgument`] if `order_cancel.ext_operator` is set to anything but 1–16 ASCII letters or digits; nothing is sent. TWS never answers such a cancel, and the order sticks in `PendingCancel`.
+    /// - [`Error::InvalidArgument`], with nothing sent, for an [`OrderCancel::ext_operator`] TWS would leave unanswered.
     ///
     /// # Examples
     ///
@@ -408,7 +410,7 @@ impl Client {
     /// ([`OrderCancel::ext_operator`]) or [`OrderCancel::manual_order_indicator`] with the cancel.
     ///
     /// # Errors
-    /// [`Error::InvalidArgument`] if `order_cancel.ext_operator` is set to anything but 1–16 ASCII letters or digits; nothing is sent. TWS never answers such a cancel, and the orders stick in `PendingCancel`.
+    /// [`Error::InvalidArgument`], with nothing sent, for an [`OrderCancel::ext_operator`] TWS would leave unanswered.
     ///
     /// # Examples
     ///

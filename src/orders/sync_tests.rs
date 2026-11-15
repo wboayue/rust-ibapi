@@ -319,7 +319,7 @@ fn invalid_ext_operator_is_rejected_before_sending() {
         ext_operator: "TRADER_7".to_owned(),
         ..Default::default()
     };
-    let contract = Contract::stock("ES").build();
+    let contract = Contract::stock("AAPL").build();
     let mut order = order_builder::limit_order(Action::Buy, 1.0, 1.0);
     order.ext_operator = "TRADER_7".to_owned();
 

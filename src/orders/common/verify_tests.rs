@@ -104,15 +104,13 @@ fn verify_ext_operator_matches_probed_set() {
 }
 
 #[test]
-fn verify_order_and_cancel_check_ext_operator() {
+fn verify_order_and_cancel_ext_operator() {
     let order = Order {
         ext_operator: "probe-op".to_owned(),
         ..Order::default()
     };
-    assert!(matches!(
-        verify_order(server_versions::PROTOBUF_REST_MESSAGES_3, &order),
-        Err(Error::InvalidArgument(_))
-    ));
+    assert!(matches!(verify_order_ext_operator(&order), Err(Error::InvalidArgument(_))));
+    assert!(verify_order_ext_operator(&Order::default()).is_ok());
     let cancel = OrderCancel {
         ext_operator: "probe-cxl".to_owned(),
         ..OrderCancel::default()

@@ -35,11 +35,8 @@ const ATTACHED_ORDERS: ProtocolFeature = ProtocolFeature::new("attached orders",
 const CONDITIONS_INCLUDE_OVERNIGHT: ProtocolFeature =
     ProtocolFeature::new("conditions include overnight", server_versions::CONDITIONS_INCLUDE_OVERNIGHT);
 
-/// Rejects `order` when it uses a field `server_version` does not support, or
-/// carries an `ext_operator` TWS rejects ([`verify_ext_operator`]).
+/// Rejects `order` when it uses a field `server_version` does not support.
 pub(crate) fn verify_order(server_version: i32, order: &Order) -> Result<(), Error> {
-    verify_ext_operator("Order::ext_operator", &order.ext_operator)?;
-
     if order.hedge_max_size.is_some() {
         check_version(server_version, HEDGE_MAX_SIZE)?;
     }
@@ -85,12 +82,17 @@ pub(crate) fn verify_order(server_version: i32, order: &Order) -> Result<(), Err
     Ok(())
 }
 
+/// Rejects `order` when its `ext_operator` is one TWS rejects ([`verify_ext_operator`]).
+pub(crate) fn verify_order_ext_operator(order: &Order) -> Result<(), Error> {
+    verify_ext_operator("Order::ext_operator", &order.ext_operator)
+}
+
 /// Rejects `order_cancel` when its `ext_operator` is one TWS rejects ([`verify_ext_operator`]).
 pub(crate) fn verify_order_cancel(order_cancel: &OrderCancel) -> Result<(), Error> {
     verify_ext_operator("OrderCancel::ext_operator", &order_cancel.ext_operator)
 }
 
-/// Longest `ext_operator` TWS accepts as letters and digits.
+/// Longest `ext_operator` the client accepts (TWS also takes 65+; see [`verify_ext_operator`]).
 const EXT_OPERATOR_MAX_LEN: usize = 16;
 
 /// Rejects an operator ID outside the set TWS accepts: 1–16 ASCII letters or
