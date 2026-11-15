@@ -9,7 +9,8 @@ use super::*;
 use crate::client::ids::RequestId;
 use crate::client::sync::Client;
 use crate::common::test_utils::helpers::{
-    binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, wait_for, TEST_ACCOUNT,
+    assert_startup_stall, binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame,
+    wait_for, TEST_ACCOUNT,
 };
 use crate::market_data::realtime::common::encode_request_market_data_type;
 use crate::market_data::MarketDataType;
@@ -379,10 +380,7 @@ fn establish_connection_times_out_when_gateway_silent() {
     let connection = Connection::stubbed(SlowSocket::new(stream, u32::MAX), CLIENT_ID);
 
     let err = connection.establish_connection().expect_err("silent gateway must fail connect");
-    match err {
-        Error::Io(ref io_err) => assert_eq!(io_err.kind(), std::io::ErrorKind::TimedOut, "unexpected error: {err:?}"),
-        other => panic!("expected Error::Io(TimedOut), got {other:?}"),
-    }
+    assert_startup_stall(&err);
     assert_eq!(connection.socket.reads.load(Ordering::SeqCst), STARTUP_TIMEOUT_LIMIT);
 }
 
