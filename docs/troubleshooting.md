@@ -71,7 +71,9 @@ After a dropped connection, TWS can keep the old session until it notices the so
 
 ### Gateway Maintenance Windows
 
-**Symptom:** the TCP connect succeeds but `Client::connect` hangs or times out with no error.
+**Symptom:** the TCP connect succeeds but `Client::connect` fails after 30 seconds with
+`Error::Io` of kind `TimedOut` ("no startup reply from TWS within 30s"). An automatic reconnect
+during the window fails the same way on each attempt.
 
 IB restarts its servers daily. During the window the gateway process still accepts TCP, but it
 doesn't answer the API handshake.

@@ -116,9 +116,17 @@ pub(crate) struct ConnectionConfig {
 }
 
 /// How long connect, and each reconnect attempt, waits for each startup frame
-/// (handshake ack, account info) before giving up. A loaded gateway can take
-/// longer than one read timeout to answer.
+/// (handshake ack, account info) before giving up: bounds a gateway that
+/// accepts TCP but never answers, while leaving a loaded one time to reply.
 pub(crate) const STARTUP_STALL: Duration = Duration::from_secs(30);
+
+/// The error a startup read fails with after [`STARTUP_STALL`] without a frame.
+pub(crate) fn startup_stall_error() -> Error {
+    Error::Io(std::io::Error::new(
+        std::io::ErrorKind::TimedOut,
+        format!("no startup reply from TWS within {STARTUP_STALL:?}"),
+    ))
+}
 
 /// Data exchanged during the connection handshake
 #[derive(Debug, Clone)]

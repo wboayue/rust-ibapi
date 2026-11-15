@@ -10,7 +10,8 @@ use super::*;
 use crate::client::ids::RequestId;
 use crate::client::r#async::Client;
 use crate::common::test_utils::helpers::{
-    binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame, wait_for_async, TEST_ACCOUNT,
+    assert_startup_stall, binary_text, error_frame, handshake_frames, handshake_response_frame, managed_accounts_frame, next_valid_id_frame,
+    wait_for_async, TEST_ACCOUNT,
 };
 use crate::market_data::realtime::common::encode_request_market_data_type;
 use crate::market_data::MarketDataType;
@@ -191,11 +192,9 @@ async fn establish_connection_times_out_when_gateway_silent() {
 
     let started = tokio::time::Instant::now();
     let err = connection.establish_connection().await.expect_err("silent gateway must fail connect");
-    match err {
-        Error::Io(ref io_err) => assert_eq!(io_err.kind(), std::io::ErrorKind::TimedOut, "unexpected error: {err:?}"),
-        other => panic!("expected Error::Io(TimedOut), got {other:?}"),
-    }
-    assert!(started.elapsed() >= STARTUP_STALL, "gave up after {:?}", started.elapsed());
+    assert_startup_stall(&err);
+    let elapsed = started.elapsed();
+    assert!(elapsed >= STARTUP_STALL && elapsed < STARTUP_STALL * 2, "gave up after {elapsed:?}");
     assert_eq!(
         stream.captured(),
         connection.connection_handler.format_handshake(),
@@ -216,10 +215,7 @@ async fn receive_account_info_times_out_when_gateway_stalls() {
         .establish_connection()
         .await
         .expect_err("missing account info must fail connect");
-    match err {
-        Error::Io(ref io_err) => assert_eq!(io_err.kind(), std::io::ErrorKind::TimedOut, "unexpected error: {err:?}"),
-        other => panic!("expected Error::Io(TimedOut), got {other:?}"),
-    }
+    assert_startup_stall(&err);
     let elapsed = started.elapsed();
     assert!(elapsed >= STARTUP_STALL && elapsed < STARTUP_STALL * 2, "gave up after {elapsed:?}");
     assert_eq!(connection.server_version(), SERVER_VERSION, "the handshake itself completed");
@@ -362,6 +358,26 @@ async fn reconnect_returns_last_error_after_exhausting_attempts() {
         matches!(&err, crate::errors::Error::Simple(msg) if msg == "simulated reconnect failure"),
         "got {err:?}"
     );
+}
+
+/// A gateway that accepts every reconnect's TCP connection but never answers
+/// the handshake: each attempt times out after [`STARTUP_STALL`] and counts as
+/// one failed attempt, so the loop gives up after `MAX_RECONNECT_ATTEMPTS`
+/// instead of hanging on the first.
+#[tokio::test(start_paused = true)]
+async fn reconnect_gives_up_when_gateway_never_answers() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+
+    push_handshake(&stream);
+    connection.establish_connection().await.expect("initial establish_connection failed");
+
+    let err = connection.reconnect().await.expect_err("must give up after MAX_RECONNECT_ATTEMPTS");
+    assert_startup_stall(&err);
+
+    let handshake = connection.connection_handler.format_handshake();
+    let handshakes = stream.captured().windows(handshake.len()).filter(|w| *w == handshake.as_slice()).count();
+    assert_eq!(handshakes, 1 + MAX_RECONNECT_ATTEMPTS as usize, "initial connect plus one per attempt");
 }
 
 /// During a reconnect, any caller of `connection_metadata()` must see cleared

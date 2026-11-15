@@ -7,8 +7,8 @@ use log::{debug, info};
 use tokio::sync::{broadcast, Mutex};
 
 use super::common::{
-    parse_handshake_ack, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionConfig, ConnectionHandler, ConnectionProtocol,
-    StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS, STARTUP_STALL,
+    parse_handshake_ack, parse_raw_message, require_protobuf_support, startup_stall_error, AccountInfo, ConnectionConfig, ConnectionHandler,
+    ConnectionProtocol, StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS, STARTUP_STALL,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -261,13 +261,14 @@ impl<S: AsyncStream> AsyncConnection<S> {
     /// Read one startup frame body, giving up with `TimedOut` after
     /// [`STARTUP_STALL`] without it: a gateway that accepts the TCP connection
     /// but never answers must not hang connect, or a reconnect's retry loop.
+    ///
+    /// The timeout can cancel the read mid-frame, leaving the stream out of
+    /// sync, so callers must discard the socket on `Err`: `connect` drops the
+    /// connection and `reconnect` dials a fresh socket for its next attempt.
     async fn read_startup_frame(&self) -> Result<Vec<u8>, Error> {
         match tokio::time::timeout(STARTUP_STALL, self.socket.read_message()).await {
             Ok(result) => result,
-            Err(_elapsed) => Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                format!("no startup reply from TWS within {STARTUP_STALL:?}"),
-            ))),
+            Err(_elapsed) => Err(startup_stall_error()),
         }
     }
 
