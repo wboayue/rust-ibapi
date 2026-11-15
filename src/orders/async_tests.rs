@@ -523,7 +523,7 @@ async fn next_valid_order_id() {
     let order_id = client.next_valid_order_id().await.expect("failed to get next valid order id");
 
     assert_eq!(order_id, 9123, "Expected order ID 9123");
-    assert_eq!(client.next_order_id(), 9123, "Client's order ID should be raised to 9123");
+    assert_eq!(client.next_order_id(), 9124, "the returned id is reserved");
     assert_ne!(client.next_order_id(), initial_order_id, "Client's order ID should have changed");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -1401,7 +1401,8 @@ async fn order_status_stream_yields_statuses_and_writes_nothing() {
 }
 
 // A caller-chosen id must keep later client-allocated ids (next_order_id, the order
-// builder's submit, exercise_options) from reusing it, or TWS rejects the later order.
+// builder's submit, exercise_options) from reusing it, or TWS reads the later order as a
+// modification of the earlier one.
 #[tokio::test]
 async fn caller_chosen_order_id_raises_the_generator() {
     let message_bus = Arc::new(MessageBusStub::default());
@@ -1423,4 +1424,21 @@ async fn caller_chosen_order_id_raises_the_generator() {
 
     client.submit_order(chosen, &contract, &order).await.expect("modify submit_order");
     assert_eq!(client.next_order_id(), chosen + 22, "a lower id never rewinds the generator");
+}
+
+// The documented flow: fetch an id from TWS, place it yourself, then let the client allocate.
+// The client-allocated id must not repeat the one already placed.
+#[tokio::test]
+async fn next_valid_order_id_then_submit_order_does_not_reissue_the_id() {
+    let (client, _bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::NextValidId,
+        next_valid_id().order_id(9123).encode_proto(),
+    )]);
+    let contract = Contract::stock("AAPL").build();
+    let order = order_builder::limit_order(Action::Buy, 1.0, 1.0);
+
+    let order_id = client.next_valid_order_id().await.expect("next_valid_order_id");
+    client.submit_order(order_id, &contract, &order).await.expect("submit_order");
+
+    assert_eq!(client.next_order_id(), order_id + 1);
 }

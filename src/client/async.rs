@@ -467,6 +467,11 @@ impl Client {
         self.id_manager.next_request_id()
     }
 
+    /// The client's request- and order-ID generators.
+    pub(crate) fn id_manager(&self) -> &ClientIdManager {
+        &self.id_manager
+    }
+
     /// Raises the order-ID generator to at least the given value; never
     /// lowers it below locally allocated order IDs.
     pub(crate) fn raise_next_order_id(&self, order_id: OrderId) {

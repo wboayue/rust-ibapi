@@ -23,17 +23,51 @@ fn verify_order_ids_accepts_order_range() {
 }
 
 #[test]
-fn order_id_after_passes_the_order_and_preset_ids() {
-    let presets = Order {
-        parent_id: 50,
-        preset_stop_loss_order_id: Some(12),
-        preset_profit_taker_order_id: Some(11),
+fn order_id_after_passes_every_carried_id() {
+    let carrying = |parent_id, stop_loss, profit_taker| Order {
+        parent_id,
+        preset_stop_loss_order_id: stop_loss,
+        preset_profit_taker_order_id: profit_taker,
         ..Order::default()
     };
-    // The parent is an existing, earlier order, so it does not move the floor.
-    assert_eq!(order_id_after(OrderId::from(10), &presets), OrderId::from(13));
-    assert_eq!(order_id_after(OrderId::from(20), &presets), OrderId::from(21));
-    assert_eq!(order_id_after(OrderId::from(7), &Order::default()), OrderId::from(8));
+    let cases = [
+        ("no carried ids", 7, Order::default(), 8),
+        ("presets above the order id", 10, carrying(0, Some(12), Some(11)), 13),
+        ("order id above the presets", 20, carrying(0, Some(12), Some(11)), 21),
+        ("parent above the order id", 10, carrying(50, None, None), 51),
+    ];
+    for (label, order_id, order, expected) in cases {
+        assert_eq!(order_id_after(OrderId::from(order_id), &order), OrderId::from(expected), "{label}");
+    }
+}
+
+#[test]
+fn verify_and_reserve_order_ids_moves_the_generator_past_the_order() {
+    let ids = ClientIdManager::new(1).unwrap();
+    let bracket = Order {
+        preset_stop_loss_order_id: Some(30),
+        preset_profit_taker_order_id: Some(25),
+        ..Order::default()
+    };
+
+    let checked = verify_and_reserve_order_ids(&ids, server_versions::ATTACHED_ORDERS, OrderId::from(20), &bracket).unwrap();
+
+    assert_eq!(checked, OrderId::from(20));
+    assert_eq!(ids.next_order_id(), OrderId::from(31));
+}
+
+#[test]
+fn verify_and_reserve_order_ids_leaves_the_generator_when_a_check_fails() {
+    let ids = ClientIdManager::new(1).unwrap();
+    let out_of_range = Order {
+        preset_profit_taker_order_id: Some(REQUEST_ID_FLOOR),
+        ..Order::default()
+    };
+
+    let result = verify_and_reserve_order_ids(&ids, server_versions::ATTACHED_ORDERS, OrderId::from(20), &out_of_range);
+
+    assert_rejected(result, "preset_profit_taker_order_id");
+    assert_eq!(ids.next_order_id(), OrderId::from(1), "a rejected order reserves nothing");
 }
 
 /// Every order id an `Order` carries is checked: TWS routes frames for the
