@@ -1320,7 +1320,8 @@ pub struct OrderState {
     pub order_allocations: Vec<OrderAllocation>,
     /// If the order is warranted, a descriptive message will be provided.
     pub warning_text: String,
-    /// Timestamp when the order completed execution.
+    /// Timestamp when the order completed, passed through unparsed. Rendered like
+    /// [`Execution::time`], except the UTC format has no trailing `Z` (`yyyymmdd-HH:MM:SS`).
     pub completed_time: String,
     /// Free-form descriptive status sent at completion (e.g. `"Cancelled by Trader"`,
     /// `"Filled Size: 1"`). For the canonical lifecycle state, use [`status`](Self::status).
@@ -1525,11 +1526,10 @@ pub struct Execution {
     /// A correction is indicated by an ExecId which differs from a previous ExecId in only the digits after the final period,
     /// e.g. an ExecId ending in ".02" would be a correction of a previous execution with an ExecId ending in ".01"
     pub execution_id: String,
-    /// The execution's server time, as the gateway renders it: `yyyymmdd HH:MM:SS <zone>`
-    /// in the instrument's zone (`20261110 20:17:28 US/Central`, the default here) or the
-    /// operator's, or `yyyymmdd-HH:MM:SSZ` under the "Send instrument-specific attributes
-    /// for dual-mode API client in: UTC format" setting (live: 2026-11-11, paper Gateway,
-    /// server 226; `docs/wire-facts/orders.md`). Passed through unparsed.
+    /// The execution's server time, passed through unparsed. The gateway setting "Send
+    /// instrument-specific attributes for dual-mode API client in" picks the rendering:
+    /// `yyyymmdd HH:MM:SS <zone>` in the instrument's or operator's zone
+    /// (`20261110 20:17:28 US/Central`), or `yyyymmdd-HH:MM:SSZ` under UTC format.
     pub time: String,
     /// The account to which the order was allocated.
     pub account_number: String,
@@ -1874,10 +1874,9 @@ pub struct ExecutionFilter {
     pub client_id: Option<i32>,
     /// The account to which the order was allocated to
     pub account_code: String,
-    /// Time from which the executions will be returned, `yyyymmdd-hh:mm:ss` (UTC) or
-    /// `yyyymmdd hh:mm:ss [zone]`; a zone-less value (deprecated by IB) is read as UTC or
-    /// the operator's zone, not the instrument's, and a zone after the dashed form draws 10314
-    /// (live: 2026-11-11, paper Gateway, server 226; `docs/wire-facts/orders.md`).
+    /// Time from which the executions will be returned. Prefer `yyyymmdd-hh:mm:ss`, which
+    /// TWS reads as UTC; `yyyymmdd hh:mm:ss <zone>` is also accepted. A zone after the
+    /// dashed form is rejected with error 10314.
     /// Only those executions reported after the specified time will be returned.
     pub time: String,
     /// The instrument's symbol
