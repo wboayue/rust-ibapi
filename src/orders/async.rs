@@ -137,8 +137,8 @@ impl Client {
     /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
     ///   The client's order-ID generator moves past this ID and every ID the order carries
     ///   (preset attached orders, parent), so IDs it allocates later don't reuse them. If you
-    ///   number orders from your own range, don't mix in client-allocated IDs (the order
-    ///   builder's `submit`, `exercise_options`): those continue from your highest ID.
+    ///   number orders from your own range, client-allocated IDs (the order builder's `submit`,
+    ///   `exercise_options`) then continue from your highest ID, inside that range.
     /// * `contract` - [Contract] to submit order for.
     /// * `order` - [`crate::orders::Order`] to submit.
     ///
@@ -250,8 +250,8 @@ impl Client {
     /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
     ///   The client's order-ID generator moves past this ID and every ID the order carries
     ///   (preset attached orders, parent), so IDs it allocates later don't reuse them. If you
-    ///   number orders from your own range, don't mix in client-allocated IDs (the order
-    ///   builder's `submit`, `exercise_options`): those continue from your highest ID.
+    ///   number orders from your own range, client-allocated IDs (the order builder's `submit`,
+    ///   `exercise_options`) then continue from your highest ID, inside that range.
     /// * `contract` - [Contract] to submit order for.
     /// * `order` - [`crate::orders::Order`] to submit.
     ///
@@ -477,7 +477,7 @@ impl Client {
         let next_order_id = OrderId::from(next_order_id).checked()?;
         // Reserve the id handed to the caller, as `next_order_id` does: raising only to it
         // left it free, so the next client-allocated id repeated it.
-        self.raise_next_order_id(OrderId::from(next_order_id.value() + 1));
+        self.id_manager().raise_order_id(next_order_id.next());
         Ok(next_order_id.value())
     }
 

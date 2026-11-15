@@ -18,8 +18,10 @@ pub(crate) fn verify_and_reserve_order_ids(ids: &ClientIdManager, server_version
 }
 
 /// The order ids `order` carries besides its own: the preset attached-order ids, which TWS
-/// creates orders under, and `parent_id` when set, which names an existing order. Checking and
-/// reserving both read this list, so a new id field goes here once.
+/// creates orders under, and `parent_id` when set, which names an existing order. Reserving the
+/// parent is usually a no-op, since it was reserved when it was sent; when the caller chose it
+/// outside the client, reserving it keeps a later client-allocated id from repeating it. Checking
+/// and reserving both read this list, so a new id field goes here once.
 fn carried_order_ids(order: &Order) -> impl Iterator<Item = i32> {
     [
         order.preset_stop_loss_order_id,
@@ -43,10 +45,9 @@ fn verify_order_ids(order_id: OrderId, order: &Order) -> Result<OrderId, Error> 
 
 /// One past the highest of `order_id` and [`carried_order_ids`]: the lowest id the client may
 /// still allocate after sending `order`. Call after [`verify_order_ids`], which keeps each id
-/// below the request range, so `+ 1` cannot overflow.
+/// below the request range.
 fn order_id_after(order_id: OrderId, order: &Order) -> OrderId {
-    let highest = carried_order_ids(order).fold(order_id.value(), i32::max);
-    OrderId::from(highest + 1)
+    OrderId::from(carried_order_ids(order).fold(order_id.value(), i32::max)).next()
 }
 
 // Gates whose server version is at or below the connection floor

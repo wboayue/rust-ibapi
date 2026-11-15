@@ -467,15 +467,10 @@ impl Client {
         self.id_manager.next_request_id()
     }
 
-    /// The client's request- and order-ID generators.
+    /// The client's request- and order-ID generators: the one way in for
+    /// minting, reserving and reading ids.
     pub(crate) fn id_manager(&self) -> &ClientIdManager {
         &self.id_manager
-    }
-
-    /// Raises the order-ID generator to at least the given value; never
-    /// lowers it below locally allocated order IDs.
-    pub(crate) fn raise_next_order_id(&self, order_id: OrderId) {
-        self.id_manager.raise_order_id(order_id);
     }
 
     pub(crate) async fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
