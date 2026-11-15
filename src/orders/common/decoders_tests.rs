@@ -800,8 +800,8 @@ fn decode_order_preserves_unknown_order_type() {
 fn decode_order_unset_order_type_fields_are_none() {
     // Absent, empty and the string "None" (how TWS echoes an unset adjusted or
     // delta-neutral type; docs/wire-facts/orders.md) all decode to None, which
-    // encodes back as no value.
-    for raw in [None, Some(String::new()), Some("None".to_string())] {
+    // encodes back as no value. "NONE" is IB's documented spelling; case is ignored.
+    for raw in [None, Some(String::new()), Some("None".to_string()), Some("NONE".to_string())] {
         let proto_order = proto::Order {
             order_type: raw.clone(),
             adjusted_order_type: raw.clone(),

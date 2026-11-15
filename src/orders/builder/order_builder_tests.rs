@@ -2221,9 +2221,30 @@ fn sent_price_fields(order_type: &OrderType) -> (bool, bool, bool) {
         Stop | StopWithProtection | MarketIfTouched | PassiveRelative | PeggedToMarket | RelativeMarketCombo => (false, true, false),
         TrailingStop | TrailingStopLimit => (false, true, true),
         Market | MarketOnClose | MarketWithProtection | PeggedToStock | PeggedToBenchmark | Volatility | BoxTop => (false, false, false),
-        // Carries whatever TWS sent; the builder sends no price field for it.
-        Unknown(_) => (false, false, false),
+        // Not in ALL_ORDER_TYPES; see unlisted_type_sends_every_price_the_caller_set.
+        Unknown(_) => (true, true, true),
     }
+}
+
+/// The builder can't know which prices an unlisted code takes, so it sends all of them.
+#[test]
+fn unlisted_type_sends_every_price_the_caller_set() {
+    let snap_mid = || OrderType::Unknown("SNAP MID".into());
+    let order = every_price_field(snap_mid()).build().unwrap();
+    assert_eq!(order.order_type, Some(snap_mid()));
+    assert_eq!(order.limit_price, Some(100.0));
+    assert_eq!(order.aux_price, Some(98.0));
+    assert_eq!(order.trailing_percent, Some(5.0));
+    assert_eq!(order.trail_stop_price, Some(95.0));
+    assert_eq!(order.limit_price_offset, Some(0.5));
+
+    // With no aux price set, the stop price goes out as aux.
+    let order = Order::builder().buy(1).stop(99.0).order_type(snap_mid()).build().unwrap();
+    assert_eq!(order.aux_price, Some(99.0));
+
+    // Nothing set, nothing sent, and no price is required.
+    let order = Order::builder().buy(1).order_type(snap_mid()).build().unwrap();
+    assert_eq!((order.limit_price, order.aux_price, order.trailing_percent), (None, None, None));
 }
 
 #[test]

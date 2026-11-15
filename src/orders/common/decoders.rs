@@ -4,6 +4,7 @@ use crate::orders::{
     Action, Execution, ExecutionSide, Liquidity, OcaType, OptionExerciseType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin,
     OrderState, OrderType, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
 };
+use crate::orders::builder::types::is_unset_order_type;
 use crate::orders::{CommissionAndFeesReport, ExecutionData, OrderBound, OrderData, OrderStatus};
 use crate::proto;
 use crate::proto::decoders::{
@@ -12,11 +13,11 @@ use crate::proto::decoders::{
 };
 use crate::Error;
 
-/// An order-type field as TWS sends it. Absent, empty and the string `"None"` (how TWS
+/// An order-type field as TWS sends it. Absent, empty and `"None"` in any case (how TWS
 /// echoes an unset `adjusted_order_type` or `delta_neutral_order_type`; `docs/wire-facts/orders.md`)
 /// are `None`; a code this version does not list is `Some(OrderType::Unknown(code))`.
 fn parse_order_type(opt: Option<&str>) -> Result<Option<OrderType>, Error> {
-    parse_optional(opt.filter(|s| *s != "None"))
+    parse_optional(opt.filter(|code| !is_unset_order_type(code)))
 }
 
 // All originating outgoing-request gates for OpenOrder, CompletedOrder,

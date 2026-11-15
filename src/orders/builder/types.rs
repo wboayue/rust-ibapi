@@ -260,7 +260,9 @@ pub enum OrderType {
     /// this version does not list, build one (`OrderType::Unknown("SNAP MID".into())`) or
     /// parse it (`"SNAP MID".parse::<OrderType>()`). Not for a listed code: `Unknown("LMT")`
     /// sends the same string as [`Limit`](Self::Limit) but is not equal to it, and parsing
-    /// never produces it. An unset `Order` field is `None`, never `Unknown("")`.
+    /// never produces it. An unset `Order` field is `None`, never `Unknown("")`. The builder
+    /// sends every price set for an `Unknown` type, unchecked
+    /// ([`OrderBuilder::order_type`](crate::orders::OrderBuilder::order_type)).
     Unknown(String),
 }
 
@@ -353,7 +355,8 @@ impl OrderType {
     pub fn requires_limit_price(&self) -> bool {
         matches!(
             self,
-            Self::Limit | Self::StopLimit | Self::LimitOnClose | Self::LimitIfTouched | Self::RelativeLimitCombo // TrailingStopLimit uses limit_price_offset, not limit_price
+            // TrailingStopLimit uses limit_price_offset, not limit_price.
+            Self::Limit | Self::StopLimit | Self::LimitOnClose | Self::LimitIfTouched | Self::RelativeLimitCombo
         )
     }
 
@@ -437,12 +440,22 @@ impl<'de> Deserialize<'de> for OrderType {
     }
 }
 
-/// Deserializer for `Order`'s `Option<OrderType>` fields: `null`, `""` and `"None"` are
-/// `None`. 5.x serialized an unset `order_type` as `""` and an unset `adjusted_order_type`
-/// or `delta_neutral_order_type` as TWS echoed it, `"None"`, so that JSON still loads.
+/// Whether an order-type string means "no order type": empty, or `None` in any case. The
+/// Gateway echoes an unset `adjusted_order_type` / `delta_neutral_order_type` as `"None"`
+/// (`docs/wire-facts/orders.md`); IB's docs and legacy C# decoder spell it `"NONE"`, and TWS
+/// (as opposed to the Gateway) was not probed, so the match ignores case.
+pub(crate) fn is_unset_order_type(code: &str) -> bool {
+    code.is_empty() || code.eq_ignore_ascii_case("none")
+}
+
+/// Deserializer for `Order`'s `Option<OrderType>` fields: `null` and any code
+/// [`is_unset_order_type`] accepts are `None`. 5.x serialized an unset `order_type` as `""`
+/// and an unset `adjusted_order_type` or `delta_neutral_order_type` as TWS echoed it,
+/// `"None"`, so that JSON still loads.
 pub(crate) fn deserialize_optional_order_type<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<OrderType>, D::Error> {
     match Option::<String>::deserialize(deserializer)?.as_deref() {
-        None | Some("") | Some("None") => Ok(None),
+        None => Ok(None),
+        Some(code) if is_unset_order_type(code) => Ok(None),
         Some(code) => code.parse().map(Some).map_err(serde::de::Error::custom),
     }
 }

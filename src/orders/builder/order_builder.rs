@@ -435,6 +435,10 @@ impl<T> OrderBuilder<T> {
     /// that doesn't take it is dropped: `.limit(100.0).order_type(OrderType::PeggedToStock)` sends
     /// no limit price. Prefer the named setter (`.relative(..)`, `.pegged_to_midpoint(..)`, ...).
     ///
+    /// [`OrderType::Unknown`] is the exception: the crate doesn't know which prices an unlisted
+    /// code takes, so `build()` sends every one set earlier (limit, aux — or the stop price when
+    /// no aux was set — trail and limit offset) without checking it, and TWS validates them.
+    ///
     /// A market-on-open, limit-on-open or auction order is `Market`, `Limit` or `MarketToLimit`
     /// with the time in force that makes it; `market_on_open()`, `limit_on_open(..)` and
     /// `at_auction(..)` set both.
@@ -1619,11 +1623,14 @@ impl<T> OrderBuilder<T> {
         };
 
         // Each price field is sent only for the order types that use it (`OrderType::uses_*`),
-        // so one left by an earlier order-type setter is dropped instead of riding along.
+        // so one left by an earlier order-type setter is dropped instead of riding along. A code
+        // this crate doesn't list (`Unknown`) sends every price the caller set, unchecked: the
+        // crate can't know which it takes, and dropping them silently is worse than TWS rejecting.
+        let unlisted = matches!(order_type, OrderType::Unknown(_));
         let limit_price = if order_type.requires_limit_price() {
             let price_raw = self.limit_price.ok_or(ValidationError::MissingRequiredField("limit_price"))?;
             Some(Price::new(price_raw)?.value())
-        } else if order_type.uses_limit_price() {
+        } else if order_type.uses_limit_price() || unlisted {
             self.limit_price.map(Price::new).transpose()?.map(|price| price.value())
         } else {
             None
@@ -1636,6 +1643,8 @@ impl<T> OrderBuilder<T> {
             Some(Price::new(price_raw)?.value())
         } else if order_type.uses_aux_price() {
             self.aux_price
+        } else if unlisted {
+            self.aux_price.or(self.stop_price)
         } else {
             None
         };
@@ -1644,6 +1653,9 @@ impl<T> OrderBuilder<T> {
             if self.trailing_percent.is_none() && aux_price.is_none() {
                 return Err(ValidationError::MissingRequiredField("trailing amount or percent"));
             }
+            let trail_stop_price = self.trail_stop_price.map(Price::new).transpose()?.map(|price| price.value());
+            (self.trailing_percent, trail_stop_price)
+        } else if unlisted {
             let trail_stop_price = self.trail_stop_price.map(Price::new).transpose()?.map(|price| price.value());
             (self.trailing_percent, trail_stop_price)
         } else {
@@ -1655,7 +1667,7 @@ impl<T> OrderBuilder<T> {
         }
 
         let limit_price_offset = match order_type {
-            OrderType::TrailingStopLimit => self.limit_price_offset,
+            OrderType::TrailingStopLimit | OrderType::Unknown(_) => self.limit_price_offset,
             _ => None,
         };
 
