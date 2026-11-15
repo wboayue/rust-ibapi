@@ -4,7 +4,7 @@ use ibapi::orders::builder::{
     accu_distr, accumulate_distribute, adaptive, arrival_price, balance_impact_risk, close_price, dark_ice, minimise_impact, pct_vol, pct_vol_price,
     pct_vol_size, pct_vol_time, twap, vwap, AdaptivePriority, AlgoParams, RiskAversion, TwapStrategyType,
 };
-use ibapi::orders::{Order, PlaceOrder};
+use ibapi::orders::{Order, OrderType, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::{Client, Error};
 use ibapi_test::{yyyymmdd_today, ClientId};
@@ -279,7 +279,7 @@ async fn submits_accu_distr() {
     let today = yyyymmdd_today();
     let algo = accu_distr()
         .time_between_orders(60)
-        .route_order_type("LMT")
+        .route_order_type(OrderType::Limit)
         .component_size(100)
         .active_time_start(format!("{today}-04:00:00"))
         .active_time_end(format!("{today}-20:00:00"))

@@ -903,39 +903,8 @@ impl OrderStatusKind {
     }
 }
 
-impl_wire_enum!(OrderStatusKind, fallback Unknown);
-
-// Serde as the plain wire string in both directions, so `Unknown("X")`
-// round-trips as `"X"` — not the externally tagged `{"Unknown":"X"}` a
-// derive would produce for the one payload variant. Deserialize is the
-// simple owned-String form on purpose: serde is not on the wire path
-// (decoding goes through `parse_required` → `FromStr`).
-//
-// The utoipa schema is hand-written for the same reason — the derive
-// mirrors serde's *default* representation, which is not what the manual
-// impls emit. The schema is exactly a string.
-#[cfg(feature = "utoipa")]
-impl utoipa::PartialSchema for OrderStatusKind {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
-        String::schema()
-    }
-}
-
-#[cfg(feature = "utoipa")]
-impl utoipa::ToSchema for OrderStatusKind {}
-
-impl Serialize for OrderStatusKind {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for OrderStatusKind {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(serde::de::Error::custom)
-    }
-}
+// Serde and utoipa use the wire string; see `impl_wire_enum!`.
+impl_wire_enum!(OrderStatusKind, fallback Unknown, serde);
 
 /// Time in force specifies how long an order remains active.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1007,35 +976,8 @@ impl TimeInForce {
     }
 }
 
-impl_wire_enum!(TimeInForce, fallback Unknown);
-
-// Serde as the plain wire string in both directions, so `Unknown("X")`
-// round-trips as `"X"` rather than the externally tagged `{"Unknown":"X"}` a
-// derive would produce for the one payload variant. This also keeps the JSON
-// stable against Rust-side renames — see `OrderStatusKind` for the same
-// reasoning, including why the utoipa schema is hand-written.
-#[cfg(feature = "utoipa")]
-impl utoipa::PartialSchema for TimeInForce {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
-        String::schema()
-    }
-}
-
-#[cfg(feature = "utoipa")]
-impl utoipa::ToSchema for TimeInForce {}
-
-impl Serialize for TimeInForce {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for TimeInForce {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(serde::de::Error::custom)
-    }
-}
+// Serde and utoipa use the wire string; see `impl_wire_enum!`.
+impl_wire_enum!(TimeInForce, fallback Unknown, serde);
 
 impl From<String> for TimeInForce {
     fn from(value: String) -> Self {

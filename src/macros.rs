@@ -52,6 +52,15 @@ macro_rules! impl_str_partial_eq {
 /// `docs/rules/wire/enum-typing.md`); only an unrecognized *value* is
 /// preserved. `as_str` then borrows from `self`, so such enums implement
 /// `as_str(&self) -> &str`.
+///
+/// The `fallback $variant, serde` form also generates serde and utoipa impls
+/// that use the wire string in both directions, so `Unknown("X")` round-trips
+/// as `"X"` rather than the externally tagged `{"Unknown":"X"}` a derive gives
+/// the one payload variant, and JSON stays stable against Rust-side renames.
+/// Deserialize goes through `FromStr`, so it rejects `""`; serde is not on the
+/// wire path (decoding goes through `parse_required` / `parse_optional`). The
+/// utoipa schema is exactly a string, because the derive would mirror serde's
+/// default representation, which is not what these impls emit.
 macro_rules! impl_wire_enum {
     ($name:ident) => {
         impl_wire_enum!(@common $name);
@@ -76,6 +85,33 @@ macro_rules! impl_wire_enum {
                 Ok(Self::from_wire(s).unwrap_or_else(|| $name::$variant(s.to_string())))
             }
         }
+    };
+    ($name:ident, fallback $variant:ident, serde) => {
+        impl_wire_enum!($name, fallback $variant);
+
+        impl ::serde::Serialize for $name {
+            fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error> {
+                serializer.serialize_str(self.as_str())
+            }
+        }
+
+        impl<'de> ::serde::Deserialize<'de> for $name {
+            fn deserialize<D: ::serde::Deserializer<'de>>(deserializer: D) -> ::std::result::Result<Self, D::Error> {
+                <String as ::serde::Deserialize>::deserialize(deserializer)?
+                    .parse()
+                    .map_err(::serde::de::Error::custom)
+            }
+        }
+
+        #[cfg(feature = "utoipa")]
+        impl ::utoipa::PartialSchema for $name {
+            fn schema() -> ::utoipa::openapi::RefOr<::utoipa::openapi::schema::Schema> {
+                <String as ::utoipa::PartialSchema>::schema()
+            }
+        }
+
+        #[cfg(feature = "utoipa")]
+        impl ::utoipa::ToSchema for $name {}
     };
     (@common $name:ident) => {
         impl ::std::fmt::Display for $name {

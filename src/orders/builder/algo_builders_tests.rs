@@ -503,7 +503,7 @@ fn pct_vol_time_validates_both_rates() {
 fn accu_distr_builder() {
     let params = AccuDistrBuilder::new()
         .time_between_orders(60)
-        .route_order_type("LMT")
+        .route_order_type(OrderType::Limit)
         .component_size(100)
         .active_time_start("20260101-09:30:00")
         .active_time_end("20260101-16:00:00")

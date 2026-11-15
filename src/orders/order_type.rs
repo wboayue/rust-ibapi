@@ -2,7 +2,7 @@
 //! `order_type`, `adjusted_order_type` and `delta_neutral_order_type`, and the type
 //! [`OrderBuilder::order_type`](crate::orders::OrderBuilder::order_type) takes.
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 /// Order types supported by Interactive Brokers.
 ///
@@ -91,7 +91,11 @@ pub enum OrderType {
 
     /// Order type string not modeled by this version of the API. Carries the raw
     /// wire value as received on an inbound order; sent back unchanged, so an order
-    /// read from TWS round-trips. Matching is exact and case-sensitive. To send a code
+    /// read from TWS round-trips. Matching is exact and case-sensitive, and only the
+    /// canonical code maps to a named variant: aliases IB's Java client also accepts
+    /// (`"STOP LIMIT"`, `"MKT TO LMT"`, `"TRAILLMT"`, ...) parse as `Unknown` and round-trip,
+    /// but don't equal [`StopLimit`](Self::StopLimit) and the rest. The #1220 probe saw TWS echo
+    /// only canonical codes (`docs/wire-facts/orders.md`). To send a code
     /// this version does not list, build one (`OrderType::Unknown("SNAP MID".into())`) or
     /// parse it (`"SNAP MID".parse::<OrderType>()`). Not for a listed code: `Unknown("LMT")`
     /// sends the same string as [`Limit`](Self::Limit) but is not equal to it, and parsing
@@ -244,36 +248,10 @@ impl OrderType {
 
 // Open: an inbound OpenOrder / CompletedOrder field whose codes TWS assigns, so one
 // this crate does not list must not end the order stream.
-impl_wire_enum!(OrderType, fallback Unknown);
-
-// Serde as the plain wire string in both directions, so `Unknown("X")`
-// round-trips as `"X"` rather than the externally tagged `{"Unknown":"X"}` a
-// derive would produce for the one payload variant, and `Order` JSON keeps
-// `"order_type":"LMT"`. Deserialize rejects `""` like `FromStr`; the `Order`
-// fields go through `deserialize_optional_order_type`, which reads `null`, `""`
-// and `"None"` as `None`. The utoipa schema is hand-written for the same reason —
-// see `OrderStatusKind` in `orders/mod.rs`.
-#[cfg(feature = "utoipa")]
-impl utoipa::PartialSchema for OrderType {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
-        String::schema()
-    }
-}
-
-#[cfg(feature = "utoipa")]
-impl utoipa::ToSchema for OrderType {}
-
-impl Serialize for OrderType {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for OrderType {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        String::deserialize(deserializer)?.parse().map_err(serde::de::Error::custom)
-    }
-}
+// Serde and utoipa use the wire string (see `impl_wire_enum!`), so `Order` JSON keeps
+// `"order_type":"LMT"`. The `Order` fields go through `deserialize_optional_order_type`,
+// which reads `null`, `""` and `"None"` as `None`.
+impl_wire_enum!(OrderType, fallback Unknown, serde);
 
 /// Whether an order-type string means "no order type": empty, or `None` in any case. The
 /// Gateway echoes an unset `adjusted_order_type` / `delta_neutral_order_type` as `"None"`

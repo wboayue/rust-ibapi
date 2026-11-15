@@ -1203,13 +1203,14 @@ A separate IBKR algorithm from `AD` (Accumulate/Distribute) with a smaller param
 
 ```rust
 use ibapi::orders::builder::accu_distr;
+use ibapi::orders::OrderType;
 
 let order_id = client.order(&contract)
     .buy(1000)
     .limit(150.0)
     .algo(accu_distr()
         .time_between_orders(60)
-        .route_order_type("LMT")
+        .route_order_type(OrderType::Limit)
         .component_size(100)
         .active_time_start("20260101-09:30:00")
         .active_time_end("20260101-16:00:00")
@@ -1220,7 +1221,7 @@ let order_id = client.order(&contract)
 
 **Parameters:**
 - `time_between_orders` - Seconds between slices
-- `route_order_type` - Order routing type (typical values: "LMT", "MKT", "REL")
+- `route_order_type` - `OrderType` of the child orders (e.g. `OrderType::Limit`, `Market`, `Relative`)
 - `component_size` - Size of each child slice
 - `active_time_start` / `active_time_end` - Active period (format: "YYYYMMDD-HH:MM:SS")
 - `active_time_tz` - Time zone for the active period (e.g., "US/Eastern", "GMT")

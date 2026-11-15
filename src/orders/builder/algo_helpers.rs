@@ -286,10 +286,11 @@ pub fn pct_vol_time() -> PctVolTimeBuilder {
 ///
 /// ```no_run
 /// use ibapi::orders::builder::accu_distr;
+/// use ibapi::orders::OrderType;
 ///
 /// let algo = accu_distr()
 ///     .time_between_orders(60)
-///     .route_order_type("LMT")
+///     .route_order_type(OrderType::Limit)
 ///     .component_size(100)
 ///     .build()?;
 /// # Ok::<(), ibapi::orders::builder::ValidationError>(())

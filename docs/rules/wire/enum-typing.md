@@ -42,8 +42,9 @@ the compiler points callers at the new arm; the payload variant costs `Copy` and
 return `&str`. No decode-time log — callers own the signal (`docs/migration-4.0.md` §9).
 One-shot and outbound-only enums stay closed: a hard error there fails one call, not a stream.
 
-Serde: if the enum serializes as the wire string (`OrderStatusKind`, `TimeInForce`), serde and the
-`utoipa` schema (`PartialSchema` delegating to `String`) must be hand-written, or the derive emits
+Serde: if an open enum serializes as the wire string (`OrderStatusKind`, `TimeInForce`,
+`OrderType`), use `impl_wire_enum!(Name, fallback Unknown, serde)`, which generates serde and the
+`utoipa` schema (`PartialSchema` delegating to `String`); a derive would emit
 `{"Unknown":"..."}`. If it serializes as the derived variant name (`Rule80A`, `OrderOpenClose`),
 keep the derives; `Unknown` takes the tagged form.
 
