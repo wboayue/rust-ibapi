@@ -29,19 +29,31 @@ Positions, PnL and account updates by model. End-marker behavior for account str
 - **Not probed:** an open (non-flat) position, and RTH updates. Which figures TWS omits for a
   held position is unknown.
 
-### `ledgerAndNLV = true` selects the `$LEDGER-` keys only
+### `ledgerAndNLV = true` selects the ledger keys; a TWS setting decides the `$LEDGER-` prefix
 
-*Live 2026-11-05 off-hours, live account through a read-only Gateway, server 226; #1183.*
+*Live 2026-11-14 weekend (01:44 and 01:50 ET), paper, server 226; #1223.*
 
-- `reqAccountUpdatesMulti` for one account, no model code, once with `ledgerAndNLV = false`
-  and once with `true`, reading to `AccountUpdateMultiEnd` each time.
-- `true`: 75 values, the 25 `$LEDGER-*` keys for each of BASE, GBP and USD
-  (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, `$LEDGER-UnrealizedPnL`, ...) and
-  nothing else. `false`: the same 75 plus 72 values of 70 account-value keys with no `$LEDGER-`
-  prefix (`AccountCode`, `NetLiquidation`, `BuyingPower`, `AvailableFunds`, the `-S` segment
-  variants, ...), 147 values. The `true` set is a strict subset of the `false` set.
-- So `true` means "the ledger and NLV-by-currency view only", the light-weight request IB's doc
-  page describes, and `false` adds the account values. The proto field comment ("Set as True if
-  currency and net liquidation values should be delivered") names the subset, not an addition.
-- **Not probed:** a model code, an FA master account, whether later update frames differ by
-  flag (only the initial dump to the end marker was read).
+- `reqAccountUpdates` and `reqAccountUpdatesMulti` (one account, no model code, `ledgerAndNLV`
+  `false` then `true`), each read to its end marker, run twice: once as the Gateway was, once
+  after turning on Global Configuration → API → Settings → "Prepend '$LEDGER-' prefix to
+  per-currency account values".
+- `ledgerAndNLV = true`: 75 values, the same 25 ledger keys for each of BASE, EUR and USD
+  (`CashBalance`, `AccruedCash`, `NetLiquidationByCurrency`, `ExchangeRate`, ...), and nothing
+  else. `false`: those 75 plus the account-level keys, 216 values. Same counts with the
+  setting off and on.
+- Setting off: no key carries `$LEDGER-`. The ledger row and the account-level row of a key
+  that is both collide: with `false`, `AccruedCash`/`USD` arrived twice, `31.99` (account
+  level, equal to the BASE ledger row) and `212.85` (the USD ledger row). Key plus currency
+  does not tell them apart.
+- Setting on: exactly the 75 ledger rows carry `$LEDGER-` (`$LEDGER-AccruedCash`/`USD` =
+  `212.85`); the account-level rows keep the bare key (`AccruedCash`/`USD` = `31.99`). BASE
+  ledger rows are prefixed too.
+- `reqAccountUpdates` is unaffected: 215 values, never a `$LEDGER-` key, and no duplicate
+  key/currency pair under either setting.
+- So the prefix is opt-in per Gateway/TWS install, not fixed protocol. The setting's default for
+  new vs upgrading installs is IB's claim (10.47 release notes), not observed here.
+- Earlier: 2026-11-05, a live account through a read-only Gateway (server 226, #1183) saw the
+  prefix, so its setting was on; the `true`/`false` subset finding matched.
+- **Not probed:** a model code, an FA master account, later update frames (only the initial
+  dump to the end marker was read), whether the Gateway applies a changed setting to an
+  already-open subscription (each run reconnected).

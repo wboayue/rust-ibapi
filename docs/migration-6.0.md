@@ -344,7 +344,7 @@ The compiler does not catch the serialized form. `PnL` and `PnLSingle` derive `S
 
 ### 16. `account_updates_multi` takes a `LedgerOnly`
 
-`Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_only: accounts::LedgerOnly`, TWS's `ledgerAndNLV` flag for the account-updates-by-model request. `LedgerOnly::Yes` delivers only the per-currency `$LEDGER-*` keys (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ...), TWS's light-weight request; `LedgerOnly::No` delivers those plus the account-level keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). 5.x always sent `Yes`, so the account-level keys could not be requested.
+`Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_only: accounts::LedgerOnly`, TWS's `ledgerAndNLV` flag for the account-updates-by-model request. `LedgerOnly::Yes` delivers only the per-currency ledger keys (`CashBalance`, `NetLiquidationByCurrency`, ...), TWS's light-weight request; `LedgerOnly::No` delivers those plus the account-level keys (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). The ledger keys carry a `$LEDGER-` prefix (`$LEDGER-CashBalance`) only when the TWS/Gateway API setting "Prepend '$LEDGER-' prefix to per-currency account values" is on. 5.x always sent `Yes`, so the account-level keys could not be requested.
 
 ```rust,ignore
 use ibapi::accounts::LedgerOnly;
