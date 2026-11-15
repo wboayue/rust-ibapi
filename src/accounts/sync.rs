@@ -321,8 +321,8 @@ impl Client {
     /// * `account`        - Account values can be requested for a particular account.
     /// * `model_code`     - Account values can also be requested for a model.
     /// * `ledger_only`    - Which keys arrive: [`LedgerOnly::Yes`] for only the per-currency
-    ///   `$LEDGER-*` keys, [`LedgerOnly::No`] for those plus the account-level keys
-    ///   (`NetLiquidation`, `BuyingPower`, ...).
+    ///   ledger keys, [`LedgerOnly::No`] for those plus the account-level keys
+    ///   (`NetLiquidation`, `BuyingPower`, ...). See [`LedgerOnly`] for the `$LEDGER-` prefix.
     ///
     /// # Examples
     ///
