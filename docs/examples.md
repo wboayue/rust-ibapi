@@ -151,11 +151,11 @@ let stock = Contract::stock("AAPL").build();
 
 // Future — `.expires_in(ContractMonth::new(...))` or `.front_month()`
 let future = Contract::futures("ES")
-    .expires_in(ContractMonth::new(2023, 12))
+    .expires_in(ContractMonth::new(2023, 12)?)
     .build();
 
 // Option — the loose-typed constructor returns a Contract directly
-let option = Contract::option("AAPL", ExpirationDate::new(2024, 1, 19), 150.0, OptionRight::Call);
+let option = Contract::option("AAPL", ExpirationDate::new(2024, 1, 19)?, 150.0, OptionRight::Call);
 
 // Forex
 let forex = Contract::forex("EUR", "USD").build();

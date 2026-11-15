@@ -344,7 +344,7 @@ The compiler does not catch the serialized form. `PnL` and `PnLSingle` derive `S
 
 ### 16. `account_updates_multi` takes a `LedgerOnly`
 
-`Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_only: accounts::LedgerOnly`, TWS's `ledgerAndNLV` flag for the account-updates-by-model request. `LedgerOnly::Yes` delivers only the per-currency `$LEDGER-*` keys (`$LEDGER-CashBalance`, `$LEDGER-NetLiquidationByCurrency`, ...), TWS's light-weight request; `LedgerOnly::No` delivers those plus the account-level keys without the prefix (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). 5.x always sent `Yes`, so the account-level keys could not be requested.
+`Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_only: accounts::LedgerOnly`, TWS's `ledgerAndNLV` flag for the account-updates-by-model request. `LedgerOnly::Yes` delivers only the per-currency ledger keys (`CashBalance`, `NetLiquidationByCurrency`, ...), TWS's light-weight request; `LedgerOnly::No` delivers those plus the account-level keys (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). The ledger keys carry a `$LEDGER-` prefix (`$LEDGER-CashBalance`) only when the TWS/Gateway API setting "Prepend '$LEDGER-' prefix to per-currency account values" is on. 5.x always sent `Yes`, so the account-level keys could not be requested.
 
 ```rust,ignore
 use ibapi::accounts::LedgerOnly;
@@ -655,8 +655,8 @@ if details.contract.last_trade_date_or_contract_month.is_empty() { /* none */ }
 println!("{}", details.contract.last_trade_date_or_contract_month);
 
 // 6.0
-let contract = Contract { last_trade_date_or_contract_month: Some(ContractMonth::new(2026, 12).into()), ..Default::default() };
-let call = Contract::option("AAPL", ExpirationDate::new(2026, 12, 18), 150.0, OptionRight::Call);
+let contract = Contract { last_trade_date_or_contract_month: Some(ContractMonth::new(2026, 12)?.into()), ..Default::default() };
+let call = Contract::option("AAPL", ExpirationDate::new(2026, 12, 18)?, 150.0, OptionRight::Call); // §34
 if details.contract.last_trade_date_or_contract_month.is_none() { /* none */ }
 if let Some(expiry) = &details.contract.last_trade_date_or_contract_month {
     println!("{expiry}"); // Display is the wire text: "20261218"
@@ -675,6 +675,30 @@ match details.contract.last_trade_date_or_contract_month {
 - A contract sent as a month comes back from TWS as its last trading day: an order on ES `202612` is echoed as `20261218`. Match on the variant you get, not the one you sent.
 - Serialized, the field is the wire string as before (`"20261218"`); an unset field is `null` instead of `""`. Deserializing still reads `""` as `None`, so 5.x JSON loads. Any other text loads as `Expiry::Unknown`, unchecked.
 - `Expiry` is in the prelude. The compiler reports every site that reads or writes the field.
+
+### 31. `cancel_order` takes only the order id
+
+`Client::cancel_order(order_id, manual_order_cancel_time)` (async and blocking) took the manual cancel time as a `&str`. It now takes only the order id and sends an immediate cancel with default `OrderCancel` fields (no manual cancel time, operator ID or manual order indicator), as `cancel_order(id, "")` did. `cancel_order_with(order_id, &OrderCancel)`, new in 6.0, carries the time in `OrderCancel::manual_order_cancel_time`, beside the operator ID and manual order indicator. `global_cancel()` and `global_cancel_with(&OrderCancel)` are unchanged.
+
+```rust,ignore
+// 5.x
+client.cancel_order(order_id, "")?;
+client.cancel_order(order_id, "20260101-15:30:00")?;
+
+// 6.0
+use ibapi::orders::OrderCancel;
+
+client.cancel_order(order_id)?;
+client.cancel_order_with(
+    order_id,
+    &OrderCancel {
+        manual_order_cancel_time: "20260101-15:30:00".to_owned(),
+        ..OrderCancel::default()
+    },
+)?;
+```
+
+The compiler flags every call. `cancel_order(id)` sends the same request as 5.x's `cancel_order(id, "")`; nothing changes on the wire.
 
 ### 32. `Order`'s order-type fields are `Option<OrderType>`, not `String`
 
@@ -723,3 +747,27 @@ accu_distr().route_order_type(OrderType::Limit)
 ```
 
 The wire value is unchanged (`OrderType::as_str` lists the codes). A code the enum does not list is `OrderType::Unknown("CODE".into())`. The compiler finds every call.
+
+### 34. `ExpirationDate::new` and `ContractMonth::new` return `Result`
+
+Both built any value they were given: `ExpirationDate::new(2026, 13, 40)` was sent to TWS as
+`20261340` and surfaced only as TWS error 200. They now return `Result<Self, Error>`, with
+`Error::InvalidArgument` unless the components form a real calendar date (`ExpirationDate`) or
+month 1–12 (`ContractMonth`), with a year of at most 9999. `FromStr` and `TryFrom<&str>` already
+checked text this way.
+
+```rust,ignore
+// 5.x
+let date = ExpirationDate::new(2026, 12, 18);
+let es = Contract::futures("ES").expires_in(ContractMonth::new(2026, 12)).build();
+
+// 6.0
+let date = ExpirationDate::new(2026, 12, 18)?;
+let es = Contract::futures("ES").expires_in(ContractMonth::new(2026, 12)?).build();
+```
+
+`OptionBuilder::expires_on(year, month, day)` still chains: `build()`, which already returns
+`Result` (§13), now also returns `Error::InvalidArgument` for a date that isn't real. The
+compiler finds every `new` call; it does not find an `expires_on` date that used to pass and now
+fails at `build()`. `ExpirationDate::next_friday()`, `third_friday_of_month()`,
+`ContractMonth::front()` and `next_quarter()` are unchanged.

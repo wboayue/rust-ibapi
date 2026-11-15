@@ -228,7 +228,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::option("AAPL", ExpirationDate::new(2025, 12, 19), 150.0, OptionRight::Call);
+    /// let contract = Contract::option("AAPL", ExpirationDate::new(2025, 12, 19).expect("valid date"), 150.0, OptionRight::Call);
     /// let calculation = client.calculate_option_price(&contract, 0.2, 235.0).expect("request failed");
     /// println!("calculation: {calculation:?}");
     /// ```
@@ -253,7 +253,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::option("AAPL", ExpirationDate::new(2023, 5, 19), 150.0, OptionRight::Call);
+    /// let contract = Contract::option("AAPL", ExpirationDate::new(2023, 5, 19).expect("valid date"), 150.0, OptionRight::Call);
     /// let calculation = client.calculate_implied_volatility(&contract, 25.0, 235.0).expect("request failed");
     /// println!("calculation: {calculation:?}");
     /// ```

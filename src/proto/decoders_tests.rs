@@ -268,8 +268,8 @@ fn decode_contract_types_last_trade_date_or_contract_month() {
     let cases = [
         (None, None),
         (Some(""), None),
-        (Some("20261218"), Some(Expiry::Date(ExpirationDate::new(2026, 12, 18)))),
-        (Some("202612"), Some(Expiry::Month(ContractMonth::new(2026, 12)))),
+        (Some("20261218"), Some(Expiry::Date(ExpirationDate::new(2026, 12, 18).unwrap()))),
+        (Some("202612"), Some(Expiry::Month(ContractMonth::new(2026, 12).unwrap()))),
         (
             Some("20261218 08:30:00 US/Central"),
             Some(Expiry::Unknown("20261218 08:30:00 US/Central".into())),

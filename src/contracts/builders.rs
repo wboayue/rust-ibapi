@@ -152,8 +152,9 @@ impl<S> OptionBuilder<Symbol, S, Missing> {
     }
 
     /// Convenience helper to set a specific calendar date.
+    /// [`build()`](OptionBuilder::build) checks it.
     pub fn expires_on(self, year: u16, month: u8, day: u8) -> OptionBuilder<Symbol, S, ExpirationDate> {
-        self.expires(ExpirationDate::new(year, month, day))
+        self.expires(ExpirationDate::unchecked(year, month, day))
     }
 
     /// Set the expiry to the next Friday weekly contract.
@@ -206,15 +207,17 @@ impl OptionBuilder<Symbol, f64, ExpirationDate> {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidArgument`] unless the strike is positive and finite.
+    /// [`Error::InvalidArgument`] unless the strike is positive and finite and
+    /// the [`expires_on`](OptionBuilder::expires_on) date is a real calendar date.
     pub fn build(self) -> Result<Contract, Error> {
         let strike = Strike::new(self.strike).map_err(Error::InvalidArgument)?;
+        let expiry = self.expiry.validated()?;
         Ok(Contract {
             symbol: self.symbol,
             security_type: SecurityType::Option,
             strike: strike.value(),
             right: Some(self.right),
-            last_trade_date_or_contract_month: Some(self.expiry.into()),
+            last_trade_date_or_contract_month: Some(expiry.into()),
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier.to_string(),

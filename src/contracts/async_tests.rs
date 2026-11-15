@@ -528,7 +528,7 @@ async fn market_rule_skips_another_rule_ids_frame() {
 async fn calculate_option_price_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
-    let contract = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call);
+    let contract = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15).unwrap(), 150.0, OptionRight::Call);
 
     let err = client.calculate_option_price(&contract, 0.25, 155.0).await.unwrap_err();
     assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
@@ -538,7 +538,7 @@ async fn calculate_option_price_returns_eof_on_empty_stream() {
 async fn calculate_implied_volatility_returns_eof_on_empty_stream() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::REQ_CALC_IMPLIED_VOLAT);
-    let contract = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15), 150.0, OptionRight::Call);
+    let contract = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15).unwrap(), 150.0, OptionRight::Call);
 
     let err = client.calculate_implied_volatility(&contract, 8.5, 155.0).await.unwrap_err();
     assert!(matches!(err, crate::Error::UnexpectedEndOfStream), "got {err:?}");
