@@ -678,7 +678,7 @@ match details.contract.last_trade_date_or_contract_month {
 
 ### 31. `cancel_order` takes only the order id
 
-`Client::cancel_order(order_id, manual_order_cancel_time)` (async and blocking) took the manual cancel time as a `&str`. It now takes only the order id and sends an immediate cancel with no operator attributes, as `cancel_order(id, "")` did. `cancel_order_with(order_id, &OrderCancel)`, new in 6.0, carries the time in `OrderCancel::manual_order_cancel_time`, beside the operator ID and manual order indicator. `global_cancel()` and `global_cancel_with(&OrderCancel)` are unchanged.
+`Client::cancel_order(order_id, manual_order_cancel_time)` (async and blocking) took the manual cancel time as a `&str`. It now takes only the order id and sends an immediate cancel with default `OrderCancel` fields (no manual cancel time, operator ID or manual order indicator), as `cancel_order(id, "")` did. `cancel_order_with(order_id, &OrderCancel)`, new in 6.0, carries the time in `OrderCancel::manual_order_cancel_time`, beside the operator ID and manual order indicator. `global_cancel()` and `global_cancel_with(&OrderCancel)` are unchanged.
 
 ```rust,ignore
 // 5.x

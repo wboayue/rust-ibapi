@@ -303,8 +303,8 @@ impl Client {
     /// the subscription stays open until dropped, so break once cancellation
     /// is observed.
     ///
-    /// Sends an immediate cancel with no operator attributes. To set a manual cancel
-    /// time, an operator ID or the manual order indicator, use
+    /// Sends an immediate cancel with default [`OrderCancel`] fields (no manual cancel
+    /// time, operator ID or manual order indicator). To set any of them, use
     /// [`cancel_order_with`](Self::cancel_order_with).
     ///
     /// # Arguments
