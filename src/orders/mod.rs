@@ -40,6 +40,7 @@ pub mod builder;
 /// Order condition types for conditional orders.
 pub mod conditions;
 mod exercise_options_builder;
+mod order_type;
 
 /// Convenience re-export for low-level order builder helpers.
 pub use common::order_builder;
@@ -48,8 +49,9 @@ pub use common::order_builder;
 // is the only public spelling.
 pub use crate::client::ids::OrderId;
 pub use builder::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBound, Detached, OrderBuilder};
-pub use builder::types::{AttachedOrderIds, BracketOrderIds, OrderType};
+pub use builder::types::{AttachedOrderIds, BracketOrderIds};
 pub use exercise_options_builder::ExerciseOptionsBuilder;
+pub use order_type::OrderType;
 
 // Re-export condition types and builders
 pub use conditions::{
@@ -97,7 +99,7 @@ pub struct Order {
     /// The order's type. `None` when unset (`Order::default()`, and an order TWS reports
     /// without one), sent as no order type. A type this version does not list is
     /// `Some(OrderType::Unknown(code))`.
-    #[serde(default, deserialize_with = "builder::types::deserialize_optional_order_type")]
+    #[serde(default, deserialize_with = "order_type::deserialize_optional_order_type")]
     pub order_type: Option<OrderType>,
     /// The LIMIT price.
     /// Used for limit, stop-limit and relative orders. In all other cases specify zero. For relative orders with no limit price, also specify zero.
@@ -291,7 +293,7 @@ pub struct Order {
     /// Type of the delta-neutral hedge TWS submits on full or partial execution of the VOL order;
     /// `None` for no hedge. VOL orders only. TWS echoes an unset value as the string `"None"`,
     /// which decodes to `None` (`docs/wire-facts/orders.md`).
-    #[serde(default, deserialize_with = "builder::types::deserialize_optional_order_type")]
+    #[serde(default, deserialize_with = "order_type::deserialize_optional_order_type")]
     pub delta_neutral_order_type: Option<OrderType>,
     /// Use this field to enter a value if the value in the deltaNeutralOrderType field is an order type that requires an Aux price, such as a REL order. VOL orders only.
     pub delta_neutral_aux_price: Option<f64>,
@@ -522,7 +524,7 @@ pub struct Order {
     /// Adjusted Stop orders: the type the order becomes when `trigger_price` is penetrated;
     /// `None` for an order without an adjustment. TWS echoes an unset value as the string
     /// `"None"`, which decodes to `None` (`docs/wire-facts/orders.md`).
-    #[serde(default, deserialize_with = "builder::types::deserialize_optional_order_type")]
+    #[serde(default, deserialize_with = "order_type::deserialize_optional_order_type")]
     pub adjusted_order_type: Option<OrderType>,
     /// Adjusted Stop orders: specifies the trigger price to execute.
     pub trigger_price: Option<f64>,

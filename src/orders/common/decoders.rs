@@ -1,10 +1,10 @@
 use crate::messages::ResponseMessage;
 use crate::orders::conditions::TriggerMethod;
+use crate::orders::order_type::is_unset_order_type;
 use crate::orders::{
     Action, Execution, ExecutionSide, Liquidity, OcaType, OptionExerciseType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin,
     OrderState, OrderType, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
 };
-use crate::orders::builder::types::is_unset_order_type;
 use crate::orders::{CommissionAndFeesReport, ExecutionData, OrderBound, OrderData, OrderStatus};
 use crate::proto;
 use crate::proto::decoders::{

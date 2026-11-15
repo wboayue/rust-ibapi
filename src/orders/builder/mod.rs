@@ -12,6 +12,7 @@ mod sync_impl;
 #[cfg(feature = "async")]
 mod async_impl;
 
+pub use crate::orders::OrderType;
 pub use algo_builders::{
     AccuDistrBuilder, AccumulateDistributeBuilder, AdaptiveBuilder, AdaptivePriority, AlgoParams, ArrivalPriceBuilder, BalanceImpactRiskBuilder,
     ClosePriceBuilder, DarkIceBuilder, MinimiseImpactBuilder, PctVolBuilder, PctVolPriceBuilder, PctVolSizeBuilder, PctVolTimeBuilder, RiskAversion,
@@ -22,4 +23,4 @@ pub use algo_helpers::{
     pct_vol_size, pct_vol_time, twap, vwap,
 };
 pub use condition_helpers::{execution, margin, percent_change, price, time, volume};
-pub use types::{BracketPrices, CompeteAgainstBest, MidOffsets, OrderType, Price, Quantity, TrailBy, ValidationError};
+pub use types::{BracketPrices, CompeteAgainstBest, MidOffsets, Price, Quantity, TrailBy, ValidationError};

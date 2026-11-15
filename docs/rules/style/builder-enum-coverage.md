@@ -52,7 +52,7 @@ its variants against setters that write them (`Some(OrderType::X)` or
 `self.order_type(OrderType::X)`):
 
 ```bash
-sed -n '/^pub enum OrderType {/,/^}/p' src/orders/builder/types.rs \
+sed -n '/^pub enum OrderType {/,/^}/p' src/orders/order_type.rs \
   | grep -oE '^    [A-Z][A-Za-z]*,' | tr -d ' ,' \
   | while read v; do grep -v '^ *//' src/orders/builder/order_builder.rs \
       | grep -qE "(Some\(|order_type\()OrderType::$v\)" || echo "$v"; done

@@ -7,11 +7,11 @@ use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
 use crate::orders::common::order_builder::non_guaranteed_params;
 use crate::orders::conditions::TriggerMethod;
-use crate::orders::OrderId;
 use crate::orders::{
     Action, OcaType, Order, OrderComboLeg, OrderCondition, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce,
     VolatilityType, WhatIfType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
 };
+use crate::orders::{OrderId, OrderType};
 
 #[cfg(test)]
 #[path = "order_builder_tests.rs"]
