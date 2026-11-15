@@ -10,7 +10,7 @@ triggers:
   - a plan says a narrowing is "transparent" to callers
 symbols: [non_exhaustive, must_use, private_interfaces, pub(crate)]
 related: [integration-crate-builds, modernize-touched-modules, floor-ratchet-splits]
-precedents: ["#547", "#548", "#581", "#665", "#1081"]
+precedents: ["#547", "#548", "#581", "#665", "#1081", "#1232"]
 ---
 
 A PR that adds a compile-time restriction to a public type — `#[non_exhaustive]`, `#[must_use]`,
@@ -75,3 +75,8 @@ unknown codes, so `ConnectivityStatus` stays exhaustive (#689) though its siblin
   match `NoticeCategory`.
 - #1081 — removed `#[non_exhaustive]` from `ExecutionFilterSide`, `OptionRight`, `LegAction`:
   closed TWS vocabularies; the one stated reason (on `ExecutionFilterSide`) was headroom.
+- #1232 — `#[non_exhaustive]` on eleven decoded output structs (`ContractDetails`,
+  `ScannerData`, bars, ticks, depth). The justification is a wire that grows fields, not
+  headroom: dropped proto fields and `Option` sizes were queued behind a major. No outside
+  caller built one, so no PR-A; doctests were the only casualties. Types that lacked `Default`
+  gained one so `default()` plus field assignment stays the escape hatch.
