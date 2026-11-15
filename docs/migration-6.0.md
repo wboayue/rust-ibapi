@@ -771,3 +771,30 @@ let es = Contract::futures("ES").expires_in(ContractMonth::new(2026, 12)?).build
 compiler finds every `new` call; it does not find an `expires_on` date that used to pass and now
 fails at `build()`. `ExpirationDate::next_friday()`, `third_friday_of_month()`,
 `ContractMonth::front()` and `next_quarter()` are unchanged.
+
+### 35. Decoded market-data, contract-details and scanner structs are `#[non_exhaustive]`
+
+`ContractDetails`, `ScannerData`, historical and realtime `Bar`, `BidAsk`, `MidPoint`, `Trade`,
+`TickPrice`, `TickSize`, `MarketDepth`, `MarketDepthL2` and `TickRequestParameters` are now
+`#[non_exhaustive]`. TWS keeps adding fields to these messages, and with this attribute a later
+6.x release can add them too, without another major version. The crate only hands these types
+out; no API takes one as input. The change affects only code that builds one itself, usually a
+test or a mock.
+
+Outside the crate, a struct literal, including `..Default::default()`, no longer compiles. Start
+from `default()` and assign fields. Historical and realtime `Bar`, `BidAsk`, `MidPoint` and
+`Trade` now implement `Default` for this: zero values, empty strings, a Unix-epoch timestamp,
+and `count` `-1` on a historical `Bar`, its value when TWS sends none. `BidAskAttribute` and
+`TradeAttribute` also implement `Default`.
+
+```rust,ignore
+// 5.x
+let details = ContractDetails { liquid_hours: hours, ..Default::default() };
+
+// 6.0
+let mut details = ContractDetails::default();
+details.liquid_hours = hours;
+```
+
+A destructuring pattern needs a trailing `..`: `let Bar { open, close, .. } = bar;`. Reading
+fields is unchanged, and so is serde `Deserialize`. The compiler finds every site.

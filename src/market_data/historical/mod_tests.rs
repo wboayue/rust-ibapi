@@ -315,3 +315,20 @@ fn trim_to_daily_bars() {
 
     assert_eq!(bar_dates(&trimmed), vec![BarTimestamp::from(date!(2026 - 04 - 15))]);
 }
+
+#[test]
+fn bar_default_is_zero_at_epoch_with_no_count() {
+    let Bar {
+        date,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        wap,
+        count,
+    } = Bar::default();
+    assert_eq!(date, BarTimestamp::DateTime(OffsetDateTime::UNIX_EPOCH));
+    assert_eq!((open, high, low, close, volume, wap), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+    assert_eq!(count, -1);
+}

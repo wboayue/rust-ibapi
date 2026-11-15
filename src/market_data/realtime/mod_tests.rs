@@ -55,3 +55,59 @@ fn market_depths_data_from_notice() {
         );
     }
 }
+
+#[test]
+fn tick_by_tick_and_bar_defaults_are_zero_at_epoch() {
+    let BidAsk {
+        time,
+        bid_price,
+        ask_price,
+        bid_size,
+        ask_size,
+        bid_ask_attribute,
+    } = BidAsk::default();
+    assert_eq!(time, OffsetDateTime::UNIX_EPOCH);
+    assert_eq!((bid_price, ask_price, bid_size, ask_size), (0.0, 0.0, 0.0, 0.0));
+    assert_eq!(
+        bid_ask_attribute,
+        BidAskAttribute {
+            bid_past_low: false,
+            ask_past_high: false
+        }
+    );
+
+    let MidPoint { time, mid_point } = MidPoint::default();
+    assert_eq!((time, mid_point), (OffsetDateTime::UNIX_EPOCH, 0.0));
+
+    let Bar {
+        date,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        wap,
+        count,
+    } = Bar::default();
+    assert_eq!(date, OffsetDateTime::UNIX_EPOCH);
+    assert_eq!((open, high, low, close, volume, wap, count), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0));
+
+    let Trade {
+        time,
+        price,
+        size,
+        trade_attribute,
+        exchange,
+        special_conditions,
+    } = Trade::default();
+    assert_eq!(time, OffsetDateTime::UNIX_EPOCH);
+    assert_eq!((price, size), (0.0, 0.0));
+    assert_eq!(
+        trade_attribute,
+        TradeAttribute {
+            past_limit: false,
+            unreported: false
+        }
+    );
+    assert_eq!((exchange.as_str(), special_conditions.as_str()), ("", ""));
+}

@@ -161,8 +161,12 @@ impl From<OffsetDateTime> for BarTimestamp {
 }
 
 /// Bar describes the historical data bar.
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`Bar::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Copy, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Bar {
     /// The bar's timestamp — either a calendar date (daily+ bars) or a full
     /// datetime (intraday bars). See [`BarTimestamp`] for details.
@@ -182,6 +186,22 @@ pub struct Bar {
     /// The number of trades during the bar's timespan (only available for TRADES);
     /// `-1` when TWS sends none
     pub count: i32,
+}
+
+impl Default for Bar {
+    /// A zero bar with `count` `-1`, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            date: BarTimestamp::DateTime(OffsetDateTime::UNIX_EPOCH),
+            open: 0.0,
+            high: 0.0,
+            low: 0.0,
+            close: 0.0,
+            volume: 0.0,
+            wap: 0.0,
+            count: -1,
+        }
+    }
 }
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -460,15 +480,10 @@ impl HistoricalData {
     /// use ibapi::market_data::historical::{Bar, BarTimestamp, HistoricalData};
     /// use time::macros::datetime;
     ///
-    /// let bar = |at| Bar {
-    ///     date: BarTimestamp::DateTime(at),
-    ///     open: 1.0,
-    ///     high: 1.0,
-    ///     low: 1.0,
-    ///     close: 1.0,
-    ///     volume: 0.0,
-    ///     wap: 0.0,
-    ///     count: 0,
+    /// let bar = |at| {
+    ///     let mut bar = Bar::default();
+    ///     bar.date = BarTimestamp::DateTime(at);
+    ///     bar
     /// };
     /// let data = HistoricalData {
     ///     start: datetime!(2026-04-14 0:00 UTC),

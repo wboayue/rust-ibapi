@@ -47,8 +47,12 @@ use crate::contracts::tick_types::TickType;
 // === Models ===
 
 /// Represents `BidAsk` tick by tick realtime tick.
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`BidAsk::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[non_exhaustive]
 pub struct BidAsk {
     /// The spread's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -62,6 +66,20 @@ pub struct BidAsk {
     pub ask_size: f64,
     /// tick-by-tick real-time bid/ask tick attribs (bit 0 - bid past low, bit 1 - ask past high)
     pub bid_ask_attribute: BidAskAttribute,
+}
+
+impl Default for BidAsk {
+    /// Zero prices and sizes, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            time: OffsetDateTime::UNIX_EPOCH,
+            bid_price: 0.0,
+            ask_price: 0.0,
+            bid_size: 0.0,
+            ask_size: 0.0,
+            bid_ask_attribute: BidAskAttribute::default(),
+        }
+    }
 }
 
 impl StreamDecoder<BidAsk> for BidAsk {
@@ -87,7 +105,7 @@ impl StreamDecoder<BidAsk> for BidAsk {
 
 /// Attributes for bid/ask tick data.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct BidAskAttribute {
     /// Indicates if the bid price is past the daily low.
     pub bid_past_low: bool,
@@ -96,13 +114,27 @@ pub struct BidAskAttribute {
 }
 
 /// Represents `MidPoint` tick by tick realtime tick.
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`MidPoint::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[non_exhaustive]
 pub struct MidPoint {
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
     /// mid point
     pub mid_point: f64,
+}
+
+impl Default for MidPoint {
+    /// A zero midpoint, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            time: OffsetDateTime::UNIX_EPOCH,
+            mid_point: 0.0,
+        }
+    }
 }
 
 impl StreamDecoder<MidPoint> for MidPoint {
@@ -127,8 +159,12 @@ impl StreamDecoder<MidPoint> for MidPoint {
 }
 
 /// Represents a real-time bar with OHLCV data
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`Bar::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[non_exhaustive]
 pub struct Bar {
     /// The timestamp of the bar in market timezone
     pub date: OffsetDateTime,
@@ -146,6 +182,22 @@ pub struct Bar {
     pub wap: f64,
     /// Number of trades during the bar period
     pub count: i32,
+}
+
+impl Default for Bar {
+    /// A zero bar, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            date: OffsetDateTime::UNIX_EPOCH,
+            open: 0.0,
+            high: 0.0,
+            low: 0.0,
+            close: 0.0,
+            volume: 0.0,
+            wap: 0.0,
+            count: 0,
+        }
+    }
 }
 
 impl StreamDecoder<Bar> for Bar {
@@ -170,8 +222,12 @@ impl StreamDecoder<Bar> for Bar {
 }
 
 /// Represents `Last` or `AllLast` tick-by-tick real-time tick.
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`Trade::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[non_exhaustive]
 pub struct Trade {
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -185,6 +241,20 @@ pub struct Trade {
     pub exchange: String,
     /// Tick special conditions
     pub special_conditions: String,
+}
+
+impl Default for Trade {
+    /// A zero trade with empty exchange and conditions, timestamped at the Unix epoch.
+    fn default() -> Self {
+        Self {
+            time: OffsetDateTime::UNIX_EPOCH,
+            price: 0.0,
+            size: 0.0,
+            trade_attribute: TradeAttribute::default(),
+            exchange: String::new(),
+            special_conditions: String::new(),
+        }
+    }
 }
 
 impl StreamDecoder<Trade> for Trade {
@@ -210,7 +280,7 @@ impl StreamDecoder<Trade> for Trade {
 
 /// Attributes for trade tick data.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct TradeAttribute {
     /// Indicates if the trade occurred past the limit price.
     pub past_limit: bool,
@@ -328,9 +398,13 @@ impl_wire_code!(DepthSide {
     Bid = 1,
 });
 
+/// Returns the order book.
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`MarketDepth::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-/// Returns the order book.
+#[non_exhaustive]
 pub struct MarketDepth {
     /// The order book's row being updated
     pub position: i32,
@@ -345,8 +419,12 @@ pub struct MarketDepth {
 }
 
 /// Returns the order book.
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`MarketDepthL2::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[non_exhaustive]
 pub struct MarketDepthL2 {
     /// The order book's row being updated
     pub position: i32,
@@ -492,8 +570,12 @@ impl StreamDecoder<TickTypes> for TickTypes {
 }
 
 /// Price tick data.
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`TickPrice::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
+#[non_exhaustive]
 pub struct TickPrice {
     /// Type of price tick (bid, ask, last, etc.).
     pub tick_type: TickType,
@@ -516,8 +598,12 @@ pub struct TickAttribute {
 }
 
 /// Size tick data.
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`TickSize::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
+#[non_exhaustive]
 pub struct TickSize {
     /// Type of size tick (bid size, ask size, etc.).
     pub tick_type: TickType,
@@ -562,8 +648,12 @@ pub struct TickGeneric {
 }
 
 /// Parameters related to tick data requests.
+///
+/// `#[non_exhaustive]`: TWS adds fields over time. Outside this crate, start from
+/// [`TickRequestParameters::default`] and assign fields.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
+#[non_exhaustive]
 pub struct TickRequestParameters {
     /// Minimum tick increment.
     pub min_tick: f64,
