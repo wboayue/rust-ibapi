@@ -306,7 +306,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.auto_cancel_date = s(&proto.auto_cancel_date);
     // Absent means unset upstream (Order.cs ctor sets decimal.MaxValue).
     order.filled_quantity = parse_decimal_or_zero(proto.filled_quantity.as_deref())?;
-    order.ref_futures_con_id = proto.ref_futures_con_id.map(Some).unwrap_or(Some(0));
+    order.ref_futures_con_id = proto.ref_futures_con_id;
     order.auto_cancel_parent = proto.auto_cancel_parent.unwrap_or_default();
     order.shareholder = s(&proto.shareholder);
     order.imbalance_only = proto.imbalance_only.unwrap_or_default();

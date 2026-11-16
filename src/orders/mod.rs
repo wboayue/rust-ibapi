@@ -467,7 +467,8 @@ pub struct Order {
     pub auto_cancel_date: String,
     /// Specifies the initial order quantity to be filled.
     pub filled_quantity: f64,
-    /// Identifies the reference future conId.
+    /// Identifies the reference future conId. `None` when TWS sends none, as it does for a
+    /// stock order.
     pub ref_futures_con_id: Option<i32>,
     /// Cancels the parent order if child order was cancelled.
     pub auto_cancel_parent: bool,
@@ -685,7 +686,7 @@ impl Default for Order {
             dont_use_auto_price_for_hedge: false,
             auto_cancel_date: "".to_owned(),
             filled_quantity: 0.0,
-            ref_futures_con_id: Some(0),
+            ref_futures_con_id: None,
             auto_cancel_parent: false,
             shareholder: "".to_owned(),
             imbalance_only: false,
