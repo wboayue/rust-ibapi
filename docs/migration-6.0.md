@@ -1028,3 +1028,33 @@ and no longer matches. A serialized `Contract` with one of these types writes `"
 or `"EventContract"` where it wrote `{"Other":"IOPT"}`, and JSON written by 5.x for them still
 deserializes as `Other`, which compares unequal to the new variant; re-parse with
 `t.as_str().parse()` to normalize.
+
+### 45. `ComboLeg::short_sale_slot` and `Order::delta_neutral_short_sale_slot` are `ShortSaleSlot`
+
+Both were `i32` codes (`1` clearing broker, `2` third party) beside `Order::short_sale_slot`,
+which is an `orders::ShortSaleSlot`. All three now hold the enum. A code the crate doesn't
+model is `ShortSaleSlot::Unknown(code)` and is sent back unchanged; `ShortSaleSlot::None`
+(code `0`) is still sent as no value.
+
+```rust,ignore
+use ibapi::orders::ShortSaleSlot;
+
+// leg: ibapi::contracts::ComboLeg, order: ibapi::orders::Order
+
+// 5.x
+leg.short_sale_slot = 2;
+order.delta_neutral_short_sale_slot = 1;
+if leg.short_sale_slot == 0 { /* not a short sale */ }
+
+// 6.0
+leg.short_sale_slot = ShortSaleSlot::ThirdParty;
+order.delta_neutral_short_sale_slot = ShortSaleSlot::Broker;
+if leg.short_sale_slot == ShortSaleSlot::None { /* not a short sale */ }
+let code = i32::from(leg.short_sale_slot); // where the number is wanted
+```
+
+The compiler finds every assignment and comparison; `ComboLeg { .., ..Default::default() }`
+literals compile unchanged. It doesn't catch the serialized form: `ComboLeg` and `Order` derive
+`Serialize` / `Deserialize`, and both fields now serialize as the variant name (`"Broker"`,
+`{"Unknown":7}`) where they were numbers, so JSON written by 5.x no longer deserializes. The
+`utoipa` schemas change to match.
