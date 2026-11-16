@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
+use ibapi::news::AllMessages;
 use ibapi_integration_async::connect;
 use ibapi_test::ClientId;
 
@@ -18,7 +19,7 @@ async fn news_bulletins() {
     let client_id = ClientId::get();
     let client = connect(&client_id).await;
 
-    let mut subscription = client.news_bulletins(true).await.expect("news_bulletins failed");
+    let mut subscription = client.news_bulletins(AllMessages::Yes).await.expect("news_bulletins failed");
 
     // Bulletins may not arrive immediately - just verify subscription was created
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(3), subscription.next()).await;

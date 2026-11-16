@@ -2,7 +2,7 @@ use time::macros::datetime;
 
 use super::*;
 use crate::common::test_utils::helpers::TEST_CONTRACT_ID;
-use crate::testdata::builders::news::historical_news_request;
+use crate::testdata::builders::news::{historical_news_request, news_bulletins_request};
 use crate::testdata::builders::RequestEncoder;
 
 /// Each bound goes in the one field TWS reads for it, as UTC `yyyy-MM-dd HH:mm:ss.0`
@@ -35,5 +35,13 @@ fn encode_request_historical_news_bounds() {
             .total_results(50)
             .encode_request();
         assert_eq!(bytes, expected, "{label}");
+    }
+}
+
+#[test]
+fn encode_request_news_bulletins_all_messages() {
+    for (all_messages, sent) in [(AllMessages::Yes, true), (AllMessages::No, false)] {
+        let bytes = encode_request_news_bulletins(all_messages).unwrap();
+        assert_eq!(bytes, news_bulletins_request().all_messages(sent).encode_request(), "{all_messages:?}");
     }
 }

@@ -1,6 +1,8 @@
 use super::*;
 use crate::orders::common::decoders::decode_order;
 use crate::orders::{self, Action, OrderType, TimeInForce, WhatIfType};
+use crate::testdata::builders::orders::{auto_open_orders_request, completed_orders_request};
+use crate::testdata::builders::RequestEncoder;
 
 #[test]
 fn encode_order_basic() {
@@ -337,5 +339,21 @@ fn encode_attached_orders_sends_preset_type_for_each_leg() {
     ];
     for (order, expected) in cases {
         assert_eq!(encode_attached_orders(&order), Some(expected));
+    }
+}
+
+#[test]
+fn encode_completed_orders_api_only() {
+    for (api_only, sent) in [(ApiOnly::Yes, true), (ApiOnly::No, false)] {
+        let bytes = encode_completed_orders(api_only).unwrap();
+        assert_eq!(bytes, completed_orders_request().api_only(sent).encode_request(), "{api_only:?}");
+    }
+}
+
+#[test]
+fn encode_auto_open_orders_auto_bind() {
+    for (auto_bind, sent) in [(AutoBind::Yes, true), (AutoBind::No, false)] {
+        let bytes = encode_auto_open_orders(auto_bind).unwrap();
+        assert_eq!(bytes, auto_open_orders_request().auto_bind(sent).encode_request(), "{auto_bind:?}");
     }
 }

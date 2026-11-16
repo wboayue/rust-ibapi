@@ -375,10 +375,9 @@ fn completed_orders() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-    let api_only = true;
-    let results = client.completed_orders(api_only);
+    let results = client.completed_orders(ApiOnly::Yes);
 
-    assert_request(&message_bus, 0, &completed_orders_request().api_only(api_only));
+    assert_request(&message_bus, 0, &completed_orders_request().api_only(true));
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 
@@ -442,10 +441,9 @@ fn auto_open_orders() {
     )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-    let api_only = true;
-    let results = client.auto_open_orders(api_only);
+    let results = client.auto_open_orders(AutoBind::Yes);
 
-    assert_request(&message_bus, 0, &auto_open_orders_request().auto_bind(api_only));
+    assert_request(&message_bus, 0, &auto_open_orders_request().auto_bind(true));
     let subscription = results.expect("auto_open_orders");
     // OpenOrderEnd is terminal for auto_open_orders too: the stream ends rather than waiting for binds.
     assert!(subscription.next().is_none(), "OpenOrderEnd alone must end the stream with no orders");

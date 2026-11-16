@@ -64,7 +64,8 @@ pub use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHour
 
 // Order types
 pub use crate::orders::{
-    order_builder, Action, ExecutionFilter, ExecutionFilterSide, ExecutionSide, OrderCancel, OrderOutcome, OrderUpdate, Orders, PlaceOrder,
+    order_builder, Action, ApiOnly, AutoBind, ExecutionFilter, ExecutionFilterSide, ExecutionSide, OrderCancel, OrderOutcome, OrderUpdate, Orders,
+    PlaceOrder,
 };
 
 // Account types

@@ -877,3 +877,36 @@ marks both fields nullable. JSON written by 5.x still deserializes, with a store
 `count` stays `i32` and is `-1` on a non-TRADES bar, as TWS sends it. The historical `Bar`
 (`market_data::historical::Bar`) is unchanged: TWS sends `-1` for its volume, WAP and count on
 non-TRADES bars rather than leaving them out, so they stay `f64` and `i32`.
+
+### 41. `completed_orders`, `auto_open_orders` and `news_bulletins` take an enum, not a `bool`
+
+The last three `bool` flags on `Client` methods are two-variant enums, as `LedgerOnly` (§16),
+`SmartDepth` and `IgnoreSize` already are, so the call site says what the flag selects:
+
+| Method (sync and async) | 5.x | 6.0 |
+|---|---|---|
+| `completed_orders` | `api_only: bool` | `api_only: orders::ApiOnly` |
+| `auto_open_orders` | `auto_bind: bool` | `auto_bind: orders::AutoBind` |
+| `news_bulletins` | `all_messages: bool` | `all_messages: news::AllMessages` |
+
+`Yes` is the old `true` and `No` the old `false`. None of the three has a `Default`. `ApiOnly`
+and `AutoBind` are in the prelude; `AllMessages` is imported from `ibapi::news`.
+
+```rust,ignore
+use ibapi::news::AllMessages;
+use ibapi::orders::{ApiOnly, AutoBind};
+
+// client: ibapi::client::blocking::Client (the async calls add `.await`)
+
+// 5.x
+let completed = client.completed_orders(true)?;
+let orders = client.auto_open_orders(false)?;
+let bulletins = client.news_bulletins(true)?;
+
+// 6.0
+let completed = client.completed_orders(ApiOnly::Yes)?;   // only orders placed through the API
+let orders = client.auto_open_orders(AutoBind::No)?;      // new TWS orders are not bound to this client
+let bulletins = client.news_bulletins(AllMessages::Yes)?; // the day's existing bulletins, then new ones
+```
+
+The compiler reports every call. Nothing changes on the wire or at runtime.
