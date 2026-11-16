@@ -10,7 +10,7 @@ triggers:
   - a plan says a narrowing is "transparent" to callers
 symbols: [non_exhaustive, must_use, private_interfaces, pub(crate)]
 related: [integration-crate-builds, modernize-touched-modules, floor-ratchet-splits]
-precedents: ["#547", "#548", "#581", "#665", "#1081", "#1232"]
+precedents: ["#547", "#548", "#581", "#665", "#1081", "#1232", "#1234"]
 ---
 
 A PR that adds a compile-time restriction to a public type — `#[non_exhaustive]`, `#[must_use]`,
@@ -81,3 +81,7 @@ unknown codes, so `ConnectivityStatus` stays exhaustive (#689) though its siblin
   the rest were headroom. The attribute makes only *adding* fields non-breaking: a field type
   change (`f64` → `Option<f64>`) breaks callers either way, so it is no reason to apply one. No
   outside caller built these types, so there was no PR-A; doctests were the only casualties.
+- #1234 — partial counter-example to #1232: `ScannerData`'s named fields (`distance`,
+  `benchmark`, `projection`) are documented in the proto as internal use only or always empty,
+  so none would be added and the attribute was removed before 6.0 shipped. A field the decoder
+  drops justifies `#[non_exhaustive]` only if the proto says it carries data.
