@@ -802,6 +802,9 @@ contracts and leaves out for everything else (empty there). Code that reads fiel
   `..Default::default()`.
 - A destructuring pattern that names every field: add them, or end it with `..`.
 
+Serialized `ContractDetails` JSON from 5.x still deserializes: the three fields default to
+empty when absent.
+
 ### 36. `ExecutionFilter::specific_dates` is `Vec<time::Date>`
 
 `specific_dates` was a `Vec<String>` of `yyyymmdd` text. An entry that did not parse as an

@@ -103,3 +103,13 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
 - **Not probed:** `MarketDepthL2` (AAPL depth drew 10092); RTH equity ticks; AAPL
   tick-by-tick (no data overnight).
 
+### `TickReqParams` precision fields
+
+*Live 2026-11-15 Sun 22:25 ET, paper, server 226; raw capture; #1251.*
+
+- `reqMktData` first frame: `lastPricePrecision` and `lastSizePrecision` sent as `"0.000001"`
+  for AAPL, absent for EUR.USD and ES. Steps, not digit counts; the same values
+  `ContractData` carries ([contracts](contracts.md#event-contract-minalgosize-and-precision-fields)).
+- Not decoded: one stock out of three contracts, with no documented meaning.
+- **Not probed:** options, crypto, non-US stocks.
+

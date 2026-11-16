@@ -127,7 +127,7 @@ Contract details and option chains. Format: [README](README.md).
 
 ### Event-contract, `minAlgoSize` and precision fields
 
-*Live 2026-11-15 Sun 23:52 ET (off-hours), paper, server 226; raw capture of `ContractData`.*
+*Live 2026-11-15 Sun 23:52 ET (off-hours), paper, server 226; raw capture of `ContractData`; #1251.*
 
 | Contract | `eventContract1` / `Description1` / `Description2` | `minAlgoSize` | `lastPricePrecision` / `lastSizePrecision` |
 |---|---|---|---|
@@ -141,9 +141,7 @@ Contract details and option chains. Format: [README](README.md).
 - `minAlgoSize` was `"0"` on every row, including AAPL, which takes algo orders, so no
   contract probed carried a usable value.
 - The precision fields are steps (`0.000001`), not digit counts, and only AAPL sent them.
-  `TickReqParams` matched: AAPL `"0.000001"` for both, absent for EUR.USD and ES (same
-  session, `reqMktData`).
-- **Not probed:** options, bonds, funds, non-US stocks; a contract with a non-zero
+  `TickReqParams` matched ([market data](market-data.md#tickreqparams-precision-fields)).
+- **Not probed:** equity and index options, bonds, funds, non-US stocks; a contract with a non-zero
   `minAlgoSize`; what the AAPL step governs (sub-penny prices and fractional shares are both
   smaller than its `minTick` 0.01 and `minSize` 0.0001).
-

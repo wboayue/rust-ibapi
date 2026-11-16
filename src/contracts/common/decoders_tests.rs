@@ -425,6 +425,7 @@ fn decode_contract_details_reads_event_contract_fields() {
         ("stock", proto::ContractDetails::default(), ["", "", ""]),
     ];
     for (label, proto_details, [topic, description, question]) in cases {
+        // The decoder reads these fields regardless of security type.
         let details = decode_contract_and_details(&stk_contract(), &proto_details).unwrap();
         assert_eq!(details.event_contract_topic, topic, "{label}");
         assert_eq!(details.event_contract_description, description, "{label}");

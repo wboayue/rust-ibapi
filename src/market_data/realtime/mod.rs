@@ -622,9 +622,8 @@ pub struct TickGeneric {
 
 /// Parameters related to tick data requests.
 ///
-/// Not `#[non_exhaustive]`: TWS also sends last price and size precision, which aren't decoded
-/// because a live check found them only on a stock (AAPL), as a step of unclear meaning
-/// (`docs/wire-facts/contracts.md`).
+/// TWS also sends last price and size precision. They aren't decoded: a live check found them
+/// only on a stock (AAPL), as a step with no documented meaning (`docs/wire-facts/market-data.md#tickreqparams-precision-fields`).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct TickRequestParameters {

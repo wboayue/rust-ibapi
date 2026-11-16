@@ -59,7 +59,9 @@ unknown codes, so `ConnectivityStatus` stays exhaustive (#689) though its siblin
 On a struct, the reason is a field still to come: one TWS sends that the decoder drops. It
 counts only if the field carries data a caller can use. Check the proto comment, and on a doubt
 check a live gateway: a field documented as internal use only, or one that arrives empty, is
-headroom (#1234).
+headroom (#1234). Probe the named fields *before* applying the attribute: of those #1232 named, a later
+probe found only the event-contract strings worth decoding, and they fit in the same major
+(#1251).
 
 ## Precedents
 
