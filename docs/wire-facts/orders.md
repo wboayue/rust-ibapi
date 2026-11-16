@@ -337,3 +337,16 @@ with `override_natural_action`.*
   price; MTL during market hours; `adjusted_order_type` `STP` (`AdjustTo::Stop`); whether `None` is ever
   echoed for `order_type` itself (it was `LMT`, `STP` or `VOL` on every echo); executions and
   `order_update_stream`; TWS as opposed to the Gateway; live accounts.
+
+### Open order fields TWS leaves out
+
+*Live 2026-11-15 Sun 22:27 ET (overnight), paper, server 226; raw capture.*
+
+- An unfilled AAPL BUY 1 LMT 1.00 (`outside_rth`), read back with `open_orders()` (5 frames):
+  `Order.refFuturesConId` (116) **absent** in every frame; `filledQuantity` (115) **sent** as
+  `"0"`.
+- Settles that a stock order carries no reference future, so absent decodes as `None`, as C#
+  leaves it unset (`HasRefFuturesConId`). `filledQuantity` is always sent, so it stays `f64`.
+- **Not probed:** a futures or EFP order, where `refFuturesConId` would be set; a filled or
+  partially filled order.
+
