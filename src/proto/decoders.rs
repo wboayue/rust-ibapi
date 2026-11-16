@@ -94,20 +94,20 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
 /// Where `0` would fabricate a plausible value and live capture shows the field
 /// is always sent, use [`required_decimal`] instead.
 /// `0.0` is what those fields produced for an absent or empty wire value before
-/// [`parse_optional_decimal`] existed, so this preserves that behaviour while
+/// [`parse_optional_decimal`] existed, so this preserves that behavior while
 /// still erroring on malformed input.
 ///
-/// **Transitional.** The fields whose absent value was most clearly reachable and
-/// meaningful — the historical tick and histogram sizes, and
-/// `ContractDetails::{min_size, size_increment, suggested_size_increment}` — are
-/// already `Option<f64>` and use [`parse_optional_decimal`]. The remaining call
-/// sites are not all provably safe: the C# reference client guards several of them
-/// with `HasX ? Util.StringToDecimal(..) : decimal.MaxValue`, so upstream models
-/// them as "absent means unset" too. `Bar::volume` / `Bar::wap` are the clearest
-/// case — MIDPOINT, BID and ASK bars carry no volume, and `EDecoderUtils.cs`
-/// defaults them to `decimal.MaxValue` while defaulting open/high/low/close to `0`
-/// in the same function. Those are candidates for `Option<f64>` in the follow-up
-/// decimal-quantity work; grep this name for the worklist.
+/// **Transitional.** The fields whose absent value was reachable and meaningful
+/// use [`parse_optional_decimal`] and are `Option<f64>`: the historical tick and
+/// histogram sizes, `ContractDetails::{min_size, size_increment,
+/// suggested_size_increment}`, and the realtime `Bar::{volume, wap}`, which TWS
+/// omits for every non-TRADES bar (`docs/wire-facts/market-data.md`). The C#
+/// reference client guards several remaining call sites with
+/// `HasX ? Util.StringToDecimal(..) : decimal.MaxValue`, but a live check
+/// (server 226) found TWS sends every one it covered: historical bar
+/// volume/WAP (`"-1"` for non-TRADES bars), tick, tick-by-tick and depth sizes,
+/// and `Order::filled_quantity`. Grep this name for the remaining sites before
+/// assuming a new one is safe.
 pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
     Ok(parse_optional_decimal(opt)?.unwrap_or(0.0))
 }

@@ -175,12 +175,14 @@ pub struct Bar {
     pub low: f64,
     /// The bar's close price.
     pub close: f64,
-    /// The bar's traded volume if available (only available for TRADES)
+    /// The bar's traded volume. TWS sends `-1` for bars that aren't
+    /// [`WhatToShow::Trades`] (MIDPOINT, BID, ASK, ...).
     pub volume: f64,
-    /// The bar's Weighted Average Price (only available for TRADES)
+    /// The bar's volume-weighted average price; `-1` for bars that aren't
+    /// [`WhatToShow::Trades`].
     pub wap: f64,
-    /// The number of trades during the bar's timespan (only available for TRADES);
-    /// `-1` when TWS sends none
+    /// The number of trades during the bar's timespan; `-1` for bars that aren't
+    /// [`WhatToShow::Trades`].
     pub count: i32,
 }
 

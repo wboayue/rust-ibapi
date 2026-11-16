@@ -78,8 +78,8 @@ pub(crate) fn decode_realtime_bar_proto(msg: crate::proto::RealTimeBarTick) -> R
         high: msg.high.unwrap_or_default(),
         low: msg.low.unwrap_or_default(),
         close: msg.close.unwrap_or_default(),
-        volume: parse_decimal_or_zero(msg.volume.as_deref())?,
-        wap: parse_decimal_or_zero(msg.wap.as_deref())?,
+        volume: parse_optional_decimal(msg.volume.as_deref())?,
+        wap: parse_optional_decimal(msg.wap.as_deref())?,
         count: msg.count.unwrap_or_default(),
     })
 }

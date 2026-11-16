@@ -75,3 +75,31 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
   and `reqMktDepth` draws 10092 (deep data not supported for the security type/exchange).
 - **Not probed:** delayed market data (type 3/4) on a CFD; snapshot requests; FX or
   commodity CFDs; a window longer than 15s; the async client.
+
+### Bar volume and WAP on non-TRADES bars
+
+*Live 2026-11-15 Sun 22:25 ET (FX and CME Globex open, US equities overnight), paper, server
+226; raw capture.*
+
+- `reqRealTimeBars` MIDPOINT, EUR.USD and ES: `RealTimeBarTick.volume` (7) and `WAP` (8)
+  **absent** in 7 of 7 frames; `count` sent as `-1`. TRADES on ES: all three sent with real
+  values. EUR.USD TRADES draws 420 (no Last data for CASH).
+- `reqHistoricalData` MIDPOINT and BID, 1-hour bars, AAPL, EUR.USD and ES: `volume` and `WAP`
+  **sent** as `"-1"`, `barCount` as `-1`. TRADES sends real values.
+- Settles that the two bar types differ: realtime leaves the fields out, historical sends a
+  `-1` sentinel. C# reads an absent realtime value as unset (`decimal.MaxValue`).
+- **Not probed:** ASK bars; AAPL realtime bars (no data overnight); `HistoricalDataUpdate`
+  (keep-up-to-date) bars.
+
+### Size fields are always sent
+
+*Live 2026-11-15 Sun 22:25 ET, paper, server 226; raw capture, same session as above.*
+
+- Every frame carried its size: `TickSize.size` (35 frames, tick types 0/3/5/8; `"0"` sent
+  explicitly twice), tick-by-tick Last (ES, 9) and BidAsk (EUR.USD and ES, 40) sizes, and
+  `MarketDepth` size (EUR.USD and ES, 80, insert and update). `TickReqParams.minTick` and
+  `snapshotPermissions` were sent for all three contracts (`0` explicitly for EUR.USD).
+- So decoding an absent size as `0` changes nothing observed; these stay `f64`.
+- **Not probed:** `MarketDepthL2` (AAPL depth drew 10092); RTH equity ticks; AAPL
+  tick-by-tick (no data overnight).
+

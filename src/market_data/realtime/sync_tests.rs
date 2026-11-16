@@ -89,7 +89,7 @@ fn realtime_bars() {
         "Wrong timestamp for first bar"
     );
     assert_eq!(received_bars[0].open, 4028.75, "Wrong open price for first bar");
-    assert_eq!(received_bars[0].volume, 2.0, "Wrong volume for first bar");
+    assert_eq!(received_bars[0].volume, Some(2.0), "Wrong volume for first bar");
 
     // Verify second bar
     assert_eq!(
@@ -98,7 +98,7 @@ fn realtime_bars() {
         "Wrong timestamp for second bar"
     );
     assert_eq!(received_bars[1].open, 4028.80, "Wrong open price for second bar");
-    assert_eq!(received_bars[1].volume, 3.0, "Wrong volume for second bar");
+    assert_eq!(received_bars[1].volume, Some(3.0), "Wrong volume for second bar");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(

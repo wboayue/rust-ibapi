@@ -52,8 +52,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  High:   ${:.2}", bar.high);
         println!("  Low:    ${:.2}", bar.low);
         println!("  Close:  ${:.2}", bar.close);
-        println!("  Volume: {:.0}", bar.volume);
-        println!("  VWAP:   ${:.2}", bar.wap);
+        // TRADES bars carry volume and VWAP; MIDPOINT, BID and ASK bars don't.
+        if let (Some(volume), Some(wap)) = (bar.volume, bar.wap) {
+            println!("  Volume: {volume:.0}");
+            println!("  VWAP:   ${wap:.2}");
+        }
         println!("  Trades: {}", bar.count);
         println!();
 
