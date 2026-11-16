@@ -817,3 +817,27 @@ details.liquid_hours = hours;
 
 A destructuring pattern needs a trailing `..`: `let TickRequestParameters { min_tick, .. } =
 params;`. Reading fields is unchanged, and so is serde `Deserialize`. The compiler finds every site.
+
+### 36. `ExecutionFilter::specific_dates` is `Vec<time::Date>`
+
+`specific_dates` was a `Vec<String>` of `yyyymmdd` text. An entry that did not parse as an
+integer, such as `"2026-01-30"` or `"20260130 "`, was dropped without an error, so the filter
+asked for fewer dates than the caller gave, and with none left the request had no date filter
+(for an otherwise default filter, today only).
+The field now holds `time::Date`s, so a malformed date can't be written.
+
+```rust,ignore
+// 5.x
+let filter = ExecutionFilter { specific_dates: vec!["20260130".to_string()], ..Default::default() };
+
+// 6.0
+use time::macros::date;
+let filter = ExecutionFilter { specific_dates: vec![date!(2026 - 01 - 30)], ..Default::default() };
+```
+
+The compiler finds every site that builds the list. A date read from text parses with
+`time::Date::parse(text, time::macros::format_description!("[year][month][day]"))`. TWS reads
+each date as the execution's day in UTC or in the operator's time zone (live tests did not
+distinguish between the two), not in the instrument's; this is unchanged. IB documents dates
+within the past week; whether TWS returns executions for an older date is not known
+([wire facts](wire-facts/orders.md#executions-last_n_days-and-specific_dates)).

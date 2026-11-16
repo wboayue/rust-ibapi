@@ -148,6 +148,18 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - `specific_dates = ["yyyymmdd"]` → exactly that day.
 - One commission report per execution comes back alongside.
 
+*Live 2026-11-16 01:43Z (Sunday evening ET), paper Gateway, server 226; #1235.*
+
+- `last_n_days = 7` → 14 executions: the 2026-11-11 UTC fills (`Execution.time` dates them
+  `20261110`; see below) and 2026-11-15. `last_n_days` 8, 14 and 30 → none, no error, only
+  the end message.
+- `specific_dates` one day at a time, 2026-10-26 to 2026-11-16: 2026-11-11 and 2026-11-15
+  returned their fills; every other day, including each day 8 to 21 days back, returned none,
+  no error, only the end message.
+- **Not probed:** a `specific_dates` day older than a week that has executions. None was
+  reachable (`last_n_days` above 7 returned nothing), so whether TWS applies IB's "within the
+  past week" to `specific_dates` is not known.
+
 ### `Execution.time` rendering
 
 *Live 2026-11-11 overnight (02:17Z to 03:09Z), paper Gateway, server 226; #1225.*

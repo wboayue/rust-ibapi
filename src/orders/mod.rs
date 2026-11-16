@@ -1890,8 +1890,11 @@ pub struct ExecutionFilter {
     pub side: Option<ExecutionFilterSide>,
     /// Filter executions from the last N days (0 = no filter).
     pub last_n_days: i32,
-    /// Filter executions for specific dates (format: yyyymmdd, e.g., "20260130").
-    pub specific_dates: Vec<String>,
+    /// Filter executions to these dates, e.g. `vec![date!(2026 - 01 - 30)]`. A date is the
+    /// execution's day in UTC or in the operator's time zone (live tests did not distinguish
+    /// between the two), not in the instrument's. IB documents dates within the past week;
+    /// whether TWS returns executions for an older date is not known.
+    pub specific_dates: Vec<time::Date>,
 }
 
 /// Enumerates possible results from querying an [Execution].
