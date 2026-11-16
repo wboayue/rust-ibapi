@@ -10,7 +10,7 @@
 //! ```
 
 use ibapi::client::blocking::Client;
-use ibapi::contracts::{Contract, OptionRight, SecurityType};
+use ibapi::contracts::{Contract, Expiry, OptionRight, SecurityType};
 use ibapi::orders::PlaceOrder;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,13 +29,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let chain = smart_chain.ok_or("no SMART option chain for SPY")?;
 
-    let mut expirations = chain.expirations.clone();
-    expirations.sort();
-    let expiration = expirations.first().ok_or("no expirations")?;
+    let expiration = chain
+        .expirations
+        .iter()
+        .filter_map(|expiry| match expiry {
+            Expiry::Date(date) => Some(date.clone()),
+            _ => None,
+        })
+        .min()
+        .ok_or("no expirations")?;
 
     // The chain's strikes span every expiration. A strike of 0 asks TWS for each strike this
     // expiration lists; take the middle one.
-    let mut calls = client.contract_details(&Contract::option("SPY", expiration.parse()?, 0.0, OptionRight::Call))?;
+    let mut calls = client.contract_details(&Contract::option("SPY", expiration, 0.0, OptionRight::Call))?;
     calls.sort_by(|a, b| a.contract.strike.total_cmp(&b.contract.strike));
     let contract = calls.get(calls.len() / 2).ok_or("no listed strikes")?.contract.clone();
     println!("Exercising 1 {} (contract id {})", contract.local_symbol, contract.contract_id);

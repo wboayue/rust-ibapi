@@ -112,6 +112,16 @@ Contract details and option chains. Format: [README](README.md).
 - `contract_id` is required; "0 for underlying" was wrong.
 - **Not probed:** a real FOP underlying (e.g. ES on CME).
 
+### Option chain expirations are `YYYYMMDD` dates
+
+*Live 2026-11-16 Mon 02:30 ET (US equities closed, CME Globex open), paper, server 223.*
+
+- `reqSecDefOptParams` for AAPL (22 chains), SPX (9 chains) and ES futures options on `CME`
+  (21 chains, one per trading class such as `EW1`, `E3B`): every `expirations` entry is an
+  8-digit `YYYYMMDD` date, weeklies and dailies included.
+- Settles typing `OptionChain::expirations` as dates. No contract month (`YYYYMM`) form appeared.
+- **Not probed:** bond or warrant chains; other futures roots.
+
 ### Market rule ids align with valid exchanges
 
 *Live 2026-11-10 RTH, paper Gateway, server 226; #1198.*
