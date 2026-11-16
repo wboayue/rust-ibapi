@@ -1,8 +1,7 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, proto_response, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::{Exchange, SecurityType, Symbol, TagValue};
 use crate::messages::IncomingMessages;
-use crate::messages::HMDS_QUERY_MESSAGE_CODE;
 use crate::scanner::common::test_tables::*;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
@@ -15,37 +14,39 @@ use futures::StreamExt;
 use std::sync::Arc;
 
 #[tokio::test]
-async fn scanner165_noitems_keeps_queued_batches() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(no_items_then_batches()));
-    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
-    let parameters = no_items_parameters();
-    let mut subscription = client.scanner_subscription(&parameters, &[]).await.unwrap();
+async fn scanner165_keeps_queued_batches() {
+    for message in HMDS_QUERY_MESSAGES {
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(hmds_query_then_batches(message)));
+        let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+        let parameters = hmds_query_parameters();
+        let mut subscription = client.scanner_subscription(&parameters, &[]).await.unwrap();
 
-    match subscription.next().await {
-        Some(Ok(SubscriptionItem::Notice(notice))) => assert_no_items_notice(&notice),
-        other => panic!("expected nonterminal no-items notice, got {other:?}"),
-    }
-    match subscription.next().await {
-        Some(Ok(SubscriptionItem::Data(rows))) => assert_filled_batch(&rows),
-        other => panic!("expected queued scanner data, got {other:?}"),
-    }
-    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(rows))) if rows.is_empty()));
-    assert!(matches!(subscription.next().await, Some(Err(crate::Error::Notice(notice))) if notice.code == REJECTION_CODE));
-    assert!(subscription.next().await.is_none(), "a genuine rejection still ends the stream");
+        match subscription.next().await {
+            Some(Ok(SubscriptionItem::Notice(notice))) => assert_hmds_query_notice(&notice, message),
+            other => panic!("{message}: expected a nonterminal 165 notice, got {other:?}"),
+        }
+        match subscription.next().await {
+            Some(Ok(SubscriptionItem::Data(rows))) => assert_filled_batch(&rows),
+            other => panic!("expected queued scanner data, got {other:?}"),
+        }
+        assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(rows))) if rows.is_empty()));
+        assert!(matches!(subscription.next().await, Some(Err(crate::Error::Notice(notice))) if notice.code == REJECTION_CODE));
+        assert!(subscription.next().await.is_none(), "a genuine rejection still ends the stream");
 
-    assert_eq!(request_message_count(&message_bus), 1, "no scanner re-registration");
-    assert_request(
-        &message_bus,
-        0,
-        &scanner_subscription_request().request_id(TEST_REQ_ID_FIRST).subscription(&parameters),
-    );
-    subscription.cancel().await;
-    assert_eq!(request_message_count(&message_bus), 2);
-    assert_request(&message_bus, 1, &cancel_scanner_subscription_request().request_id(TEST_REQ_ID_FIRST));
+        assert_eq!(request_message_count(&message_bus), 1, "no scanner re-registration");
+        assert_request(
+            &message_bus,
+            0,
+            &scanner_subscription_request().request_id(TEST_REQ_ID_FIRST).subscription(&parameters),
+        );
+        subscription.cancel().await;
+        assert_eq!(request_message_count(&message_bus), 2);
+        assert_request(&message_bus, 1, &cancel_scanner_subscription_request().request_id(TEST_REQ_ID_FIRST));
+    }
 }
 
 #[tokio::test]
-async fn scanner165_other_failures_remain_terminal() {
+async fn scanner_errors_remain_terminal() {
     for &(code, message) in TERMINAL_SCANNER_ERRORS {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(error_then_empty_batch(code, message)));
         let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
@@ -56,21 +57,6 @@ async fn scanner165_other_failures_remain_terminal() {
         );
         assert!(subscription.next().await.is_none());
     }
-}
-
-#[tokio::test]
-async fn scanner165_noitems_remains_terminal_for_other_requests() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
-        TEST_REQ_ID_FIRST,
-        HMDS_QUERY_MESSAGE_CODE,
-        NO_ITEMS_MESSAGE,
-    )]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-    let error = client
-        .contract_details(&crate::contracts::Contract::stock("NVDA").build())
-        .await
-        .unwrap_err();
-    assert!(matches!(error, crate::Error::Notice(notice) if notice.code == HMDS_QUERY_MESSAGE_CODE && notice.message == NO_ITEMS_MESSAGE));
 }
 
 #[tokio::test]

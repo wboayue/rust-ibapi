@@ -7,22 +7,22 @@ use crate::scanner::{ScannerData, ScannerSubscription};
 use crate::testdata::builders::scanner::{scanner_data, scanner_data_row};
 use crate::testdata::builders::ResponseProtoEncoder;
 
-/// The 165 text TWS sends for an empty scanner query (seen live before RTH).
-pub(crate) const NO_ITEMS_MESSAGE: &str = "Historical Market Data Service query message:no items retrieved";
+/// The 165 texts TWS sends on a scanner that goes on: an empty query (seen live before RTH,
+/// #886), and a bond scan's partial result, sent before its rows (`docs/wire-facts/scanner.md`).
+pub(crate) const HMDS_QUERY_MESSAGES: [&str; 2] = [
+    "Historical Market Data Service query message:no items retrieved",
+    "Historical Market Data Service query message:10 out of 18957 items retrieved",
+];
 
 /// A genuine rejection: still ends the subscription.
 pub(crate) const REJECTION_CODE: i32 = NO_SECURITY_DEFINITION_CODE;
 
 const NVDA_CONTRACT_ID: i32 = 4815747;
 
-/// Errors that must still end a scanner subscription: another 165 text, and a
-/// scanner-specific error.
-pub(crate) const TERMINAL_SCANNER_ERRORS: &[(i32, &str)] = &[
-    (HMDS_QUERY_MESSAGE_CODE, "Different query failure"),
-    (309, "Maximum number of scanner subscriptions reached"),
-];
+/// Errors that must still end a scanner subscription.
+pub(crate) const TERMINAL_SCANNER_ERRORS: &[(i32, &str)] = &[(309, "Maximum number of scanner subscriptions reached")];
 
-pub(crate) fn no_items_parameters() -> ScannerSubscription {
+pub(crate) fn hmds_query_parameters() -> ScannerSubscription {
     ScannerSubscription {
         instrument: Some("STK".into()),
         location_code: Some("STK.US".into()),
@@ -31,15 +31,16 @@ pub(crate) fn no_items_parameters() -> ScannerSubscription {
     }
 }
 
-/// Queued before the first poll: the 165 notice, a filled batch, an empty
-/// batch, a genuine rejection, then a batch the ended stream must not yield.
-pub(crate) fn no_items_then_batches() -> Vec<ResponseMessage> {
+/// Queued before the first poll: a 165 notice with `message`, a filled batch,
+/// an empty batch, a genuine rejection, then a batch the ended stream must not
+/// yield.
+pub(crate) fn hmds_query_then_batches(message: &str) -> Vec<ResponseMessage> {
     let filled = scanner_data()
         .request_id(TEST_REQ_ID_FIRST)
         .rows(vec![scanner_data_row(0, NVDA_CONTRACT_ID, "NVDA")])
         .encode_proto();
     vec![
-        proto_error_response(TEST_REQ_ID_FIRST, HMDS_QUERY_MESSAGE_CODE, NO_ITEMS_MESSAGE),
+        proto_error_response(TEST_REQ_ID_FIRST, HMDS_QUERY_MESSAGE_CODE, message),
         proto_response(IncomingMessages::ScannerData, filled.clone()),
         empty_batch(),
         proto_error_response(TEST_REQ_ID_FIRST, REJECTION_CODE, "No security definition"),
@@ -59,13 +60,12 @@ pub(crate) fn error_then_empty_batch(code: i32, message: &str) -> Vec<ResponseMe
     vec![proto_error_response(TEST_REQ_ID_FIRST, code, message), empty_batch()]
 }
 
-pub(crate) fn assert_no_items_notice(notice: &Notice) {
+pub(crate) fn assert_hmds_query_notice(notice: &Notice, message: &str) {
     assert_eq!(notice.request_id, Some(TEST_REQ_ID_FIRST));
     assert_eq!(notice.code, HMDS_QUERY_MESSAGE_CODE);
-    assert_eq!(notice.message, NO_ITEMS_MESSAGE);
-    // Delivered as a notice, but not reclassified: see `classify`.
-    assert_eq!(notice.category(), NoticeCategory::Error);
-    assert!(!notice.is_informational());
+    assert_eq!(notice.message, message);
+    assert_eq!(notice.category(), NoticeCategory::Warning);
+    assert!(notice.is_informational());
 }
 
 pub(crate) fn assert_filled_batch(rows: &[ScannerData]) {

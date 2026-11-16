@@ -1,5 +1,5 @@
 use crate::common::error_helpers;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, HMDS_ERROR_CODE, HMDS_QUERY_MESSAGE_CODE};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, HMDS_ERROR_CODE};
 use crate::scanner::common::decoders;
 use crate::scanner::common::encoders;
 use crate::scanner::ScannerData;
@@ -8,12 +8,6 @@ use crate::Error;
 
 impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData];
-
-    fn is_nonterminal_notice(notice: &Notice) -> bool {
-        // An empty scanner query can report 165 while its continuous request
-        // remains active. Only ScannerData itself represents a completed batch.
-        notice.code == HMDS_QUERY_MESSAGE_CODE && notice.message.to_ascii_lowercase().contains("no items retrieved")
-    }
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Vec<ScannerData>, Error> {
         // A single-type decoder has no match, so `expect_type` is its `_ =>`
@@ -29,7 +23,6 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     /// Live: after 162 TWS answers the cancel with 365 (no scanner subscription).
     /// Verified for "scanner type … is disabled"; the other 162s seen on
     /// scanners (subscription cancelled, pacing) are believed to end it too.
-    /// Not 165: its "no items retrieved" form keeps the scanner alive (#886).
     fn rejection_ends_request(notice: &Notice) -> bool {
         notice.code == HMDS_ERROR_CODE
     }
