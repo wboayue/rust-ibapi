@@ -16,9 +16,9 @@ fn decode_scanner_data_proto_works() {
                     ..Default::default()
                 }),
                 market_name: Some("NMS".into()),
-                distance: Some("1.5".into()),
-                benchmark: Some("".into()),
-                projection: Some("".into()),
+                distance: None,
+                benchmark: None,
+                projection: None,
                 combo_key: Some("".into()),
             },
             crate::proto::ScannerDataElement {

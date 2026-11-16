@@ -99,8 +99,9 @@ impl Default for ScannerSubscription {
 
 /// Provides the data resulting from the market scanner request.
 ///
-/// The proto's `distance`, `benchmark` and `projection` are not decoded: IBKR documents them as
-/// internal use only, and `benchmark` as always empty.
+/// The proto's `distance`, `benchmark` and `projection` are not decoded: IBKR documents
+/// `distance` and `projection` as internal use only and `benchmark` as always empty, and a live
+/// gateway sends none of them (`docs/wire-facts/scanner.md`).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ScannerData {
