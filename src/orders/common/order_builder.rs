@@ -49,7 +49,7 @@
 
 use crate::orders::builder::validation::validate_bracket_prices;
 use crate::orders::builder::{BracketPrices, Price, TrailBy, ValidationError};
-use crate::orders::{Action, OcaType, Order, OrderComboLeg, OrderId, OrderType, TagValue, TimeInForce, TrailingUnit, VolatilityType};
+use crate::orders::{Action, AdjustableTrailingUnit, OcaType, Order, OrderComboLeg, OrderId, OrderType, TagValue, TimeInForce, VolatilityType};
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
 /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with
@@ -974,7 +974,7 @@ pub struct Adjustment {
 /// ```
 /// use ibapi::orders::builder::TrailBy;
 /// use ibapi::orders::order_builder::{attach_adjustable_stop, limit_order, AdjustTo, Adjustment};
-/// use ibapi::orders::{Action, OrderType, TrailingUnit};
+/// use ibapi::orders::{Action, OrderType, AdjustableTrailingUnit};
 ///
 /// let mut parent = limit_order(Action::Buy, 100.0, 30.0);
 /// parent.order_id = 1;
@@ -988,7 +988,7 @@ pub struct Adjustment {
 /// );
 /// assert_eq!(stop.parent_id, 1);
 /// assert_eq!(stop.adjusted_order_type, Some(OrderType::TrailingStop));
-/// assert_eq!(stop.adjustable_trailing_unit, TrailingUnit::Percent);
+/// assert_eq!(stop.adjustable_trailing_unit, AdjustableTrailingUnit::Percent);
 /// ```
 pub fn attach_adjustable_stop(parent: &Order, stop_price: f64, adjustment: Adjustment) -> Order {
     let mut order = stop(parent.action.reverse(), parent.total_quantity, stop_price);
@@ -1009,8 +1009,8 @@ pub fn attach_adjustable_stop(parent: &Order, stop_price: f64, adjustment: Adjus
             order.adjusted_order_type = Some(OrderType::TrailingStop);
             order.adjusted_stop_price = Some(stop_price);
             let (unit, amount) = match trail {
-                TrailBy::Amount(amount) => (TrailingUnit::Amount, amount),
-                TrailBy::Percent(percent) => (TrailingUnit::Percent, percent),
+                TrailBy::Amount(amount) => (AdjustableTrailingUnit::Amount, amount),
+                TrailBy::Percent(percent) => (AdjustableTrailingUnit::Percent, percent),
             };
             order.adjustable_trailing_unit = unit;
             order.adjusted_trailing_amount = Some(amount);

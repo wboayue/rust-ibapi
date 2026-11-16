@@ -1,7 +1,7 @@
 use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
 use crate::orders::common::encoders::encode_order;
 use crate::orders::common::order_builder::*;
-use crate::orders::{Action, Order, OrderType, TrailingUnit};
+use crate::orders::{Action, AdjustableTrailingUnit, Order, OrderType};
 
 /// Tests for basic order types like market, limit, and stop orders
 #[cfg(test)]
@@ -514,10 +514,10 @@ mod adjustable_order_tests {
 
     #[test]
     fn adjust_to_trail() {
-        // (trail, expected adjustable_trailing_unit, its wire value, expected adjusted_trailing_amount)
+        // (trail, expected adjustable_trailing_unit, encoded proto value (None = omitted), expected adjusted_trailing_amount)
         let cases = [
-            (TrailBy::Amount(0.5), TrailingUnit::Amount, None, 0.5),
-            (TrailBy::Percent(2.0), TrailingUnit::Percent, Some(100), 2.0),
+            (TrailBy::Amount(0.5), AdjustableTrailingUnit::Amount, None, 0.5),
+            (TrailBy::Percent(2.0), AdjustableTrailingUnit::Percent, Some(100), 2.0),
         ];
 
         for (trail, unit, wire, amount) in cases {

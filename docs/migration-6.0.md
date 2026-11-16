@@ -818,12 +818,12 @@ details.liquid_hours = hours;
 A destructuring pattern needs a trailing `..`: `let TickRequestParameters { min_tick, .. } =
 params;`. Reading fields is unchanged, and so is serde `Deserialize`. The compiler finds every site.
 
-### 37. `Order::adjustable_trailing_unit` is a `TrailingUnit`
+### 37. `Order::adjustable_trailing_unit` is an `AdjustableTrailingUnit`
 
 `adjustable_trailing_unit` was an `i32` whose rustdoc, following IB's `Order` reference, gave
 `0` for an amount and `1` for a percentage. TWS rejects `1` with error 201 and takes `100` for
 a percentage ([wire facts](wire-facts/orders.md#adjustable_trailing_unit)). The field is now an
-`orders::TrailingUnit`: `Amount` (`0`, the default) or `Percent` (`100`), with `Unknown(i32)`
+`orders::AdjustableTrailingUnit`: `Amount` (`0`, the default) or `Percent` (`100`), with `Unknown(i32)`
 for a code this version does not model.
 
 ```rust,ignore
@@ -831,7 +831,7 @@ for a code this version does not model.
 order.adjustable_trailing_unit = 100;
 
 // 6.0
-order.adjustable_trailing_unit = TrailingUnit::Percent;
+order.adjustable_trailing_unit = AdjustableTrailingUnit::Percent;
 ```
 
 `attach_adjustable_stop` sets the field from its `TrailBy` as before. `i32::from(unit)` gives the

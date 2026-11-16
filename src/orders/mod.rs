@@ -537,9 +537,9 @@ pub struct Order {
     /// Adjusted Stop orders: specifies the trailing amount of the adjusted (TRAIL) parent.
     pub adjusted_trailing_amount: Option<f64>,
     /// Adjusted Stop orders: whether [`adjusted_trailing_amount`](Self::adjusted_trailing_amount)
-    /// is an amount or a percentage. See [`TrailingUnit`]. An echo without the field decodes
+    /// is an amount or a percentage. See [`AdjustableTrailingUnit`]. An echo without the field decodes
     /// to `Amount`.
-    pub adjustable_trailing_unit: TrailingUnit,
+    pub adjustable_trailing_unit: AdjustableTrailingUnit,
     /// Conditions determining when the order will be activated or canceled.
     pub conditions: Vec<OrderCondition>,
     /// Indicates whether or not conditions will also be valid outside Regular Trading Hours.
@@ -712,7 +712,7 @@ impl Default for Order {
             adjusted_stop_price: None,
             adjusted_stop_limit_price: None,
             adjusted_trailing_amount: None,
-            adjustable_trailing_unit: TrailingUnit::Amount,
+            adjustable_trailing_unit: AdjustableTrailingUnit::Amount,
             conditions: vec![],
             conditions_ignore_rth: false,
             conditions_cancel_order: false,
@@ -1022,12 +1022,15 @@ impl_wire_code!(OcaType {
 });
 
 /// The unit of an adjusted trailing stop's [`Order::adjusted_trailing_amount`].
+/// [`attach_adjustable_stop`](crate::orders::order_builder::attach_adjustable_stop) sets it from the builder's
+/// [`TrailBy`](crate::orders::builder::TrailBy) (`AdjustTo::Trail`); plain trailing stops use
+/// [`Order::aux_price`] / [`Order::trailing_percent`] instead.
 ///
 /// IB's `Order` reference gives `1` for a percentage; TWS rejects `1` with error 201 and takes
 /// `100` (live 2026-10-04, paper; `docs/wire-facts/orders.md#adjustable_trailing_unit`).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TrailingUnit {
+pub enum AdjustableTrailingUnit {
     /// A price amount. Wire code `0`. The encoder sends no code for it; TWS accepted such an
     /// order and echoed `0`.
     #[default]
@@ -1038,7 +1041,7 @@ pub enum TrailingUnit {
     Unknown(i32),
 }
 
-impl_wire_code!(TrailingUnit {
+impl_wire_code!(AdjustableTrailingUnit {
     Amount = 0,
     Percent = 100,
 });
