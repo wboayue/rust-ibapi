@@ -184,6 +184,34 @@ mod sync_tests {
     }
 
     #[test]
+    fn between_on_continuous_future_sends_no_end_date() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::continuous_futures("ES").build();
+        let now = time::OffsetDateTime::now_utc();
+        // 10 days less an hour back: 10 whole days plus one session, whatever the exact time.
+        let start = now - time::Duration::days(10) + time::Duration::hours(1);
+
+        client
+            .historical_data(&contract, BarSize::Hour)
+            .between(start, start + time::Duration::days(2))
+            .fetch()
+            .expect("fetch should succeed");
+
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .end_date(None)
+                .duration(Duration::days(11))
+                .bar_size(BarSize::Hour)
+                .what_to_show(WhatToShow::Trades)
+                .use_rth(true),
+        );
+    }
+
+    #[test]
     fn between_trims_bars_outside_range() {
         let bus = Arc::new(MessageBusStub::with_ordered_responses(super::overshooting_response_pair()));
         let client = Client::stubbed(bus, server_versions::PROTOBUF_HISTORICAL_DATA);
@@ -489,6 +517,35 @@ mod async_tests {
     }
 
     #[tokio::test]
+    async fn between_on_continuous_future_sends_no_end_date() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::continuous_futures("ES").build();
+        let now = time::OffsetDateTime::now_utc();
+        // 10 days less an hour back: 10 whole days plus one session, whatever the exact time.
+        let start = now - time::Duration::days(10) + time::Duration::hours(1);
+
+        client
+            .historical_data(&contract, BarSize::Hour)
+            .between(start, start + time::Duration::days(2))
+            .fetch()
+            .await
+            .expect("fetch should succeed");
+
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .end_date(None)
+                .duration(Duration::days(11))
+                .bar_size(BarSize::Hour)
+                .what_to_show(WhatToShow::Trades)
+                .use_rth(true),
+        );
+    }
+
+    #[tokio::test]
     async fn between_trims_bars_outside_range() {
         let bus = Arc::new(MessageBusStub::with_ordered_responses(super::overshooting_response_pair()));
         let client = Client::stubbed(bus, server_versions::PROTOBUF_HISTORICAL_DATA);
@@ -704,6 +761,27 @@ mod async_tests {
         assert!(matches!(subscription.next().await, Some(Err(Error::ConnectionReset))));
         assert!(subscription.next().await.is_none());
         assert_eq!(request_message_count(&bus), 1, "subscribe never resends");
+    }
+}
+
+mod continuous_future_range_tests {
+    use super::super::continuous_future_range;
+    use crate::market_data::historical::Duration;
+    use crate::Error;
+    use time::macros::datetime;
+
+    #[test]
+    fn covers_start_to_now_without_end_date() {
+        let range = continuous_future_range(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC)).unwrap();
+
+        assert_eq!(range, (None, Duration::days(8)));
+    }
+
+    #[test]
+    fn start_not_before_now_errors() {
+        let now = datetime!(2026-04-15 0:00 UTC);
+
+        assert!(matches!(continuous_future_range(now, now), Err(Error::InvalidArgument(_))));
     }
 }
 

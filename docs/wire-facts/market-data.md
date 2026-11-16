@@ -91,6 +91,18 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
 - **Not probed:** ASK bars; AAPL realtime bars (no data overnight); `HistoricalDataUpdate`
   (keep-up-to-date) bars.
 
+### Historical bars for a continuous future take no end date
+
+*Live 2026-11-16 Mon 02:20 ET (CME Globex open), paper, server 223.*
+
+- `reqHistoricalData` on ES `CONTFUT`, 1-hour TRADES bars: a 2-day duration with no end date
+  returns 16 bars (2026-11-12 14:30 to 2026-11-13 21:00 UTC). The same request with an end date
+  of 2026-11-13 21:00 UTC returns error 10339, "Setting end date/time for continuous future
+  security type is not allowed". `between` sent an end date, so it got 10339 too.
+- Settles that `between` on a continuous future must omit the end date and ask for a duration
+  reaching back to `start` from now.
+- **Not probed:** `keepUpToDate` streaming; CONTFUT on another exchange; daily bars.
+
 ### Size fields are always sent
 
 *Live 2026-11-15 Sun 22:25 ET, paper, server 226; raw capture, same session as above.*
