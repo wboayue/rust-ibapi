@@ -1,6 +1,6 @@
 use super::*;
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
-use crate::orders::Order;
+use crate::orders::{Order, ShortSaleSlot};
 
 #[test]
 fn encode_contract_sends_expiry_as_wire_text() {
@@ -128,7 +128,7 @@ fn encode_combo_legs_pairs_each_leg_with_its_order_price() {
                 action: LegAction::Buy,
                 exchange: "SMART".into(),
                 open_close: ComboLegOpenClose::Open,
-                short_sale_slot: 2,
+                short_sale_slot: ShortSaleSlot::ThirdParty,
                 designated_location: "LOC".into(),
                 exempt_code: 7,
             },
@@ -196,6 +196,28 @@ fn encode_combo_legs_sends_unknown_open_close_code_unchanged() {
     let legs = encode_combo_legs(&contract, None);
 
     assert_eq!(legs[0].open_close, Some(7));
+}
+
+#[test]
+fn encode_combo_legs_short_sale_slot() {
+    use crate::contracts::ComboLeg;
+
+    let cases = [
+        (ShortSaleSlot::None, None),
+        (ShortSaleSlot::Broker, Some(1)),
+        (ShortSaleSlot::ThirdParty, Some(2)),
+        (ShortSaleSlot::Unknown(7), Some(7)),
+    ];
+    for (short_sale_slot, expected) in cases {
+        let contract = Contract {
+            combo_legs: vec![ComboLeg {
+                short_sale_slot,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(encode_combo_legs(&contract, None)[0].short_sales_slot, expected, "{short_sale_slot:?}");
+    }
 }
 
 #[test]

@@ -13,6 +13,7 @@ use serde::Serialize;
 use tick_types::TickType;
 
 use crate::encode_option_field;
+use crate::orders::ShortSaleSlot;
 use crate::Error;
 use crate::ToField;
 
@@ -533,6 +534,10 @@ impl Contract {
 }
 
 /// A single component within a combo contract.
+///
+/// `ComboLeg::default()` has `contract_id` and `ratio` `0`, and neither is sent. TWS rejects a
+/// leg without a ratio with error 321; it does not read a missing ratio as `1`
+/// (live 2026-11-15, paper; `docs/wire-facts/orders.md#combo-bag-orders`).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ComboLeg {
@@ -549,11 +554,14 @@ pub struct ComboLeg {
     /// Specifies whether an order is an open or closing order.
     /// For institutional customers to determine if this order is to open or close a position.
     pub open_close: ComboLegOpenClose,
-    /// For stock legs when doing short selling. Set to 1 = clearing broker, 2 = third party.
-    pub short_sale_slot: i32,
-    /// When ShortSaleSlot is 2, this field shall contain the designated location.
+    /// For stock legs when doing short selling: [`ShortSaleSlot::Broker`] or
+    /// [`ShortSaleSlot::ThirdParty`], the enum [`Order::short_sale_slot`](crate::orders::Order::short_sale_slot)
+    /// holds. [`ShortSaleSlot::None`] is sent as no value, and an absent value decodes to it.
+    pub short_sale_slot: ShortSaleSlot,
+    /// When `short_sale_slot` is [`ShortSaleSlot::ThirdParty`], this field shall contain the designated location.
     pub designated_location: String,
-    /// Regulation SHO code for the leg (0 = none).
+    /// Short sale uptick rule code for the leg: `0` does not apply the rule, `-1` applies it
+    /// (`ComboLeg.proto`). `0` is sent as no value.
     pub exempt_code: i32,
 }
 

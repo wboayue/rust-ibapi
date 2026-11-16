@@ -877,3 +877,33 @@ marks both fields nullable. JSON written by 5.x still deserializes, with a store
 `count` stays `i32` and is `-1` on a non-TRADES bar, as TWS sends it. The historical `Bar`
 (`market_data::historical::Bar`) is unchanged: TWS sends `-1` for its volume, WAP and count on
 non-TRADES bars rather than leaving them out, so they stay `f64` and `i32`.
+
+### 42. `ComboLeg::short_sale_slot` and `Order::delta_neutral_short_sale_slot` are `ShortSaleSlot`
+
+Both were `i32` codes (`1` clearing broker, `2` third party) beside `Order::short_sale_slot`,
+which is an `orders::ShortSaleSlot`. All three now hold the enum. A code the crate doesn't
+model is `ShortSaleSlot::Unknown(code)` and is sent back unchanged; `ShortSaleSlot::None`
+(code `0`) is still sent as no value.
+
+```rust,ignore
+use ibapi::orders::ShortSaleSlot;
+
+// leg: ibapi::contracts::ComboLeg, order: ibapi::orders::Order
+
+// 5.x
+leg.short_sale_slot = 2;
+order.delta_neutral_short_sale_slot = 1;
+if leg.short_sale_slot == 0 { /* not a short sale */ }
+
+// 6.0
+leg.short_sale_slot = ShortSaleSlot::ThirdParty;
+order.delta_neutral_short_sale_slot = ShortSaleSlot::Broker;
+if leg.short_sale_slot == ShortSaleSlot::None { /* not a short sale */ }
+let code = i32::from(leg.short_sale_slot); // where the number is wanted
+```
+
+The compiler finds every assignment and comparison; `ComboLeg { .., ..Default::default() }`
+literals compile unchanged. It doesn't catch the serialized form: `ComboLeg` and `Order` derive
+`Serialize` / `Deserialize`, and both fields now serialize as the variant name (`"Broker"`,
+`{"Unknown":7}`) where they were numbers, so JSON written by 5.x no longer deserializes. The
+`utoipa` schemas change to match.

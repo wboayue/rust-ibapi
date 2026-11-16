@@ -2,7 +2,7 @@ use crate::contracts::{
     ComboLeg, ComboLegOpenClose, Contract, Currency, DeltaNeutralContract, Exchange, Expiry, LegAction, SecurityIdType, SecurityType, Symbol,
     TagValue,
 };
-use crate::orders::SoftDollarTier;
+use crate::orders::{ShortSaleSlot, SoftDollarTier};
 use crate::proto;
 use crate::Error;
 
@@ -233,7 +233,7 @@ pub fn decode_combo_leg(proto: &proto::ComboLeg) -> Result<ComboLeg, Error> {
         action: parse_required::<LegAction>(proto.action.as_deref(), "LegAction")?,
         exchange: s(&proto.exchange),
         open_close: ComboLegOpenClose::from(proto.open_close.unwrap_or_default()),
-        short_sale_slot: proto.short_sales_slot.unwrap_or_default(),
+        short_sale_slot: ShortSaleSlot::from(proto.short_sales_slot.unwrap_or_default()),
         designated_location: s(&proto.designated_location),
         exempt_code: proto.exempt_code.unwrap_or_default(),
     })
