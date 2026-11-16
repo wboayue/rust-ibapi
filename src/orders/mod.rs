@@ -432,6 +432,10 @@ pub struct Order {
     ///   <br/>Value = The upper price    
     pub smart_combo_routing_params: Vec<TagValue>,
     /// List of Per-leg price following the same sequence combo legs are added. The combo price must be left unspecified when using per-leg prices.
+    ///
+    /// On an order TWS sends back (any open-order or completed-order message, including those
+    /// on a `place_order` stream), one entry per combo leg of the order's contract, `price:
+    /// None` for a leg TWS sent without one; empty for a non-combo contract.
     pub order_combo_legs: Vec<OrderComboLeg>,
     /// For internal use only. Use the default value XYZ.
     pub order_misc_options: Vec<TagValue>,
