@@ -671,6 +671,13 @@ fn proto_order() -> proto::Order {
 }
 
 #[test]
+fn decode_order_absent_short_sale_slots_are_none() {
+    let order = decode_order(&proto_order()).unwrap();
+    assert_eq!(order.short_sale_slot, ShortSaleSlot::None);
+    assert_eq!(order.delta_neutral_short_sale_slot, ShortSaleSlot::None);
+}
+
+#[test]
 fn decode_order_maps_hedge_max_size() {
     let proto_order = proto::Order {
         hedge_max_size: Some(500),
@@ -993,6 +1000,7 @@ fn decode_order_preserves_unknown_integer_codes() {
         reference_price_type: Some(9),
         origin: Some(9),
         short_sale_slot: Some(9),
+        delta_neutral_short_sale_slot: Some(9),
         what_if_type: Some(9),
         adjustable_trailing_unit: Some(1),
         ..proto_order()
@@ -1005,6 +1013,7 @@ fn decode_order_preserves_unknown_integer_codes() {
     assert_eq!(order.reference_price_type, Some(ReferencePriceType::Unknown(9)));
     assert_eq!(order.origin, OrderOrigin::Unknown(9));
     assert_eq!(order.short_sale_slot, ShortSaleSlot::Unknown(9));
+    assert_eq!(order.delta_neutral_short_sale_slot, ShortSaleSlot::Unknown(9));
     assert_eq!(order.what_if_type, Some(WhatIfType::Unknown(9)));
 }
 

@@ -88,6 +88,11 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   option-only combos, no 201 bounds: prices below the put floor and above the call cap were
   all accepted.
 - What-if answers outside RTH; all 8 `SpreadBuilder` presets PreSubmitted at 23:55 ET.
+- *Live 2026-11-15 weekend (Sunday 10:00 ET), paper Gateway, server 226; what-if AAPL
+  20261218 C250 / C260 call spread:* with the second leg's ratio 0 (the encoder leaves it off)
+  → 321 "The combo details for leg '1' are invalid. -  conid, ratio, side: 692807836, 0, 2";
+  both ratios 0 → the same for leg '0'. Ratios 1/1 gave a normal what-if reply. TWS does not
+  read a missing ratio as 1.
 
 ### `use_price_mgmt_algo` / `route_marketable_to_bbo` echo and acceptance
 

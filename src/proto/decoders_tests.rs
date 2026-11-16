@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::assert_decimal_parse_error;
-use crate::orders::{ExecutionSide, OrderStatusKind};
+use crate::orders::{ExecutionSide, OrderStatusKind, ShortSaleSlot};
 
 // === parse_required ===
 
@@ -220,6 +220,23 @@ fn combo_leg_preserves_unknown_open_close_code() {
     };
     let leg = decode_combo_leg(&proto_leg).unwrap();
     assert_eq!(leg.open_close, ComboLegOpenClose::Unknown(7));
+}
+
+#[test]
+fn combo_leg_short_sale_slot() {
+    let cases = [
+        (None, ShortSaleSlot::None),
+        (Some(1), ShortSaleSlot::Broker),
+        (Some(2), ShortSaleSlot::ThirdParty),
+        (Some(7), ShortSaleSlot::Unknown(7)),
+    ];
+    for (short_sales_slot, expected) in cases {
+        let proto_leg = proto::ComboLeg {
+            short_sales_slot,
+            ..proto_leg(Some("BUY"))
+        };
+        assert_eq!(decode_combo_leg(&proto_leg).unwrap().short_sale_slot, expected, "{short_sales_slot:?}");
+    }
 }
 
 // === decode_contract surfaces combo-leg errors ===

@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233", "#1238"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233", "#1238", "#1258"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -117,7 +117,7 @@ exists.
 
 Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §30;
 `docs/migration-4.0.md` §2, §9, §13–§15; `docs/migration-5.0.md` §1, §7;
-`docs/migration-6.0.md` §2–§3, §6–§7, §32, §37. Consult it rather than re-deriving which fields were converted.
+`docs/migration-6.0.md` §2–§3, §6–§7, §32, §37, §42. Consult it rather than re-deriving which fields were converted.
 
 - #518 — established the pattern (`OrderStatus.status` → `OrderStatusKind`).
 - #556, #558 — the generic `parse_required` / `parse_optional` shape.
