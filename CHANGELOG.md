@@ -71,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `historical_data(..).between(start, end)` works for a continuous future (`SecurityType::ContinuousFuture`). TWS rejects any end date for one with error 10339, and `between` always sent `end`, so every such request failed. For a continuous future it now sends no end date and a duration covering `[start, now)`, then drops the bars after `end` as before; a `start` that is not before now is `Error::InvalidArgument` (#1252).
 - Orders TWS sends back (open and completed) fill `Order::order_combo_legs` from the per-leg prices TWS sends on the contract's combo legs, one entry per leg. The list was always empty, so modifying an open combo order by re-sending what `open_orders()` returned dropped its per-leg prices (#1243).
 - `Order::ref_futures_con_id` is `None` when TWS sends no reference future, as for a stock order. It decoded as `Some(0)`, a con id no contract has. `Order::default()` has `None` too, so an order no longer sends `refFuturesConId` 0; the C# client never sends it (#1241).
 - Code 165 ("Historical Market Data Service query message") is a `NoticeCategory::Warning` in every form, logged at info. A bond scan sends "10 out of 18957 items retrieved" before its rows, and that text ended the scanner subscription with `Err` and dropped the rows. A scanner's "no items retrieved" notice is now informational too (`is_informational()` is true) (#1237).

@@ -1,7 +1,7 @@
 use time::OffsetDateTime;
 
 use crate::client::ids::RequestId;
-use crate::contracts::Contract;
+use crate::contracts::{Contract, SecurityType};
 use crate::market_data::historical::{BarRequest, BarSize, Duration, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame, WhatToShow};
 use crate::market_data::TradingHours;
 use crate::Error;
@@ -75,7 +75,9 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
         self
     }
 
-    /// Anchor the query at a specific end date (defaults to now).
+    /// Anchor the query at a specific end date (defaults to now). TWS rejects an end date for a
+    /// [`ContinuousFuture`](SecurityType::ContinuousFuture) (error 10339); use
+    /// [`duration`](Self::duration) alone or [`between`](Self::between) for one.
     pub fn ending(mut self, end_date: OffsetDateTime) -> Self {
         self.ending = Some(end_date);
         self
@@ -89,6 +91,10 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     /// start time, so a bar that begins before `start` is dropped even if it overlaps the range.
     /// Daily and longer bars carry only a date and compare as midnight UTC: a `start` after
     /// midnight UTC drops that day's bar.
+    ///
+    /// TWS rejects any end date for a [`ContinuousFuture`](SecurityType::ContinuousFuture)
+    /// (error 10339), so for one the request has no end date and covers `[start, now)`; the bars
+    /// after `end` are then dropped. Such a range must start before now.
     pub fn between(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
         self.between = Some((start, end));
         self
@@ -215,6 +221,9 @@ async fn main() {
                         "historical_data: .between(start, end) requires end > start".to_owned(),
                     ));
                 }
+                if self.contract.security_type == SecurityType::ContinuousFuture {
+                    return continuous_future_range(start, OffsetDateTime::now_utc());
+                }
                 Ok((Some(end), covering_duration(end - start)))
             }
             (None, Some(duration), ending) => Ok((ending, duration)),
@@ -270,6 +279,18 @@ fn covering_duration(span: time::Duration) -> Duration {
         return Duration::days(days as i32);
     }
     Duration::years(seconds.div_ceil(MAX_DAYS * SECONDS_PER_DAY) as i32)
+}
+
+/// The `(end_date, duration)` of a [`between`](HistoricalDataBuilder::between) request for a
+/// continuous future. TWS rejects any end date for one (error 10339), so the request covers
+/// `[start, now)` and the trim to `[start, end)` drops the bars after `end`.
+fn continuous_future_range(start: OffsetDateTime, now: OffsetDateTime) -> Result<(Option<OffsetDateTime>, Duration), Error> {
+    if start >= now {
+        return Err(Error::InvalidArgument(
+            "historical_data: .between(start, end) on a continuous future requires start before now".to_owned(),
+        ));
+    }
+    Ok((None, covering_duration(now - start)))
 }
 
 /// Drop bars outside `[start, end)` when the request came from [`between`](HistoricalDataBuilder::between).
