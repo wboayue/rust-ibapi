@@ -49,7 +49,7 @@ fn underlying_and_expiries(client: &Client) -> (i32, String, String) {
     let chain = chains.iter().find(|c| c.exchange == "SMART").expect("no SMART option chain");
 
     let cutoff = yyyymmdd_from_now(14);
-    let mut later: Vec<&String> = chain.expirations.iter().filter(|e| **e >= cutoff).collect();
+    let mut later: Vec<String> = chain.expirations.iter().map(ToString::to_string).filter(|e| *e >= cutoff).collect();
     later.sort();
     assert!(later.len() >= 2, "need two expirations after {cutoff}: {later:?}");
     (stock_id, later[0].clone(), later[1].clone())

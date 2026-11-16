@@ -1033,8 +1033,10 @@ pub struct OptionChain {
     pub multiplier: String,
     /// Exchange for which the derivative is hosted.
     pub exchange: String,
-    /// A list of the expiries for the options of this underlying on this exchange.
-    pub expirations: Vec<String>,
+    /// The expiries of the options of this underlying on this exchange, as TWS lists them. TWS
+    /// sends each as a `YYYYMMDD` date ([`Expiry::Date`]); text in another form is kept as
+    /// [`Expiry::Unknown`].
+    pub expirations: Vec<Expiry>,
     /// A list of the possible strikes for options of this underlying on this exchange.
     pub strikes: Vec<f64>,
 }

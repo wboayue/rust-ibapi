@@ -34,7 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Multiplier: {}", chain.multiplier);
 
                 if !chain.expirations.is_empty() {
-                    println!("Expirations: {}", chain.expirations.join(", "));
+                    let expirations: Vec<String> = chain.expirations.iter().map(ToString::to_string).collect();
+                    println!("Expirations: {}", expirations.join(", "));
                 }
 
                 if !chain.strikes.is_empty() {

@@ -877,3 +877,31 @@ marks both fields nullable. JSON written by 5.x still deserializes, with a store
 `count` stays `i32` and is `-1` on a non-TRADES bar, as TWS sends it. The historical `Bar`
 (`market_data::historical::Bar`) is unchanged: TWS sends `-1` for its volume, WAP and count on
 non-TRADES bars rather than leaving them out, so they stay `f64` and `i32`.
+
+### 39. `OptionChain::expirations` is `Vec<Expiry>`
+
+TWS sends each option chain expiration as a `YYYYMMDD` date (stock, index and futures option
+chains, live). The field was `Vec<String>`, so finding the nearest expiration meant parsing or
+comparing text. It is now `Vec<Expiry>`: each date is an `Expiry::Date(ExpirationDate)`, which
+orders by date and goes straight into `Contract::option`. Text in another form is kept as
+`Expiry::Unknown`, so an unexpected value never fails the request.
+
+```rust,ignore
+// 5.x
+let mut expirations = chain.expirations.clone();
+expirations.sort();
+let nearest: ExpirationDate = expirations[0].parse()?;
+
+// 6.0
+let nearest = chain
+    .expirations
+    .iter()
+    .filter_map(|expiry| match expiry {
+        Expiry::Date(date) => Some(date.clone()),
+        _ => None,
+    })
+    .min();
+let text: Vec<String> = chain.expirations.iter().map(ToString::to_string).collect(); // the 5.x strings
+```
+
+The compiler finds every use as a `String`.
