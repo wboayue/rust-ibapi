@@ -1907,9 +1907,15 @@ pub struct ExecutionFilter {
     /// The account to which the order was allocated to
     pub account_code: String,
     /// Time from which the executions will be returned. Prefer `yyyymmdd-hh:mm:ss`, which
-    /// TWS reads as UTC; `yyyymmdd hh:mm:ss <zone>` is also accepted. A zone after the
-    /// dashed form is rejected with error 10314.
+    /// TWS reads as UTC. `yyyymmdd hh:mm:ss <zone>` was accepted only with `UTC` or, in the
+    /// live tests, `Europe/London` (the Gateway's and the operator's zone there; which one
+    /// decides is not known); every other zone tried, the instrument's included, and a zone
+    /// after the dashed form were rejected with error 10314.
     /// Only those executions reported after the specified time will be returned.
+    ///
+    /// `time` narrows the days the filter covers and does not widen them: with
+    /// [`last_n_days`](Self::last_n_days) at 0 that is today, so a time on an earlier day
+    /// returns nothing unless `last_n_days` reaches back to it (live: 2026-11-16, paper).
     pub time: String,
     /// The instrument's symbol
     pub symbol: String,
@@ -1920,7 +1926,7 @@ pub struct ExecutionFilter {
     /// Side filter — `None` for no filter, `Some(ExecutionFilterSide::Buy)`
     /// or `Some(ExecutionFilterSide::Sell)` to restrict the response.
     pub side: Option<ExecutionFilterSide>,
-    /// Filter executions from the last N days (0 = no filter). At most 7, per IB's
+    /// Filter executions from the last N days (0 = today only). At most 7, per IB's
     /// `ExecutionFilter.proto`: above 7, TWS returned no executions at all, not even those
     /// inside the window (live: 2026-11-16, paper, 8, 14 and 30).
     pub last_n_days: i32,
