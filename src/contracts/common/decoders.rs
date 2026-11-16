@@ -285,6 +285,10 @@ pub(crate) fn decode_contract_and_details(
                 description: s(&r.description),
             })
             .collect(),
+        // event contracts
+        event_contract_topic: s(&proto_details.event_contract1),
+        event_contract_description: s(&proto_details.event_contract_description1),
+        event_contract_question: s(&proto_details.event_contract_description2),
         // defaults for fields not in protobuf
         last_trade_time: String::new(),
     })

@@ -533,3 +533,16 @@ fn sessions_skip_empty_entries_and_fail_on_one_bad_entry() {
     assert_eq!(ContractDetails::default().trading_sessions().unwrap(), vec![]);
     assert!(matches!(details.liquid_sessions(), Err(Error::Parse(_, value, _)) if value == "20090507:0700-1830"));
 }
+
+/// JSON written before the event-contract fields existed still deserializes, with them empty.
+#[test]
+fn contract_details_json_without_event_contract_fields_deserializes() {
+    let mut json = serde_json::to_value(ContractDetails::default()).unwrap();
+    let object = json.as_object_mut().unwrap();
+    for key in ["event_contract_topic", "event_contract_description", "event_contract_question"] {
+        assert!(object.remove(key).is_some(), "{key} is serialized");
+    }
+
+    let details: ContractDetails = serde_json::from_value(json).unwrap();
+    assert_eq!(details, ContractDetails::default());
+}

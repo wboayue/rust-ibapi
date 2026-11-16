@@ -622,12 +622,10 @@ pub struct TickGeneric {
 
 /// Parameters related to tick data requests.
 ///
-/// `#[non_exhaustive]`: TWS sends last price and size precision, not decoded yet, so fields
-/// will be added. Outside this crate, start from [`TickRequestParameters::default`] and assign
-/// fields.
+/// TWS also sends last price and size precision. They aren't decoded: a live check found them
+/// only on a stock (AAPL), as a step with no documented meaning (`docs/wire-facts/market-data.md#tickreqparams-precision-fields`).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
-#[non_exhaustive]
 pub struct TickRequestParameters {
     /// Minimum tick increment.
     pub min_tick: f64,

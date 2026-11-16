@@ -791,32 +791,19 @@ compiler finds every `new` call; it does not find an `expires_on` date that used
 fails at `build()`. `ExpirationDate::next_friday()`, `third_friday_of_month()`,
 `ContractMonth::front()` and `next_quarter()` are unchanged.
 
-### 35. `ContractDetails` and `TickRequestParameters` are `#[non_exhaustive]`
+### 35. `ContractDetails` gains the event-contract fields
 
-TWS sends fields on these two messages that the crate doesn't decode yet:
+`ContractDetails` has three new `String` fields, `event_contract_topic`,
+`event_contract_description` and `event_contract_question`, which TWS sends for ForecastEx event
+contracts and leaves out for everything else (empty there). Code that reads fields, or builds a
+`ContractDetails` with `..Default::default()`, is unaffected. Two forms stop compiling:
 
-- `ContractDetails`: `min_algo_size`, last price and size precision, and the event-contract
-  fields.
-- `TickRequestParameters`: last price and size precision.
+- A struct literal that names every field: add the three, or end it with
+  `..Default::default()`.
+- A destructuring pattern that names every field: add them, or end it with `..`.
 
-With the attribute, a 6.x release can add them without another major version. The crate only
-hands these types out; no API takes one as input. The change affects only code that builds one
-itself, usually a test or a mock.
-
-Outside the crate, a struct literal, including `..Default::default()`, no longer compiles. Start
-from `default()` and assign fields:
-
-```rust,ignore
-// 5.x
-let details = ContractDetails { liquid_hours: hours, ..Default::default() };
-
-// 6.0
-let mut details = ContractDetails::default();
-details.liquid_hours = hours;
-```
-
-A destructuring pattern needs a trailing `..`: `let TickRequestParameters { min_tick, .. } =
-params;`. Reading fields is unchanged, and so is serde `Deserialize`. The compiler finds every site.
+Serialized `ContractDetails` JSON from 5.x still deserializes: the three fields default to
+empty when absent.
 
 ### 36. `ExecutionFilter::specific_dates` is `Vec<time::Date>`
 

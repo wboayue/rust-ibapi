@@ -594,12 +594,11 @@ pub struct DeltaNeutralContract {
 
 /// ContractDetails provides extended contract details.
 ///
-/// `#[non_exhaustive]`: TWS sends fields not decoded yet (`min_algo_size`, price and size
-/// precision, event-contract details), so fields will be added. Outside this crate, start from
-/// [`ContractDetails::default`] and assign fields.
+/// TWS also sends `minAlgoSize` and last price and size precision. They aren't decoded: a live
+/// check found `minAlgoSize` always `0` and the precision fields only on a stock, with no
+/// documented meaning (`docs/wire-facts/contracts.md#event-contract-minalgosize-and-precision-fields`).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct ContractDetails {
     /// A fully-defined Contract object.
     pub contract: Contract,
@@ -749,6 +748,21 @@ pub struct ContractDetails {
 
     /// Ineligibility reasons for the contract.
     pub ineligibility_reasons: Vec<IneligibilityReason>,
+
+    // event contracts (ForecastEx)
+    /// An event contract's topic, such as `"US Fed Funds Target Rate"`. Empty for other
+    /// contracts. IBKR's `eventContract1`.
+    #[serde(default)]
+    pub event_contract_topic: String,
+    /// An event contract's description: its strike, expiry and right, such as
+    /// `"FF Jan28'27 3.125"`. Empty for other contracts. IBKR's `eventContractDescription1`.
+    #[serde(default)]
+    pub event_contract_description: String,
+    /// An event contract's full question, such as `"Will the US Fed Funds Target Rate be set
+    /// above 3.125% at the FOMC meeting ending January 27, 2027?"`. Empty for other
+    /// contracts. IBKR's `eventContractDescription2`.
+    #[serde(default)]
+    pub event_contract_question: String,
 }
 
 impl ContractDetails {
