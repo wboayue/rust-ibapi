@@ -10,7 +10,7 @@ triggers:
   - a plan says a narrowing is "transparent" to callers
 symbols: [non_exhaustive, must_use, private_interfaces, pub(crate)]
 related: [integration-crate-builds, modernize-touched-modules, floor-ratchet-splits]
-precedents: ["#547", "#548", "#581", "#665", "#1081", "#1232", "#1234", "#PRNUM"]
+precedents: ["#547", "#548", "#581", "#665", "#1081", "#1232", "#1234", "#1251"]
 ---
 
 A PR that adds a compile-time restriction to a public type — `#[non_exhaustive]`, `#[must_use]`,
@@ -92,7 +92,7 @@ headroom (#1234).
   (`docs/wire-facts/scanner.md`), so none would be added. The attribute was removed before
   6.0 shipped. The C# client forwards the three anyway, so C# passing a field along is not
   evidence that it carries data.
-- #PRNUM — #1232 fully reversed before 6.0 shipped. A live probe of five contract types
+- #1251 — #1232 fully reversed before 6.0 shipped. A live probe of five contract types
   found `minAlgoSize` `"0"` on every row and the precision fields only on AAPL, as a step finer
   than its `minTick` and `minSize` with no documented meaning (`docs/wire-facts/contracts.md`).
   The event-contract strings did carry data and were added in 6.0 directly, so nothing was left
