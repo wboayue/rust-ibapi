@@ -1092,3 +1092,59 @@ fn decode_order_state_rejects_malformed_allocation_position() {
     };
     assert_decimal_parse_error(decode_order_state(&state), "abc");
 }
+
+/// `action` is the one field `decode_combo_leg` requires.
+fn combo_leg_proto(per_leg_price: Option<f64>) -> crate::proto::ComboLeg {
+    crate::proto::ComboLeg {
+        action: Some("BUY".into()),
+        per_leg_price,
+        ..Default::default()
+    }
+}
+
+/// TWS sends an order's per-leg prices on the contract's combo legs. Both frames that
+/// carry an order must move them onto `Order::order_combo_legs`, one entry per leg, as
+/// C#'s `decodeOrderComboLegs` does.
+#[test]
+fn decode_order_frames_fill_order_combo_legs_from_contract_legs() {
+    use crate::orders::OrderComboLeg;
+    use crate::testdata::builders::orders::{completed_order, open_order};
+
+    let priced = vec![combo_leg_proto(Some(1.25)), combo_leg_proto(None)];
+    let cases: [(&str, Vec<crate::proto::ComboLeg>, Vec<OrderComboLeg>); 2] = [
+        (
+            "one priced leg, one without",
+            priced,
+            vec![OrderComboLeg { price: Some(1.25) }, OrderComboLeg { price: None }],
+        ),
+        ("no combo legs", vec![], vec![]),
+    ];
+    for (label, legs, expected) in cases {
+        let mut open = open_order().to_proto();
+        open.contract.as_mut().unwrap().combo_legs = legs.clone();
+        let mut completed = completed_order().to_proto();
+        completed.contract.as_mut().unwrap().combo_legs = legs;
+
+        let open = decode_open_order_proto(open).unwrap();
+        assert_eq!(open.order.order_combo_legs, expected, "open order: {label}");
+        assert_eq!(open.contract.combo_legs.len(), expected.len(), "open order legs: {label}");
+        let completed = decode_completed_order_proto(completed).unwrap();
+        assert_eq!(completed.order.order_combo_legs, expected, "completed order: {label}");
+        assert_eq!(completed.contract.combo_legs.len(), expected.len(), "completed order legs: {label}");
+    }
+}
+
+/// Modifying an open combo order re-sends what `open_orders()` returned; the per-leg prices
+/// must survive the round trip.
+#[test]
+fn open_combo_order_re_encodes_with_its_per_leg_prices() {
+    use crate::testdata::builders::orders::open_order;
+
+    let mut frame = open_order().to_proto();
+    frame.contract.as_mut().unwrap().combo_legs = vec![combo_leg_proto(Some(1.25)), combo_leg_proto(None)];
+    let data = decode_open_order_proto(frame).unwrap();
+
+    let resent = crate::proto::encoders::encode_contract_with_order(&data.contract, Some(&data.order));
+    let prices: Vec<_> = resent.combo_legs.iter().map(|leg| leg.per_leg_price).collect();
+    assert_eq!(prices, vec![Some(1.25), None]);
+}

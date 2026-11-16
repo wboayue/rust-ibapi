@@ -1,8 +1,8 @@
 use crate::messages::ResponseMessage;
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
-    Action, Execution, ExecutionSide, Liquidity, OcaType, OptionExerciseType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin,
-    OrderState, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
+    Action, Execution, ExecutionSide, Liquidity, OcaType, OptionExerciseType, Order, OrderAllocation, OrderComboLeg, OrderCondition, OrderOpenClose,
+    OrderOrigin, OrderState, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
 };
 use crate::orders::{CommissionReport, ExecutionData, OrderBound, OrderData, OrderStatus};
 use crate::proto;
@@ -50,10 +50,13 @@ pub(crate) fn decode_completed_order(message: &ResponseMessage) -> Result<OrderD
 // === Protobuf decoders ===
 
 pub(crate) fn decode_open_order_proto(p: crate::proto::OpenOrder) -> Result<OrderData, Error> {
+    let contract_proto = required(p.contract.as_ref(), "contract", "OpenOrder")?;
+    let mut order = decode_order(required(p.order.as_ref(), "order", "OpenOrder")?)?;
+    order.order_combo_legs = decode_order_combo_legs(contract_proto);
     Ok(OrderData {
         order_id: p.order_id.unwrap_or_default(),
-        contract: crate::proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "OpenOrder")?)?,
-        order: decode_order(required(p.order.as_ref(), "order", "OpenOrder")?)?,
+        contract: crate::proto::decoders::decode_contract(contract_proto)?,
+        order,
         order_state: decode_order_state(required(p.order_state.as_ref(), "order_state", "OpenOrder")?)?,
     })
 }
@@ -83,8 +86,10 @@ pub(crate) fn decode_execution_data_proto(p: crate::proto::ExecutionDetails) -> 
 }
 
 pub(crate) fn decode_completed_order_proto(p: crate::proto::CompletedOrder) -> Result<OrderData, Error> {
-    let contract = crate::proto::decoders::decode_contract(required(p.contract.as_ref(), "contract", "CompletedOrder")?)?;
-    let order = decode_order(required(p.order.as_ref(), "order", "CompletedOrder")?)?;
+    let contract_proto = required(p.contract.as_ref(), "contract", "CompletedOrder")?;
+    let contract = crate::proto::decoders::decode_contract(contract_proto)?;
+    let mut order = decode_order(required(p.order.as_ref(), "order", "CompletedOrder")?)?;
+    order.order_combo_legs = decode_order_combo_legs(contract_proto);
     let order_state = decode_order_state(required(p.order_state.as_ref(), "order_state", "CompletedOrder")?)?;
 
     Ok(OrderData {
@@ -113,6 +118,13 @@ pub(crate) fn decode_next_valid_id_proto(p: crate::proto::NextValidId) -> Result
 }
 
 // === Sub-message decoders (shared by the frame decoders above) ===
+
+/// The order's per-leg prices, which TWS sends on the contract's combo legs rather than on
+/// the order: one entry per leg, `price: None` for a leg without one. Empty for a
+/// non-combo contract. Re-sending the order (a modify) puts them back on the legs.
+fn decode_order_combo_legs(contract: &proto::Contract) -> Vec<OrderComboLeg> {
+    contract.combo_legs.iter().map(|leg| OrderComboLeg { price: leg.per_leg_price }).collect()
+}
 
 // Linted for the first time after leaving proto/'s blanket allow; struct-literal rewrite
 // tracked in #1084.
