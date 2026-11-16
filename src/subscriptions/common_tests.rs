@@ -236,7 +236,7 @@ fn rejection_ends_request_only_for_verified_codes() {
     };
     // Wire literals, not the `notice.rs` constants: the table pins IB's codes
     // independently of the names. `other` is the code a leak would come from
-    // where one is known (10197 on market data, 165 on scanners).
+    // where one is known (10197 on market data).
     let cases = [
         case("TickTypes", rejection_ends::<TickTypes>, Some(200), 10197),
         case("Bar", rejection_ends::<Bar>, Some(200), 10197),
@@ -247,7 +247,7 @@ fn rejection_ends_request_only_for_verified_codes() {
         case("HistoricalBarUpdate", rejection_ends::<HistoricalBarUpdate>, Some(200), 162),
         case("PnL", rejection_ends::<PnL>, Some(321), 200),
         case("PnLSingle", rejection_ends::<PnLSingle>, Some(321), 200),
-        case("Vec<ScannerData>", rejection_ends::<Vec<ScannerData>>, Some(162), 165),
+        case("Vec<ScannerData>", rejection_ends::<Vec<ScannerData>>, Some(162), 309),
         // Silent cancel live (no 366-style reply): nothing to gain, keep the safety net.
         case("ContractDetails", rejection_ends::<ContractDetails>, None, 200),
     ];

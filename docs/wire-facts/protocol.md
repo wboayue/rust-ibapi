@@ -52,7 +52,7 @@ longer occurs for them.
 - 10314 came from a 1975 end date (IB rejects that old a date), not a format problem.
 - Skipping the cancel is opt-in per verified code (`StreamDecoder::rejection_ends_request`). A
   global skip was rejected: a code we treat as terminal may not end the request at TWS (10197
-  market data; scanner 165), and skipping would leak TWS resources.
+  market data), and skipping would leak TWS resources.
 
 ### One-shot requests answer once
 
