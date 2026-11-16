@@ -1187,12 +1187,10 @@ fn decode_order_state_rejects_malformed_allocation_position() {
     assert_decimal_parse_error(decode_order_state(&state), "abc");
 }
 
-fn combo_leg_proto(con_id: i32, per_leg_price: Option<f64>) -> crate::proto::ComboLeg {
+/// `action` is the one field `decode_combo_leg` requires.
+fn combo_leg_proto(per_leg_price: Option<f64>) -> crate::proto::ComboLeg {
     crate::proto::ComboLeg {
-        con_id: Some(con_id),
-        ratio: Some(1),
         action: Some("BUY".into()),
-        exchange: Some("SMART".into()),
         per_leg_price,
         ..Default::default()
     }
@@ -1206,7 +1204,7 @@ fn decode_order_frames_fill_order_combo_legs_from_contract_legs() {
     use crate::orders::OrderComboLeg;
     use crate::testdata::builders::orders::{completed_order, open_order};
 
-    let priced = vec![combo_leg_proto(1001, Some(1.25)), combo_leg_proto(1002, None)];
+    let priced = vec![combo_leg_proto(Some(1.25)), combo_leg_proto(None)];
     let cases: [(&str, Vec<crate::proto::ComboLeg>, Vec<OrderComboLeg>); 2] = [
         (
             "one priced leg, one without",
@@ -1226,6 +1224,7 @@ fn decode_order_frames_fill_order_combo_legs_from_contract_legs() {
         assert_eq!(open.contract.combo_legs.len(), expected.len(), "open order legs: {label}");
         let completed = decode_completed_order_proto(completed).unwrap();
         assert_eq!(completed.order.order_combo_legs, expected, "completed order: {label}");
+        assert_eq!(completed.contract.combo_legs.len(), expected.len(), "completed order legs: {label}");
     }
 }
 
@@ -1236,7 +1235,7 @@ fn open_combo_order_re_encodes_with_its_per_leg_prices() {
     use crate::testdata::builders::orders::open_order;
 
     let mut frame = open_order().to_proto();
-    frame.contract.as_mut().unwrap().combo_legs = vec![combo_leg_proto(1001, Some(1.25)), combo_leg_proto(1002, None)];
+    frame.contract.as_mut().unwrap().combo_legs = vec![combo_leg_proto(Some(1.25)), combo_leg_proto(None)];
     let data = decode_open_order_proto(frame).unwrap();
 
     let resent = crate::proto::encoders::encode_contract_with_order(&data.contract, Some(&data.order));
