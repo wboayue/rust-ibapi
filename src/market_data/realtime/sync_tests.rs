@@ -4,7 +4,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
-use crate::market_data::realtime::{BidAsk, DepthOperation, DepthSide, MidPoint, Reroute, Trade};
+use crate::market_data::realtime::{DepthOperation, DepthSide, Reroute, TickBidAsk, TickLast, TickMidpoint};
 use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
@@ -156,7 +156,7 @@ fn tick_by_tick_all_last() {
     let trades = trades.expect("Failed to create tick-by-tick subscription");
 
     // Test receiving data
-    let received_trades: Vec<Trade> = trades.iter_data().take(2).map(|r| r.expect("subscription error")).collect();
+    let received_trades: Vec<TickLast> = trades.iter_data().take(2).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_trades.len(), 2, "Should receive 2 trades");
 
@@ -340,16 +340,16 @@ fn tick_by_tick_bid_ask() {
 
     // Test receiving data
     let subscription = result.expect("Failed to create bid/ask subscription");
-    let received_ticks: Vec<BidAsk> = subscription.iter_data().take(1).map(|r| r.expect("subscription error")).collect();
+    let received_ticks: Vec<TickBidAsk> = subscription.iter_data().take(1).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_ticks.len(), 1, "Should receive 1 bid/ask tick");
 
     // Verify tick data
     let tick = &received_ticks[0];
-    assert_eq!(tick.bid_price, 3895.50, "Wrong bid price");
-    assert_eq!(tick.ask_price, 3896.00, "Wrong ask price");
-    assert_eq!(tick.bid_size, 9.0, "Wrong bid size");
-    assert_eq!(tick.ask_size, 11.0, "Wrong ask size");
+    assert_eq!(tick.price_bid, 3895.50, "Wrong bid price");
+    assert_eq!(tick.price_ask, 3896.00, "Wrong ask price");
+    assert_eq!(tick.size_bid, 9.0, "Wrong bid size");
+    assert_eq!(tick.size_ask, 11.0, "Wrong ask size");
 
     assert_request(
         &message_bus,
@@ -368,11 +368,11 @@ fn tick_by_tick_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::TickByTick,
-            mid_point_tick().time(1678740829).mid_point(3895.375).encode_proto(),
+            mid_point_tick().time(1678740829).price(3895.375).encode_proto(),
         ),
         proto_response(
             IncomingMessages::TickByTick,
-            mid_point_tick().time(1678740830).mid_point(3895.425).encode_proto(),
+            mid_point_tick().time(1678740830).price(3895.425).encode_proto(),
         ),
     ]));
 
@@ -392,13 +392,13 @@ fn tick_by_tick_midpoint() {
     let midpoints = midpoints.expect("Failed to create tick-by-tick midpoint subscription");
 
     // Test receiving data
-    let received_midpoints: Vec<MidPoint> = midpoints.iter_data().take(2).map(|r| r.expect("subscription error")).collect();
+    let received_midpoints: Vec<TickMidpoint> = midpoints.iter_data().take(2).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_midpoints.len(), 2, "Should receive 2 midpoint updates");
 
     // Verify first midpoint
     let midpoint = &received_midpoints[0];
-    assert_eq!(midpoint.mid_point, 3895.375, "Wrong midpoint for first update");
+    assert_eq!(midpoint.price, 3895.375, "Wrong midpoint for first update");
     assert_eq!(
         midpoint.time,
         OffsetDateTime::from_unix_timestamp(1678740829).unwrap(),
@@ -407,7 +407,7 @@ fn tick_by_tick_midpoint() {
 
     // Verify second midpoint
     let midpoint = &received_midpoints[1];
-    assert_eq!(midpoint.mid_point, 3895.425, "Wrong midpoint for second update");
+    assert_eq!(midpoint.price, 3895.425, "Wrong midpoint for second update");
     assert_eq!(
         midpoint.time,
         OffsetDateTime::from_unix_timestamp(1678740830).unwrap(),
@@ -627,7 +627,7 @@ fn tick_by_tick_last() {
 
     // Test receiving data
     let trades = result.expect("Failed to receive tick-by-tick last data");
-    let received_trades: Vec<Trade> = trades.iter_data().take(1).map(|r| r.expect("subscription error")).collect();
+    let received_trades: Vec<TickLast> = trades.iter_data().take(1).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_trades.len(), 1, "Should receive 1 trade");
 

@@ -61,24 +61,24 @@ fn market_depths_data_from_notice() {
 
 #[test]
 fn bid_ask_default_is_zero_at_epoch() {
-    let BidAsk {
+    let TickBidAsk {
         time,
-        bid_price,
-        ask_price,
-        bid_size,
-        ask_size,
-        bid_ask_attribute,
-    } = BidAsk::default();
+        price_bid,
+        price_ask,
+        size_bid,
+        size_ask,
+        attributes,
+    } = TickBidAsk::default();
     assert_eq!(time, OffsetDateTime::UNIX_EPOCH);
-    assert_eq!((bid_price, ask_price, bid_size, ask_size), (0.0, 0.0, 0.0, 0.0));
-    let BidAskAttribute { bid_past_low, ask_past_high } = bid_ask_attribute;
+    assert_eq!((price_bid, price_ask, size_bid, size_ask), (0.0, 0.0, 0.0, 0.0));
+    let TickAttributeBidAsk { bid_past_low, ask_past_high } = attributes;
     assert!(!bid_past_low && !ask_past_high);
 }
 
 #[test]
 fn mid_point_default_is_zero_at_epoch() {
-    let MidPoint { time, mid_point } = MidPoint::default();
-    assert_eq!((time, mid_point), (OffsetDateTime::UNIX_EPOCH, 0.0));
+    let TickMidpoint { time, price, size } = TickMidpoint::default();
+    assert_eq!((time, price, size), (OffsetDateTime::UNIX_EPOCH, 0.0, None));
 }
 
 #[test]
@@ -100,17 +100,17 @@ fn bar_default_is_zero_at_epoch() {
 
 #[test]
 fn trade_default_is_zero_at_epoch_with_empty_strings() {
-    let Trade {
+    let TickLast {
         time,
         price,
         size,
-        trade_attribute,
+        attributes,
         exchange,
         special_conditions,
-    } = Trade::default();
+    } = TickLast::default();
     assert_eq!(time, OffsetDateTime::UNIX_EPOCH);
     assert_eq!((price, size), (0.0, 0.0));
-    let TradeAttribute { past_limit, unreported } = trade_attribute;
+    let TickAttributeLast { past_limit, unreported } = attributes;
     assert!(!past_limit && !unreported);
     assert_eq!((exchange.as_str(), special_conditions.as_str()), ("", ""));
 }

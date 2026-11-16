@@ -103,8 +103,8 @@ mod trade_tick_tests {
         assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
         assert_eq!(trade.price, 3895.25);
         assert_eq!(trade.size, 7.0);
-        assert!(!trade.trade_attribute.past_limit);
-        assert!(trade.trade_attribute.unreported);
+        assert!(!trade.attributes.past_limit);
+        assert!(trade.attributes.unreported);
         assert_eq!(trade.exchange, "NASDAQ");
         assert_eq!(trade.special_conditions, "Regular");
     }
@@ -164,20 +164,20 @@ mod bid_ask_tests {
     fn decode_bid_ask_proto_basic() {
         let bid_ask = decode_bid_ask_tick_proto(fixture(3).to_proto()).expect("decode failed");
         assert_eq!(bid_ask.time, OffsetDateTime::from_unix_timestamp(1678745793).unwrap());
-        assert_eq!(bid_ask.bid_price, 3895.50);
-        assert_eq!(bid_ask.ask_price, 3896.00);
-        assert_eq!(bid_ask.bid_size, 9.0);
-        assert_eq!(bid_ask.ask_size, 11.0);
-        assert!(bid_ask.bid_ask_attribute.bid_past_low);
-        assert!(bid_ask.bid_ask_attribute.ask_past_high);
+        assert_eq!(bid_ask.price_bid, 3895.50);
+        assert_eq!(bid_ask.price_ask, 3896.00);
+        assert_eq!(bid_ask.size_bid, 9.0);
+        assert_eq!(bid_ask.size_ask, 11.0);
+        assert!(bid_ask.attributes.bid_past_low);
+        assert!(bid_ask.attributes.ask_past_high);
     }
 
     #[test]
     fn decode_bid_ask_proto_attributes() {
         for (mask, expected_bid_past_low, expected_ask_past_high) in [(0, false, false), (1, true, false), (2, false, true), (3, true, true)] {
             let bid_ask = decode_bid_ask_tick_proto(fixture(mask).to_proto()).expect("decode failed");
-            assert_eq!(bid_ask.bid_ask_attribute.bid_past_low, expected_bid_past_low, "mask {mask}");
-            assert_eq!(bid_ask.bid_ask_attribute.ask_past_high, expected_ask_past_high, "mask {mask}");
+            assert_eq!(bid_ask.attributes.bid_past_low, expected_bid_past_low, "mask {mask}");
+            assert_eq!(bid_ask.attributes.ask_past_high, expected_ask_past_high, "mask {mask}");
         }
     }
 
@@ -198,14 +198,15 @@ mod mid_point_tests {
     use super::*;
 
     fn fixture() -> MidPointTickResponse {
-        mid_point_tick().time(1678740829).mid_point(3895.375)
+        mid_point_tick().time(1678740829).price(3895.375)
     }
 
     #[test]
     fn decode_mid_point_tick_proto_works() {
         let mid = decode_mid_point_tick_proto(fixture().to_proto()).expect("decode failed");
         assert_eq!(mid.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
-        assert_eq!(mid.mid_point, 3895.375);
+        assert_eq!(mid.price, 3895.375);
+        assert_eq!(mid.size, None);
     }
 
     #[test]
@@ -217,6 +218,47 @@ mod mid_point_tests {
         };
         let err = decode_mid_point_tick_proto(msg).expect_err("should reject last tick type");
         assert!(err.to_string().contains("Unexpected tick_type"));
+    }
+}
+
+mod tick_by_tick_size_tests {
+    use super::*;
+
+    // Trade and bid/ask sizes decode an absent size as `0.0`; a midpoint size keeps
+    // absent (`None`) apart from a sent "0".
+    const SIZE_CASES: [(Option<f64>, f64); 3] = [(None, 0.0), (Some(0.0), 0.0), (Some(7.0), 7.0)];
+    const MIDPOINT_SIZE_CASES: [(Option<f64>, Option<f64>); 3] = [(None, None), (Some(0.0), Some(0.0)), (Some(7.0), Some(7.0))];
+
+    #[test]
+    fn trade_tick_size() {
+        for (sent, expected) in SIZE_CASES {
+            let mut fixture = trade_tick();
+            fixture.size = sent;
+            let trade = decode_trade_tick_proto(fixture.to_proto()).expect("decode failed");
+            assert_eq!(trade.size, expected, "sent {sent:?}");
+        }
+    }
+
+    #[test]
+    fn bid_ask_tick_sizes() {
+        for (sent, expected) in SIZE_CASES {
+            let mut fixture = bid_ask_tick();
+            fixture.size_bid = sent;
+            fixture.size_ask = sent;
+            let bid_ask = decode_bid_ask_tick_proto(fixture.to_proto()).expect("decode failed");
+            assert_eq!(bid_ask.size_bid, expected, "sent {sent:?}");
+            assert_eq!(bid_ask.size_ask, expected, "sent {sent:?}");
+        }
+    }
+
+    #[test]
+    fn mid_point_tick_size() {
+        for (sent, expected) in MIDPOINT_SIZE_CASES {
+            let mut fixture = mid_point_tick();
+            fixture.size = sent;
+            let mid = decode_mid_point_tick_proto(fixture.to_proto()).expect("decode failed");
+            assert_eq!(mid.size, expected, "sent {sent:?}");
+        }
     }
 }
 
@@ -842,6 +884,20 @@ mod decimal_wire_tests {
         }
     }
 
+    fn mid_point_tick_proto(size: &str) -> crate::proto::TickByTickData {
+        crate::proto::TickByTickData {
+            req_id: Some(9000),
+            tick_type: Some(4),
+            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(
+                crate::proto::HistoricalTick {
+                    time: Some(1_678_890_000),
+                    price: Some(100.0),
+                    size: Some(size.into()),
+                },
+            )),
+        }
+    }
+
     #[test]
     fn tick_size_rejects_malformed_size() {
         assert_decimal_parse_error(decode_tick_size_proto(tick_size_proto("abc")), "abc");
@@ -874,6 +930,11 @@ mod decimal_wire_tests {
     #[test]
     fn bid_ask_tick_rejects_malformed_size() {
         assert_decimal_parse_error(decode_bid_ask_tick_proto(bid_ask_tick_proto("abc")), "abc");
+    }
+
+    #[test]
+    fn mid_point_tick_rejects_malformed_size() {
+        assert_decimal_parse_error(decode_mid_point_tick_proto(mid_point_tick_proto("abc")), "abc");
     }
 
     // --- behaviour change worth naming ---

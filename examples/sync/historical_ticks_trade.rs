@@ -46,7 +46,7 @@ fn main() {
     let ticks = client
         .historical_ticks(&contract, *number_of_ticks)
         .starting(interval_start)
-        .trade()
+        .last()
         .expect("historical data request failed");
 
     // `iter_data()` filters notices and yields `Result<_, Error>`, so a

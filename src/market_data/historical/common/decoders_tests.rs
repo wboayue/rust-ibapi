@@ -97,18 +97,18 @@ fn decode_historical_ticks_last_proto_works() {
     assert!(done);
     assert_eq!(ticks.len(), 2);
 
-    assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
-    assert!(ticks[0].tick_attribute_last.past_limit);
-    assert!(!ticks[0].tick_attribute_last.unreported);
+    assert_eq!(ticks[0].time, datetime!(2023-04-10 13:30:00 UTC));
+    assert!(ticks[0].attributes.past_limit);
+    assert!(!ticks[0].attributes.unreported);
     assert_eq!(ticks[0].price, 11.63);
-    assert_eq!(ticks[0].size, Some(100.0));
+    assert_eq!(ticks[0].size, 100.0);
     assert_eq!(ticks[0].exchange, "ISLAND");
     assert_eq!(ticks[0].special_conditions, "O X");
 
-    assert_eq!(ticks[1].timestamp, datetime!(2023-04-10 13:30:01 UTC));
-    assert!(!ticks[1].tick_attribute_last.past_limit);
-    assert!(ticks[1].tick_attribute_last.unreported);
-    assert_eq!(ticks[1].size, Some(50.0));
+    assert_eq!(ticks[1].time, datetime!(2023-04-10 13:30:01 UTC));
+    assert!(!ticks[1].attributes.past_limit);
+    assert!(ticks[1].attributes.unreported);
+    assert_eq!(ticks[1].size, 50.0);
     assert_eq!(ticks[1].exchange, "FINRA");
 }
 
@@ -145,7 +145,7 @@ fn decode_historical_ticks_proto_works() {
     let (ticks, done) = decode_historical_ticks_proto(proto_msg).unwrap();
     assert_eq!(ticks.len(), 2);
     assert!(!done);
-    assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
+    assert_eq!(ticks[0].time, datetime!(2023-04-10 13:30:00 UTC));
     assert_eq!(ticks[0].price, 150.0);
     assert_eq!(ticks[0].size, Some(100.0));
 }
@@ -171,13 +171,13 @@ fn decode_historical_ticks_bid_ask_proto_works() {
     let (ticks, done) = decode_historical_ticks_bid_ask_proto(proto_msg).unwrap();
     assert_eq!(ticks.len(), 1);
     assert!(done);
-    assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
-    assert!(ticks[0].tick_attribute_bid_ask.bid_past_low);
-    assert!(!ticks[0].tick_attribute_bid_ask.ask_past_high);
+    assert_eq!(ticks[0].time, datetime!(2023-04-10 13:30:00 UTC));
+    assert!(ticks[0].attributes.bid_past_low);
+    assert!(!ticks[0].attributes.ask_past_high);
     assert_eq!(ticks[0].price_bid, 149.0);
     assert_eq!(ticks[0].price_ask, 151.0);
-    assert_eq!(ticks[0].size_bid, Some(100.0));
-    assert_eq!(ticks[0].size_ask, Some(200.0));
+    assert_eq!(ticks[0].size_bid, 100.0);
+    assert_eq!(ticks[0].size_ask, 200.0);
 }
 
 #[test]
@@ -548,7 +548,7 @@ fn decode_historical_ticks_last_proto_preserves_fractional_size() {
         .to_proto();
 
     let (ticks, _) = super::decode_historical_ticks_last_proto(p).unwrap();
-    assert_eq!(ticks[0].size, Some(0.25));
+    assert_eq!(ticks[0].size, 0.25);
 }
 
 #[test]
@@ -558,8 +558,8 @@ fn decode_historical_ticks_bid_ask_proto_preserves_fractional_sizes() {
         .to_proto();
 
     let (ticks, _) = super::decode_historical_ticks_bid_ask_proto(p).unwrap();
-    assert_eq!(ticks[0].size_bid, Some(0.5));
-    assert_eq!(ticks[0].size_ask, Some(0.75));
+    assert_eq!(ticks[0].size_bid, 0.5);
+    assert_eq!(ticks[0].size_ask, 0.75);
 }
 
 #[test]
@@ -588,6 +588,48 @@ fn decode_historical_ticks_proto_rejects_malformed_size() {
         .to_proto();
 
     assert_decimal_parse_error(super::decode_historical_ticks_proto(p), "abc");
+}
+
+/// A size TWS leaves out, or sends as the unset sentinel, decodes as `0.0` on
+/// trade and bid/ask ticks and as `None` on midpoint ticks; a sent `0` stays a
+/// value on both.
+#[test]
+fn decode_historical_tick_sizes_absent_unset_or_zero() {
+    // (wire size, trade / bid-ask size, midpoint size)
+    let cases: [(Option<&str>, f64, Option<f64>); 3] = [(None, 0.0, None), (Some("9223372036854775807"), 0.0, None), (Some("0"), 0.0, Some(0.0))];
+    for (wire, expected, expected_mid) in cases {
+        let mut last = historical_tick_last(1_681_133_400, 150.0, 0.0, "NYSE");
+        last.size = wire.map(str::to_string);
+        let (ticks, _) = super::decode_historical_ticks_last_proto(historical_ticks_last_response().tick(last).to_proto()).unwrap();
+        assert_eq!(ticks[0].size, expected, "last {wire:?}");
+
+        let mut bid_ask = historical_tick_bid_ask(1_681_133_400, 149.0, 151.0, 0.0, 0.0);
+        bid_ask.size_bid = wire.map(str::to_string);
+        bid_ask.size_ask = wire.map(str::to_string);
+        let (ticks, _) = super::decode_historical_ticks_bid_ask_proto(historical_ticks_bid_ask_response().tick(bid_ask).to_proto()).unwrap();
+        assert_eq!((ticks[0].size_bid, ticks[0].size_ask), (expected, expected), "bid_ask {wire:?}");
+
+        let mid = historical_tick_mid(1_681_133_400, 150.0, 0.0).size_wire(wire);
+        let (ticks, _) = super::decode_historical_ticks_proto(historical_ticks_response().tick(mid).to_proto()).unwrap();
+        assert_eq!(ticks[0].size, expected_mid, "mid {wire:?}");
+    }
+}
+
+#[test]
+fn decode_historical_ticks_last_and_bid_ask_reject_malformed_size() {
+    let mut last = historical_tick_last(1_681_133_400, 150.0, 0.0, "NYSE");
+    last.size = Some("abc".into());
+    assert_decimal_parse_error(
+        super::decode_historical_ticks_last_proto(historical_ticks_last_response().tick(last).to_proto()),
+        "abc",
+    );
+
+    let mut bid_ask = historical_tick_bid_ask(1_681_133_400, 149.0, 151.0, 0.0, 0.0);
+    bid_ask.size_bid = Some("abc".into());
+    assert_decimal_parse_error(
+        super::decode_historical_ticks_bid_ask_proto(historical_ticks_bid_ask_response().tick(bid_ask).to_proto()),
+        "abc",
+    );
 }
 
 /// `HistoricalDataEnd` echoes the requested window, and the schedule decoder

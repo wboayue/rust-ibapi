@@ -877,3 +877,72 @@ marks both fields nullable. JSON written by 5.x still deserializes, with a store
 `count` stays `i32` and is `-1` on a non-TRADES bar, as TWS sends it. The historical `Bar`
 (`market_data::historical::Bar`) is unchanged: TWS sends `-1` for its volume, WAP and count on
 non-TRADES bars rather than leaving them out, so they stay `f64` and `i32`.
+
+### 39. Tick-by-tick and historical ticks share `TickLast`, `TickBidAsk` and `TickMidpoint`
+
+A tick-by-tick frame carries the same three TWS tick messages as a historical ticks reply, but
+5.x decoded them into two unrelated families of structs. Both requests now yield one set of
+types, defined in `market_data` and re-exported from `market_data::realtime` and
+`market_data::historical`. Field names follow the proto's (`time`, `price_bid`, `size_bid`);
+each struct's attribute field is `attributes`.
+
+| 5.x | 6.0 |
+|---|---|
+| `realtime::Trade` | `TickLast` |
+| `realtime::BidAsk` | `TickBidAsk` |
+| `realtime::MidPoint` | `TickMidpoint` |
+| `realtime::TradeAttribute`, `realtime::BidAskAttribute` | `TickAttributeLast`, `TickAttributeBidAsk` |
+| `Trade::trade_attribute`, `BidAsk::bid_ask_attribute` | `attributes` |
+| `BidAsk::bid_price`, `ask_price`, `bid_size`, `ask_size` | `price_bid`, `price_ask`, `size_bid`, `size_ask` |
+| `MidPoint::mid_point` | `price`, and a new `size: Option<f64>` |
+| historical `timestamp` | `time` |
+| historical `tick_attribute_last`, `tick_attribute_bid_ask` | `attributes` |
+| historical `TickLast::size`, `TickBidAsk::size_bid`, `size_ask` (`Option<f64>`) | `f64` |
+| `HistoricalTicksBuilder::trade()` | `last()` |
+
+```rust,ignore
+// 5.x
+let mut volume = 0.0;
+let trades = client.tick_by_tick(&contract, 0).last()?;
+for trade in trades.iter_data() {
+    let trade = trade?;
+    volume += trade.size;
+    let unreported = trade.trade_attribute.unreported;
+}
+let quotes = client.tick_by_tick(&contract, 0).bid_ask(IgnoreSize::No)?;
+// quote.bid_price, quote.ask_size, quote.bid_ask_attribute
+let history = client.historical_ticks(&contract, 100).trade()?;
+// tick.timestamp, tick.tick_attribute_last, tick.size.unwrap_or(0.0)
+
+// 6.0
+let mut volume = 0.0;
+let trades = client.tick_by_tick(&contract, 0).last()?;
+for trade in trades.iter_data() {
+    let trade = trade?;
+    volume += trade.size;
+    let unreported = trade.attributes.unreported;
+}
+let quotes = client.tick_by_tick(&contract, 0).bid_ask(IgnoreSize::No)?;
+// quote.price_bid, quote.size_ask, quote.attributes
+let history = client.historical_ticks(&contract, 100).last()?;
+// tick.time, tick.attributes, tick.size
+```
+
+(`client` is a connected `Client`, `contract` a `Contract`.)
+
+The compiler finds every use of a removed type, a renamed field or `trade()`, and every
+historical size used as an `Option`. It does not catch four runtime changes:
+
+- A historical trade or bid/ask size TWS did not send (or sent as the unset sentinel) reads as
+  `0.0`, where 5.x gave `None`. TWS sent one on every tick probed, live and historical
+  ([wire facts](wire-facts/market-data.md#tick-by-tick-sizes-and-ignoresize)).
+- A live midpoint frame carries no size, so `TickMidpoint::size` is `None` on `tick_by_tick`;
+  historical midpoint ticks carry `0`. A malformed live midpoint size now ends the subscription
+  with `Error::Parse`, as a malformed trade or bid/ask size already did; 5.x did not read it.
+- The types derive `Serialize` / `Deserialize`, and the keys change with the field names
+  (`timestamp` -> `time`, `bid_price` -> `price_bid`, `trade_attribute` -> `attributes`,
+  `mid_point` -> `price`), so JSON written by 5.x for them no longer deserializes. The `utoipa`
+  schema names change to match.
+- Code that only prints or serializes a historical size still compiles but changes output:
+  `{:?}` gives `100.0` where it gave `Some(100.0)`, and a stored `null` size no longer
+  deserializes.
