@@ -140,3 +140,16 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   position exists in this option in account <X>"; for `""` X was the login's account. Account
   is optional on a single-account login.
 - **Not probed:** multi-account (FA) logins.
+
+### Open order fields TWS leaves out
+
+*Live 2026-11-15 Sun 22:27 ET (overnight), paper, server 226; raw capture.*
+
+- An unfilled AAPL BUY 1 LMT 1.00 (`outside_rth`), read back with `open_orders()` (5 frames):
+  `Order.refFuturesConId` (116) **absent** in every frame; `filledQuantity` (115) **sent** as
+  `"0"`.
+- Settles that a stock order carries no reference future, so absent decodes as `None`, as C#
+  leaves it unset (`HasRefFuturesConId`). `filledQuantity` is always sent, so it stays `f64`.
+- **Not probed:** a futures or EFP order, where `refFuturesConId` would be set; a filled or
+  partially filled order.
+

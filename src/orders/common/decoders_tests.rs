@@ -46,6 +46,18 @@ fn decode_open_order_proto_works() {
     assert_eq!(result.order_state.status, OrderStatusKind::Submitted);
 }
 
+/// TWS leaves `refFuturesConId` out of a stock order's frame (live, server 226); absent
+/// must not read as con id 0.
+#[test]
+fn decode_open_order_ref_futures_con_id_by_presence() {
+    for (label, sent, expected) in [("sent", Some(495512563), Some(495512563)), ("absent", None, None)] {
+        let mut proto_msg = crate::testdata::builders::orders::open_order().to_proto();
+        proto_msg.order.as_mut().unwrap().ref_futures_con_id = sent;
+        let result = decode_open_order_proto(proto_msg).unwrap();
+        assert_eq!(result.order.ref_futures_con_id, expected, "{label}");
+    }
+}
+
 #[test]
 fn decode_order_status_proto_works() {
     let proto_msg = crate::proto::OrderStatus {
