@@ -1915,12 +1915,14 @@ pub struct ExecutionFilter {
     /// Side filter — `None` for no filter, `Some(ExecutionFilterSide::Buy)`
     /// or `Some(ExecutionFilterSide::Sell)` to restrict the response.
     pub side: Option<ExecutionFilterSide>,
-    /// Filter executions from the last N days (0 = no filter).
+    /// Filter executions from the last N days (0 = no filter). At most 7, per IB's
+    /// `ExecutionFilter.proto`: above 7, TWS returned no executions at all, not even those
+    /// inside the window (live: 2026-11-16, paper, 8, 14 and 30).
     pub last_n_days: i32,
     /// Filter executions to these dates, e.g. `vec![date!(2026 - 01 - 30)]`. A date is the
     /// execution's day in UTC or in the operator's time zone (live tests did not distinguish
-    /// between the two), not in the instrument's. IB documents dates within the past week;
-    /// whether TWS returns executions for an older date is not known.
+    /// between the two), not in the instrument's. IB's `ExecutionFilter.proto` asks for dates
+    /// within the past week; whether TWS returns executions for an older date is not known.
     pub specific_dates: Vec<time::Date>,
 }
 

@@ -151,14 +151,16 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 *Live 2026-11-16 01:43Z (Sunday evening ET), paper Gateway, server 226; #1235.*
 
 - `last_n_days = 7` → 14 executions: the 2026-11-11 UTC fills (`Execution.time` dates them
-  `20261110`; see below) and 2026-11-15. `last_n_days` 8, 14 and 30 → none, no error, only
-  the end message.
+  `20261110`; see below) and 2026-11-15.
+- `last_n_days` 8, 14 and 30 → none, no error, only the end message, although 8 spans the same
+  2026-11-11 and 2026-11-15 fills. Above 7, TWS returns nothing rather than capping the window.
+  IB's `ExecutionFilter.proto` gives 7 as the maximum.
 - `specific_dates` one day at a time, 2026-10-26 to 2026-11-16: 2026-11-11 and 2026-11-15
   returned their fills; every other day, including each day 8 to 21 days back, returned none,
   no error, only the end message.
 - **Not probed:** a `specific_dates` day older than a week that has executions. None was
-  reachable (`last_n_days` above 7 returned nothing), so whether TWS applies IB's "within the
-  past week" to `specific_dates` is not known.
+  reachable (`last_n_days` above 7 returns nothing), so whether TWS applies the "within the
+  past week" in IB's `ExecutionFilter.proto` to `specific_dates` is not known.
 
 ### `Execution.time` rendering
 
