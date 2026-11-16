@@ -29,3 +29,7 @@ Scanner subscriptions and their data rows. Format: [README](README.md).
   before that, this text ended the subscription with `Err` and the rows were dropped. Stock scans
   sent no 165.
 - **Not probed:** whether later refreshes of a bond scan repeat the 165, other instruments, RTH.
+  Also not probed: a 165 as the *only* answer to a one-shot (`head_timestamp`, `histogram_data`,
+  `historical_schedule`, `historical_ticks`). With 165 a warning, such a call would wait for an
+  answer, and on async without a limit unless `one_shot_timeout` is set. Every 165 seen so far
+  was followed by data or an end marker.

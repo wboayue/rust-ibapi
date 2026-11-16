@@ -44,10 +44,10 @@ pub const ORDER_MESSAGE_CODE: i32 = 399;
 /// depth subscription yields it as [`MarketDepths::Reset`](crate::market_data::realtime::MarketDepths::Reset).
 pub(crate) const MARKET_DEPTH_RESET_CODE: i32 = 317;
 
-/// "Historical Market Data Service query message", a `Warning` in every form seen live: "HMDS
-/// server connection was successful" before a historical request's bars (#1136), "no items
-/// retrieved" on an empty scan (#886), and "N out of M items retrieved" before a bond scan's rows
-/// (`docs/wire-facts/scanner.md`). In each, TWS goes on with the request.
+/// "Historical Market Data Service query message". Always a `Warning`, whatever the text. Every
+/// form seen live reports on a request TWS goes on with: "HMDS server connection was successful"
+/// before a historical request's bars (#1136), "no items retrieved" on an empty scan (#886), and
+/// "N out of M items retrieved" before a bond scan's rows (`docs/wire-facts/scanner.md`).
 pub(crate) const HMDS_QUERY_MESSAGE_CODE: i32 = 165;
 
 /// "Order TIF was set to DAY based on order preset." TWS applied the preset's
@@ -80,8 +80,7 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2199;
 /// falls back to the same default, so code 0 never carries a hard error.
 ///
 /// Code 165 ([`HMDS_QUERY_MESSAGE_CODE`]) reports on a query TWS goes on with.
-/// Code 10349 ([`ORDER_PRESET_TIF_CODE`])
-/// reports an order TWS goes on with.
+/// Code 10349 ([`ORDER_PRESET_TIF_CODE`]) reports an order TWS goes on with.
 pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
     code == 0
         || code == ORDER_PRESET_TIF_CODE

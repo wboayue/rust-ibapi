@@ -621,7 +621,7 @@ fn log_level_follows_category() {
     assert_eq!(order_warning.log_level(), log::Level::Warn);
     assert_eq!(Notice::synthesized(ORDER_MESSAGE_CODE, "rejected".into()).log_level(), log::Level::Error);
     // 165, whatever its text, is a routine query report: info.
-    for message in [HMDS_CONNECTED_MESSAGE, "no items retrieved"] {
+    for message in [HMDS_CONNECTED_MESSAGE, "no items retrieved", "10 out of 18957 items retrieved"] {
         assert_eq!(
             Notice::synthesized(HMDS_QUERY_MESSAGE_CODE, message.into()).log_level(),
             log::Level::Info,
