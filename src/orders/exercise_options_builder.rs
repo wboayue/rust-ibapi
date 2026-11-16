@@ -79,14 +79,17 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
     }
 
     /// Customer account to send with the request: the `customerAccount` parameter of IBKR's
-    /// `exerciseOptions`. If unset or empty, none is sent.
+    /// `exerciseOptions`. If unset or empty, none is sent. TWS rejects the exercise with error 145
+    /// unless the account's configuration allows a customer account, even when the value is the
+    /// account itself (live: 2026-11-15, a plain paper account).
     pub fn customer_account(mut self, customer_account: impl Into<String>) -> Self {
         self.customer_account = Some(customer_account.into());
         self
     }
 
     /// Flag the request as from a professional customer: the `professionalCustomer` parameter of
-    /// IBKR's `exerciseOptions`. Off by default.
+    /// IBKR's `exerciseOptions`. Off by default. TWS rejects the exercise with error 145 unless the
+    /// account's configuration allows the flag (live: 2026-11-15, a plain paper account).
     pub fn professional_customer(mut self) -> Self {
         self.professional_customer = true;
         self

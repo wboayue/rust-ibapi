@@ -198,6 +198,26 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   is optional on a single-account login.
 - **Not probed:** multi-account (FA) logins.
 
+### `exercise_options` customer account and professional customer
+
+*Live 2026-11-15 20:43 ET (Sunday evening), paper Gateway, server 226, SPY 20261204 930 call, no
+position held; #1226.*
+
+- Neither field set → 322 "No unlapsed position exists in this option in account <X>", as in
+  the account entry above.
+- `customer_account("CUST123")` → 145 "Error in validating entry fields -Account config doesn't
+  allow to specify customer account value: CUST123 for account <X>". The same with the value set
+  to the account itself.
+- `professional_customer()` → 145 "... Account config doesn't allow to assign 'true' value for
+  ProfessionalCustomer for account <X>".
+- Both set → 145 with the customer-account message only.
+- So the check is per account configuration, and runs before the position check: 145 replaced
+  322. The C# client documents the parameters only as "Customer Account" / "Professional
+  Customer".
+- **Not probed:** an account whose configuration allows either field (omnibus, FA), live
+  accounts, an exercise with a position held, and `Order`'s fields of the same names on
+  `place_order`.
+
 ### `exercise_options` replies
 
 *Live 2026-11-13 11:22–11:38 ET RTH, paper TWS, server 223, SPY 20261120 calls (755, 780), exercise
