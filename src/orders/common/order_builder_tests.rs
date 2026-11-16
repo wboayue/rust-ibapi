@@ -1,6 +1,7 @@
 use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
+use crate::orders::common::encoders::encode_order;
 use crate::orders::common::order_builder::*;
-use crate::orders::{Action, Order, OrderType};
+use crate::orders::{Action, Order, OrderType, TrailingUnit};
 
 /// Tests for basic order types like market, limit, and stop orders
 #[cfg(test)]
@@ -513,16 +514,20 @@ mod adjustable_order_tests {
 
     #[test]
     fn adjust_to_trail() {
-        // (trail, expected adjustable_trailing_unit, expected adjusted_trailing_amount)
-        let cases = [(TrailBy::Amount(0.5), 0, 0.5), (TrailBy::Percent(2.0), 100, 2.0)];
+        // (trail, expected adjustable_trailing_unit, its wire value, expected adjusted_trailing_amount)
+        let cases = [
+            (TrailBy::Amount(0.5), TrailingUnit::Amount, None, 0.5),
+            (TrailBy::Percent(2.0), TrailingUnit::Percent, Some(100), 2.0),
+        ];
 
-        for (trail, unit, amount) in cases {
+        for (trail, unit, wire, amount) in cases {
             let order = attach(AdjustTo::Trail { stop_price: 46.0, trail });
 
             assert_attached_stop(&order);
             assert_eq!(order.adjusted_order_type, Some(OrderType::TrailingStop));
             assert_eq!(order.adjusted_stop_price, Some(46.0));
             assert_eq!(order.adjustable_trailing_unit, unit, "{trail:?}");
+            assert_eq!(encode_order(&order).adjustable_trailing_unit, wire, "{trail:?}");
             assert_eq!(order.adjusted_trailing_amount, Some(amount), "{trail:?}");
         }
     }

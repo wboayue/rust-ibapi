@@ -956,6 +956,23 @@ fn decode_order_empty_optional_strings_are_none() {
 }
 
 #[test]
+fn decode_order_adjustable_trailing_unit() {
+    // (wire value, expected); `None` is an echo without the field.
+    let cases = [
+        (None, TrailingUnit::Amount),
+        (Some(0), TrailingUnit::Amount),
+        (Some(100), TrailingUnit::Percent),
+    ];
+    for (wire, expected) in cases {
+        let proto_order = proto::Order {
+            adjustable_trailing_unit: wire,
+            ..proto_order()
+        };
+        assert_eq!(decode_order(&proto_order).unwrap().adjustable_trailing_unit, expected, "{wire:?}");
+    }
+}
+
+#[test]
 fn decode_order_preserves_unknown_integer_codes() {
     let proto_order = proto::Order {
         oca_type: Some(9),
@@ -965,10 +982,12 @@ fn decode_order_preserves_unknown_integer_codes() {
         origin: Some(9),
         short_sale_slot: Some(9),
         what_if_type: Some(9),
+        adjustable_trailing_unit: Some(1),
         ..proto_order()
     };
     let order = decode_order(&proto_order).unwrap();
     assert_eq!(order.oca_type, OcaType::Unknown(9));
+    assert_eq!(order.adjustable_trailing_unit, TrailingUnit::Unknown(1));
     assert_eq!(order.trigger_method, TriggerMethod::Unknown(99));
     assert_eq!(order.volatility_type, Some(VolatilityType::Unknown(9)));
     assert_eq!(order.reference_price_type, Some(ReferencePriceType::Unknown(9)));
