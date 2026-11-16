@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `ArticleType` gains `Unknown(i32)`: `news_article` returns an article whose type code it doesn't model as `Unknown(code)`, with the body intact, instead of failing with `Error::Parse`. `From<i32>` keeps such a code as `Unknown(code)` where 5.x read it as `Text`, and `From<ArticleType> for i32` is new; `value as i32` no longer compiles. `ArticleType` is now `Copy` and `Eq`. See `docs/migration-6.0.md` §3.
 - `ContractDetails`, `ScannerData` and `TickRequestParameters` are `#[non_exhaustive]`, so fields TWS sends that aren't decoded yet (`min_algo_size` and the precision and event-contract fields; scanner `distance`, `benchmark` and `projection`) can be added in a minor release. Outside the crate, a struct literal no longer compiles: start from `default()` and assign fields. See `docs/migration-6.0.md` §35 (#1232).
 - `ExpirationDate::new` and `ContractMonth::new` return `Result<Self, Error>`: `Error::InvalidArgument` unless the components form a real calendar date (or month 1–12) with a year of at most 9999, where `ExpirationDate::new(2026, 13, 40)` was sent to TWS as is. `OptionBuilder::build()` checks an `expires_on(..)` date the same way. See `docs/migration-6.0.md` §34 (#1219).
 - `AccuDistrBuilder::route_order_type` takes an `OrderType` instead of `impl Into<String>`: `.route_order_type(OrderType::Limit)` for `.route_order_type("LMT")`. See `docs/migration-6.0.md` §33 (#1222).
@@ -62,7 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `ibapi::protocol` is crate-private. Its 53 constants deprecated in 5.1 (at or below the server version 213 connection floor, so a check always passed) are deleted, along with `is_supported` and `include_if_supported`, which nothing called. The three remaining gates (`CANCEL_CONTRACT_DATA`, `CONFIG`, `UPDATE_CONFIG`) are checked by the requests themselves, which return `Error::ServerVersion` from a server too old for them. See `docs/migration-6.0.md` §1 (#990, #1157).
-- `From<i32> for ArticleType` is removed: it read any unknown code as `Text`. See `docs/migration-6.0.md` §3 (#1071).
 - `Order::fa_profile`, `basis_points` and `basis_points_type` are removed. IB's protobuf `Order` message has no field for them, so nothing has sent or read them since 3.0. See `docs/migration-6.0.md` §17 (#1184).
 - `OrderType::ComboLimit`, `ComboMarket`, `MarketOnOpen`, `LimitOnOpen` and `AtAuction` are removed; they shared a wire code with `Limit`, `Market` or `MarketToLimit`. `market_on_open()`, `limit_on_open(..)` and `at_auction(..)` set the type and time in force; `.order_type(..)` sets no time in force. See `docs/migration-6.0.md` §32 (#1220).
 

@@ -63,9 +63,28 @@ let code = i32::from(leg.open_close);
 if let MarketDataType::Unknown(code) = market_data_type { /* ... */ }
 ```
 
-### 3. `From<i32> for ArticleType` is removed
+### 3. `ArticleType` keeps unrecognized codes
 
-It mapped any unknown code to `ArticleType::Text`, so a binary article type TWS added later would have read as text. `news_article` has not used it since 5.4.0: its decoder rejects an unknown code with `Error::Parse`. Nothing else in the crate called it. Match on the two variants directly; there is no replacement conversion.
+In 5.x, `From<i32> for ArticleType` read any code it did not model as `Text`. `news_article`
+did not use it; since 5.4.0 it has returned `Error::Parse` for such a code and dropped the
+article. `ArticleType` now takes the shape of the other integer-coded enums (§2):
+
+- **A new `Unknown(i32)` variant.** `news_article` returns the article with
+  `ArticleType::Unknown(code)` and the body passed through unchanged; it no longer fails.
+  `From<i32>` returns `Unknown(code)` outside `0` (`Text`) and `1` (`Binary`). The new
+  `From<ArticleType> for i32` returns the code unchanged.
+- **The variants no longer have explicit discriminants**, so `value as i32` no longer compiles.
+  Use `i32::from(value)`.
+- An exhaustive `match` needs an arm for `Unknown`. `ArticleType` is now also `Copy` and `Eq`.
+
+```rust,ignore
+// 6.0
+match article.article_type {
+    ArticleType::Text => { /* HTML or plain text */ }
+    ArticleType::Binary => { /* Base64; decode it */ }
+    ArticleType::Unknown(code) => { /* a type this version doesn't model */ }
+}
+```
 
 ### 4. `CommissionReport` is now `CommissionAndFeesReport`
 

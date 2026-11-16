@@ -76,10 +76,10 @@ no longer compiles with a payload variant. `impl_wire_code!` (`src/macros.rs`) g
 one table (#1180). `Unknown(i32)` keeps `Copy` and derived serde. There is no closed
 `TryFrom<i32>` form for streaming paths.
 
-**A one-shot integer field decodes closed.** `ArticleType` (`news_article`, #1070) maps the table
-in a private decoder fn and returns `Error::Parse` for any other code. Its coercing public
-`From<i32>` is removed for 6.0 (#1071); an existing `From<i32>` also blocks `TryFrom<i32>` through
-the blanket impl.
+**One-shot fields take the same shape.** `ArticleType` (`news_article`) decoded closed, returning
+`Error::Parse` for an unmodeled code (#1070). That failed the call and discarded a body the caller
+could still use, so it is now open like every other integer-coded enum. An error suits a frame
+that can't be used at all; an unmodeled code in one field isn't that.
 
 **The wire code lives in the `impl_wire_code!` table, not a discriminant.** No `#[repr(i32)]`, no
 `Foo = 0` on the enum: with a payload variant nothing reads the discriminant, so it is decoration a

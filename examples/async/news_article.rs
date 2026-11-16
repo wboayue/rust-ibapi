@@ -30,6 +30,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Content length: {} bytes", article_body.article_text.len());
                     // In a real application, you would decode the Base64 and save as PDF
                 }
+                ibapi::news::ArticleType::Unknown(code) => {
+                    println!("Type: unknown (code {code})");
+                    println!("Content length: {} bytes", article_body.article_text.len());
+                }
             }
         }
         Err(e) => {

@@ -15,3 +15,16 @@ fn message_type_round_trips_every_wire_code() {
         BulletinType::Unknown,
     );
 }
+
+#[test]
+fn article_type_round_trips_every_wire_code() {
+    check_wire_code_round_trip(
+        &[
+            (ArticleType::Text, 0),
+            (ArticleType::Binary, 1),
+            (ArticleType::Unknown(2), 2),
+            (ArticleType::Unknown(-1), -1),
+        ],
+        ArticleType::Unknown,
+    );
+}

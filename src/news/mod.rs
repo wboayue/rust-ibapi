@@ -114,14 +114,22 @@ pub(crate) enum HistoricalNewsFrame {
 
 /// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
 pub enum ArticleType {
-    /// plain text or html
+    /// Plain text or HTML. Wire code `0`. Also the value when TWS omits the field.
     #[default]
-    Text = 0,
-    /// binary data / pdf
-    Binary = 1,
+    Text,
+    /// Binary data, such as a PDF, Base64-encoded in `article_text`. Wire code `1`.
+    Binary,
+    /// Article type code not modeled by this version of the API. `article_text` is passed
+    /// through as TWS sent it.
+    Unknown(i32),
 }
+
+impl_wire_code!(ArticleType {
+    Text = 0,
+    Binary = 1,
+});
 
 /// News article body containing the full article content.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
