@@ -123,14 +123,23 @@ impl Price {
 
 /// How far a trailing stop trails the market.
 ///
-/// Taken by [`OrderBuilder::trailing_stop`](crate::orders::OrderBuilder::trailing_stop) and
-/// [`OrderBuilder::trailing_stop_limit`](crate::orders::OrderBuilder::trailing_stop_limit).
+/// The `Order` fields it sets depend on the path:
+///
+/// - [`OrderBuilder::trailing_stop`](crate::orders::OrderBuilder::trailing_stop) and
+///   [`OrderBuilder::trailing_stop_limit`](crate::orders::OrderBuilder::trailing_stop_limit):
+///   `Amount` sets [`Order::aux_price`](crate::orders::Order::aux_price), `Percent` sets
+///   [`Order::trailing_percent`](crate::orders::Order::trailing_percent).
+/// - [`AdjustTo::Trail`](crate::orders::order_builder::AdjustTo::Trail), the trailing target of
+///   [`attach_adjustable_stop`](crate::orders::order_builder::attach_adjustable_stop): either
+///   variant sets [`Order::adjusted_trailing_amount`](crate::orders::Order::adjusted_trailing_amount),
+///   and [`Order::adjustable_trailing_unit`](crate::orders::Order::adjustable_trailing_unit)
+///   records which one.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum TrailBy {
-    /// Trail by a fixed price amount. Sent as `Order::aux_price`.
+    /// Trail by a fixed price amount.
     Amount(f64),
-    /// Trail by a percentage of the market price. Sent as `Order::trailing_percent`.
+    /// Trail by a percentage of the market price.
     Percent(f64),
 }
 
