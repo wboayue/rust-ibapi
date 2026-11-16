@@ -241,7 +241,7 @@ pub(crate) fn encode_order(order: &Order) -> proto::Order {
         adjusted_stop_price: order.adjusted_stop_price,
         adjusted_stop_limit_price: order.adjusted_stop_limit_price,
         adjusted_trailing_amount: order.adjusted_trailing_amount,
-        adjustable_trailing_unit: some_i32_ne(order.adjustable_trailing_unit, 0),
+        adjustable_trailing_unit: some_i32_ne(i32::from(order.adjustable_trailing_unit), 0),
         lmt_price_offset: order.limit_price_offset,
         conditions: encode_conditions(&order.conditions),
         conditions_cancel_order: some_bool(order.conditions_cancel_order),
@@ -386,8 +386,13 @@ pub(crate) fn encode_execution_filter(filter: &ExecutionFilter) -> proto::Execut
         exchange: some_str(&filter.exchange),
         side: some_display(filter.side.as_ref()),
         last_n_days: some_i32_ne(filter.last_n_days, 0),
-        specific_dates: filter.specific_dates.iter().filter_map(|d| d.parse::<i32>().ok()).collect(),
+        specific_dates: filter.specific_dates.iter().map(|d| yyyymmdd(*d)).collect(),
     }
+}
+
+/// A date as the `yyyymmdd` integer the proto's `specific_dates` carries.
+fn yyyymmdd(date: time::Date) -> i32 {
+    date.year() * 10_000 + i32::from(u8::from(date.month())) * 100 + i32::from(date.day())
 }
 
 // === Attached orders, OrderCancel ===

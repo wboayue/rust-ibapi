@@ -536,8 +536,10 @@ pub struct Order {
     pub adjusted_stop_limit_price: Option<f64>,
     /// Adjusted Stop orders: specifies the trailing amount of the adjusted (TRAIL) parent.
     pub adjusted_trailing_amount: Option<f64>,
-    /// Adjusted Stop orders: specifies where the trailing unit is an amount (set to 0) or a percentage (set to 1)
-    pub adjustable_trailing_unit: i32,
+    /// Adjusted Stop orders: whether [`adjusted_trailing_amount`](Self::adjusted_trailing_amount)
+    /// is an amount or a percentage. See [`AdjustableTrailingUnit`]. An echo without the field decodes
+    /// to `Amount`.
+    pub adjustable_trailing_unit: AdjustableTrailingUnit,
     /// Conditions determining when the order will be activated or canceled.
     pub conditions: Vec<OrderCondition>,
     /// Indicates whether or not conditions will also be valid outside Regular Trading Hours.
@@ -710,7 +712,7 @@ impl Default for Order {
             adjusted_stop_price: None,
             adjusted_stop_limit_price: None,
             adjusted_trailing_amount: None,
-            adjustable_trailing_unit: 0,
+            adjustable_trailing_unit: AdjustableTrailingUnit::Amount,
             conditions: vec![],
             conditions_ignore_rth: false,
             conditions_cancel_order: false,
@@ -1017,6 +1019,31 @@ impl_wire_code!(OcaType {
     CancelWithBlock = 1,
     ReduceWithBlock = 2,
     ReduceWithoutBlock = 3,
+});
+
+/// The unit of an adjusted trailing stop's [`Order::adjusted_trailing_amount`].
+/// [`attach_adjustable_stop`](crate::orders::order_builder::attach_adjustable_stop) sets it from the builder's
+/// [`TrailBy`](crate::orders::builder::TrailBy) (`AdjustTo::Trail`); plain trailing stops use
+/// [`Order::aux_price`] / [`Order::trailing_percent`] instead.
+///
+/// IB's `Order` reference gives `1` for a percentage; TWS rejects `1` with error 201 and takes
+/// `100` (live 2026-10-04, paper; `docs/wire-facts/orders.md#adjustable_trailing_unit`).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AdjustableTrailingUnit {
+    /// A price amount. Wire code `0`. The encoder sends no code for it; TWS accepted such an
+    /// order and echoed `0`.
+    #[default]
+    Amount,
+    /// A percentage. Wire code `100`.
+    Percent,
+    /// Trailing unit code not modeled by this version of the API.
+    Unknown(i32),
+}
+
+impl_wire_code!(AdjustableTrailingUnit {
+    Amount = 0,
+    Percent = 100,
 });
 
 /// The order's origin. Identifies the type of customer from which the order originated.
@@ -1888,10 +1915,15 @@ pub struct ExecutionFilter {
     /// Side filter — `None` for no filter, `Some(ExecutionFilterSide::Buy)`
     /// or `Some(ExecutionFilterSide::Sell)` to restrict the response.
     pub side: Option<ExecutionFilterSide>,
-    /// Filter executions from the last N days (0 = no filter).
+    /// Filter executions from the last N days (0 = no filter). At most 7, per IB's
+    /// `ExecutionFilter.proto`: above 7, TWS returned no executions at all, not even those
+    /// inside the window (live: 2026-11-16, paper, 8, 14 and 30).
     pub last_n_days: i32,
-    /// Filter executions for specific dates (format: yyyymmdd, e.g., "20260130").
-    pub specific_dates: Vec<String>,
+    /// Filter executions to these dates, e.g. `vec![date!(2026 - 01 - 30)]`. A date is the
+    /// execution's day in UTC or in the operator's time zone (live tests did not distinguish
+    /// between the two), not in the instrument's. IB's `ExecutionFilter.proto` asks for dates
+    /// within the past week; whether TWS returns executions for an older date is not known.
+    pub specific_dates: Vec<time::Date>,
 }
 
 /// Enumerates possible results from querying an [Execution].

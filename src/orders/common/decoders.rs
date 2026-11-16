@@ -2,8 +2,8 @@ use crate::messages::ResponseMessage;
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::order_type::is_unset_order_type;
 use crate::orders::{
-    Action, Execution, ExecutionSide, Liquidity, OcaType, OptionExerciseType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin,
-    OrderState, OrderType, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
+    Action, AdjustableTrailingUnit, Execution, ExecutionSide, Liquidity, OcaType, OptionExerciseType, Order, OrderAllocation, OrderCondition,
+    OrderOpenClose, OrderOrigin, OrderState, OrderType, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
 };
 use crate::orders::{CommissionAndFeesReport, ExecutionData, OrderBound, OrderData, OrderStatus};
 use crate::proto;
@@ -276,7 +276,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.adjusted_stop_price = optional_f64(proto.adjusted_stop_price);
     order.adjusted_stop_limit_price = optional_f64(proto.adjusted_stop_limit_price);
     order.adjusted_trailing_amount = optional_f64(proto.adjusted_trailing_amount);
-    order.adjustable_trailing_unit = proto.adjustable_trailing_unit.unwrap_or_default();
+    order.adjustable_trailing_unit = AdjustableTrailingUnit::from(proto.adjustable_trailing_unit.unwrap_or_default());
     order.limit_price_offset = optional_f64(proto.lmt_price_offset);
 
     // conditions
