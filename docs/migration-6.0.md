@@ -863,3 +863,30 @@ code. The compiler finds every assignment and comparison that uses an integer. I
 catch the serialized form: `Order` derives `Serialize` / `Deserialize`, and the field now
 serializes as the variant name (`"Percent"`) where it was a number, so `Order` JSON written by
 5.x no longer deserializes. The `utoipa` schema changes to match.
+
+### 38. Realtime `Bar::volume` and `wap` are `Option<f64>`
+
+TWS sends no volume or WAP on a realtime bar that isn't `WhatToShow::Trades`: MIDPOINT, BID
+and ASK bars have no traded volume. 5.x decoded the missing value as `0.0`, the same as a
+TRADES bar in which nothing traded. Both fields are now `Option<f64>`, `None` for a
+non-TRADES bar; a quiet TRADES bar is `Some(0.0)`.
+
+```rust,ignore
+// 5.x
+println!("volume {} vwap {:.2}", bar.volume, bar.wap);
+
+// 6.0
+if let (Some(volume), Some(wap)) = (bar.volume, bar.wap) {
+    println!("volume {volume} vwap {wap:.2}");
+}
+let volume = bar.volume.unwrap_or(0.0); // where the old reading is wanted
+```
+
+The compiler finds every use as `f64`. It doesn't catch the serialized form: `Bar` derives
+`Serialize` / `Deserialize`, and an absent value now serializes as `null`; the `utoipa` schema
+marks both fields nullable. JSON written by 5.x still deserializes, with a stored `0` read as
+`Some(0.0)`.
+
+`count` stays `i32` and is `-1` on a non-TRADES bar, as TWS sends it. The historical `Bar`
+(`market_data::historical::Bar`) is unchanged: TWS sends `-1` for its volume, WAP and count on
+non-TRADES bars rather than leaving them out, so they stay `f64` and `i32`.

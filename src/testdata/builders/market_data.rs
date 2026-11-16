@@ -1262,8 +1262,9 @@ pub struct RealTimeBarTickResponse {
     pub high: f64,
     pub low: f64,
     pub close: f64,
-    pub volume: f64,
-    pub wap: f64,
+    /// `None` omits the field, as TWS does for non-TRADES bars.
+    pub volume: Option<f64>,
+    pub wap: Option<f64>,
     pub count: i32,
 }
 
@@ -1276,8 +1277,8 @@ impl Default for RealTimeBarTickResponse {
             high: 0.0,
             low: 0.0,
             close: 0.0,
-            volume: 0.0,
-            wap: 0.0,
+            volume: None,
+            wap: None,
             count: 0,
         }
     }
@@ -1296,11 +1297,11 @@ impl RealTimeBarTickResponse {
         self
     }
     pub fn volume(mut self, v: f64) -> Self {
-        self.volume = v;
+        self.volume = Some(v);
         self
     }
     pub fn wap(mut self, v: f64) -> Self {
-        self.wap = v;
+        self.wap = Some(v);
         self
     }
     pub fn count(mut self, v: i32) -> Self {
@@ -1320,8 +1321,8 @@ impl ResponseProtoEncoder for RealTimeBarTickResponse {
             high: Some(self.high),
             low: Some(self.low),
             close: Some(self.close),
-            volume: Some(self.volume.to_string()),
-            wap: Some(self.wap.to_string()),
+            volume: self.volume.map(|v| v.to_string()),
+            wap: self.wap.map(|v| v.to_string()),
             count: Some(self.count),
         }
     }

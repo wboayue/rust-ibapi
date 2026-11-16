@@ -185,7 +185,7 @@ let contract = Contract::stock("AAPL").build();
 let subscription = client.realtime_bars(&contract).subscribe()?;
 for bar in subscription.iter_data() {
     let bar = bar?;
-    println!("Price: {}, Volume: {}", bar.close, bar.volume);
+    println!("Price: {}, Volume: {:?}", bar.close, bar.volume); // None for non-TRADES bars
 }
 
 // Request real-time bars (async). `filter_data()` is the async equivalent.
@@ -193,7 +193,7 @@ let subscription = client.realtime_bars(&contract).subscribe().await?;
 let mut bars = subscription.filter_data();
 while let Some(bar) = bars.next().await {
     let bar = bar?;
-    println!("Price: {}, Volume: {}", bar.close, bar.volume);
+    println!("Price: {}, Volume: {:?}", bar.close, bar.volume); // None for non-TRADES bars
 }
 ```
 
