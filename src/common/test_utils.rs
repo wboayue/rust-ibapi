@@ -517,8 +517,10 @@ pub mod wire_enum {
 
     /// Codes probed for the completeness half of [`check_wire_code_round_trip`].
     /// Wide enough to cover any code IB would plausibly add to one of these
-    /// enums — the largest in use is `TriggerMethod::Midpoint` at 8 — and the
-    /// negative end guards a `From<i32>` that reaches for `.abs()` or `as u32`.
+    /// enums — the largest sequential code in use is `TriggerMethod::Midpoint`
+    /// at 8; `AdjustableTrailingUnit::Percent` (100) is a sparse code its test's
+    /// table covers — and the negative end guards a `From<i32>` that reaches
+    /// for `.abs()` or `as u32`.
     const PROBE_CODES: std::ops::RangeInclusive<i32> = -8..=64;
 
     /// Assert `From<i32>` and `From<T> for i32` agree on a hand-written

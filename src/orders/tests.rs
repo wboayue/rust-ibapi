@@ -221,6 +221,19 @@ fn oca_type_round_trips_every_wire_code() {
 }
 
 #[test]
+fn adjustable_trailing_unit_round_trips_every_wire_code() {
+    check_wire_code_round_trip(
+        &[
+            (AdjustableTrailingUnit::Amount, 0),
+            (AdjustableTrailingUnit::Percent, 100),
+            (AdjustableTrailingUnit::Unknown(1), 1),
+            (AdjustableTrailingUnit::Unknown(-1), -1),
+        ],
+        AdjustableTrailingUnit::Unknown,
+    );
+}
+
+#[test]
 fn order_origin_round_trips_every_wire_code() {
     check_wire_code_round_trip(
         &[

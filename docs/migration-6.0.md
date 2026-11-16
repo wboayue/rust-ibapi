@@ -838,6 +838,28 @@ let filter = ExecutionFilter { specific_dates: vec![date!(2026 - 01 - 30)], ..De
 The compiler finds every site that builds the list. A date read from text parses with
 `time::Date::parse(text, time::macros::format_description!("[year][month][day]"))`. TWS reads
 each date as the execution's day in UTC or in the operator's time zone (live tests did not
-distinguish between the two), not in the instrument's; this is unchanged. IB documents dates
+distinguish between the two), not in the instrument's; this is unchanged. IB's `ExecutionFilter.proto` asks for dates
 within the past week; whether TWS returns executions for an older date is not known
 ([wire facts](wire-facts/orders.md#executions-last_n_days-and-specific_dates)).
+
+### 37. `Order::adjustable_trailing_unit` is an `AdjustableTrailingUnit`
+
+`adjustable_trailing_unit` was an `i32` whose rustdoc, following IB's `Order` reference, gave
+`0` for an amount and `1` for a percentage. TWS rejects `1` with error 201 and takes `100` for
+a percentage ([wire facts](wire-facts/orders.md#adjustable_trailing_unit)). The field is now an
+`orders::AdjustableTrailingUnit`: `Amount` (`0`, the default) or `Percent` (`100`), with `Unknown(i32)`
+for a code this version does not model.
+
+```rust,ignore
+// 5.x
+order.adjustable_trailing_unit = 100;
+
+// 6.0
+order.adjustable_trailing_unit = AdjustableTrailingUnit::Percent;
+```
+
+`attach_adjustable_stop` sets the field from its `TrailBy` as before. `i32::from(unit)` gives the
+code. The compiler finds every assignment and comparison that uses an integer. It does not
+catch the serialized form: `Order` derives `Serialize` / `Deserialize`, and the field now
+serializes as the variant name (`"Percent"`) where it was a number, so `Order` JSON written by
+5.x no longer deserializes. The `utoipa` schema changes to match.
