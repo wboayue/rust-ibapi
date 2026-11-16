@@ -386,8 +386,13 @@ pub(crate) fn encode_execution_filter(filter: &ExecutionFilter) -> proto::Execut
         exchange: some_str(&filter.exchange),
         side: some_display(filter.side.as_ref()),
         last_n_days: some_i32_ne(filter.last_n_days, 0),
-        specific_dates: filter.specific_dates.iter().filter_map(|d| d.parse::<i32>().ok()).collect(),
+        specific_dates: filter.specific_dates.iter().map(|d| yyyymmdd(*d)).collect(),
     }
+}
+
+/// A date as the `yyyymmdd` integer the proto's `specific_dates` carries.
+fn yyyymmdd(date: time::Date) -> i32 {
+    date.year() * 10_000 + i32::from(u8::from(date.month())) * 100 + i32::from(date.day())
 }
 
 // === Attached orders, OrderCancel ===

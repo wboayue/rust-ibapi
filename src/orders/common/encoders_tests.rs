@@ -280,7 +280,7 @@ fn encode_execution_filter_works() {
         exchange: "SMART".to_string(),
         side: Some(orders::ExecutionFilterSide::Buy),
         last_n_days: 5,
-        specific_dates: vec!["20240101".to_string()],
+        specific_dates: vec![time::macros::date!(2024 - 01 - 01), time::macros::date!(2026 - 11 - 30)],
     };
 
     let proto = encode_execution_filter(&filter);
@@ -289,7 +289,7 @@ fn encode_execution_filter_works() {
     assert_eq!(proto.symbol.as_deref(), Some("AAPL"));
     assert_eq!(proto.side.as_deref(), Some("BUY"));
     assert_eq!(proto.last_n_days, Some(5));
-    assert_eq!(proto.specific_dates, vec![20240101]);
+    assert_eq!(proto.specific_dates, vec![20240101, 20261130]);
 }
 
 fn preset_legs(stop_loss: Option<i32>, profit_taker: Option<i32>) -> Order {
