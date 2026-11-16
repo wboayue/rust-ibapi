@@ -1,5 +1,6 @@
 // The decoder is not exercised; each test asserts that the right wire request
-// is sent, so the stub needs no responses.
+// is sent. The stub sends no reply, so the terminal ends with
+// `UnexpectedEndOfStream`.
 #[cfg(feature = "sync")]
 mod sync_tests {
     use time::macros::datetime;
@@ -17,11 +18,8 @@ mod sync_tests {
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
 
-        let _sub = client
-            .historical_ticks(&contract, 100)
-            .starting(start)
-            .last()
-            .expect("last terminal failed");
+        let result = client.historical_ticks(&contract, 100).starting(start).last();
+        assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
 
         assert_request(
             &bus,
@@ -42,12 +40,12 @@ mod sync_tests {
         let contract = Contract::stock("AAPL").build();
         let end = datetime!(2026-04-15 16:00:00 UTC);
 
-        let _sub = client
+        let result = client
             .historical_ticks(&contract, 50)
             .ending(end)
             .trading_hours(TradingHours::Extended)
-            .mid_point()
-            .expect("mid_point terminal failed");
+            .mid_point();
+        assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
 
         assert_request(
             &bus,
@@ -68,11 +66,8 @@ mod sync_tests {
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
 
-        let _sub = client
-            .historical_ticks(&contract, 25)
-            .starting(start)
-            .bid_ask(IgnoreSize::Yes)
-            .expect("bid_ask terminal failed");
+        let result = client.historical_ticks(&contract, 25).starting(start).bid_ask(IgnoreSize::Yes);
+        assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
 
         assert_request(
             &bus,
@@ -93,10 +88,8 @@ mod sync_tests {
         let (client, bus) = create_blocking_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
 
-        let _sub = client
-            .historical_ticks(&contract, 10)
-            .bid_ask(IgnoreSize::No)
-            .expect("bid_ask terminal failed");
+        let result = client.historical_ticks(&contract, 10).bid_ask(IgnoreSize::No);
+        assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
 
         assert_request(
             &bus,
@@ -129,12 +122,8 @@ mod async_tests {
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
 
-        let _sub = client
-            .historical_ticks(&contract, 100)
-            .starting(start)
-            .last()
-            .await
-            .expect("last terminal failed");
+        let result = client.historical_ticks(&contract, 100).starting(start).last().await;
+        assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
 
         assert_request(
             &bus,
@@ -155,13 +144,13 @@ mod async_tests {
         let contract = Contract::stock("AAPL").build();
         let end = datetime!(2026-04-15 16:00:00 UTC);
 
-        let _sub = client
+        let result = client
             .historical_ticks(&contract, 50)
             .ending(end)
             .trading_hours(TradingHours::Extended)
             .mid_point()
-            .await
-            .expect("mid_point terminal failed");
+            .await;
+        assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
 
         assert_request(
             &bus,
@@ -182,12 +171,8 @@ mod async_tests {
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
 
-        let _sub = client
-            .historical_ticks(&contract, 25)
-            .starting(start)
-            .bid_ask(IgnoreSize::Yes)
-            .await
-            .expect("bid_ask terminal failed");
+        let result = client.historical_ticks(&contract, 25).starting(start).bid_ask(IgnoreSize::Yes).await;
+        assert!(matches!(result, Err(crate::Error::UnexpectedEndOfStream)), "{result:?}");
 
         assert_request(
             &bus,

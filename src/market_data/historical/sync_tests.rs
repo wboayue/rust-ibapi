@@ -1,10 +1,8 @@
 use super::*;
 use crate::client::blocking::Client;
-use crate::client::ids::RequestId;
 use crate::common::test_utils::helpers::{
-    assert_decimal_parse_error, assert_proto_msg_id, assert_request, assert_request_msg_id, assert_tws_error_message, count_proto_msgs,
-    create_blocking_test_client_with_ordered_proto_responses, proto_error_response, proto_response, request_message_count, test_notice,
-    TEST_REQ_ID_FIRST,
+    assert_decimal_parse_error, assert_request, assert_tws_error_message, count_proto_msgs, create_blocking_test_client_with_ordered_proto_responses,
+    proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::Contract;
 use crate::market_data::historical::common::test_tables::{HMDS_CONNECTED_MESSAGE, PRE_DATA_NOTICES};
@@ -12,9 +10,9 @@ use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint, ToDuration};
 use crate::market_data::{IgnoreSize, TradingHours};
 use crate::messages::{IncomingMessages, OutgoingMessages, HMDS_QUERY_MESSAGE_CODE};
-use crate::protocol::{Features, ProtocolFeature};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
@@ -22,54 +20,10 @@ use crate::testdata::builders::market_data::{
     historical_ticks_response, tick_bid_ask, tick_last, tick_midpoint,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
-use crate::transport::common::Lease;
-use crate::transport::{Signal, SubscriptionBuilder};
-use crossbeam::channel;
 use std::sync::Arc;
 use time::macros::{date, datetime};
 use time::OffsetDateTime;
 use time_tz::{self, PrimitiveDateTimeExt, Tz};
-
-// Build a `TickSubscription<T>` fed by `items`, with the inbound channel closed
-// after the last item. Returns the signal-channel receiver too; keep it bound
-// for the test's lifetime to silence the drop-time signal warning.
-fn tick_sub_from_routed<T: TickDecoder<T>>(items: Vec<RoutedItem>) -> (TickSubscription<T>, channel::Receiver<Signal>) {
-    let (subscription, signal_rx, _sender) = tick_sub_with_sender(items);
-    (subscription, signal_rx)
-}
-
-// `tick_sub_from_routed` with the inbound channel kept open: the returned
-// sender feeds it.
-fn tick_sub_with_sender<T: TickDecoder<T>>(items: Vec<RoutedItem>) -> (TickSubscription<T>, channel::Receiver<Signal>, channel::Sender<RoutedItem>) {
-    let (sender, receiver) = channel::unbounded();
-    let (signaler, signal_rx) = channel::unbounded();
-    for item in items {
-        sender.send(item).unwrap();
-    }
-    let internal = SubscriptionBuilder::new()
-        .receiver(receiver)
-        .signaler(signaler)
-        .lease(Lease::new())
-        .request_id(RequestId::nth(300))
-        .build();
-    let subscription = TickSubscription::new(internal, RequestId::nth(300).raw(), Arc::new(MessageBusStub::default()));
-    (subscription, signal_rx, sender)
-}
-
-// Pins server_version one below `feature.min_version` and asserts the call fails
-// with the feature name in the error. Custom helper (vs. `.expect_err`) because
-// subscription return types don't implement Debug.
-fn assert_version_check_fails<F, T>(feature: ProtocolFeature, call: F)
-where
-    F: FnOnce(Client) -> Result<T, Error>,
-{
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus, feature.min_version - 1);
-    let Err(err) = call(client) else {
-        panic!("expected version-check failure ({})", feature.name);
-    };
-    assert!(err.to_string().contains(feature.name), "expected '{}', got: {err}", feature.name);
-}
 
 // Feeds a single frame of a message type the request doesn't expect: it is
 // skipped, the stream closes before the answer, and the request is cancelled
@@ -358,113 +312,6 @@ fn historical_schedules() {
 }
 
 #[test]
-fn historical_ticks_bid_ask() {
-    let message_bus = Arc::new(MessageBusStub::default());
-
-    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
-
-    let contract = Contract::stock("MSFT").build();
-    let start = datetime!(2023-04-01 09:30:00 UTC);
-    let end = datetime!(2023-04-01 16:00:00 UTC);
-    let number_of_ticks = 10;
-    let trading_hours = TradingHours::Regular;
-
-    let _tick_subscription = client
-        .historical_ticks(&contract, number_of_ticks)
-        .starting(start)
-        .ending(end)
-        .trading_hours(trading_hours)
-        .bid_ask(IgnoreSize::Yes)
-        .expect("historical ticks bid ask request failed");
-
-    assert_eq!(request_message_count(&message_bus), 1);
-    assert_request(
-        &message_bus,
-        0,
-        &historical_ticks_request()
-            .request_id(TEST_REQ_ID_FIRST)
-            .contract(&contract)
-            .start(Some(start))
-            .end(Some(end))
-            .number_of_ticks(number_of_ticks)
-            .what_to_show(WhatToShow::BidAsk)
-            .use_rth(trading_hours.use_rth())
-            .ignore_size(true),
-    );
-}
-
-#[test]
-fn historical_ticks_mid_point() {
-    let message_bus = Arc::new(MessageBusStub::default());
-
-    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
-
-    let contract = Contract::stock("MSFT").build();
-    let start = datetime!(2023-04-01 09:30:00 UTC);
-    let end = datetime!(2023-04-01 16:00:00 UTC);
-    let number_of_ticks = 10;
-    let trading_hours = TradingHours::Regular;
-
-    let _tick_subscription = client
-        .historical_ticks(&contract, number_of_ticks)
-        .starting(start)
-        .ending(end)
-        .trading_hours(trading_hours)
-        .mid_point()
-        .expect("historical ticks mid point request failed");
-
-    assert_eq!(request_message_count(&message_bus), 1);
-    assert_request(
-        &message_bus,
-        0,
-        &historical_ticks_request()
-            .request_id(TEST_REQ_ID_FIRST)
-            .contract(&contract)
-            .start(Some(start))
-            .end(Some(end))
-            .number_of_ticks(number_of_ticks)
-            .what_to_show(WhatToShow::MidPoint)
-            .use_rth(trading_hours.use_rth()),
-    );
-}
-
-#[test]
-fn historical_ticks_trade() {
-    let message_bus = Arc::new(MessageBusStub::default());
-
-    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
-
-    let contract = Contract::stock("MSFT").build();
-    let start = datetime!(2023-04-01 09:30:00 UTC);
-    let end = datetime!(2023-04-01 16:00:00 UTC);
-    let number_of_ticks = 10;
-    let trading_hours = TradingHours::Regular;
-
-    let tick_subscription = client
-        .historical_ticks(&contract, number_of_ticks)
-        .starting(start)
-        .ending(end)
-        .trading_hours(trading_hours)
-        .last()
-        .expect("historical ticks trade request failed");
-
-    assert_eq!(tick_subscription.request_id(), TEST_REQ_ID_FIRST, "request_id() is the id on the wire");
-    assert_eq!(request_message_count(&message_bus), 1);
-    assert_request(
-        &message_bus,
-        0,
-        &historical_ticks_request()
-            .request_id(TEST_REQ_ID_FIRST)
-            .contract(&contract)
-            .start(Some(start))
-            .end(Some(end))
-            .number_of_ticks(number_of_ticks)
-            .what_to_show(WhatToShow::Trades)
-            .use_rth(trading_hours.use_rth()),
-    );
-}
-
-#[test]
 fn historical_data_adjusted_last_validation() {
     let message_bus = Arc::new(MessageBusStub::default());
 
@@ -577,183 +424,6 @@ fn historical_data_skips_undeclared_message() {
     let (result, bus) = fetch_daily(vec![proto_response(IncomingMessages::MarketDataType, Vec::new())]);
     assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "{result:?}");
     assert_eq!(historical_requests_and_cancels(&bus), (1, 1));
-}
-
-#[test]
-fn tick_subscription_methods() {
-    // For now, we'll use a minimal test to ensure the methods exist and are called correctly
-    // Testing the subscription iterators fully would require more complex setup with mocked messages
-
-    let message_bus = Arc::new(MessageBusStub::default());
-
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
-
-    let contract = Contract::stock("MSFT").build();
-    let number_of_ticks = 10;
-    let trading_hours = TradingHours::Regular;
-
-    let tick_subscription = client
-        .historical_ticks(&contract, number_of_ticks)
-        .trading_hours(trading_hours)
-        .last()
-        .expect("historical ticks trade request failed");
-
-    // Just test that these methods can be called without panicking
-    let _iter = tick_subscription.iter();
-    let _try_iter = tick_subscription.try_iter();
-    let _timeout_iter = tick_subscription.timeout_iter(std::time::Duration::from_millis(100));
-
-    // Test IntoIterator trait exists
-    let _iter_ref: TickSubscriptionIter<TickLast> = (&tick_subscription).into_iter();
-}
-
-#[test]
-fn tick_subscription_buffer_and_iteration() {
-    // First batch: 3 ticks, done = false. Second batch: 2 ticks, done = true.
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-        proto_response(
-            IncomingMessages::HistoricalTickLast,
-            historical_ticks_last_response()
-                .tick(tick_last(1_681_133_400, 11.63, 24_547.0, "ISLAND").special_conditions(" O X"))
-                .tick(tick_last(1_681_133_401, 11.64, 179.0, "FINRA"))
-                .tick(tick_last(1_681_133_402, 11.65, 200.0, "NYSE"))
-                .done(false)
-                .encode_proto(),
-        ),
-        proto_response(
-            IncomingMessages::HistoricalTickLast,
-            historical_ticks_last_response()
-                .tick(tick_last(1_681_133_403, 11.66, 100.0, "ARCA"))
-                .tick(tick_last(1_681_133_404, 11.67, 300.0, "BATS"))
-                .done(true)
-                .encode_proto(),
-        ),
-    ]));
-
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let contract = Contract::stock("MSFT").build();
-    let number_of_ticks = 10;
-    let trading_hours = TradingHours::Regular;
-
-    let tick_subscription = client
-        .historical_ticks(&contract, number_of_ticks)
-        .trading_hours(trading_hours)
-        .last()
-        .expect("historical ticks trade request failed");
-
-    // Test standard data iterator (notices filtered, errors surface via Result)
-    let mut ticks = Vec::new();
-    for tick in tick_subscription.iter_data() {
-        ticks.push(tick.expect("decode error"));
-    }
-
-    // Should have received all 5 ticks from both messages
-    assert_eq!(ticks.len(), 5, "Expected 5 ticks in total");
-
-    // Check specific values from first and last ticks
-    assert_eq!(ticks[0].price, 11.63, "First tick price");
-    assert_eq!(ticks[0].exchange, "ISLAND", "First tick exchange");
-
-    assert_eq!(ticks[4].price, 11.67, "Last tick price");
-    assert_eq!(ticks[4].exchange, "BATS", "Last tick exchange");
-}
-
-#[test]
-fn tick_subscription_owned_iterator() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::HistoricalTickLast,
-        historical_ticks_last_response()
-            .tick(tick_last(1_681_133_400, 11.70, 24_547.0, "ISLAND").special_conditions(" O X"))
-            .tick(tick_last(1_681_133_401, 11.71, 179.0, "FINRA"))
-            .done(true)
-            .encode_proto(),
-    )]));
-
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let contract = Contract::stock("MSFT").build();
-    let tick_subscription = client
-        .historical_ticks(&contract, 10)
-        .last()
-        .expect("historical ticks trade request failed");
-
-    // Convert to owned iterator — yields the SubscriptionItem envelope.
-    let ticks: Vec<TickLast> = tick_subscription
-        .into_iter()
-        .map(|item| item.expect("decode error").into_data().expect("unexpected notice"))
-        .collect();
-
-    assert_eq!(ticks.len(), 2, "Expected 2 ticks from owned iterator");
-    assert_eq!(ticks[0].price, 11.70, "First tick price");
-    assert_eq!(ticks[1].price, 11.71, "Second tick price");
-}
-
-#[test]
-fn tick_subscription_bid_ask() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::HistoricalTickBidAsk,
-        historical_ticks_bid_ask_response()
-            .tick(tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
-            .tick(tick_bid_ask(1_681_133_400, 11.64, 11.84, 2_900.0, 200.0))
-            .tick(tick_bid_ask(1_681_133_401, 11.65, 11.85, 3_000.0, 300.0))
-            .done(true)
-            .encode_proto(),
-    )]));
-
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let contract = Contract::stock("MSFT").build();
-    let tick_subscription = client
-        .historical_ticks(&contract, 10)
-        .bid_ask(IgnoreSize::No)
-        .expect("historical ticks bid_ask request failed");
-
-    // Collect ticks
-    let ticks: Vec<TickBidAsk> = tick_subscription.iter_data().map(|t| t.expect("decode error")).collect();
-
-    assert_eq!(ticks.len(), 3, "Expected 3 bid/ask ticks");
-
-    // Check first tick
-    assert_eq!(ticks[0].price_bid, 11.63, "First tick bid price");
-    assert_eq!(ticks[0].price_ask, 11.83, "First tick ask price");
-    assert_eq!(ticks[0].size_bid, 2800.0, "First tick bid size");
-    assert_eq!(ticks[0].size_ask, 100.0, "First tick ask size");
-
-    // Check last tick
-    assert_eq!(ticks[2].price_bid, 11.65, "Last tick bid price");
-    assert_eq!(ticks[2].price_ask, 11.85, "Last tick ask price");
-}
-
-#[test]
-fn tick_subscription_midpoint() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::HistoricalTick,
-        historical_ticks_response()
-            .tick(tick_midpoint(1_681_133_398, 91.36))
-            .tick(tick_midpoint(1_681_133_399, 91.37))
-            .tick(tick_midpoint(1_681_133_400, 91.38))
-            .done(true)
-            .encode_proto(),
-    )]));
-
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let contract = Contract::stock("MSFT").build();
-    let tick_subscription = client
-        .historical_ticks(&contract, 10)
-        .mid_point()
-        .expect("historical ticks mid_point request failed");
-
-    // Collect ticks
-    let ticks: Vec<TickMidpoint> = tick_subscription.iter_data().map(|t| t.expect("decode error")).collect();
-
-    assert_eq!(ticks.len(), 3, "Expected 3 midpoint ticks");
-
-    // Check specific tick values
-    assert_eq!(ticks[0].price, 91.36, "First tick price");
-    assert_eq!(ticks[1].price, 91.37, "Second tick price");
-    assert_eq!(ticks[2].price, 91.38, "Third tick price");
 }
 
 #[test]
@@ -949,79 +619,6 @@ fn historical_data_streaming_hmds_connected_notice_then_data() {
         panic!("bars should follow the notice");
     };
     assert_eq!(bars.len(), 1);
-}
-
-#[test]
-fn tick_subscription_sends_cancel_on_drop() {
-    let message_bus = Arc::new(MessageBusStub::default());
-
-    let internal = message_bus.send_request(RequestId::nth(100), &[]).unwrap();
-
-    {
-        let _subscription: TickSubscription<TickLast> = TickSubscription::new(internal, RequestId::nth(100).raw(), message_bus.clone());
-        // subscription dropped here, !done so cancel should fire
-    }
-
-    let messages = message_bus.request_messages.read().unwrap();
-    let cancel_msg = messages.last().expect("should have cancel message");
-    assert_proto_msg_id(cancel_msg, OutgoingMessages::CancelHistoricalTicks);
-}
-
-#[test]
-fn tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
-    let message_bus = Arc::new(MessageBusStub::default());
-
-    let internal = message_bus.send_request(RequestId::nth(101), &[]).unwrap();
-
-    {
-        let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, RequestId::nth(101).raw(), message_bus.clone());
-        subscription.cancel();
-    }
-
-    let messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(
-        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalTicks),
-        1,
-        "should send cancel only once"
-    );
-}
-
-#[test]
-fn tick_subscription_drop_after_done_does_not_cancel() {
-    let message_bus = Arc::new(MessageBusStub::default());
-
-    let internal = message_bus.send_request(RequestId::nth(102), &[]).unwrap();
-
-    {
-        let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, RequestId::nth(102).raw(), message_bus.clone());
-        subscription.done.store(true, std::sync::atomic::Ordering::Relaxed);
-        // drop with done=true → no cancel
-    }
-
-    let messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(
-        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalTicks),
-        0,
-        "completed subscription should not send cancel on drop"
-    );
-}
-
-#[test]
-fn tick_subscription_cancel_after_done_writes_nothing() {
-    let message_bus = Arc::new(MessageBusStub::default());
-
-    let internal = message_bus.send_request(RequestId::nth(103), &[]).unwrap();
-    let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, RequestId::nth(103).raw(), message_bus.clone());
-    subscription.done.store(true, std::sync::atomic::Ordering::Relaxed);
-
-    subscription.cancel();
-
-    let messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(
-        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalTicks),
-        0,
-        "completed subscription should not send cancel"
-    );
 }
 
 #[test]
@@ -1260,22 +857,6 @@ fn historical_schedule_end_of_stream() {
 }
 
 #[test]
-fn cancel_historical_ticks() {
-    let message_bus = Arc::new(MessageBusStub::default());
-    let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA);
-
-    client.cancel_historical_ticks(9000).expect("cancel should succeed");
-
-    assert_eq!(request_message_count(&message_bus), 1);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::CancelHistoricalTicks);
-}
-
-#[test]
-fn cancel_historical_ticks_version_check() {
-    assert_version_check_fails(Features::CANCEL_CONTRACT_DATA, |c| c.cancel_historical_ticks(9000));
-}
-
-#[test]
 fn histogram_data_empty_response_returns_empty_vec() {
     // None on the first subscription.next() → returns an empty Vec.
     let message_bus = Arc::new(MessageBusStub::default());
@@ -1286,221 +867,6 @@ fn histogram_data_empty_response_returns_empty_vec() {
         .expect("histogram_data should succeed with empty result");
 
     assert!(histogram.is_empty(), "expected empty histogram, got {histogram:?}");
-}
-
-#[test]
-fn tick_subscription_try_next_drains_buffer() {
-    // Pre-load a single batch with done=true so try_next() can drain without blocking.
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::HistoricalTickLast,
-        historical_ticks_last_response()
-            .tick(tick_last(1_681_133_400, 12.00, 100.0, "NYSE"))
-            .tick(tick_last(1_681_133_401, 12.01, 200.0, "NYSE"))
-            .done(true)
-            .encode_proto(),
-    )]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let subscription = client
-        .historical_ticks(&Contract::stock("MSFT").build(), 10)
-        .last()
-        .expect("subscription should be created");
-
-    // Drain via try_iter_data — each .next() goes through try_next() → next_helper(try_next_routed).
-    assert!(!subscription.is_terminated(), "nothing read yet");
-    let mut ticks = subscription.try_iter_data();
-    assert_eq!(ticks.next().expect("first tick").expect("decode error").price, 12.00);
-    assert!(!subscription.is_terminated(), "one tick still buffered");
-    assert_eq!(ticks.next().expect("second tick").expect("decode error").price, 12.01);
-    assert!(subscription.is_terminated(), "last batch read and drained");
-    assert!(ticks.next().is_none(), "nothing after the two ticks");
-
-    // After done, try_next returns None immediately.
-    assert!(subscription.try_next().is_none(), "no more ticks expected after done");
-}
-
-#[test]
-fn tick_subscription_next_timeout_drains_buffer() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::HistoricalTickLast,
-        historical_ticks_last_response()
-            .tick(tick_last(1_681_133_400, 13.00, 100.0, "NYSE"))
-            .done(true)
-            .encode_proto(),
-    )]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let subscription = client
-        .historical_ticks(&Contract::stock("MSFT").build(), 10)
-        .last()
-        .expect("subscription should be created");
-
-    // Drive timeout_iter_data — each .next() goes through next_timeout() → next_helper.
-    let ticks: Vec<TickLast> = subscription
-        .timeout_iter_data(std::time::Duration::from_millis(50))
-        .map(|t| t.expect("decode error"))
-        .collect();
-    assert_eq!(ticks.len(), 1, "should drain the single tick");
-    assert_eq!(ticks[0].price, 13.00);
-
-    // After done, next_timeout also returns None.
-    assert!(
-        subscription.next_timeout(std::time::Duration::from_millis(10)).is_none(),
-        "no more ticks expected after done"
-    );
-}
-
-#[test]
-fn tick_subscription_error_surfaces_via_err_arm() {
-    // #675 regression guard: a mid-stream RoutedItem::Error must surface through
-    // the `Err` arm — NOT be swallowed as a silent `None` indistinguishable from
-    // end-of-data. Subsequent calls return None (stream terminated).
-    let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![RoutedItem::Error(Error::InvalidArgument("injected".into()))]);
-
-    assert!(!subscription.is_terminated());
-    match subscription.next() {
-        Some(Err(Error::InvalidArgument(msg))) => assert_eq!(msg, "injected", "error payload preserved"),
-        other => panic!("expected Some(Err(InvalidArgument)), got {other:?}"),
-    }
-    assert!(subscription.is_terminated());
-    assert!(subscription.next().is_none(), "stream terminates after a terminal error");
-    subscription.done.store(true, Ordering::Relaxed); // prevent cancel-on-drop noise
-}
-
-#[test]
-fn tick_subscription_notice_passes_through_then_data() {
-    // A RoutedItem::Notice surfaces as SubscriptionItem::Notice (stream stays
-    // open); a following tick batch is delivered after it.
-    let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![
-        RoutedItem::Notice(test_notice(2100, "API client has been unsubscribed from account data")),
-        RoutedItem::Response(proto_response(
-            IncomingMessages::HistoricalTickLast,
-            historical_ticks_last_response()
-                .tick(tick_last(1_681_133_400, 15.00, 100.0, "NYSE"))
-                .done(true)
-                .encode_proto(),
-        )),
-    ]);
-
-    match subscription.next() {
-        Some(Ok(SubscriptionItem::Notice(n))) => assert_eq!(n.code, 2100),
-        other => panic!("expected a Notice, got {other:?}"),
-    }
-    match subscription.next() {
-        Some(Ok(SubscriptionItem::Data(tick))) => assert_eq!(tick.price, 15.00),
-        other => panic!("expected tick data after notice, got {other:?}"),
-    }
-
-    // iter_data() filters the notice and yields only the tick.
-    subscription.done.store(true, Ordering::Relaxed); // already drained; avoid cancel noise
-}
-
-#[test]
-fn tick_subscription_iter_data_filters_notice_keeps_error() {
-    // iter_data() drops the Notice but still surfaces the terminal Error.
-    let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![
-        RoutedItem::Notice(test_notice(2100, "warning")),
-        RoutedItem::Error(Error::InvalidArgument("boom".into())),
-    ]);
-
-    let mut data = subscription.iter_data();
-    match data.next() {
-        Some(Err(Error::InvalidArgument(msg))) => assert_eq!(msg, "boom", "error survives the notice filter"),
-        other => panic!("expected the error after the filtered notice, got {other:?}"),
-    }
-    assert!(data.next().is_none(), "stream ended after the error");
-    subscription.done.store(true, Ordering::Relaxed);
-}
-
-#[test]
-fn tick_subscription_is_terminated_false_while_nothing_has_arrived() {
-    let (subscription, _signal_rx, _sender) = tick_sub_with_sender::<TickLast>(vec![]);
-    assert!(subscription.try_next().is_none(), "open, empty channel: nothing queued");
-    assert!(!subscription.is_terminated());
-    subscription.done.store(true, Ordering::Relaxed); // prevent cancel-on-drop noise
-}
-
-#[test]
-fn tick_subscription_none_when_channel_closes() {
-    // Channel closes with no done=true → next_routed() yields None → next returns None.
-    let (subscription, _signal_rx) = tick_sub_from_routed::<TickBidAsk>(vec![]); // empty + closed immediately
-    assert!(subscription.next().is_none(), "closed channel → next_routed None → next returns None");
-    subscription.done.store(true, Ordering::Relaxed);
-}
-
-#[test]
-fn tick_subscription_midpoint_try_iter_and_timeout_iter() {
-    // Exercise try_next + next_timeout on the TickMidpoint monomorphization so
-    // every (TickT × iterator) combination shows up in coverage data.
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::HistoricalTick,
-        historical_ticks_response()
-            .tick(tick_midpoint(1_681_133_400, 91.50))
-            .done(true)
-            .encode_proto(),
-    )]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let subscription = client
-        .historical_ticks(&Contract::stock("MSFT").build(), 10)
-        .mid_point()
-        .expect("subscription should be created");
-
-    let ticks_try: Vec<TickMidpoint> = subscription.try_iter_data().map(|t| t.expect("decode error")).collect();
-    assert_eq!(ticks_try.len(), 1);
-
-    // Timeout iterator after exhaustion — exercises next_timeout None path.
-    assert!(subscription.timeout_iter(std::time::Duration::from_millis(10)).next().is_none());
-}
-
-#[test]
-fn tick_subscription_bid_ask_try_iter_and_timeout_iter() {
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::HistoricalTickBidAsk,
-        historical_ticks_bid_ask_response()
-            .tick(tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
-            .done(true)
-            .encode_proto(),
-    )]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let subscription = client
-        .historical_ticks(&Contract::stock("MSFT").build(), 10)
-        .bid_ask(IgnoreSize::No)
-        .expect("subscription should be created");
-
-    let ticks_try: Vec<TickBidAsk> = subscription.try_iter_data().map(|t| t.expect("decode error")).collect();
-    assert_eq!(ticks_try.len(), 1);
-    assert!(subscription.timeout_iter(std::time::Duration::from_millis(10)).next().is_none());
-}
-
-#[test]
-fn tick_subscription_skips_unexpected_message_then_yields() {
-    // First response is HistoricalData — fill_buffer should silently skip it
-    // (the `Some(Ok(message))` non-match arm) and loop to the next batch.
-    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
-        proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto()),
-        proto_response(
-            IncomingMessages::HistoricalTickLast,
-            historical_ticks_last_response()
-                .tick(tick_last(1_681_133_400, 14.00, 100.0, "NYSE"))
-                .done(true)
-                .encode_proto(),
-        ),
-    ]));
-    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-
-    let subscription = client
-        .historical_ticks(&Contract::stock("MSFT").build(), 1)
-        .last()
-        .expect("subscription should be created");
-
-    let tick = subscription
-        .next_data()
-        .expect("should receive tick after skipping unexpected")
-        .expect("decode error");
-    assert_eq!(tick.price, 14.00, "wrong price");
-    assert!(subscription.next().is_none(), "should be done");
 }
 
 /// The historical data requests and cancels written to `bus`.
@@ -1675,4 +1041,258 @@ fn historical_data_fetch_rejects_buffer_limit() {
 
     assert!(matches!(result, Err(Error::InvalidArgument(_))), "got {result:?}");
     assert!(message_bus.request_messages.read().unwrap().is_empty(), "nothing is sent");
+}
+
+// === Historical ticks: a one-shot read until TWS marks the reply `done` ===
+
+/// The historical ticks requests and cancels written to `bus`.
+fn tick_requests_and_cancels(bus: &MessageBusStub) -> (usize, usize) {
+    let messages = bus.request_messages.read().unwrap();
+    (
+        count_proto_msgs(&messages, OutgoingMessages::RequestHistoricalTicks),
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalTicks),
+    )
+}
+
+/// One trade-tick frame holding one tick at `price`.
+fn last_frame(price: f64, done: bool) -> crate::messages::ResponseMessage {
+    proto_response(
+        IncomingMessages::HistoricalTickLast,
+        historical_ticks_last_response()
+            .tick(tick_last(1_681_133_400, price, 24.0, "ARCA").special_conditions("APR"))
+            .done(done)
+            .encode_proto(),
+    )
+}
+
+/// Request ten trade ticks against `responses`.
+fn fetch_last(responses: Vec<crate::messages::ResponseMessage>) -> (Result<Vec<TickLast>, Error>, Arc<MessageBusStub>) {
+    fetch_last_at(server_versions::CANCEL_CONTRACT_DATA, responses)
+}
+
+fn fetch_last_at(server_version: i32, responses: Vec<crate::messages::ResponseMessage>) -> (Result<Vec<TickLast>, Error>, Arc<MessageBusStub>) {
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
+    let client = Client::stubbed(bus.clone(), server_version);
+    let result = client.historical_ticks(&Contract::stock("MSFT").build(), 10).last();
+    (result, bus)
+}
+
+fn prices(ticks: &[TickLast]) -> Vec<f64> {
+    ticks.iter().map(|tick| tick.price).collect()
+}
+
+#[test]
+fn historical_ticks_last() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![last_frame(11.63, true)]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let contract = Contract::stock("MSFT").build();
+    let start = datetime!(2023-04-01 09:30:00 UTC);
+    let end = datetime!(2023-04-01 16:00:00 UTC);
+
+    let ticks = client
+        .historical_ticks(&contract, 10)
+        .starting(start)
+        .ending(end)
+        .trading_hours(TradingHours::Regular)
+        .last()
+        .expect("historical ticks request failed");
+
+    assert_eq!(prices(&ticks), [11.63]);
+    assert_eq!((ticks[0].exchange.as_str(), ticks[0].special_conditions.as_str()), ("ARCA", "APR"));
+    assert_eq!(ticks[0].size, 24.0);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_ticks_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .start(Some(start))
+            .end(Some(end))
+            .number_of_ticks(10)
+            .what_to_show(WhatToShow::Trades)
+            .use_rth(true),
+    );
+}
+
+#[test]
+fn historical_ticks_mid_point() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistoricalTick,
+        historical_ticks_response()
+            .tick(tick_midpoint(1_681_133_398, 91.36))
+            .tick(tick_midpoint(1_681_133_399, 91.37))
+            .done(true)
+            .encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let contract = Contract::stock("MSFT").build();
+    let end = datetime!(2023-04-01 16:00:00 UTC);
+
+    let ticks: Vec<TickMidpoint> = client
+        .historical_ticks(&contract, 10)
+        .ending(end)
+        .mid_point()
+        .expect("historical ticks request failed");
+
+    assert_eq!(ticks.iter().map(|tick| tick.price).collect::<Vec<_>>(), [91.36, 91.37]);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_ticks_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .end(Some(end))
+            .number_of_ticks(10)
+            .what_to_show(WhatToShow::MidPoint)
+            .use_rth(true),
+    );
+}
+
+#[test]
+fn historical_ticks_bid_ask() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::HistoricalTickBidAsk,
+        historical_ticks_bid_ask_response()
+            .tick(tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0).bid_past_low(true))
+            .tick(tick_bid_ask(1_681_133_400, 11.64, 11.84, 2_900.0, 200.0).ask_past_high(true))
+            .done(true)
+            .encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let contract = Contract::stock("MSFT").build();
+    let start = datetime!(2023-04-01 09:30:00 UTC);
+
+    let ticks: Vec<TickBidAsk> = client
+        .historical_ticks(&contract, 10)
+        .starting(start)
+        .bid_ask(IgnoreSize::Yes)
+        .expect("historical ticks request failed");
+
+    assert_eq!(ticks.len(), 2);
+    assert_eq!((ticks[0].price_bid, ticks[0].price_ask), (11.63, 11.83));
+    assert_eq!((ticks[1].size_bid, ticks[1].size_ask), (2_900.0, 200.0));
+    assert_eq!((ticks[0].attributes.bid_past_low, ticks[0].attributes.ask_past_high), (true, false));
+    assert_eq!((ticks[1].attributes.bid_past_low, ticks[1].attributes.ask_past_high), (false, true));
+    assert_request(
+        &message_bus,
+        0,
+        &historical_ticks_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .start(Some(start))
+            .number_of_ticks(10)
+            .what_to_show(WhatToShow::BidAsk)
+            .use_rth(true)
+            .ignore_size(true),
+    );
+}
+
+/// The reply is read frame by frame until the `done` one, which also ends the
+/// request at TWS: no cancel is written.
+#[test]
+fn historical_ticks_reads_frames_until_done() {
+    let (result, bus) = fetch_last(vec![last_frame(1.0, false), last_frame(2.0, false), last_frame(3.0, true)]);
+    assert_eq!(prices(&result.expect("three frames")), [1.0, 2.0, 3.0]);
+    assert_eq!(tick_requests_and_cancels(&bus), (1, 0));
+}
+
+/// An empty `done` frame is a complete, empty reply.
+#[test]
+fn historical_ticks_empty_reply() {
+    let frame = proto_response(
+        IncomingMessages::HistoricalTickLast,
+        historical_ticks_last_response().done(true).encode_proto(),
+    );
+    let (result, bus) = fetch_last(vec![frame]);
+    assert_eq!(result.expect("empty reply"), Vec::<TickLast>::new());
+    assert_eq!(tick_requests_and_cancels(&bus), (1, 0));
+}
+
+/// A reply that stops before its `done` frame is never returned as complete,
+/// and the request is cancelled at TWS.
+#[test]
+fn historical_ticks_closed_before_done_is_an_error() {
+    for responses in [vec![], vec![last_frame(1.0, false)]] {
+        let (result, bus) = fetch_last(responses);
+        assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "{result:?}");
+        assert_eq!(tick_requests_and_cancels(&bus), (1, 1));
+    }
+}
+
+/// A server older than the cancel message gets none.
+#[test]
+fn historical_ticks_writes_no_cancel_below_its_server_version() {
+    let (result, bus) = fetch_last_at(server_versions::CANCEL_CONTRACT_DATA - 1, vec![last_frame(1.0, false)]);
+    assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "{result:?}");
+    assert_eq!(tick_requests_and_cancels(&bus), (1, 0));
+}
+
+/// A TWS rejection is the error, with its code.
+#[test]
+fn historical_ticks_rejection_is_the_error() {
+    let rejection = proto_error_response(TEST_REQ_ID_FIRST, 10187, "Failed to request historical ticks:Max length exceeded");
+    let (result, _bus) = fetch_last(vec![rejection]);
+    match result {
+        Err(Error::Notice(notice)) => assert_eq!(
+            (notice.code, notice.message.as_str()),
+            (10187, "Failed to request historical ticks:Max length exceeded")
+        ),
+        other => panic!("expected the 10187 rejection, got {other:?}"),
+    }
+}
+
+/// Notices TWS sends before the data are skipped, as `fetch()` skips them.
+#[test]
+fn historical_ticks_notice_before_reply_is_skipped() {
+    for (code, message) in PRE_DATA_NOTICES {
+        let (result, _bus) = fetch_last(vec![proto_error_response(TEST_REQ_ID_FIRST, code, message), last_frame(1.0, true)]);
+        assert_eq!(prices(&result.unwrap_or_else(|e| panic!("code {code}: {e:?}"))), [1.0], "code {code}");
+    }
+}
+
+/// A frame of another message type is skipped, not decoded.
+#[test]
+fn historical_ticks_skips_undeclared_message() {
+    let other = proto_response(IncomingMessages::HistoricalDataEnd, historical_data_end_response().encode_proto());
+    let (result, _bus) = fetch_last(vec![other, last_frame(1.0, true)]);
+    assert_eq!(prices(&result.expect("the tick frame")), [1.0]);
+}
+
+/// A decode failure before the `done` frame cancels the request at TWS.
+#[test]
+fn historical_ticks_local_error_cancels() {
+    let (result, bus) = fetch_last(vec![proto_response(IncomingMessages::HistoricalTickLast, vec![0xff])]);
+    assert!(matches!(result, Err(Error::ProtobufDecode(_))), "{result:?}");
+    assert_eq!(tick_requests_and_cancels(&bus), (1, 1));
+}
+
+#[test]
+fn historical_ticks_retries_a_connection_reset() {
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![last_frame(1.0, true)]).with_connection_resets(1));
+    let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let ticks = client
+        .historical_ticks(&Contract::stock("MSFT").build(), 10)
+        .last()
+        .expect("the reset must be retried, not surfaced");
+
+    assert_eq!(prices(&ticks), [1.0]);
+    assert_eq!(tick_requests_and_cancels(&bus).0, 2, "the retry must re-send the request");
+}
+
+/// `one_shot_timeout` bounds every read: a frame, then silence, times out and
+/// cancels the request at TWS.
+#[test]
+fn historical_ticks_one_shot_timeout_cancels_between_frames() {
+    let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![last_frame(1.0, false)]).keeping_channels_open());
+    let client = Client::stubbed(bus.clone(), server_versions::CANCEL_CONTRACT_DATA).with_one_shot_timeout(std::time::Duration::from_millis(20));
+
+    let result = client.historical_ticks(&Contract::stock("MSFT").build(), 10).last();
+
+    assert!(matches!(result, Err(Error::Timeout)), "{result:?}");
+    assert_eq!(tick_requests_and_cancels(&bus), (1, 1));
 }

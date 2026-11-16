@@ -115,17 +115,6 @@ async fn builder_patterns_table_driven() {
 }
 
 #[tokio::test]
-async fn request_builder_send_raw() {
-    let client = create_test_client();
-
-    let builder = client.request_with_id(RequestId::nth(123));
-    let message = crate::messages::encode_protobuf_message(OutgoingMessages::RequestCurrentTime as i32, &[]);
-
-    let result = builder.send_raw(message).await;
-    assert!(result.is_ok());
-}
-
-#[tokio::test]
 async fn shared_request_builder_send_raw() {
     let client = create_test_client();
 

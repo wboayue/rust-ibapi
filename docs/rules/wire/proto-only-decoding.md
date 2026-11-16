@@ -30,9 +30,9 @@ pub(in crate::news) fn decode_news_bulletin(message: &ResponseMessage) -> Result
 path is a text decoder or a signature copied from one.
 
 **`RESPONSE_MESSAGE_IDS` must list every type the `decode` match handles.** It is the skip
-filter: all three drivers (`StreamDecoder` sync and async, and
-`market_data/historical/common/tick.rs::classify` for `TickDecoder`) drop anything not listed,
-via `is_undeclared`, *before* calling `decode`. An arm for an unlisted type is dead code. The
+filter: both drivers (`StreamDecoder` sync and async) drop anything not listed, via
+`is_undeclared`, *before* calling `decode`. `TickDecoder` reaches them through `TickFrame`,
+whose `StreamDecoder` impl passes the tick type's const on. An arm for an unlisted type is dead code. The
 const stays a slice even for single-type decoders.
 
 **Every `decode` needs a backstop.** A multi-type match ends with

@@ -71,3 +71,4 @@ next poll through a shared flag (#894, #916). Don't "fix" either side to match.
   top-level name async.
 - #958 — extended the `client::blocking` mirror to `TickSubscription` (+ its four iterators) and
   `DisplayGroupSubscription`, which had no blocking path in a both-features build.
+  `TickSubscription` and its iterators were removed in #1317 (`historical_ticks` returns a `Vec`).

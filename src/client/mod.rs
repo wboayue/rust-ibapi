@@ -43,18 +43,10 @@ pub mod r#async;
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::blocking::{Client, DisplayGroupSubscription, TickSubscription};
-/// use ibapi::contracts::Contract;
-/// use ibapi::market_data::historical::TickLast;
+/// use ibapi::client::blocking::{Client, DisplayGroupSubscription};
 ///
 /// # fn main() -> Result<(), ibapi::Error> {
 /// let client = Client::connect("127.0.0.1:4002", 100)?;
-/// let contract = Contract::stock("TSLA").build();
-///
-/// let ticks: TickSubscription<TickLast> = client.historical_ticks(&contract, 100).last()?;
-/// for tick in ticks.iter_data() {
-///     println!("{:?}", tick?);
-/// }
 ///
 /// let group: DisplayGroupSubscription = client.subscribe_to_group_events(1)?;
 /// for update in group.iter_data() {
@@ -70,9 +62,6 @@ pub mod blocking {
     pub(crate) use crate::client::builders::blocking::{ClientRequestBuilders, SubscriptionBuilderExt};
     pub use crate::client::builders::client_builder::sync_impl::ClientBuilder;
     pub use crate::display_groups::sync::DisplayGroupSubscription;
-    pub use crate::market_data::historical::sync::{
-        TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter, TickSubscriptionTryIter,
-    };
     pub use crate::subscriptions::notice_stream::sync_impl::{NoticeStream, NoticeStreamIter};
     pub use crate::subscriptions::sync::{Subscription, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter};
     pub use crate::subscriptions::Resubscribing;

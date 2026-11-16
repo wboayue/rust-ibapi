@@ -74,11 +74,6 @@ impl<'a> RequestBuilder<'a> {
             .with_context(context)
             .send_with_request_id_capped(self.request_id, message, bound)
     }
-
-    /// Send the request without creating a subscription
-    pub fn send_raw(self, message: Vec<u8>) -> Result<InternalSubscription, Error> {
-        self.client.send_request(self.request_id, message)
-    }
 }
 
 /// Builder for creating shared channel requests (without request IDs)

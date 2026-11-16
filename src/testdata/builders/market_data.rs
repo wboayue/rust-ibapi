@@ -1032,10 +1032,6 @@ impl HistoricalTicksLastResponse {
         self.ticks.push(t);
         self
     }
-    pub fn ticks(mut self, t: Vec<TickLastFields>) -> Self {
-        self.ticks = t;
-        self
-    }
     pub fn done(mut self, v: bool) -> Self {
         self.done = v;
         self
