@@ -12,6 +12,7 @@ behind a decoder, encoder, or rustdoc decision.
 | [market-data.md](market-data.md) | Generic ticks, option computations, tick types |
 | [accounts.md](accounts.md) | Positions, PnL, account updates by model |
 | [news.md](news.md) | Historical news, articles |
+| [scanner.md](scanner.md) | Scanner subscription rows and notices |
 
 ## Entry format
 

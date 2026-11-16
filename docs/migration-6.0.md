@@ -791,13 +791,12 @@ compiler finds every `new` call; it does not find an `expires_on` date that used
 fails at `build()`. `ExpirationDate::next_friday()`, `third_friday_of_month()`,
 `ContractMonth::front()` and `next_quarter()` are unchanged.
 
-### 35. `ContractDetails`, `ScannerData` and `TickRequestParameters` are `#[non_exhaustive]`
+### 35. `ContractDetails` and `TickRequestParameters` are `#[non_exhaustive]`
 
-TWS sends fields on these three messages that the crate doesn't decode yet:
+TWS sends fields on these two messages that the crate doesn't decode yet:
 
 - `ContractDetails`: `min_algo_size`, last price and size precision, and the event-contract
   fields.
-- `ScannerData`: `distance`, `benchmark` and `projection`.
 - `TickRequestParameters`: last price and size precision.
 
 With the attribute, a 6.x release can add them without another major version. The crate only
@@ -816,5 +815,5 @@ let mut details = ContractDetails::default();
 details.liquid_hours = hours;
 ```
 
-A destructuring pattern needs a trailing `..`: `let ScannerData { rank, contract_details, .. } =
-row;`. Reading fields is unchanged, and so is serde `Deserialize`. The compiler finds every site.
+A destructuring pattern needs a trailing `..`: `let TickRequestParameters { min_tick, .. } =
+params;`. Reading fields is unchanged, and so is serde `Deserialize`. The compiler finds every site.

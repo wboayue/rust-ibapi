@@ -10,7 +10,7 @@ triggers:
   - a plan says a narrowing is "transparent" to callers
 symbols: [non_exhaustive, must_use, private_interfaces, pub(crate)]
 related: [integration-crate-builds, modernize-touched-modules, floor-ratchet-splits]
-precedents: ["#547", "#548", "#581", "#665", "#1081", "#1232"]
+precedents: ["#547", "#548", "#581", "#665", "#1081", "#1232", "#1234"]
 ---
 
 A PR that adds a compile-time restriction to a public type — `#[non_exhaustive]`, `#[must_use]`,
@@ -56,6 +56,11 @@ and the attribute only forces a dead `_` arm. `ConnectivityStatus::from_code` re
 unknown codes, so `ConnectivityStatus` stays exhaustive (#689) though its sibling
 `NoticeCategory` is not. Sibling consistency is not a reason.
 
+On a struct, the reason is a field still to come: one TWS sends that the decoder drops. It
+counts only if the field carries data a caller can use. Check the proto comment, and on a doubt
+check a live gateway: a field documented as internal use only, or one that arrives empty, is
+headroom (#1234).
+
 ## Precedents
 
 - #547 → #548 — the canonical split. #547 moved 15 example sites and a README snippet to the
@@ -81,3 +86,9 @@ unknown codes, so `ConnectivityStatus` stays exhaustive (#689) though its siblin
   the rest were headroom. The attribute makes only *adding* fields non-breaking: a field type
   change (`f64` → `Option<f64>`) breaks callers either way, so it is no reason to apply one. No
   outside caller built these types, so there was no PR-A; doctests were the only casualties.
+- #1234 — partial counter-example to #1232: `ScannerData`'s named fields (`distance`,
+  `benchmark`, `projection`) are documented in the proto as internal use only or always empty,
+  and a live probe of stock and bond scans found all three absent
+  (`docs/wire-facts/scanner.md`), so none would be added. The attribute was removed before
+  6.0 shipped. The C# client forwards the three anyway, so C# passing a field along is not
+  evidence that it carries data.
