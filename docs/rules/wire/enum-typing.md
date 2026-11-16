@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -40,7 +40,9 @@ terminates the subscription, so a value IBKR adds later must not become an outag
 case-sensitive (a case variant lands in `Unknown`, never coerced). The enum stays exhaustive so
 the compiler points callers at the new arm; the payload variant costs `Copy` and makes `as_str`
 return `&str`. No decode-time log — callers own the signal (`docs/migration-4.0.md` §9).
-One-shot and outbound-only enums stay closed: a hard error there fails one call, not a stream.
+Outbound-only enums stay closed: the caller picks the value, so there is nothing unrecognized to
+keep. A one-shot field is open too: a hard error fails the call and discards the rest of the
+frame (#1233).
 
 Serde: if an open enum serializes as the wire string (`OrderStatusKind`, `TimeInForce`,
 `OrderType`), use `impl_wire_enum!(Name, fallback Unknown, serde)`, which generates serde and the
@@ -76,10 +78,10 @@ no longer compiles with a payload variant. `impl_wire_code!` (`src/macros.rs`) g
 one table (#1180). `Unknown(i32)` keeps `Copy` and derived serde. There is no closed
 `TryFrom<i32>` form for streaming paths.
 
-**A one-shot integer field decodes closed.** `ArticleType` (`news_article`, #1070) maps the table
-in a private decoder fn and returns `Error::Parse` for any other code. Its coercing public
-`From<i32>` is removed for 6.0 (#1071); an existing `From<i32>` also blocks `TryFrom<i32>` through
-the blanket impl.
+**One-shot fields take the same shape.** `ArticleType` (`news_article`) used to decode closed,
+returning `Error::Parse` for an unmodeled code (#1070, superseded). That failed the call and discarded a body the caller
+could still use, so it is now open like every other integer-coded enum (#1233). An error suits a frame
+that can't be used at all; an unmodeled code in one field isn't that.
 
 **The wire code lives in the `impl_wire_code!` table, not a discriminant.** No `#[repr(i32)]`, no
 `Foo = 0` on the enum: with a payload variant nothing reads the discriminant, so it is decoration a
@@ -155,3 +157,6 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
   `"None"` to `None` before `FromStr`, which keeps the bare `"None"` as `Unknown("None")`.
 - #1222 — wire-string serde for open enums moved from hand-written impls to
   `impl_wire_enum!(Name, fallback Unknown, serde)`.
+- #1233 — counter-example to #1070: `ArticleType` reopened with `Unknown(i32)` on
+  `impl_wire_code!`. Decoding closed on a one-shot failed `news_article` and discarded the body;
+  the one-shot exception to the open shape is retired.
