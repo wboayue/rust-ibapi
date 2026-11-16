@@ -877,3 +877,24 @@ marks both fields nullable. JSON written by 5.x still deserializes, with a store
 `count` stays `i32` and is `-1` on a non-TRADES bar, as TWS sends it. The historical `Bar`
 (`market_data::historical::Bar`) is unchanged: TWS sends `-1` for its volume, WAP and count on
 non-TRADES bars rather than leaving them out, so they stay `f64` and `i32`.
+
+### 40. `ContractDetails::under_security_type` is `Option<SecurityType>`
+
+TWS sends the underlying's security type as one of its codes: `STK` for a stock option, `FUT`
+for a futures option, `IND` for a future on an index, and nothing for a stock or an index. The
+field was a `String`, empty when TWS sent nothing. It is now `Option<SecurityType>`, `None`
+when TWS sends nothing; a code the crate doesn't model is `SecurityType::Other`.
+
+```rust,ignore
+// 5.x
+if details.under_security_type == "FUT" { /* futures option */ }
+
+// 6.0
+if details.under_security_type == Some(SecurityType::Future) { /* futures option */ }
+let code = details.under_security_type.as_ref().map_or("", SecurityType::as_str); // the 5.x text
+```
+
+The compiler finds every use as a `String`. It doesn't catch the serialized form:
+`ContractDetails` derives `Serialize` / `Deserialize`, and the field now serializes like
+`Contract::security_type` (the variant name, `"Stock"`) or as `null`, where it was the wire code
+(`"STK"`) or `""`. JSON written by 5.x doesn't deserialize into the new field.
