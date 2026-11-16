@@ -410,6 +410,28 @@ fn decode_contract_details_rejects_malformed_market_rule_id() {
     ));
 }
 
+/// Values from a live ForecastEx `FF` contract (server 226); other contracts omit all three.
+#[test]
+fn decode_contract_details_reads_event_contract_fields() {
+    let question = "Will the US Fed Funds Target Rate be set above 3.125% at the FOMC meeting ending January 27, 2027?";
+    let event = proto::ContractDetails {
+        event_contract1: Some("US Fed Funds Target Rate".into()),
+        event_contract_description1: Some("FF Jan28'27 3.125".into()),
+        event_contract_description2: Some(question.into()),
+        ..Default::default()
+    };
+    let cases = [
+        ("event contract", event, ["US Fed Funds Target Rate", "FF Jan28'27 3.125", question]),
+        ("stock", proto::ContractDetails::default(), ["", "", ""]),
+    ];
+    for (label, proto_details, [topic, description, question]) in cases {
+        let details = decode_contract_and_details(&stk_contract(), &proto_details).unwrap();
+        assert_eq!(details.event_contract_topic, topic, "{label}");
+        assert_eq!(details.event_contract_description, description, "{label}");
+        assert_eq!(details.event_contract_question, question, "{label}");
+    }
+}
+
 // === ContractDetails size rules are optional (issue #716) ===
 
 #[test]

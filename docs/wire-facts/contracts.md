@@ -124,3 +124,26 @@ Contract details and option chains. Format: [README](README.md).
   exchange *i*, as IB's `ContractDetails` doc says. Usually all ids are equal (AAPL: 4563
   ×27); some contracts mix them (SAP@IBIS: 1874, 1943, 3055; 7203@TSEJ: 3407, 1460).
 - **Not probed:** bonds, warrants, structured products; contracts with no market rule.
+
+### Event-contract, `minAlgoSize` and precision fields
+
+*Live 2026-11-15 Sun 23:52 ET (off-hours), paper, server 226; raw capture of `ContractData`.*
+
+| Contract | `eventContract1` / `Description1` / `Description2` | `minAlgoSize` | `lastPricePrecision` / `lastSizePrecision` |
+|---|---|---|---|
+| AAPL STK | absent | `"0"` | `"0.000001"` / `"0.000001"` |
+| ES FUT (front month) | absent | `"0"` | absent |
+| EUR.USD CASH | absent | `"0"` | absent |
+| BTC CRYPTO (PAXOS) | absent | `"0"` | absent |
+| FF OPT on FORECASTX (62 rows) | `"US Fed Funds Target Rate"` / `"FF Jan28'27 3.125"` / `"Will the US Fed Funds Target Rate be set above 3.125% at the FOMC meeting ending January 27, 2027?"` | `"0"` | absent |
+
+- The event-contract strings are present and meaningful only on event contracts.
+- `minAlgoSize` was `"0"` on every row, including AAPL, which takes algo orders, so no
+  contract probed carried a usable value.
+- The precision fields are steps (`0.000001`), not digit counts, and only AAPL sent them.
+  `TickReqParams` matched: AAPL `"0.000001"` for both, absent for EUR.USD and ES (same
+  session, `reqMktData`).
+- **Not probed:** options, bonds, funds, non-US stocks; a contract with a non-zero
+  `minAlgoSize`; what the AAPL step governs (sub-penny prices and fractional shares are both
+  smaller than its `minTick` 0.01 and `minSize` 0.0001).
+
