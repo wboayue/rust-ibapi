@@ -99,12 +99,10 @@ impl Default for ScannerSubscription {
 
 /// Provides the data resulting from the market scanner request.
 ///
-/// `#[non_exhaustive]`: TWS sends `distance`, `benchmark` and `projection`, not decoded yet,
-/// so fields will be added. Outside this crate, start from [`ScannerData::default`] and assign
-/// fields.
+/// The proto's `distance`, `benchmark` and `projection` are not decoded: IBKR documents them as
+/// internal use only, and `benchmark` as always empty.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-#[non_exhaustive]
 pub struct ScannerData {
     /// The ranking position of the contract in the scanner sort.
     pub rank: i32,
