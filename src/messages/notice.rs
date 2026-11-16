@@ -44,16 +44,11 @@ pub const ORDER_MESSAGE_CODE: i32 = 399;
 /// depth subscription yields it as [`MarketDepths::Reset`](crate::market_data::realtime::MarketDepths::Reset).
 pub(crate) const MARKET_DEPTH_RESET_CODE: i32 = 317;
 
-/// "Historical Market Data Service query message". Classified `Error`, except
-/// the [`HMDS_CONNECTED_TEXT`] form, which is a `Warning`; a scanner
-/// subscription also keeps its "no items retrieved" form nonterminal. See
-/// [`classify`].
+/// "Historical Market Data Service query message", a `Warning` in every form seen live: "HMDS
+/// server connection was successful" before a historical request's bars (#1136), "no items
+/// retrieved" on an empty scan (#886), and "N out of M items retrieved" before a bond scan's rows
+/// (`docs/wire-facts/scanner.md`). In each, TWS goes on with the request.
 pub(crate) const HMDS_QUERY_MESSAGE_CODE: i32 = 165;
-
-/// Text of the [`HMDS_QUERY_MESSAGE_CODE`] frame TWS sends, bound to a
-/// historical request, when the HMDS farm connects on demand. The data follows
-/// it, so it is a warning, not a failed query (#1136).
-pub(crate) const HMDS_CONNECTED_TEXT: &str = "HMDS server connection was successful";
 
 /// "Order TIF was set to DAY based on order preset." TWS applied the preset's
 /// time in force to an order that left it unset, such as an `exerciseOptions`
@@ -84,15 +79,15 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2199;
 /// and the absent field decodes to 0. An error frame that fails proto decode
 /// falls back to the same default, so code 0 never carries a hard error.
 ///
-/// Code 165 is a warning only in its [`HMDS_CONNECTED_TEXT`] form; its other
-/// texts can be real query failures. Code 10349 ([`ORDER_PRESET_TIF_CODE`])
+/// Code 165 ([`HMDS_QUERY_MESSAGE_CODE`]) reports on a query TWS goes on with.
+/// Code 10349 ([`ORDER_PRESET_TIF_CODE`])
 /// reports an order TWS goes on with.
 pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
     code == 0
         || code == ORDER_PRESET_TIF_CODE
         || WARNING_CODE_RANGE.contains(&code)
         || (code == ORDER_MESSAGE_CODE && message.lines().any(|line| line.trim_start().starts_with("Warning:")))
-        || (code == HMDS_QUERY_MESSAGE_CODE && message.contains(HMDS_CONNECTED_TEXT))
+        || code == HMDS_QUERY_MESSAGE_CODE
 }
 
 /// Classify a raw error frame into a disjoint [`NoticeCategory`].
@@ -100,15 +95,6 @@ pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
 /// The single owner of the precedence chain documented on [`NoticeCategory`];
 /// [`Notice::category`] and [`is_informational_code`] both derive from it, so
 /// routing and the public partition cannot disagree.
-///
-/// One exception sits downstream of routing:
-/// [`StreamDecoder::is_nonterminal_notice`](crate::subscriptions::common::StreamDecoder::is_nonterminal_notice)
-/// lets a subscription deliver a request-bound `Error` notice as
-/// `SubscriptionItem::Notice` instead of ending. The notice keeps its `Error`
-/// category. Only the scanner uses it, for [`HMDS_QUERY_MESSAGE_CODE`] "no items
-/// retrieved" (#886); making that form informational here would also reach
-/// one-shot requests, which would wait for an answer that never comes. The
-/// [`HMDS_CONNECTED_TEXT`] form is a `Warning` here instead: the data follows it.
 pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
     if code == ORDER_CANCELLED_CODE {
         NoticeCategory::Cancellation
@@ -507,7 +493,7 @@ pub enum NoticeCategory {
     /// Order cancellation confirmation (exact code 202).
     Cancellation,
     /// Informational warning ([`WARNING_CODE_RANGE`], code 399 with a `Warning:`
-    /// line, code 165 "HMDS server connection was successful", code 10349 "Order
+    /// line, code 165 "Historical Market Data Service query message", code 10349 "Order
     /// TIF was set to DAY based on order preset", or code 0 — a code-less frame).
     Warning,
     /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
@@ -723,11 +709,6 @@ impl Notice {
     ///
     /// Informational notices include cancellation confirmations, warnings,
     /// system/connectivity messages, and data advisories.
-    ///
-    /// A scanner subscription also yields TWS code 165 "no items retrieved"
-    /// (an empty scan) as a `SubscriptionItem::Notice` and stays open, although
-    /// that notice is not informational; don't end a scanner loop on
-    /// `!is_informational()` alone.
     pub fn is_informational(&self) -> bool {
         is_informational_code(self.code, &self.message)
     }
@@ -894,7 +875,7 @@ impl Notice {
     /// Informational categories log at `warn` (the caller may want to act:
     /// a fallback engaged, a book must be cleared), with three exceptions at
     /// `info`: the cancellation confirmation, data-farm notices that need no
-    /// action, and 165 "HMDS server connection was successful". A farm that is
+    /// action, and 165 (an HMDS query report). A farm that is
     /// OK, `Inactive` ("…available upon demand") or `Connecting` is routine on
     /// nearly every connect; only `Broken` warns.
     /// System connectivity codes are graded by how much they matter: 1102
@@ -913,7 +894,6 @@ impl Notice {
             {
                 Level::Info
             }
-            // A 165 classifies as Warning only in its HMDS-connected form.
             NoticeCategory::Warning if self.code == HMDS_QUERY_MESSAGE_CODE => Level::Info,
             NoticeCategory::Warning | NoticeCategory::DataAdvisory => Level::Warn,
             NoticeCategory::SystemMessage => match self.code {

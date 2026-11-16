@@ -287,16 +287,6 @@ pub(crate) trait StreamDecoder<T> {
     /// an error ends a capped stream.
     const END_MESSAGES: &'static [IncomingMessages] = &[];
 
-    /// Keep a request-bound error notice nonterminal when this decoder knows
-    /// the request remains active: the subscription yields it as
-    /// `SubscriptionItem::Notice` and keeps reading. The notice keeps its
-    /// `Error` category (`is_informational()` stays `false`). Default: terminal.
-    /// See [`classify`](crate::messages::classify) for why this is not a
-    /// classification change.
-    fn is_nonterminal_notice(_notice: &Notice) -> bool {
-        false
-    }
-
     /// Whether a terminal error notice also ends the request at TWS, so drop
     /// writes no cancel (TWS would answer it with 366). Opt in only where
     /// that is wire-verified: ending the stream on our side doesn't prove TWS
@@ -304,7 +294,7 @@ pub(crate) trait StreamDecoder<T> {
     /// data line, a scanner slot). Default: `false`, the cancel is written.
     ///
     /// Match the codes verified live, not every error: an unverified terminal
-    /// code (10197 on market data, 165 on scanners) must keep its cancel. A
+    /// code (10197 on market data) must keep its cancel. A
     /// one-shot query with nothing to continue (`HistoricalDataFrame`) may
     /// accept any error.
     fn rejection_ends_request(_notice: &Notice) -> bool {

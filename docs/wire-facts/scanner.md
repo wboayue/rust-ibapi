@@ -24,7 +24,8 @@ Scanner subscriptions and their data rows. Format: [README](README.md).
 
 - Both bond scans above sent error 165 "Historical Market Data Service query message:10 out of
   18957 items retrieved" on the request id, then the `ScannerData` frame with all 10 rows.
-- The crate treats this 165 text as an error, so the subscription ends with `Err` and the rows
-  that follow are dropped. Only the "no items retrieved" text is handled as informational.
-  Stock scans sent no 165.
+- TWS goes on with the scan, so 165 is informational here as in its other forms ("no items
+  retrieved", the HMDS farm connecting). The crate classifies every 165 as a `Warning` (#1235);
+  before that, this text ended the subscription with `Err` and the rows were dropped. Stock scans
+  sent no 165.
 - **Not probed:** whether later refreshes of a bond scan repeat the 165, other instruments, RTH.
