@@ -112,6 +112,15 @@ Contract details and option chains. Format: [README](README.md).
 - `contract_id` is required; "0 for underlying" was wrong.
 - **Not probed:** a real FOP underlying (e.g. ES on CME).
 
+### `underSecType` is a security type code
+
+*Live 2026-11-16 Mon 02:30 ET (US equities closed, CME Globex open), paper, server 223.*
+
+- `reqContractDetails`: AAPL stock and SPX index send none (empty); the ES future sends `IND`;
+  680 AAPL options for 202612 all send `STK`; 7582 ES futures options for 202612 all send `FUT`.
+- Settles typing `ContractDetails::under_security_type` as an optional `SecurityType`.
+- **Not probed:** bonds, warrants, CFDs, forex, and futures on other underlyings.
+
 ### Market rule ids align with valid exchanges
 
 *Live 2026-11-10 RTH, paper Gateway, server 226; #1198.*

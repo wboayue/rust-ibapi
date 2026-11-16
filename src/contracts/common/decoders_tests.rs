@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::common::test_utils::helpers::{assert_decimal_parse_error, assert_missing_field, assert_rejects_text_framing};
-use crate::contracts::{FundAssetType, FundDistributionPolicyIndicator};
+use crate::contracts::{FundAssetType, FundDistributionPolicyIndicator, SecurityType};
 use crate::messages::IncomingMessages;
 use prost::Message;
 
@@ -382,6 +382,27 @@ fn parse_market_rule_ids_table() {
             }
             (got, want) => panic!("input {input:?}: expected {want:?}, got {got:?}"),
         }
+    }
+}
+
+#[test]
+fn decode_contract_details_types_under_security_type() {
+    let cases = [
+        (Some("STK"), Some(SecurityType::Stock)),
+        (Some("FUT"), Some(SecurityType::Future)),
+        (Some("IND"), Some(SecurityType::Index)),
+        (Some("NEWTYPE"), Some(SecurityType::Other("NEWTYPE".into()))),
+        (Some(""), None),
+        (None, None),
+    ];
+    for (input, expected) in cases {
+        let details = proto::ContractDetails {
+            under_sec_type: input.map(Into::into),
+            ..Default::default()
+        };
+        let decoded = decode_contract_and_details(&stk_contract(), &details).unwrap();
+
+        assert_eq!(decoded.under_security_type, expected, "input {input:?}");
     }
 }
 

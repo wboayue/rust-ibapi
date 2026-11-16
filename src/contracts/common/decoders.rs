@@ -232,7 +232,7 @@ pub(crate) fn decode_contract_and_details(
         agg_group: proto_details.agg_group.unwrap_or_default(),
         sec_id_list: tag_values(&proto_details.sec_id_list),
         under_symbol: s(&proto_details.under_symbol),
-        under_security_type: s(&proto_details.under_sec_type),
+        under_security_type: parse_optional(proto_details.under_sec_type.as_deref())?,
         market_rule_ids: parse_market_rule_ids(proto_details.market_rule_ids.as_deref())?,
         real_expiration_date: s(&proto_details.real_expiration_date),
         stock_type: s(&proto_details.stock_type),
