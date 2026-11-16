@@ -1334,7 +1334,7 @@ pub struct TradeTickResponse {
     pub tick_type: i32,
     pub time: i64,
     pub price: f64,
-    pub size: f64,
+    pub size: Option<f64>,
     pub past_limit: bool,
     pub unreported: bool,
     pub exchange: String,
@@ -1348,7 +1348,7 @@ impl Default for TradeTickResponse {
             tick_type: 1,
             time: 0,
             price: 0.0,
-            size: 0.0,
+            size: Some(0.0),
             past_limit: false,
             unreported: false,
             exchange: String::new(),
@@ -1371,7 +1371,7 @@ impl TradeTickResponse {
         self
     }
     pub fn size(mut self, v: f64) -> Self {
-        self.size = v;
+        self.size = Some(v);
         self
     }
     pub fn attributes(mut self, past_limit: bool, unreported: bool) -> Self {
@@ -1403,7 +1403,7 @@ impl ResponseProtoEncoder for TradeTickResponse {
                     unreported: Some(self.unreported),
                 }),
                 price: Some(self.price),
-                size: Some(self.size.to_string()),
+                size: self.size.map(|v| v.to_string()),
                 exchange: some_str(&self.exchange),
                 special_conditions: some_str(&self.special_conditions),
             })),
@@ -1415,10 +1415,10 @@ impl ResponseProtoEncoder for TradeTickResponse {
 pub struct BidAskTickResponse {
     pub request_id: i32,
     pub time: i64,
-    pub bid_price: f64,
-    pub ask_price: f64,
-    pub bid_size: f64,
-    pub ask_size: f64,
+    pub price_bid: f64,
+    pub price_ask: f64,
+    pub size_bid: Option<f64>,
+    pub size_ask: Option<f64>,
     pub bid_past_low: bool,
     pub ask_past_high: bool,
 }
@@ -1428,10 +1428,10 @@ impl Default for BidAskTickResponse {
         Self {
             request_id: TEST_REQ_ID_FIRST,
             time: 0,
-            bid_price: 0.0,
-            ask_price: 0.0,
-            bid_size: 0.0,
-            ask_size: 0.0,
+            price_bid: 0.0,
+            price_ask: 0.0,
+            size_bid: Some(0.0),
+            size_ask: Some(0.0),
             bid_past_low: false,
             ask_past_high: false,
         }
@@ -1443,11 +1443,11 @@ impl BidAskTickResponse {
         self.time = v;
         self
     }
-    pub fn quote(mut self, bid_price: f64, ask_price: f64, bid_size: f64, ask_size: f64) -> Self {
-        self.bid_price = bid_price;
-        self.ask_price = ask_price;
-        self.bid_size = bid_size;
-        self.ask_size = ask_size;
+    pub fn quote(mut self, price_bid: f64, price_ask: f64, size_bid: f64, size_ask: f64) -> Self {
+        self.price_bid = price_bid;
+        self.price_ask = price_ask;
+        self.size_bid = Some(size_bid);
+        self.size_ask = Some(size_ask);
         self
     }
     pub fn attributes(mut self, bid_past_low: bool, ask_past_high: bool) -> Self {
@@ -1470,10 +1470,10 @@ impl ResponseProtoEncoder for BidAskTickResponse {
                     bid_past_low: Some(self.bid_past_low),
                     ask_past_high: Some(self.ask_past_high),
                 }),
-                price_bid: Some(self.bid_price),
-                price_ask: Some(self.ask_price),
-                size_bid: Some(self.bid_size.to_string()),
-                size_ask: Some(self.ask_size.to_string()),
+                price_bid: Some(self.price_bid),
+                price_ask: Some(self.price_ask),
+                size_bid: self.size_bid.map(|v| v.to_string()),
+                size_ask: self.size_ask.map(|v| v.to_string()),
             })),
         }
     }
@@ -1483,7 +1483,8 @@ impl ResponseProtoEncoder for BidAskTickResponse {
 pub struct MidPointTickResponse {
     pub request_id: i32,
     pub time: i64,
-    pub mid_point: f64,
+    pub price: f64,
+    pub size: Option<f64>,
 }
 
 impl Default for MidPointTickResponse {
@@ -1491,7 +1492,8 @@ impl Default for MidPointTickResponse {
         Self {
             request_id: TEST_REQ_ID_FIRST,
             time: 0,
-            mid_point: 0.0,
+            price: 0.0,
+            size: None,
         }
     }
 }
@@ -1501,8 +1503,8 @@ impl MidPointTickResponse {
         self.time = v;
         self
     }
-    pub fn mid_point(mut self, v: f64) -> Self {
-        self.mid_point = v;
+    pub fn price(mut self, v: f64) -> Self {
+        self.price = v;
         self
     }
 }
@@ -1516,8 +1518,8 @@ impl ResponseProtoEncoder for MidPointTickResponse {
             tick_type: Some(4),
             tick: Some(proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(proto::HistoricalTick {
                 time: Some(self.time),
-                price: Some(self.mid_point),
-                size: Some("0".into()),
+                price: Some(self.price),
+                size: self.size.map(|v| v.to_string()),
             })),
         }
     }

@@ -35,6 +35,8 @@ pub(crate) mod common;
 mod builder;
 pub use builder::{HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder};
 
+pub use super::{TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
+
 #[doc(hidden)]
 #[cfg(feature = "sync")]
 pub mod sync;
@@ -737,85 +739,6 @@ pub struct Session {
     pub start: OffsetDateTime,
     /// Session end time.
     pub end: OffsetDateTime,
-}
-
-/// The historical tick's description. Used when requesting historical tick data with whatToShow = MIDPOINT
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub struct TickMidpoint {
-    /// timestamp of the historical tick.
-    pub timestamp: OffsetDateTime,
-    /// historical tick price.
-    pub price: f64,
-    /// Historical tick size.
-    ///
-    /// `None` means TWS sent no value (field absent, empty, or an "unset"
-    /// sentinel); `Some(0.0)` is a real zero.
-    pub size: Option<f64>,
-}
-
-/// The historical tick's description. Used when requesting historical tick data with whatToShow = BID_ASK.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub struct TickBidAsk {
-    /// Timestamp of the historical tick.
-    pub timestamp: OffsetDateTime,
-    /// Tick attributes of historical bid/ask tick.
-    pub tick_attribute_bid_ask: TickAttributeBidAsk,
-    /// Bid price of the historical tick.
-    pub price_bid: f64,
-    /// Ask price of the historical tick.
-    pub price_ask: f64,
-    /// Bid size of the historical tick.
-    ///
-    /// `None` means TWS sent no value (field absent, empty, or an "unset"
-    /// sentinel); `Some(0.0)` is a real zero.
-    pub size_bid: Option<f64>,
-    /// Ask size of the historical tick.
-    ///
-    /// `None` carries the same meaning as [`Self::size_bid`].
-    pub size_ask: Option<f64>,
-}
-
-/// Tick attributes accompanying bid/ask historical ticks.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub struct TickAttributeBidAsk {
-    /// Indicates whether the bid is past the lower price band.
-    pub bid_past_low: bool,
-    /// Indicates whether the ask is past the upper price band.
-    pub ask_past_high: bool,
-}
-
-/// The historical last tick's description. Used when requesting historical tick data with whatToShow = TRADES.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-pub struct TickLast {
-    /// Timestamp of the historical tick.
-    pub timestamp: OffsetDateTime,
-    /// Tick attributes of historical bid/ask tick.
-    pub tick_attribute_last: TickAttributeLast,
-    /// Last price of the historical tick.
-    pub price: f64,
-    /// Last size of the historical tick.
-    ///
-    /// `None` means TWS sent no value (field absent, empty, or an "unset"
-    /// sentinel); `Some(0.0)` is a real zero.
-    pub size: Option<f64>,
-    /// Source exchange of the historical tick.
-    pub exchange: String,
-    /// Conditions of the historical tick. Refer to Trade Conditions page for more details: <https://www.interactivebrokers.com/en/index.php?f=7235>.
-    pub special_conditions: String,
-}
-
-/// Tick attributes accompanying trade historical ticks.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
-pub struct TickAttributeLast {
-    /// `true` if the trade occurred outside exchange limits.
-    pub past_limit: bool,
-    /// `true` if the trade is from an unreported trade source.
-    pub unreported: bool,
 }
 
 /// Enumerates the data payload returned when requesting historical data.

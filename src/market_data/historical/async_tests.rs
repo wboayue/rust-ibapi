@@ -127,7 +127,7 @@ async fn head_timestamp() {
     assert!(result.is_ok(), "head_timestamp should succeed");
 
     let timestamp = result.unwrap();
-    assert_eq!(timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
+    assert_eq!(timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong time");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
@@ -509,10 +509,10 @@ async fn tick_subscription_methods() {
     let tick1 = expect_data(subscription.next().await);
     assert_eq!(tick1.price_bid, 185.50, "Wrong bid price for first tick");
     assert_eq!(tick1.price_ask, 186.00, "Wrong ask price for first tick");
-    assert_eq!(tick1.size_bid, Some(100.0), "Wrong bid size for first tick");
-    assert_eq!(tick1.size_ask, Some(200.0), "Wrong ask size for first tick");
-    assert!(tick1.tick_attribute_bid_ask.bid_past_low, "Wrong bid past low for first tick");
-    assert!(!tick1.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high for first tick");
+    assert_eq!(tick1.size_bid, 100.0, "Wrong bid size for first tick");
+    assert_eq!(tick1.size_ask, 200.0, "Wrong ask size for first tick");
+    assert!(tick1.attributes.bid_past_low, "Wrong bid past low for first tick");
+    assert!(!tick1.attributes.ask_past_high, "Wrong ask past high for first tick");
 
     // Get second tick
     let tick2 = expect_data(subscription.next().await);
@@ -586,13 +586,13 @@ async fn tick_subscription_bid_ask() {
         .expect("Failed to create bid/ask tick subscription");
 
     let tick = expect_data(subscription.next().await);
-    assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
+    assert_eq!(tick.time, datetime!(2023-03-15 00:00:00 UTC), "Wrong time");
     assert_eq!(tick.price_bid, 185.50, "Wrong bid price");
     assert_eq!(tick.price_ask, 186.00, "Wrong ask price");
-    assert_eq!(tick.size_bid, Some(100.0), "Wrong bid size");
-    assert_eq!(tick.size_ask, Some(200.0), "Wrong ask size");
-    assert!(tick.tick_attribute_bid_ask.bid_past_low, "Wrong bid past low");
-    assert!(!tick.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high");
+    assert_eq!(tick.size_bid, 100.0, "Wrong bid size");
+    assert_eq!(tick.size_ask, 200.0, "Wrong ask size");
+    assert!(tick.attributes.bid_past_low, "Wrong bid past low");
+    assert!(!tick.attributes.ask_past_high, "Wrong ask past high");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
@@ -630,7 +630,7 @@ async fn tick_subscription_midpoint() {
         .expect("Failed to create midpoint tick subscription");
 
     let tick = expect_data(subscription.next().await);
-    assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
+    assert_eq!(tick.time, datetime!(2023-03-15 00:00:00 UTC), "Wrong time");
     assert_eq!(tick.price, 185.75, "Wrong midpoint price");
     assert_eq!(tick.size, Some(100.0), "Wrong size");
 
@@ -662,18 +662,18 @@ async fn historical_ticks_trade() {
 
     let mut subscription = client
         .historical_ticks(&contract, 1)
-        .trade()
+        .last()
         .await
         .expect("Failed to create trade tick subscription");
 
     let tick = expect_data(subscription.next().await);
-    assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
+    assert_eq!(tick.time, datetime!(2023-03-15 00:00:00 UTC), "Wrong time");
     assert_eq!(tick.price, 185.50, "Wrong trade price");
-    assert_eq!(tick.size, Some(100.0), "Wrong trade size");
+    assert_eq!(tick.size, 100.0, "Wrong trade size");
     assert_eq!(tick.exchange, "ISLAND", "Wrong exchange");
     assert_eq!(tick.special_conditions, "APR", "Wrong special conditions");
-    assert!(!tick.tick_attribute_last.past_limit, "Wrong past limit");
-    assert!(!tick.tick_attribute_last.unreported, "Wrong unreported");
+    assert!(!tick.attributes.past_limit, "Wrong past limit");
+    assert!(!tick.attributes.unreported, "Wrong unreported");
 
     assert_eq!(subscription.request_id(), TEST_REQ_ID_FIRST, "request_id() is the id on the wire");
     assert_eq!(request_message_count(&message_bus), 1);
@@ -1345,7 +1345,7 @@ async fn tick_subscription_skips_unexpected_message_then_yields() {
 
     let mut subscription = client
         .historical_ticks(&test_contract(), 1)
-        .trade()
+        .last()
         .await
         .expect("subscription should be created");
 

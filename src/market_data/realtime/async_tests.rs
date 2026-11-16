@@ -299,10 +299,10 @@ async fn tick_by_tick_bid_ask() {
 
     // Verify tick data
     let tick = &received_ticks[0];
-    assert_eq!(tick.bid_price, 3895.50, "Wrong bid price");
-    assert_eq!(tick.ask_price, 3896.00, "Wrong ask price");
-    assert_eq!(tick.bid_size, 9.0, "Wrong bid size");
-    assert_eq!(tick.ask_size, 11.0, "Wrong ask size");
+    assert_eq!(tick.price_bid, 3895.50, "Wrong bid price");
+    assert_eq!(tick.price_ask, 3896.00, "Wrong ask price");
+    assert_eq!(tick.size_bid, 9.0, "Wrong bid size");
+    assert_eq!(tick.size_ask, 11.0, "Wrong ask size");
 
     assert_request(
         &message_bus,
@@ -321,11 +321,11 @@ async fn tick_by_tick_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::TickByTick,
-            mid_point_tick().time(1678740829).mid_point(3895.375).encode_proto(),
+            mid_point_tick().time(1678740829).price(3895.375).encode_proto(),
         ),
         proto_response(
             IncomingMessages::TickByTick,
-            mid_point_tick().time(1678740830).mid_point(3895.425).encode_proto(),
+            mid_point_tick().time(1678740830).price(3895.425).encode_proto(),
         ),
     ]));
 
@@ -359,7 +359,7 @@ async fn tick_by_tick_midpoint() {
 
     // Verify first midpoint
     let midpoint = &received_midpoints[0];
-    assert_eq!(midpoint.mid_point, 3895.375, "Wrong midpoint for first update");
+    assert_eq!(midpoint.price, 3895.375, "Wrong midpoint for first update");
     assert_eq!(
         midpoint.time,
         OffsetDateTime::from_unix_timestamp(1678740829).unwrap(),
@@ -368,7 +368,7 @@ async fn tick_by_tick_midpoint() {
 
     // Verify second midpoint
     let midpoint = &received_midpoints[1];
-    assert_eq!(midpoint.mid_point, 3895.425, "Wrong midpoint for second update");
+    assert_eq!(midpoint.price, 3895.425, "Wrong midpoint for second update");
     assert_eq!(
         midpoint.time,
         OffsetDateTime::from_unix_timestamp(1678740830).unwrap(),

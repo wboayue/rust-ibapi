@@ -98,16 +98,16 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
 /// still erroring on malformed input.
 ///
 /// **Transitional.** The fields whose absent value was reachable and meaningful
-/// use [`parse_optional_decimal`] and are `Option<f64>`: the historical tick and
-/// histogram sizes, `ContractDetails::{min_size, size_increment,
-/// suggested_size_increment}`, and the realtime `Bar::{volume, wap}`, which TWS
-/// omits for every non-TRADES bar (`docs/wire-facts/market-data.md`). The C#
-/// reference client guards several remaining call sites with
-/// `HasX ? Util.StringToDecimal(..) : decimal.MaxValue`, but a live check
-/// (server 226) found TWS sends every one it covered: historical bar
-/// volume/WAP (`"-1"` for non-TRADES bars), tick, tick-by-tick and depth sizes,
-/// and `Order::filled_quantity`. Grep this name for the remaining sites before
-/// assuming a new one is safe.
+/// use [`parse_optional_decimal`] and are `Option<f64>`: `TickMidpoint::size`
+/// (live midpoint frames carry none), the histogram sizes,
+/// `ContractDetails::{min_size, size_increment, suggested_size_increment}`, and
+/// the realtime `Bar::{volume, wap}`, which TWS omits for every non-TRADES bar
+/// (`docs/wire-facts/market-data.md`). The C# reference client guards several
+/// remaining call sites with `HasX ? Util.StringToDecimal(..) :
+/// decimal.MaxValue`, but a live check (server 226) found TWS sends every one it
+/// covered: historical bar volume/WAP (`"-1"` for non-TRADES bars), tick,
+/// tick-by-tick, historical tick and depth sizes, and `Order::filled_quantity`.
+/// Grep this name for the remaining sites before assuming a new one is safe.
 pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
     Ok(parse_optional_decimal(opt)?.unwrap_or(0.0))
 }

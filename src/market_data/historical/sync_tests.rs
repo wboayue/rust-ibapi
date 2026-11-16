@@ -445,7 +445,7 @@ fn historical_ticks_trade() {
         .starting(start)
         .ending(end)
         .trading_hours(trading_hours)
-        .trade()
+        .last()
         .expect("historical ticks trade request failed");
 
     assert_eq!(tick_subscription.request_id(), TEST_REQ_ID_FIRST, "request_id() is the id on the wire");
@@ -595,7 +595,7 @@ fn tick_subscription_methods() {
     let tick_subscription = client
         .historical_ticks(&contract, number_of_ticks)
         .trading_hours(trading_hours)
-        .trade()
+        .last()
         .expect("historical ticks trade request failed");
 
     // Just test that these methods can be called without panicking
@@ -639,7 +639,7 @@ fn tick_subscription_buffer_and_iteration() {
     let tick_subscription = client
         .historical_ticks(&contract, number_of_ticks)
         .trading_hours(trading_hours)
-        .trade()
+        .last()
         .expect("historical ticks trade request failed");
 
     // Test standard data iterator (notices filtered, errors surface via Result)
@@ -675,7 +675,7 @@ fn tick_subscription_owned_iterator() {
     let contract = Contract::stock("MSFT").build();
     let tick_subscription = client
         .historical_ticks(&contract, 10)
-        .trade()
+        .last()
         .expect("historical ticks trade request failed");
 
     // Convert to owned iterator — yields the SubscriptionItem envelope.
@@ -717,8 +717,8 @@ fn tick_subscription_bid_ask() {
     // Check first tick
     assert_eq!(ticks[0].price_bid, 11.63, "First tick bid price");
     assert_eq!(ticks[0].price_ask, 11.83, "First tick ask price");
-    assert_eq!(ticks[0].size_bid, Some(2800.0), "First tick bid size");
-    assert_eq!(ticks[0].size_ask, Some(100.0), "First tick ask size");
+    assert_eq!(ticks[0].size_bid, 2800.0, "First tick bid size");
+    assert_eq!(ticks[0].size_ask, 100.0, "First tick ask size");
 
     // Check last tick
     assert_eq!(ticks[2].price_bid, 11.65, "Last tick bid price");
@@ -1303,7 +1303,7 @@ fn tick_subscription_try_next_drains_buffer() {
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 10)
-        .trade()
+        .last()
         .expect("subscription should be created");
 
     // Drain via try_iter_data — each .next() goes through try_next() → next_helper(try_next_routed).
@@ -1332,7 +1332,7 @@ fn tick_subscription_next_timeout_drains_buffer() {
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 10)
-        .trade()
+        .last()
         .expect("subscription should be created");
 
     // Drive timeout_iter_data — each .next() goes through next_timeout() → next_helper.
@@ -1492,7 +1492,7 @@ fn tick_subscription_skips_unexpected_message_then_yields() {
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 1)
-        .trade()
+        .last()
         .expect("subscription should be created");
 
     let tick = subscription

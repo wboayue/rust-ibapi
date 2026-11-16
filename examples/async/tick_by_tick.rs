@@ -57,10 +57,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             trade.exchange,
             trade.special_conditions
         );
-        if trade.trade_attribute.past_limit {
+        if trade.attributes.past_limit {
             println!("  -> Past limit");
         }
-        if trade.trade_attribute.unreported {
+        if trade.attributes.unreported {
             println!("  -> Unreported");
         }
     }
@@ -83,15 +83,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .time
                 .format(format_description!("[hour]:[minute]:[second].[subsecond digits:3]"))
                 .unwrap(),
-            quote.bid_price,
-            quote.bid_size,
-            quote.ask_price,
-            quote.ask_size,
+            quote.price_bid,
+            quote.size_bid,
+            quote.price_ask,
+            quote.size_ask,
         );
-        if quote.bid_ask_attribute.bid_past_low {
+        if quote.attributes.bid_past_low {
             println!("  -> Bid past low");
         }
-        if quote.bid_ask_attribute.ask_past_high {
+        if quote.attributes.ask_past_high {
             println!("  -> Ask past high");
         }
     }
@@ -114,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .time
                 .format(format_description!("[hour]:[minute]:[second].[subsecond digits:3]"))
                 .unwrap(),
-            midpoint.mid_point
+            midpoint.price
         );
     }
 

@@ -165,7 +165,7 @@ impl Client {
     /// Build a request for historical time & sales data (tick-by-tick).
     ///
     /// The terminal method selects the tick type:
-    /// [`HistoricalTicksBuilder::trade`](super::HistoricalTicksBuilder::trade) /
+    /// [`HistoricalTicksBuilder::last`](super::HistoricalTicksBuilder::last) /
     /// `.mid_point()` / `.bid_ask(IgnoreSize)`. Use
     /// [`HistoricalTicksBuilder::starting`](super::HistoricalTicksBuilder::starting) /
     /// `.ending()` to anchor the query (at least one is required per IBKR).
@@ -190,7 +190,7 @@ impl Client {
     ///     let mut trades = client
     ///         .historical_ticks(&contract, 100)
     ///         .starting(datetime!(2023-04-15 0:00 UTC))
-    ///         .trade()
+    ///         .last()
     ///         .await
     ///         .expect("historical ticks request failed");
     ///
@@ -198,7 +198,7 @@ impl Client {
     ///         println!("{tick:?}");
     ///     }
     ///
-    ///     // Bid/ask ticks anchored at an end date, ignoring tick sizes:
+    ///     // Bid/ask ticks anchored at an end date, skipping size-only updates:
     ///     let _quotes = client
     ///         .historical_ticks(&contract, 100)
     ///         .ending(datetime!(2023-04-15 0:00 UTC))
@@ -226,7 +226,7 @@ impl Client {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
     ///     let contract = Contract::stock("MSFT").build();
-    ///     let subscription = client.historical_ticks(&contract, 100).trade().await.expect("request failed");
+    ///     let subscription = client.historical_ticks(&contract, 100).last().await.expect("request failed");
     ///
     ///     // Holding the subscription, `subscription.cancel().await` (or dropping it) does the same.
     ///     client.cancel_historical_ticks(subscription.request_id()).await.expect("cancel failed");
@@ -449,7 +449,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::connect("127.0.0.1:4002", 100).await?;
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().await?;
+    /// let subscription = client.historical_ticks(&contract, 100).last().await?;
     /// subscription.cancel().await;
     /// # Ok(())
     /// # }

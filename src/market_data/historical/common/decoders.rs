@@ -7,9 +7,8 @@ use crate::common::timezone::{find_timezone, resolve_local};
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use crate::market_data::historical::{
-    Bar, BarTimestamp, HistogramEntry, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint, NO_BAR_COUNT,
-};
+use crate::market_data::common::decoders::{decode_tick_bid_ask, decode_tick_last, decode_tick_midpoint};
+use crate::market_data::historical::{Bar, BarTimestamp, HistogramEntry, Schedule, Session, TickBidAsk, TickLast, TickMidpoint, NO_BAR_COUNT};
 
 fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
     let mk_err = |e: &dyn std::fmt::Display| Error::parse_field(s, format!("invalid unix-second timestamp: {e}"));
@@ -97,7 +96,7 @@ fn parse_historical_data_end_timestamp(text: &str) -> Result<OffsetDateTime, Err
 // === Protobuf decoders ===
 
 use crate::proto;
-use crate::proto::decoders::{parse_decimal_or_zero, parse_optional_decimal, required, ts};
+use crate::proto::decoders::{parse_decimal_or_zero, parse_optional_decimal, required};
 
 pub(crate) fn decode_historical_data_proto(msg: crate::proto::HistoricalData) -> Result<Vec<Bar>, Error> {
     // Sized up front rather than `.collect::<Result<Vec<_>, _>>()`: collecting into
@@ -131,12 +130,8 @@ pub(crate) fn decode_head_timestamp_proto(msg: crate::proto::HeadTimestamp) -> R
 
 pub(crate) fn decode_historical_ticks_proto(msg: crate::proto::HistoricalTicks) -> Result<(Vec<TickMidpoint>, bool), Error> {
     let mut ticks = Vec::with_capacity(msg.historical_ticks.len());
-    for t in &msg.historical_ticks {
-        ticks.push(TickMidpoint {
-            timestamp: ts(t.time.unwrap_or_default()),
-            price: t.price.unwrap_or_default(),
-            size: parse_optional_decimal(t.size.as_deref())?,
-        });
+    for t in msg.historical_ticks {
+        ticks.push(decode_tick_midpoint(t)?);
     }
 
     Ok((ticks, msg.is_done.unwrap_or_default()))
@@ -145,18 +140,7 @@ pub(crate) fn decode_historical_ticks_proto(msg: crate::proto::HistoricalTicks) 
 pub(crate) fn decode_historical_ticks_last_proto(msg: crate::proto::HistoricalTicksLast) -> Result<(Vec<TickLast>, bool), Error> {
     let mut ticks = Vec::with_capacity(msg.historical_ticks_last.len());
     for t in msg.historical_ticks_last {
-        let attr = t.tick_attrib_last;
-        ticks.push(TickLast {
-            timestamp: ts(t.time.unwrap_or_default()),
-            tick_attribute_last: TickAttributeLast {
-                past_limit: attr.as_ref().and_then(|a| a.past_limit).unwrap_or_default(),
-                unreported: attr.and_then(|a| a.unreported).unwrap_or_default(),
-            },
-            price: t.price.unwrap_or_default(),
-            size: parse_optional_decimal(t.size.as_deref())?,
-            exchange: t.exchange.unwrap_or_default(),
-            special_conditions: t.special_conditions.unwrap_or_default(),
-        });
+        ticks.push(decode_tick_last(t)?);
     }
 
     Ok((ticks, msg.is_done.unwrap_or_default()))
@@ -164,19 +148,8 @@ pub(crate) fn decode_historical_ticks_last_proto(msg: crate::proto::HistoricalTi
 
 pub(crate) fn decode_historical_ticks_bid_ask_proto(msg: crate::proto::HistoricalTicksBidAsk) -> Result<(Vec<TickBidAsk>, bool), Error> {
     let mut ticks = Vec::with_capacity(msg.historical_ticks_bid_ask.len());
-    for t in &msg.historical_ticks_bid_ask {
-        let attr = t.tick_attrib_bid_ask.as_ref();
-        ticks.push(TickBidAsk {
-            timestamp: ts(t.time.unwrap_or_default()),
-            tick_attribute_bid_ask: TickAttributeBidAsk {
-                ask_past_high: attr.and_then(|a| a.ask_past_high).unwrap_or_default(),
-                bid_past_low: attr.and_then(|a| a.bid_past_low).unwrap_or_default(),
-            },
-            price_bid: t.price_bid.unwrap_or_default(),
-            price_ask: t.price_ask.unwrap_or_default(),
-            size_bid: parse_optional_decimal(t.size_bid.as_deref())?,
-            size_ask: parse_optional_decimal(t.size_ask.as_deref())?,
-        });
+    for t in msg.historical_ticks_bid_ask {
+        ticks.push(decode_tick_bid_ask(t)?);
     }
 
     Ok((ticks, msg.is_done.unwrap_or_default()))

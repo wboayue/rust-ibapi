@@ -1,6 +1,6 @@
 use crate::contracts::Contract;
-use crate::market_data::realtime::{BidAsk, MidPoint, Trade};
 use crate::market_data::IgnoreSize;
+use crate::market_data::{TickBidAsk, TickLast, TickMidpoint};
 use crate::Error;
 
 #[cfg(test)]
@@ -13,9 +13,8 @@ mod tests;
 /// [`.last()`](Self::last) / [`.all_last()`](Self::all_last) /
 /// [`.bid_ask(...)`](Self::bid_ask) / [`.mid_point()`](Self::mid_point). Each
 /// terminal returns its own correctly-typed [`Subscription`] —
-/// [`Trade`](crate::market_data::realtime::Trade) for the two trade variants,
-/// [`BidAsk`](crate::market_data::realtime::BidAsk) for bid/ask, and
-/// [`MidPoint`](crate::market_data::realtime::MidPoint) for mid-point.
+/// [`TickLast`] for the two trade variants, [`TickBidAsk`] for bid/ask, and
+/// [`TickMidpoint`] for mid-point.
 ///
 /// `ignore_size` is only meaningful for the bid/ask stream — IBKR ignores the
 /// flag on the trade and mid-point streams — so it lives on the
@@ -64,8 +63,8 @@ impl<'a> TickByTickBuilder<'a, crate::client::sync::Client> {
     ///     }
     /// }
     /// ```
-    pub fn last(self) -> Result<crate::subscriptions::sync::Subscription<Trade>, Error> {
-        crate::market_data::realtime::sync::tick_by_tick::<Trade>(self.client, self.contract, "Last", self.number_of_ticks, false)
+    pub fn last(self) -> Result<crate::subscriptions::sync::Subscription<TickLast>, Error> {
+        crate::market_data::realtime::sync::tick_by_tick::<TickLast>(self.client, self.contract, "Last", self.number_of_ticks, false)
     }
 
     /// Subscribe to the `AllLast` trade stream (includes special-condition trades).
@@ -91,12 +90,12 @@ impl<'a> TickByTickBuilder<'a, crate::client::sync::Client> {
     ///     }
     /// }
     /// ```
-    pub fn all_last(self) -> Result<crate::subscriptions::sync::Subscription<Trade>, Error> {
-        crate::market_data::realtime::sync::tick_by_tick::<Trade>(self.client, self.contract, "AllLast", self.number_of_ticks, false)
+    pub fn all_last(self) -> Result<crate::subscriptions::sync::Subscription<TickLast>, Error> {
+        crate::market_data::realtime::sync::tick_by_tick::<TickLast>(self.client, self.contract, "AllLast", self.number_of_ticks, false)
     }
 
-    /// Subscribe to the `BidAsk` stream. Pass [`IgnoreSize::Yes`] to drop tick
-    /// sizes from the response.
+    /// Subscribe to the `BidAsk` stream. Pass [`IgnoreSize::Yes`] to skip updates
+    /// that change only a size; see [`IgnoreSize`].
     ///
     /// # Examples
     ///
@@ -120,8 +119,8 @@ impl<'a> TickByTickBuilder<'a, crate::client::sync::Client> {
     ///     }
     /// }
     /// ```
-    pub fn bid_ask(self, ignore_size: IgnoreSize) -> Result<crate::subscriptions::sync::Subscription<BidAsk>, Error> {
-        crate::market_data::realtime::sync::tick_by_tick::<BidAsk>(
+    pub fn bid_ask(self, ignore_size: IgnoreSize) -> Result<crate::subscriptions::sync::Subscription<TickBidAsk>, Error> {
+        crate::market_data::realtime::sync::tick_by_tick::<TickBidAsk>(
             self.client,
             self.contract,
             "BidAsk",
@@ -153,8 +152,8 @@ impl<'a> TickByTickBuilder<'a, crate::client::sync::Client> {
     ///     }
     /// }
     /// ```
-    pub fn mid_point(self) -> Result<crate::subscriptions::sync::Subscription<MidPoint>, Error> {
-        crate::market_data::realtime::sync::tick_by_tick::<MidPoint>(self.client, self.contract, "MidPoint", self.number_of_ticks, false)
+    pub fn mid_point(self) -> Result<crate::subscriptions::sync::Subscription<TickMidpoint>, Error> {
+        crate::market_data::realtime::sync::tick_by_tick::<TickMidpoint>(self.client, self.contract, "MidPoint", self.number_of_ticks, false)
     }
 }
 
@@ -187,8 +186,8 @@ impl<'a> TickByTickBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn last(self) -> Result<crate::subscriptions::r#async::Subscription<Trade>, Error> {
-        crate::market_data::realtime::r#async::tick_by_tick::<Trade>(self.client, self.contract, "Last", self.number_of_ticks, false).await
+    pub async fn last(self) -> Result<crate::subscriptions::r#async::Subscription<TickLast>, Error> {
+        crate::market_data::realtime::r#async::tick_by_tick::<TickLast>(self.client, self.contract, "Last", self.number_of_ticks, false).await
     }
 
     /// Subscribe to the `AllLast` trade stream (includes special-condition trades).
@@ -218,12 +217,12 @@ impl<'a> TickByTickBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn all_last(self) -> Result<crate::subscriptions::r#async::Subscription<Trade>, Error> {
-        crate::market_data::realtime::r#async::tick_by_tick::<Trade>(self.client, self.contract, "AllLast", self.number_of_ticks, false).await
+    pub async fn all_last(self) -> Result<crate::subscriptions::r#async::Subscription<TickLast>, Error> {
+        crate::market_data::realtime::r#async::tick_by_tick::<TickLast>(self.client, self.contract, "AllLast", self.number_of_ticks, false).await
     }
 
-    /// Subscribe to the `BidAsk` stream. Pass [`IgnoreSize::Yes`] to drop tick
-    /// sizes from the response.
+    /// Subscribe to the `BidAsk` stream. Pass [`IgnoreSize::Yes`] to skip updates
+    /// that change only a size; see [`IgnoreSize`].
     ///
     /// # Examples
     ///
@@ -250,8 +249,8 @@ impl<'a> TickByTickBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn bid_ask(self, ignore_size: IgnoreSize) -> Result<crate::subscriptions::r#async::Subscription<BidAsk>, Error> {
-        crate::market_data::realtime::r#async::tick_by_tick::<BidAsk>(
+    pub async fn bid_ask(self, ignore_size: IgnoreSize) -> Result<crate::subscriptions::r#async::Subscription<TickBidAsk>, Error> {
+        crate::market_data::realtime::r#async::tick_by_tick::<TickBidAsk>(
             self.client,
             self.contract,
             "BidAsk",
@@ -288,7 +287,7 @@ impl<'a> TickByTickBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn mid_point(self) -> Result<crate::subscriptions::r#async::Subscription<MidPoint>, Error> {
-        crate::market_data::realtime::r#async::tick_by_tick::<MidPoint>(self.client, self.contract, "MidPoint", self.number_of_ticks, false).await
+    pub async fn mid_point(self) -> Result<crate::subscriptions::r#async::Subscription<TickMidpoint>, Error> {
+        crate::market_data::realtime::r#async::tick_by_tick::<TickMidpoint>(self.client, self.contract, "MidPoint", self.number_of_ticks, false).await
     }
 }

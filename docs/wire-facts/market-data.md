@@ -113,3 +113,28 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
 - Not decoded: one stock out of three contracts, with no documented meaning.
 - **Not probed:** options, crypto, non-US stocks.
 
+### Tick-by-tick sizes and `IgnoreSize`
+
+*Live 2026-11-16 03:33Z (Sunday evening ET), paper Gateway, server 226, BTC/PAXOS; #1244.*
+
+- `last` / `all_last` (24 frames) and `bid_ask` (121 frames, both `IgnoreSize` values): every
+  frame carried its size fields (`size`; `size_bid` and `size_ask`).
+- `mid_point` (84 frames): no size field in any frame.
+- `bid_ask` with `IgnoreSize::Yes` (one window, 40 updates read): every update changed a price
+  (0 of 39 consecutive pairs with both prices unchanged). With `IgnoreSize::No` (two windows, 40
+  updates read in each), 12 of 39 and 4 of 39 pairs changed only sizes. Consistent with `Yes`
+  dropping size-only updates rather than the size fields.
+- Requested right after the `IgnoreSize::No` subscription on the same contract was cancelled,
+  `IgnoreSize::Yes` got no frames and no error in 25 s. Requested first, it delivered. One run,
+  not explained.
+- Historical ticks (live 2026-11-15 08:27 ET, Sunday, paper Gateway, server 226; AAPL ticks of
+  2026-11-13): every trade tick (1018) carried `size` and every bid/ask tick (17) `size_bid` and
+  `size_ask`; every midpoint tick (19) carried `size`, always `"0"`.
+- Historical bid/ask ticks with `IgnoreSize` (live 2026-11-16 05:02Z, Monday 00:02 ET, paper
+  Gateway, server 226; AAPL, 200 ticks requested ending 2026-11-13 21:00 UTC, all returned
+  ticks fall in 20:59:58-59 UTC; each request drew notice 2188 and still delivered): decoded
+  from the capture, `Yes` 475 ticks and `No` 1009, every one with `size_bid` and `size_ask`. 0
+  of 474 consecutive `Yes` pairs and 534 of 1008 `No` pairs had both prices unchanged: `Yes`
+  drops size-only updates here too.
+- ES and EUR.USD tick-by-tick sizes, all sent: [Size fields are always sent](#size-fields-are-always-sent).
+- **Not probed:** live stock ticks during RTH, live accounts, TWS rather than the Gateway.

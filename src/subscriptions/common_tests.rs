@@ -217,7 +217,7 @@ fn rejection_ends_request_only_for_verified_codes() {
     use crate::accounts::{PnL, PnLSingle};
     use crate::contracts::ContractDetails;
     use crate::market_data::historical::{HistoricalBarUpdate, HistoricalDataFrame};
-    use crate::market_data::realtime::{Bar, BidAsk, MarketDepths, MidPoint, TickTypes, Trade};
+    use crate::market_data::realtime::{Bar, MarketDepths, TickBidAsk, TickLast, TickMidpoint, TickTypes};
     use crate::scanner::ScannerData;
 
     struct Case {
@@ -240,9 +240,9 @@ fn rejection_ends_request_only_for_verified_codes() {
     let cases = [
         case("TickTypes", rejection_ends::<TickTypes>, Some(200), 10197),
         case("Bar", rejection_ends::<Bar>, Some(200), 10197),
-        case("Trade", rejection_ends::<Trade>, Some(200), 10197),
-        case("BidAsk", rejection_ends::<BidAsk>, Some(200), 10197),
-        case("MidPoint", rejection_ends::<MidPoint>, Some(200), 10197),
+        case("TickLast", rejection_ends::<TickLast>, Some(200), 10197),
+        case("TickBidAsk", rejection_ends::<TickBidAsk>, Some(200), 10197),
+        case("TickMidpoint", rejection_ends::<TickMidpoint>, Some(200), 10197),
         case("MarketDepths", rejection_ends::<MarketDepths>, Some(200), 10197),
         case("HistoricalBarUpdate", rejection_ends::<HistoricalBarUpdate>, Some(200), 162),
         case("PnL", rejection_ends::<PnL>, Some(321), 200),
