@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -78,7 +78,7 @@ one table (#1180). `Unknown(i32)` keeps `Copy` and derived serde. There is no cl
 
 **One-shot fields take the same shape.** `ArticleType` (`news_article`) decoded closed, returning
 `Error::Parse` for an unmodeled code (#1070). That failed the call and discarded a body the caller
-could still use, so it is now open like every other integer-coded enum. An error suits a frame
+could still use, so it is now open like every other integer-coded enum (#1233). An error suits a frame
 that can't be used at all; an unmodeled code in one field isn't that.
 
 **The wire code lives in the `impl_wire_code!` table, not a discriminant.** No `#[repr(i32)]`, no
@@ -155,3 +155,6 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
   `"None"` to `None` before `FromStr`, which keeps the bare `"None"` as `Unknown("None")`.
 - #1222 — wire-string serde for open enums moved from hand-written impls to
   `impl_wire_enum!(Name, fallback Unknown, serde)`.
+- #1233 — counter-example to #1070: `ArticleType` reopened with `Unknown(i32)` on
+  `impl_wire_code!`. Decoding closed on a one-shot failed `news_article` and discarded the body;
+  the one-shot exception to the open shape is retired.
