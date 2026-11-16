@@ -40,7 +40,9 @@ terminates the subscription, so a value IBKR adds later must not become an outag
 case-sensitive (a case variant lands in `Unknown`, never coerced). The enum stays exhaustive so
 the compiler points callers at the new arm; the payload variant costs `Copy` and makes `as_str`
 return `&str`. No decode-time log — callers own the signal (`docs/migration-4.0.md` §9).
-One-shot and outbound-only enums stay closed: a hard error there fails one call, not a stream.
+Outbound-only enums stay closed: the caller picks the value, so there is nothing unrecognized to
+keep. A one-shot field is open too: a hard error fails the call and discards the rest of the
+frame (#1233).
 
 Serde: if an open enum serializes as the wire string (`OrderStatusKind`, `TimeInForce`,
 `OrderType`), use `impl_wire_enum!(Name, fallback Unknown, serde)`, which generates serde and the
@@ -76,8 +78,8 @@ no longer compiles with a payload variant. `impl_wire_code!` (`src/macros.rs`) g
 one table (#1180). `Unknown(i32)` keeps `Copy` and derived serde. There is no closed
 `TryFrom<i32>` form for streaming paths.
 
-**One-shot fields take the same shape.** `ArticleType` (`news_article`) decoded closed, returning
-`Error::Parse` for an unmodeled code (#1070). That failed the call and discarded a body the caller
+**One-shot fields take the same shape.** `ArticleType` (`news_article`) used to decode closed,
+returning `Error::Parse` for an unmodeled code (#1070, superseded). That failed the call and discarded a body the caller
 could still use, so it is now open like every other integer-coded enum (#1233). An error suits a frame
 that can't be used at all; an unmodeled code in one field isn't that.
 

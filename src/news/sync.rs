@@ -99,9 +99,8 @@ impl Client {
     /// * `provider_code` - Short code indicating news provider, e.g. FLY.
     /// * `article_id`    - ID of the specific article.
     ///
-    /// # Errors
-    ///
-    /// [`Error::Parse`] if TWS reports an article type other than text (`0`) or binary (`1`).
+    /// An article type this version doesn't model comes back as [`ArticleType::Unknown`], with
+    /// `article_text` as TWS sent it.
     ///
     /// # Examples
     ///

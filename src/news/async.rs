@@ -97,9 +97,8 @@ impl Client {
 
     /// Requests news article body
     ///
-    /// # Errors
-    ///
-    /// [`Error::Parse`] if TWS reports an article type other than text (`0`) or binary (`1`).
+    /// An article type this version doesn't model comes back as [`ArticleType::Unknown`], with
+    /// `article_text` as TWS sent it.
     ///
     /// # Examples
     ///

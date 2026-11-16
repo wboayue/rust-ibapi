@@ -49,24 +49,22 @@ fn decode_news_article_proto_works() {
 
 #[test]
 fn decode_news_article_proto_article_types() {
-    let decode = |article_type| {
-        decode_news_article_proto(crate::proto::NewsArticle {
+    let cases = [
+        ("text", Some(0), ArticleType::Text),
+        ("binary", Some(1), ArticleType::Binary),
+        ("absent is code 0", None, ArticleType::Text),
+        ("unmodeled code is kept, not an error", Some(2), ArticleType::Unknown(2)),
+    ];
+    for (label, article_type, expected) in cases {
+        let body = decode_news_article_proto(crate::proto::NewsArticle {
             req_id: Some(1),
             article_type,
-            article_text: None,
+            article_text: Some("body".into()),
         })
-    };
-
-    assert_eq!(decode(Some(1)).unwrap().article_type, ArticleType::Binary);
-    assert_eq!(decode(None).unwrap().article_type, ArticleType::Text, "absent is code 0");
-    let unknown = decode_news_article_proto(crate::proto::NewsArticle {
-        req_id: Some(1),
-        article_type: Some(2),
-        article_text: Some("body".into()),
-    })
-    .unwrap();
-    assert_eq!(unknown.article_type, ArticleType::Unknown(2), "an unmodeled code is kept, not an error");
-    assert_eq!(unknown.article_text, "body", "the body survives an unmodeled type");
+        .unwrap_or_else(|e| panic!("{label}: {e:?}"));
+        assert_eq!(body.article_type, expected, "{label}");
+        assert_eq!(body.article_text, "body", "{label}: body passed through");
+    }
 }
 
 #[test]

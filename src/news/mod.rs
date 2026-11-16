@@ -112,7 +112,7 @@ pub(crate) enum HistoricalNewsFrame {
     },
 }
 
-/// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)
+/// The type of a news article's body: text, binary, or a code this version doesn't model.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
 pub enum ArticleType {
@@ -135,7 +135,7 @@ impl_wire_code!(ArticleType {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
 pub struct NewsArticleBody {
-    /// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)
+    /// The type of the body: text, binary, or [`ArticleType::Unknown`].
     pub article_type: ArticleType,
     /// The body of article (if [ArticleType::Binary], the binary data is encoded using the Base64 scheme)
     pub article_text: String,
