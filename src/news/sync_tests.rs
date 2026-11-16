@@ -4,7 +4,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::news::{ArticleType, BulletinType};
+use crate::news::{AllMessages, ArticleType, BulletinType};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::market_data::market_data_request;
@@ -56,7 +56,7 @@ fn news_bulletins() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
-    let subscription = client.news_bulletins(true).expect("request news bulletins failed");
+    let subscription = client.news_bulletins(AllMessages::Yes).expect("request news bulletins failed");
 
     assert_request(&message_bus, 0, &news_bulletins_request().all_messages(true));
 

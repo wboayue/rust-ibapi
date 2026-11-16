@@ -1,6 +1,7 @@
 use time::OffsetDateTime;
 
 use crate::news::builder::NewsBound;
+use crate::news::AllMessages;
 
 #[cfg(test)]
 #[path = "encoders_tests.rs"]
@@ -10,12 +11,12 @@ pub(in crate::news) fn encode_request_news_providers() -> Result<Vec<u8>, crate:
     crate::proto::encoders::encode_empty_proto!(NewsProvidersRequest, crate::messages::OutgoingMessages::RequestNewsProviders)
 }
 
-pub(in crate::news) fn encode_request_news_bulletins(all_messages: bool) -> Result<Vec<u8>, crate::Error> {
+pub(in crate::news) fn encode_request_news_bulletins(all_messages: AllMessages) -> Result<Vec<u8>, crate::Error> {
     use crate::messages::{encode_protobuf_message, OutgoingMessages};
     use crate::proto::encoders::some_bool;
     use prost::Message;
     let request = crate::proto::NewsBulletinsRequest {
-        all_messages: some_bool(all_messages),
+        all_messages: some_bool(matches!(all_messages, AllMessages::Yes)),
     };
     Ok(encode_protobuf_message(
         OutgoingMessages::RequestNewsBulletins as i32,

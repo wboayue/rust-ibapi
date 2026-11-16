@@ -2856,7 +2856,7 @@ async fn wait_for_fill_lookup_ends_do_not_end_next_requests() {
 
     let outcome = client.wait_for_fill(7, Duration::ZERO).await.unwrap();
     assert_eq!(outcome, crate::orders::OrderOutcome::TimedOut(None));
-    let mut orders = client.completed_orders(false).await.unwrap();
+    let mut orders = client.completed_orders(crate::orders::ApiOnly::No).await.unwrap();
     let first = tokio::time::timeout(Duration::from_secs(1), orders.next()).await.expect("no reply");
     assert!(
         matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order.order_id == 9),

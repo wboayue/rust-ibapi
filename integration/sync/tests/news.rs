@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use ibapi::contracts::Contract;
+use ibapi::news::AllMessages;
 use ibapi_integration_sync::connect;
 use ibapi_test::ClientId;
 
@@ -19,7 +20,7 @@ fn news_bulletins() {
     let client_id = ClientId::get();
     let client = connect(&client_id);
 
-    let subscription = client.news_bulletins(true).expect("news_bulletins failed");
+    let subscription = client.news_bulletins(AllMessages::Yes).expect("news_bulletins failed");
 
     // Bulletins may not arrive immediately - just verify subscription was created
     let _item = subscription.next_timeout(Duration::from_secs(3));

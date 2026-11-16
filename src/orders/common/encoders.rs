@@ -2,7 +2,7 @@ use time::OffsetDateTime;
 
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
-use crate::orders::{ExecutionFilter, ExerciseAction, Order, OrderCancel, OrderCondition, SoftDollarTier};
+use crate::orders::{ApiOnly, AutoBind, ExecutionFilter, ExerciseAction, Order, OrderCancel, OrderCondition, SoftDollarTier};
 use crate::proto;
 use crate::proto::encoders::{some_bool, some_display, some_f64_ne, some_i32_ne, some_i64_ne, some_str, tag_values_to_map};
 use crate::Error;
@@ -41,10 +41,10 @@ pub(crate) fn encode_all_open_orders() -> Result<Vec<u8>, Error> {
     crate::proto::encoders::encode_empty_proto!(AllOpenOrdersRequest, OutgoingMessages::RequestAllOpenOrders)
 }
 
-pub(crate) fn encode_auto_open_orders(auto_bind: bool) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_auto_open_orders(auto_bind: AutoBind) -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::AutoOpenOrdersRequest {
-        auto_bind: some_bool(auto_bind),
+        auto_bind: some_bool(matches!(auto_bind, AutoBind::Yes)),
     };
     Ok(crate::messages::encode_protobuf_message(
         OutgoingMessages::RequestAutoOpenOrders as i32,
@@ -52,10 +52,10 @@ pub(crate) fn encode_auto_open_orders(auto_bind: bool) -> Result<Vec<u8>, Error>
     ))
 }
 
-pub(crate) fn encode_completed_orders(api_only: bool) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_completed_orders(api_only: ApiOnly) -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::CompletedOrdersRequest {
-        api_only: some_bool(api_only),
+        api_only: some_bool(matches!(api_only, ApiOnly::Yes)),
     };
     Ok(crate::messages::encode_protobuf_message(
         OutgoingMessages::RequestCompletedOrders as i32,
