@@ -133,23 +133,20 @@ fn notice_classifies_order_message_warning_from_text() {
     assert!(rejection.is_error());
 }
 
-/// TWS binds 165 "HMDS server connection was successful" to a historical
-/// request when the farm connects on demand; the data follows (#1136). Other
-/// 165 texts stay errors.
+/// Code 165 reports on a query TWS goes on with, in every text seen live: the
+/// farm connecting before a historical request's bars (#1136), an empty scan
+/// (#886), and a bond scan's partial result before its rows.
 #[test]
-fn notice_classifies_hmds_connected_as_warning() {
-    let connected = helpers::test_notice(HMDS_QUERY_MESSAGE_CODE, HMDS_CONNECTED_MESSAGE);
-    assert!(connected.is_warning());
-    assert_eq!(connected.category(), NoticeCategory::Warning);
-    assert!(connected.is_informational());
-
+fn notice_classifies_every_hmds_query_message_as_warning() {
     for message in [
+        HMDS_CONNECTED_MESSAGE,
         "Historical Market Data Service query message:no items retrieved",
-        "Different query failure",
+        "Historical Market Data Service query message:10 out of 18957 items retrieved",
     ] {
         let notice = helpers::test_notice(HMDS_QUERY_MESSAGE_CODE, message);
-        assert!(!notice.is_warning(), "{message:?}");
-        assert_eq!(notice.category(), NoticeCategory::Error, "{message:?}");
+        assert!(notice.is_warning(), "{message:?}");
+        assert_eq!(notice.category(), NoticeCategory::Warning, "{message:?}");
+        assert!(notice.is_informational(), "{message:?}");
     }
 }
 
@@ -623,15 +620,14 @@ fn log_level_follows_category() {
     let order_warning = Notice::synthesized(ORDER_MESSAGE_CODE, "Order Message:\nWarning: outside RTH".into());
     assert_eq!(order_warning.log_level(), log::Level::Warn);
     assert_eq!(Notice::synthesized(ORDER_MESSAGE_CODE, "rejected".into()).log_level(), log::Level::Error);
-    // 165 grades by its text too: HMDS connected is info, any other 165 an error.
-    assert_eq!(
-        Notice::synthesized(HMDS_QUERY_MESSAGE_CODE, HMDS_CONNECTED_MESSAGE.into()).log_level(),
-        log::Level::Info
-    );
-    assert_eq!(
-        Notice::synthesized(HMDS_QUERY_MESSAGE_CODE, "no items retrieved".into()).log_level(),
-        log::Level::Error
-    );
+    // 165, whatever its text, is a routine query report: info.
+    for message in [HMDS_CONNECTED_MESSAGE, "no items retrieved", "10 out of 18957 items retrieved"] {
+        assert_eq!(
+            Notice::synthesized(HMDS_QUERY_MESSAGE_CODE, message.into()).log_level(),
+            log::Level::Info,
+            "{message:?}"
+        );
+    }
     // Connectivity lost, socket reset, request errors (316, 354), order
     // rejections (200, 201) and errors: error.
     for code in [

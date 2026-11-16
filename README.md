@@ -573,7 +573,7 @@ They arrive as `SubscriptionItem::Notice` only on the subscription returned by t
 TWS emits two flavors of notification alongside subscription data. Routing depends on whether a notice carries a `request_id`, not on its code alone:
 
 - **Per-subscription notices** — warnings in the 2100..=2199 band and order-cancel code 202 that carry a `request_id` mapping back to a specific subscription. They arrive on that subscription as `SubscriptionItem::Notice(_)`; the stream stays open.
-  - **Scanner "no items retrieved"** — an empty scan (common before regular hours) reports error code 165 with that text. A scanner subscription delivers it as `SubscriptionItem::Notice(_)` and stays open; later batches, including empty ones, still arrive. The notice's `category()` is still `Error`, so don't end a scanner loop on `!notice.is_informational()` alone. On other requests, and with any other text, 165 still ends the stream.
+  - **Code 165, "Historical Market Data Service query message"** — a warning on any request: TWS goes on with the query. It reports an empty scan ("no items retrieved", common before regular hours), a bond scan's partial result ("10 out of 18957 items retrieved"), and the data farm connecting before historical bars. A subscription delivers it as `SubscriptionItem::Notice(_)` and stays open.
 - **Globally routed notices** — connectivity codes 1100/1101/1102 and farm-status codes (2103–2108, 2119, 2157, 2158 — inside the 2100 band, but sent without a `request_id`) are not delivered to any subscription; subscribe via [`Client::notice_stream()`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream) instead.
 
 ### Per-subscription notices

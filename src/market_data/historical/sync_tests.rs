@@ -122,6 +122,29 @@ fn head_timestamp() {
     );
 }
 
+/// A 165 bound to a one-shot is a warning: the call reads past it to its answer.
+#[test]
+fn head_timestamp_reads_past_hmds_query_notice() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_error_response(
+            TEST_REQ_ID_FIRST,
+            HMDS_QUERY_MESSAGE_CODE,
+            "Historical Market Data Service query message:no items retrieved",
+        ),
+        proto_response(
+            IncomingMessages::HeadTimestamp,
+            head_timestamp_response().unix_timestamp(1678323335).encode_proto(),
+        ),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let head_timestamp = client
+        .head_timestamp(&Contract::stock("MSFT").build(), WhatToShow::Trades, TradingHours::Regular)
+        .expect("the 165 must not fail the call");
+
+    assert_eq!(head_timestamp, OffsetDateTime::from_unix_timestamp(1678323335).unwrap());
+}
+
 #[test]
 fn histogram_data_malformed_size_fails_the_request() {
     // End-to-end through the public API: a malformed size must fail the request
