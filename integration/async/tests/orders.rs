@@ -3,7 +3,8 @@ use std::time::Instant;
 use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::{
-    Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderType, OrderUpdate, Orders, PlaceOrder,
+    Action, ApiOnly, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderType, OrderUpdate, Orders,
+    PlaceOrder,
 };
 use ibapi::subscriptions::{Subscription, SubscriptionItem};
 use ibapi::{Client, Error, NoticeCategory};
@@ -88,7 +89,7 @@ async fn all_open_orders() {
 async fn completed_orders() {
     let (client, _client_id) = connect().await;
 
-    let mut subscription = client.completed_orders(false).await.expect("completed_orders failed");
+    let mut subscription = client.completed_orders(ApiOnly::No).await.expect("completed_orders failed");
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
 }
 
@@ -97,7 +98,7 @@ async fn completed_orders() {
 async fn completed_orders_api_only() {
     let (client, _client_id) = connect().await;
 
-    let mut subscription = client.completed_orders(true).await.expect("completed_orders api_only failed");
+    let mut subscription = client.completed_orders(ApiOnly::Yes).await.expect("completed_orders api_only failed");
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
 }
 

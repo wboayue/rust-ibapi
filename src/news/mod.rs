@@ -50,6 +50,18 @@ pub struct NewsBulletin {
     pub exchange: String,
 }
 
+/// Which bulletins [`news_bulletins`](crate::Client::news_bulletins) delivers.
+///
+/// Sent as TWS's `allMessages` flag: `Yes` is `true`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AllMessages {
+    /// The existing bulletins for the current day, then new bulletins.
+    Yes,
+    /// Only new bulletins.
+    No,
+}
+
 /// The type of a [`NewsBulletin`].
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

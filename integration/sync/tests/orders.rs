@@ -3,7 +3,8 @@ use std::time::{Duration, Instant};
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::{
-    Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderType, OrderUpdate, Orders, PlaceOrder,
+    Action, ApiOnly, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderType, OrderUpdate, Orders,
+    PlaceOrder,
 };
 use ibapi::subscriptions::sync::Subscription;
 use ibapi::subscriptions::SubscriptionItem;
@@ -85,7 +86,7 @@ fn all_open_orders() {
 fn completed_orders() {
     let (client, _client_id) = connect();
 
-    let subscription = client.completed_orders(false).expect("completed_orders failed");
+    let subscription = client.completed_orders(ApiOnly::No).expect("completed_orders failed");
     let _item = subscription.next_timeout(Duration::from_secs(5));
 }
 
@@ -94,7 +95,7 @@ fn completed_orders() {
 fn completed_orders_api_only() {
     let (client, _client_id) = connect();
 
-    let subscription = client.completed_orders(true).expect("completed_orders api_only failed");
+    let subscription = client.completed_orders(ApiOnly::Yes).expect("completed_orders api_only failed");
     let _item = subscription.next_timeout(Duration::from_secs(5));
 }
 

@@ -11,7 +11,7 @@ use clap::builder::PossibleValue;
 use clap::{arg, Command};
 use ibapi::client::blocking::{Client, Subscription};
 
-use ibapi::orders::Orders;
+use ibapi::orders::{ApiOnly, AutoBind, Orders};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -45,12 +45,12 @@ fn main() -> anyhow::Result<()> {
         }
         "auto_open" => {
             println!("Auto open orders:");
-            let orders = client.auto_open_orders(false)?;
+            let orders = client.auto_open_orders(AutoBind::No)?;
             print_orders(orders);
         }
         "completed" => {
             println!("Completed orders:");
-            let orders = client.completed_orders(false)?;
+            let orders = client.completed_orders(ApiOnly::No)?;
             print_orders(orders);
         }
         kind => {

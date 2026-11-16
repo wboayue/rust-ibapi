@@ -3,7 +3,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::news::{ArticleType, BulletinType};
+use crate::news::{AllMessages, ArticleType, BulletinType};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::market_data_request;
@@ -57,7 +57,7 @@ async fn news_bulletins() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
-    let mut subscription = client.news_bulletins(true).await.expect("request news bulletins failed");
+    let mut subscription = client.news_bulletins(AllMessages::Yes).await.expect("request news bulletins failed");
 
     assert_request(&message_bus, 0, &news_bulletins_request().all_messages(true));
 
@@ -368,7 +368,7 @@ async fn news_bulletin_cancellation() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_NEWS_DATA);
 
-    let mut subscription = client.news_bulletins(true).await.unwrap();
+    let mut subscription = client.news_bulletins(AllMessages::Yes).await.unwrap();
     let _ = subscription.next().await;
 
     assert_request(&message_bus, 0, &news_bulletins_request().all_messages(true));
