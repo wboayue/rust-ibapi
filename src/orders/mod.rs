@@ -318,8 +318,9 @@ pub struct Order {
     /// - `Away`
     /// - `PTA` (post trade allocation)
     pub delta_neutral_clearing_intent: String,
-    /// Specifies whether the order is an Open or a Close order and is used when the hedge involves a CFD and and the order is clearing away.
-    pub delta_neutral_open_close: String,
+    /// Specifies whether the order is an Open or a Close order and is used when the hedge involves a CFD and the order is clearing away.
+    /// `None` is sent as no value, and an absent or empty value decodes to it.
+    pub delta_neutral_open_close: Option<OrderOpenClose>,
     /// Used when the hedge involves a stock and indicates whether or not it is sold short.
     pub delta_neutral_short_sale: bool,
     /// Indicates a short sale Delta Neutral order: [`ShortSaleSlot::Broker`] (the clearing broker
@@ -658,7 +659,7 @@ impl Default for Order {
             delta_neutral_settling_firm: "".to_owned(),
             delta_neutral_clearing_account: "".to_owned(),
             delta_neutral_clearing_intent: "".to_owned(),
-            delta_neutral_open_close: "".to_owned(),
+            delta_neutral_open_close: None,
             delta_neutral_short_sale: false,
             delta_neutral_short_sale_slot: ShortSaleSlot::None,
             delta_neutral_designated_location: "".to_owned(),

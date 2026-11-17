@@ -596,6 +596,9 @@ connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
   `"0"`.
 - Settles that a stock order carries no reference future, so absent decodes as `None`, as C#
   leaves it unset (`HasRefFuturesConId`). `filledQuantity` is always sent, so it stays `f64`.
+- *Live 2026-11-15 and 2026-11-16 (several sessions), paper, server 226; raw captures:* every
+  OpenOrder echo of the AAPL and BTC orders placed (limit, stop and market; none a
+  delta-neutral order) omits `delta_neutral_open_close`, so absent decodes as `None`.
 - **Not probed:** a futures or EFP order, where `refFuturesConId` would be set; a filled or
-  partially filled order.
+  partially filled order; a delta-neutral order, where `delta_neutral_open_close` would be set.
 

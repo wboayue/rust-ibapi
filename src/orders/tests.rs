@@ -224,6 +224,26 @@ fn order_open_close_preserves_unknown_wire_value() {
 }
 
 #[test]
+fn delta_neutral_open_close_serde_unset_is_null_and_rejects_empty_string() {
+    // An unset field serializes as null and a set one as its wire code. 5.x JSON
+    // holds "" for an unset field, which does not read back.
+    let unset = serde_json::to_value(Order::default()).unwrap();
+    assert_eq!(unset["delta_neutral_open_close"], serde_json::Value::Null);
+
+    let order = Order {
+        delta_neutral_open_close: Some(OrderOpenClose::Open),
+        ..Default::default()
+    };
+    let set = serde_json::to_value(&order).unwrap();
+    assert_eq!(set["delta_neutral_open_close"], "O");
+    assert_eq!(serde_json::from_value::<Order>(set).unwrap(), order);
+
+    let mut legacy = unset;
+    legacy["delta_neutral_open_close"] = "".into();
+    assert!(serde_json::from_value::<Order>(legacy).is_err(), "empty string must not deserialize");
+}
+
+#[test]
 fn oca_type_round_trips_every_wire_code() {
     check_wire_code_round_trip(
         &[

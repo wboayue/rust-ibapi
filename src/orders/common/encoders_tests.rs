@@ -1,6 +1,6 @@
 use super::*;
 use crate::orders::common::decoders::decode_order;
-use crate::orders::{self, Action, OrderType, ShortSaleSlot, TimeInForce, WhatIfType};
+use crate::orders::{self, Action, OrderOpenClose, OrderType, ShortSaleSlot, TimeInForce, WhatIfType};
 use crate::testdata::builders::orders::{auto_open_orders_request, completed_orders_request};
 use crate::testdata::builders::RequestEncoder;
 
@@ -48,6 +48,29 @@ fn encode_order_deactivate() {
     let proto = encode_order(&order);
 
     assert_eq!(proto.deactivate, Some(true));
+}
+
+#[test]
+fn encode_order_open_close_fields() {
+    let cases = [
+        (None, None),
+        (Some(OrderOpenClose::Open), Some("O")),
+        (Some(OrderOpenClose::Close), Some("C")),
+        (Some(OrderOpenClose::Unknown("X".into())), Some("X")),
+        (Some(OrderOpenClose::Unknown(String::new())), None),
+    ];
+    for (value, expected) in cases {
+        let order = Order {
+            open_close: value.clone(),
+            delta_neutral_open_close: value.clone(),
+            ..Default::default()
+        };
+
+        let proto = encode_order(&order);
+
+        assert_eq!(proto.open_close.as_deref(), expected, "open_close {value:?}");
+        assert_eq!(proto.delta_neutral_open_close.as_deref(), expected, "delta_neutral_open_close {value:?}");
+    }
 }
 
 #[test]

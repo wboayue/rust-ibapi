@@ -1778,3 +1778,30 @@ for update in subscription.iter_data() {
 
 A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
 Check `notice.code` to tell them apart.
+
+### 61. `Order::delta_neutral_open_close` is `Option<OrderOpenClose>`
+
+It was a `String` (`"O"`, `"C"`, or empty for unset) beside `Order::open_close`, which is an
+`Option<orders::OrderOpenClose>`. Both now have that type. `None` is unset and is sent as no
+value; a value the crate doesn't model is `OrderOpenClose::Unknown(raw)` and is sent back
+unchanged.
+
+```rust,ignore
+use ibapi::orders::OrderOpenClose;
+
+// order: ibapi::orders::Order
+
+// 5.x
+order.delta_neutral_open_close = "O".to_string();
+if order.delta_neutral_open_close.is_empty() { /* unset */ }
+
+// 6.0
+order.delta_neutral_open_close = Some(OrderOpenClose::Open);
+if order.delta_neutral_open_close.is_none() { /* unset */ }
+let code = order.delta_neutral_open_close.as_ref().map(OrderOpenClose::as_str); // where "O" / "C" is wanted
+```
+
+The compiler finds every assignment and comparison. It doesn't catch the serialized form:
+`Order` derives `Serialize` / `Deserialize`, and an unset field now serializes as `null` where
+it was `""`. A set field is the wire code (`"O"`, §47) as in 5.x. Read from 5.x JSON, the field
+accepts a code and fails on `""`; 5.x `Order` JSON as a whole already doesn't load (§46, §47).
