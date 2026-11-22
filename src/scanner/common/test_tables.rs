@@ -24,10 +24,8 @@ pub(crate) const TERMINAL_SCANNER_ERRORS: &[(i32, &str)] = &[(309, "Maximum numb
 
 pub(crate) fn hmds_query_parameters() -> ScannerSubscription {
     ScannerSubscription {
-        instrument: Some("STK".into()),
         location_code: Some("STK.US".into()),
-        scan_code: Some("TOP_OPEN_PERC_GAIN".into()),
-        ..Default::default()
+        ..ScannerSubscription::new("STK", "TOP_OPEN_PERC_GAIN")
     }
 }
 

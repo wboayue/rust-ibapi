@@ -19,14 +19,12 @@ fn scanner_subscription_top_gainers() {
     let client = connect(&client_id);
 
     let sub = ScannerSubscription {
-        scan_code: Some("TOP_PERC_GAIN".to_string()),
-        instrument: Some("STK".to_string()),
         location_code: Some("STK.US.MAJOR".to_string()),
         number_of_rows: 10,
-        ..Default::default()
+        ..ScannerSubscription::new("STK", "TOP_PERC_GAIN")
     };
 
-    let subscription = client.scanner_subscription(&sub, &[]).expect("scanner_subscription failed");
+    let subscription = client.scanner_subscription(&sub).expect("scanner_subscription failed");
 
     let results = subscription
         .next_data()

@@ -16,13 +16,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create scanner subscription for top percentage gainers
     let subscription = ScannerSubscription {
         number_of_rows: 10,
-        instrument: Some("STK".to_string()),
         location_code: Some("STK.US.MAJOR".to_string()),
-        scan_code: Some("TOP_PERC_GAIN".to_string()),
         above_price: Some(5.0),
         below_price: Some(1000.0),
         above_volume: Some(100000),
-        ..Default::default()
+        ..ScannerSubscription::new("STK", "TOP_PERC_GAIN")
     };
 
     println!("Scanning for top percentage gainers...");
@@ -32,10 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - Volume above 100,000");
     println!("  - Top 10 results");
 
-    // No additional filters for this example
-    let filters = vec![];
-
-    let scanner_results = client.scanner_subscription(&subscription, &filters).await?;
+    let scanner_results = client.scanner_subscription(&subscription).await?;
 
     println!("\nScanning market... (Press Ctrl+C to stop)");
 

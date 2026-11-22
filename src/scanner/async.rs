@@ -4,7 +4,6 @@ use super::common::{decoders, encoders};
 use super::*;
 use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, expect_proto};
-use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};
@@ -49,15 +48,11 @@ impl Client {
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     let mut sub = ScannerSubscription::default();
-    ///     sub.instrument = Some("STK".to_string());
+    ///     let mut sub = ScannerSubscription::new("STK", "TOP_PERC_GAIN");
     ///     sub.location_code = Some("STK.US.MAJOR".to_string());
-    ///     sub.scan_code = Some("TOP_PERC_GAIN".to_string());
-    ///
-    ///     let filter: Vec<ibapi::contracts::TagValue> = Vec::new();
     ///
     ///     let subscription = client
-    ///         .scanner_subscription(&sub, &filter)
+    ///         .scanner_subscription(&sub)
     ///         .await
     ///         .expect("scanner_subscription failed");
     ///
@@ -78,13 +73,9 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn scanner_subscription(
-        &self,
-        subscription: &ScannerSubscription,
-        filter: &[TagValue],
-    ) -> Result<Subscription<Vec<ScannerData>>, Error> {
+    pub async fn scanner_subscription(&self, subscription: &ScannerSubscription) -> Result<Subscription<Vec<ScannerData>>, Error> {
         let builder = self.request();
-        let request = encoders::encode_scanner_subscription(builder.request_id(), subscription, filter)?;
+        let request = encoders::encode_scanner_subscription(builder.request_id(), subscription)?;
         builder.send(request).await
     }
 }

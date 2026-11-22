@@ -17,13 +17,9 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let scanner_subscription = complex_orders_and_trades();
-    let filter = vec![contracts::TagValue {
-        tag: "underConID".to_string(),
-        value: "265598".to_string(),
-    }];
 
     let subscription = client
-        .scanner_subscription(&scanner_subscription, &filter)
+        .scanner_subscription(&scanner_subscription)
         .expect("request scanner parameters failed");
 
     match subscription.next_data() {
@@ -42,9 +38,11 @@ fn main() {
 
 fn complex_orders_and_trades() -> scanner::ScannerSubscription {
     scanner::ScannerSubscription {
-        instrument: Some("NATCOMB".to_string()),
         location_code: Some("NATCOMB.OPT.US".to_string()),
-        scan_code: Some("COMBO_LATEST_TRADE".to_string()),
-        ..Default::default()
+        filter_options: vec![contracts::TagValue {
+            tag: "underConID".to_string(),
+            value: "265598".to_string(),
+        }],
+        ..scanner::ScannerSubscription::new("NATCOMB", "COMBO_LATEST_TRADE")
     }
 }

@@ -17,16 +17,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create scanner subscription for high option volume stocks
     let subscription = ScannerSubscription {
         number_of_rows: 25,
-        instrument: Some("STK".to_string()),
         location_code: Some("STK.US".to_string()),
-        scan_code: Some("OPT_VOLUME_MOST_ACTIVE".to_string()),
         above_price: Some(10.0),
         below_price: Some(500.0),
         above_volume: Some(500000),
         average_option_volume_above: Some(10000),
         market_cap_above: Some(1_000_000_000.0),     // $1B market cap
         stock_type_filter: Some("CORP".to_string()), // Corporations only
-        ..Default::default()
+        // Further filters as tag-value pairs
+        filter_options: vec![TagValue {
+            tag: "changePercAbove".to_string(),
+            value: "2".to_string(), // At least 2% change
+        }],
+        ..ScannerSubscription::new("STK", "OPT_VOLUME_MOST_ACTIVE")
     };
 
     println!("Scanning for stocks with high option volume...");
@@ -39,13 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - Corporations only");
     println!("  - Top 25 results");
 
-    // Add additional filters using TagValue
-    let filters = vec![TagValue {
-        tag: "changePercAbove".to_string(),
-        value: "2".to_string(), // At least 2% change
-    }];
-
-    let scanner_results = client.scanner_subscription(&subscription, &filters).await?;
+    let scanner_results = client.scanner_subscription(&subscription).await?;
 
     println!("\nScanning market... (Press Ctrl+C to stop)");
 
