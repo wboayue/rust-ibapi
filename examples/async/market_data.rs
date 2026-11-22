@@ -55,7 +55,7 @@ async fn example_streaming_with_tick_types(client: &Arc<Client>, contract: &Cont
     // https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
     let mut subscription = client
         .market_data(contract)
-        .generic_ticks(&["233", "236", "293"]) // RTVolume, Shortable, Trade Count
+        .generic_ticks([GenericTick::RT_VOLUME, GenericTick::SHORTABLE, GenericTick::TRADE_COUNT])
         .subscribe()
         .await?;
 
@@ -120,7 +120,11 @@ async fn example_builder_chaining(client: &Arc<Client>, contract: &Contract) -> 
     // Later method calls override earlier ones for the same setting.
     let mut subscription = client
         .market_data(contract)
-        .generic_ticks(&["100", "101", "104"]) // Option Volume, Open Interest, Historical Vol
+        .generic_ticks([
+            GenericTick::OPTION_VOLUME,
+            GenericTick::OPTION_OPEN_INTEREST,
+            GenericTick::OPTION_HISTORICAL_VOLATILITY,
+        ])
         .snapshot() // Initially set to snapshot mode
         .streaming() // Override to streaming mode (this takes precedence)
         .subscribe()
@@ -152,7 +156,7 @@ async fn example_builder_chaining(client: &Arc<Client>, contract: &Contract) -> 
 async fn example_observe_notices(client: &Arc<Client>, contract: &Contract) -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 4: Observing notices via SubscriptionItem\n");
 
-    let subscription = client.market_data(contract).generic_ticks(&["233"]).subscribe().await?;
+    let subscription = client.market_data(contract).generic_ticks([GenericTick::RT_VOLUME]).subscribe().await?;
 
     let mut events = subscription.take(8);
     while let Some(event) = events.next().await {

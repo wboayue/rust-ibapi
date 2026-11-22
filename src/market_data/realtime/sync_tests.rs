@@ -443,7 +443,15 @@ fn basic_market_data() {
     let generic_ticks = &["100", "101", "104", "106"]; // Option Volume, OI, Historical Vol, Implied Vol
 
     // Test subscription creation
-    let result = client.market_data(&contract).generic_ticks(generic_ticks).subscribe();
+    let result = client
+        .market_data(&contract)
+        .generic_ticks([
+            GenericTick::OPTION_VOLUME,
+            GenericTick::OPTION_OPEN_INTEREST,
+            GenericTick::OPTION_HISTORICAL_VOLATILITY,
+            GenericTick::OPTION_IMPLIED_VOLATILITY,
+        ])
+        .subscribe();
 
     // Test receiving data
     let subscription = result.expect("Failed to create market data subscription");
@@ -509,7 +517,10 @@ fn market_data_with_combo_legs() {
     let generic_ticks: Vec<&str> = vec!["233", "456"];
 
     // Test subscription creation
-    let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe();
+    let result = client
+        .market_data(&contract)
+        .generic_ticks([GenericTick::RT_VOLUME, GenericTick::IB_DIVIDENDS])
+        .subscribe();
     assert!(result.is_ok(), "Failed to create market data subscription with combo legs");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -537,7 +548,7 @@ fn market_data_with_delta_neutral() {
     let generic_ticks: Vec<&str> = vec![];
 
     // Test subscription creation
-    let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe();
+    let result = client.market_data(&contract).generic_ticks(Vec::<GenericTick>::new()).subscribe();
     assert!(result.is_ok(), "Failed to create market data subscription with delta neutral");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -569,7 +580,7 @@ fn market_data_regulatory_snapshot() {
     // Test subscription creation
     let result = client
         .market_data(&contract)
-        .generic_ticks(&generic_ticks)
+        .generic_ticks(Vec::<GenericTick>::new())
         .snapshot()
         .regulatory_snapshot()
         .subscribe();

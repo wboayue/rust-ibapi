@@ -6,8 +6,8 @@ use crate::{client::sync::Client, Error};
 
 use super::common::{decoders, encoders};
 use super::{
-    Bar, DepthMarketDataDescription, MarketDataBuilder, MarketDepthBuilder, MarketDepths, RealtimeBarsBuilder, TickByTickBuilder, TickTypes,
-    WhatToShow,
+    Bar, DepthMarketDataDescription, GenericTick, MarketDataBuilder, MarketDepthBuilder, MarketDepths, RealtimeBarsBuilder, TickByTickBuilder,
+    TickTypes, WhatToShow,
 };
 use crate::market_data::{SmartDepth, TradingHours};
 use crate::subscriptions::StreamDecoder;
@@ -23,14 +23,14 @@ impl Client {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::realtime::TickTypes;
+    /// use ibapi::market_data::realtime::{GenericTick, TickTypes};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("AAPL").build();
     ///
     /// // Subscribe to real-time streaming data with specific tick types
     /// let subscription = client.market_data(&contract)
-    ///     .generic_ticks(&["233", "236"])  // RTVolume and Shortable
+    ///     .generic_ticks([GenericTick::RT_VOLUME, GenericTick::SHORTABLE])
     ///     .subscribe()
     ///     .expect("subscription failed");
     ///
@@ -235,7 +235,7 @@ impl Client {
 pub(crate) fn market_data(
     client: &Client,
     contract: &Contract,
-    generic_ticks: &[&str],
+    generic_ticks: &[GenericTick],
     snapshot: bool,
     regulatory_snapshot: bool,
 ) -> Result<Subscription<TickTypes>, Error> {

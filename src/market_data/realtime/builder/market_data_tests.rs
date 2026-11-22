@@ -5,7 +5,7 @@ mod sync_tests {
         create_blocking_test_client_with_version, proto_response, request_message_count, TEST_REQ_ID_FIRST,
     };
     use crate::contracts::Contract;
-    use crate::market_data::realtime::TickTypes;
+    use crate::market_data::realtime::{GenericTick, TickTypes};
     use crate::messages::{IncomingMessages, OutgoingMessages};
     use crate::server_versions;
     use crate::testdata::builders::market_data::{market_data_request, tick_price, tick_size, tick_snapshot_end};
@@ -30,12 +30,56 @@ mod sync_tests {
 
         let _subscription = client
             .market_data(&contract)
-            .generic_ticks(&["233", "236"])
+            .generic_ticks([233, 236])
             .subscribe()
             .expect("Failed to create subscription");
 
         assert_eq!(request_message_count(&bus), 1, "Should send one request message");
         assert_request_msg_id(&bus, 0, OutgoingMessages::RequestMarketData);
+    }
+
+    /// Constants, plain numbers and a borrowed list all reach the wire as the numbers.
+    #[test]
+    fn market_data_builder_generic_ticks_accepts_constants_numbers_and_references() {
+        let contract = Contract::stock("AAPL").build();
+        let held = vec![GenericTick::RT_VOLUME, GenericTick::SHORTABLE];
+        let expected = market_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .generic_ticks(&["233", "236"]);
+
+        let (client, bus) = create_blocking_test_client();
+        let _constants = client
+            .market_data(&contract)
+            .generic_ticks([GenericTick::RT_VOLUME, GenericTick::SHORTABLE])
+            .subscribe()
+            .expect("subscribe with constants");
+        assert_request(&bus, 0, &expected);
+
+        let (client, bus) = create_blocking_test_client();
+        let _numbers = client
+            .market_data(&contract)
+            .generic_ticks([233, 236])
+            .subscribe()
+            .expect("subscribe with numbers");
+        assert_request(&bus, 0, &expected);
+
+        let (client, bus) = create_blocking_test_client();
+        let _borrowed = client
+            .market_data(&contract)
+            .generic_ticks(&held)
+            .subscribe()
+            .expect("subscribe with a borrowed list");
+        assert_request(&bus, 0, &expected);
+
+        let (client, bus) = create_blocking_test_client();
+        let _appended = client
+            .market_data(&contract)
+            .add_generic_tick(GenericTick::RT_VOLUME)
+            .add_generic_tick(236)
+            .subscribe()
+            .expect("subscribe with appended ticks");
+        assert_request(&bus, 0, &expected);
     }
 
     #[test]
@@ -45,8 +89,8 @@ mod sync_tests {
 
         let _subscription = client
             .market_data(&contract)
-            .add_generic_tick("233")
-            .add_generic_tick("236")
+            .add_generic_tick(233)
+            .add_generic_tick(236)
             .subscribe()
             .expect("Failed to create subscription");
 
@@ -67,8 +111,8 @@ mod sync_tests {
 
         let _subscription = client
             .market_data(&contract)
-            .generic_ticks(&["233"])
-            .add_generic_tick("236")
+            .generic_ticks([233])
+            .add_generic_tick(236)
             .subscribe()
             .expect("Failed to create subscription");
 
@@ -135,7 +179,7 @@ mod sync_tests {
 
         let _subscription = client
             .market_data(&contract)
-            .generic_ticks(&["100", "101", "104", "106"])
+            .generic_ticks([100, 101, 104, 106])
             .snapshot()
             .regulatory_snapshot()
             .subscribe()
@@ -191,7 +235,7 @@ mod async_tests {
 
         let _subscription = client
             .market_data(&contract)
-            .generic_ticks(&["233", "236"])
+            .generic_ticks([233, 236])
             .snapshot()
             .subscribe()
             .await
@@ -208,8 +252,8 @@ mod async_tests {
 
         let _subscription = client
             .market_data(&contract)
-            .add_generic_tick("233")
-            .add_generic_tick("236")
+            .add_generic_tick(233)
+            .add_generic_tick(236)
             .subscribe()
             .await
             .expect("Failed to create subscription");
