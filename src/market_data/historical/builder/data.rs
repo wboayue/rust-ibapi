@@ -76,8 +76,9 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     }
 
     /// Anchor the query at a specific end date (defaults to now). TWS rejects an end date for a
-    /// [`ContinuousFuture`](SecurityType::ContinuousFuture) (error 10339); use
-    /// [`duration`](Self::duration) alone or [`between`](Self::between) for one.
+    /// [`ContinuousFuture`](SecurityType::ContinuousFuture) (error 10339), so for one the request
+    /// fails with [`Error::InvalidArgument`] and nothing is sent; use
+    /// [`duration`](Self::duration) alone or [`between`](Self::between) instead.
     pub fn ending(mut self, end_date: OffsetDateTime) -> Self {
         self.ending = Some(end_date);
         self
@@ -94,7 +95,10 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     ///
     /// TWS rejects any end date for a [`ContinuousFuture`](SecurityType::ContinuousFuture)
     /// (error 10339), so for one the request has no end date and covers `[start, now)`; the bars
-    /// after `end` are then dropped. Such a range must start before now.
+    /// after `end` are then dropped. Such a range must start before now. The request size grows
+    /// with `now - start`, not `end - start`: a short range far in the past fetches every bar
+    /// since `start`, and TWS may reject that duration for a small bar size. Use
+    /// [`duration`](Self::duration) alone for one, or a larger bar size.
     pub fn between(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
         self.between = Some((start, end));
         self
@@ -226,6 +230,9 @@ async fn main() {
                 }
                 Ok((Some(end), covering_duration(end - start)))
             }
+            (None, Some(_), Some(_)) if self.contract.security_type == SecurityType::ContinuousFuture => Err(Error::InvalidArgument(
+                "historical_data: TWS rejects .ending() for a continuous future (error 10339); use .duration() alone".to_owned(),
+            )),
             (None, Some(duration), ending) => Ok((ending, duration)),
             (None, None, _) => Err(Error::InvalidArgument(
                 "historical_data: must set .duration() or .between(...)".to_owned(),

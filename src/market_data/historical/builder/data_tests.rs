@@ -212,6 +212,29 @@ mod sync_tests {
     }
 
     #[test]
+    fn ending_on_continuous_future_errors() {
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
+        let contract = Contract::continuous_futures("ES").build();
+        let ending = || {
+            client
+                .historical_data(&contract, BarSize::Hour)
+                .duration(2.days())
+                .ending(datetime!(2026-04-15 0:00 UTC))
+        };
+
+        let fetched = ending().fetch();
+        assert!(
+            matches!(fetched, Err(Error::InvalidArgument(_))),
+            "expected InvalidArgument, got: {fetched:?}"
+        );
+        let Err(err) = ending().subscribe() else {
+            panic!("expected InvalidArgument")
+        };
+        assert!(matches!(err, Error::InvalidArgument(_)), "got: {err}");
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
+    }
+
+    #[test]
     fn between_trims_bars_outside_range() {
         let bus = Arc::new(MessageBusStub::with_ordered_responses(super::overshooting_response_pair()));
         let client = Client::stubbed(bus, server_versions::PROTOBUF_HISTORICAL_DATA);
@@ -543,6 +566,29 @@ mod async_tests {
                 .what_to_show(WhatToShow::Trades)
                 .use_rth(true),
         );
+    }
+
+    #[tokio::test]
+    async fn ending_on_continuous_future_errors() {
+        let (client, bus) = create_test_client_with_version(server_versions::SIZE_RULES);
+        let contract = Contract::continuous_futures("ES").build();
+        let ending = || {
+            client
+                .historical_data(&contract, BarSize::Hour)
+                .duration(2.days())
+                .ending(datetime!(2026-04-15 0:00 UTC))
+        };
+
+        let fetched = ending().fetch().await;
+        assert!(
+            matches!(fetched, Err(Error::InvalidArgument(_))),
+            "expected InvalidArgument, got: {fetched:?}"
+        );
+        let Err(err) = ending().subscribe().await else {
+            panic!("expected InvalidArgument")
+        };
+        assert!(matches!(err, Error::InvalidArgument(_)), "got: {err}");
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
     }
 
     #[tokio::test]

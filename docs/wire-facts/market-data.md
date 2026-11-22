@@ -101,7 +101,10 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
   security type is not allowed". `between` sent an end date, so it got 10339 too.
 - Settles that `between` on a continuous future must omit the end date and ask for a duration
   reaching back to `start` from now.
-- **Not probed:** `keepUpToDate` streaming; CONTFUT on another exchange; daily bars.
+- **Not probed:** `keepUpToDate` streaming; CONTFUT on another exchange; daily bars; whether
+  `reqHistoricalTicks` and `reqHistoricalSchedule` also reject a CONTFUT end date (their
+  builders' `ending()` still sends one); the longest duration TWS accepts for a CONTFUT bar
+  size, which bounds how far back `between` can start.
 
 ### Size fields are always sent
 
