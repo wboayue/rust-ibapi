@@ -7,9 +7,10 @@ use crate::messages::ResponseMessage;
 use crate::server_versions;
 use crate::subscriptions::DecoderContext;
 use crate::testdata::builders::market_data::{
-    bid_ask_tick, depth_market_data_description, market_depth_response, mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick,
-    reroute_market_data, reroute_market_depth, tick_generic, tick_price, tick_size, tick_string, trade_tick, BidAskTickResponse,
-    MidPointTickResponse, RealTimeBarTickResponse, TickGenericResponse, TickPriceResponse, TickSizeResponse, TickStringResponse, TradeTickResponse,
+    depth_market_data_description, market_depth_response, mkt_depth_exchanges_response, realtime_bar_tick, reroute_market_data, reroute_market_depth,
+    tick_bid_ask, tick_by_tick_bid_ask_response, tick_by_tick_last_response, tick_by_tick_midpoint_response, tick_generic, tick_last, tick_midpoint,
+    tick_price, tick_size, tick_string, RealTimeBarTickResponse, TickByTickResponse, TickGenericResponse, TickPriceResponse, TickSizeResponse,
+    TickStringResponse,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use prost::Message;
@@ -86,15 +87,13 @@ mod realtime_bar_tests {
 mod trade_tick_tests {
     use super::*;
 
-    fn fixture(tick_type: i32) -> TradeTickResponse {
-        trade_tick()
-            .tick_type(tick_type)
-            .time(1678740829)
-            .price(3895.25)
-            .size(7.0)
-            .attributes(false, true)
-            .exchange("NASDAQ")
-            .special_conditions("Regular")
+    fn fixture(tick_type: i32) -> TickByTickResponse {
+        tick_by_tick_last_response(
+            tick_last(1678740829, 3895.25, 7.0, "NASDAQ")
+                .unreported(true)
+                .special_conditions("Regular"),
+        )
+        .tick_type(tick_type)
     }
 
     #[test]
@@ -153,11 +152,12 @@ mod trade_tick_tests {
 mod bid_ask_tests {
     use super::*;
 
-    fn fixture(mask: u32) -> BidAskTickResponse {
-        bid_ask_tick()
-            .time(1678745793)
-            .quote(3895.50, 3896.00, 9.0, 11.0)
-            .attributes(mask & 0x1 != 0, mask & 0x2 != 0)
+    fn fixture(mask: u32) -> TickByTickResponse {
+        tick_by_tick_bid_ask_response(
+            tick_bid_ask(1678745793, 3895.50, 3896.00, 9.0, 11.0)
+                .bid_past_low(mask & 0x1 != 0)
+                .ask_past_high(mask & 0x2 != 0),
+        )
     }
 
     #[test]
@@ -197,8 +197,8 @@ mod bid_ask_tests {
 mod mid_point_tests {
     use super::*;
 
-    fn fixture() -> MidPointTickResponse {
-        mid_point_tick().time(1678740829).price(3895.375)
+    fn fixture() -> TickByTickResponse {
+        tick_by_tick_midpoint_response(tick_midpoint(1678740829, 3895.375))
     }
 
     #[test]

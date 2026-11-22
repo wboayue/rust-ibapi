@@ -898,26 +898,34 @@ impl ResponseProtoEncoder for HistoricalScheduleResponse {
     }
 }
 
+// Per-tick fixtures, shared by the historical ticks replies and `TickByTickResponse`: TWS sends
+// both as the same three proto messages.
+
+/// A `proto::HistoricalTick` (midpoint). The wire size is not decoded, so the fixture sends none.
 #[derive(Clone, Debug)]
-pub struct HistoricalTickMidFields {
+pub struct TickMidpointFields {
     pub time: i64,
     pub price: f64,
-    /// Raw `optional string` size wire value. `None` omits the field entirely.
-    pub size: Option<String>,
 }
 
-pub fn historical_tick_mid(time: i64, price: f64, size: f64) -> HistoricalTickMidFields {
-    HistoricalTickMidFields {
-        time,
-        price,
-        size: Some(size.to_string()),
+pub fn tick_midpoint(time: i64, price: f64) -> TickMidpointFields {
+    TickMidpointFields { time, price }
+}
+
+impl TickMidpointFields {
+    pub fn to_proto(&self) -> proto::HistoricalTick {
+        proto::HistoricalTick {
+            time: Some(self.time),
+            price: Some(self.price),
+            size: None,
+        }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct HistoricalTicksResponse {
     pub request_id: i32,
-    pub ticks: Vec<HistoricalTickMidFields>,
+    pub ticks: Vec<TickMidpointFields>,
     pub done: bool,
 }
 
@@ -932,7 +940,7 @@ impl Default for HistoricalTicksResponse {
 }
 
 impl HistoricalTicksResponse {
-    pub fn tick(mut self, t: HistoricalTickMidFields) -> Self {
+    pub fn tick(mut self, t: TickMidpointFields) -> Self {
         self.ticks.push(t);
         self
     }
@@ -947,22 +955,15 @@ impl ResponseProtoEncoder for HistoricalTicksResponse {
     fn to_proto(&self) -> Self::Proto {
         proto::HistoricalTicks {
             req_id: Some(self.request_id),
-            historical_ticks: self
-                .ticks
-                .iter()
-                .map(|t| proto::HistoricalTick {
-                    time: Some(t.time),
-                    price: Some(t.price),
-                    size: t.size.clone(),
-                })
-                .collect(),
+            historical_ticks: self.ticks.iter().map(TickMidpointFields::to_proto).collect(),
             is_done: Some(self.done),
         }
     }
 }
 
+/// A `proto::HistoricalTickLast` (trade).
 #[derive(Clone, Debug)]
-pub struct HistoricalTickLastFields {
+pub struct TickLastFields {
     pub time: i64,
     pub past_limit: bool,
     pub unreported: bool,
@@ -973,8 +974,8 @@ pub struct HistoricalTickLastFields {
     pub special_conditions: String,
 }
 
-pub fn historical_tick_last(time: i64, price: f64, size: f64, exchange: impl Into<String>) -> HistoricalTickLastFields {
-    HistoricalTickLastFields {
+pub fn tick_last(time: i64, price: f64, size: f64, exchange: impl Into<String>) -> TickLastFields {
+    TickLastFields {
         time,
         past_limit: false,
         unreported: false,
@@ -985,17 +986,34 @@ pub fn historical_tick_last(time: i64, price: f64, size: f64, exchange: impl Int
     }
 }
 
-impl HistoricalTickLastFields {
+impl TickLastFields {
+    pub fn unreported(mut self, v: bool) -> Self {
+        self.unreported = v;
+        self
+    }
     pub fn special_conditions(mut self, v: impl Into<String>) -> Self {
         self.special_conditions = v.into();
         self
+    }
+    pub fn to_proto(&self) -> proto::HistoricalTickLast {
+        proto::HistoricalTickLast {
+            time: Some(self.time),
+            tick_attrib_last: Some(proto::TickAttribLast {
+                past_limit: Some(self.past_limit),
+                unreported: Some(self.unreported),
+            }),
+            price: Some(self.price),
+            size: self.size.clone(),
+            exchange: Some(self.exchange.clone()),
+            special_conditions: Some(self.special_conditions.clone()),
+        }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct HistoricalTicksLastResponse {
     pub request_id: i32,
-    pub ticks: Vec<HistoricalTickLastFields>,
+    pub ticks: Vec<TickLastFields>,
     pub done: bool,
 }
 
@@ -1010,11 +1028,11 @@ impl Default for HistoricalTicksLastResponse {
 }
 
 impl HistoricalTicksLastResponse {
-    pub fn tick(mut self, t: HistoricalTickLastFields) -> Self {
+    pub fn tick(mut self, t: TickLastFields) -> Self {
         self.ticks.push(t);
         self
     }
-    pub fn ticks(mut self, t: Vec<HistoricalTickLastFields>) -> Self {
+    pub fn ticks(mut self, t: Vec<TickLastFields>) -> Self {
         self.ticks = t;
         self
     }
@@ -1029,28 +1047,15 @@ impl ResponseProtoEncoder for HistoricalTicksLastResponse {
     fn to_proto(&self) -> Self::Proto {
         proto::HistoricalTicksLast {
             req_id: Some(self.request_id),
-            historical_ticks_last: self
-                .ticks
-                .iter()
-                .map(|t| proto::HistoricalTickLast {
-                    time: Some(t.time),
-                    tick_attrib_last: Some(proto::TickAttribLast {
-                        past_limit: Some(t.past_limit),
-                        unreported: Some(t.unreported),
-                    }),
-                    price: Some(t.price),
-                    size: t.size.clone(),
-                    exchange: Some(t.exchange.clone()),
-                    special_conditions: Some(t.special_conditions.clone()),
-                })
-                .collect(),
+            historical_ticks_last: self.ticks.iter().map(TickLastFields::to_proto).collect(),
             is_done: Some(self.done),
         }
     }
 }
 
+/// A `proto::HistoricalTickBidAsk`.
 #[derive(Clone, Debug)]
-pub struct HistoricalTickBidAskFields {
+pub struct TickBidAskFields {
     pub time: i64,
     pub bid_past_low: bool,
     pub ask_past_high: bool,
@@ -1062,8 +1067,8 @@ pub struct HistoricalTickBidAskFields {
     pub size_ask: Option<String>,
 }
 
-pub fn historical_tick_bid_ask(time: i64, price_bid: f64, price_ask: f64, size_bid: f64, size_ask: f64) -> HistoricalTickBidAskFields {
-    HistoricalTickBidAskFields {
+pub fn tick_bid_ask(time: i64, price_bid: f64, price_ask: f64, size_bid: f64, size_ask: f64) -> TickBidAskFields {
+    TickBidAskFields {
         time,
         bid_past_low: false,
         ask_past_high: false,
@@ -1074,7 +1079,7 @@ pub fn historical_tick_bid_ask(time: i64, price_bid: f64, price_ask: f64, size_b
     }
 }
 
-impl HistoricalTickBidAskFields {
+impl TickBidAskFields {
     pub fn bid_past_low(mut self, v: bool) -> Self {
         self.bid_past_low = v;
         self
@@ -1083,12 +1088,25 @@ impl HistoricalTickBidAskFields {
         self.ask_past_high = v;
         self
     }
+    pub fn to_proto(&self) -> proto::HistoricalTickBidAsk {
+        proto::HistoricalTickBidAsk {
+            time: Some(self.time),
+            tick_attrib_bid_ask: Some(proto::TickAttribBidAsk {
+                bid_past_low: Some(self.bid_past_low),
+                ask_past_high: Some(self.ask_past_high),
+            }),
+            price_bid: Some(self.price_bid),
+            price_ask: Some(self.price_ask),
+            size_bid: self.size_bid.clone(),
+            size_ask: self.size_ask.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct HistoricalTicksBidAskResponse {
     pub request_id: i32,
-    pub ticks: Vec<HistoricalTickBidAskFields>,
+    pub ticks: Vec<TickBidAskFields>,
     pub done: bool,
 }
 
@@ -1103,7 +1121,7 @@ impl Default for HistoricalTicksBidAskResponse {
 }
 
 impl HistoricalTicksBidAskResponse {
-    pub fn tick(mut self, t: HistoricalTickBidAskFields) -> Self {
+    pub fn tick(mut self, t: TickBidAskFields) -> Self {
         self.ticks.push(t);
         self
     }
@@ -1118,21 +1136,7 @@ impl ResponseProtoEncoder for HistoricalTicksBidAskResponse {
     fn to_proto(&self) -> Self::Proto {
         proto::HistoricalTicksBidAsk {
             req_id: Some(self.request_id),
-            historical_ticks_bid_ask: self
-                .ticks
-                .iter()
-                .map(|t| proto::HistoricalTickBidAsk {
-                    time: Some(t.time),
-                    tick_attrib_bid_ask: Some(proto::TickAttribBidAsk {
-                        bid_past_low: Some(t.bid_past_low),
-                        ask_past_high: Some(t.ask_past_high),
-                    }),
-                    price_bid: Some(t.price_bid),
-                    price_ask: Some(t.price_ask),
-                    size_bid: t.size_bid.clone(),
-                    size_ask: t.size_ask.clone(),
-                })
-                .collect(),
+            historical_ticks_bid_ask: self.ticks.iter().map(TickBidAskFields::to_proto).collect(),
             is_done: Some(self.done),
         }
     }
@@ -1318,198 +1322,31 @@ impl ResponseProtoEncoder for RealTimeBarTickResponse {
     }
 }
 
+/// A `proto::TickByTickData` frame wrapping one of the per-tick fixtures. `tick_type` is the
+/// request's (`1` last, `2` all-last, `3` bid/ask, `4` midpoint); each entry point sets the
+/// one its tick implies.
 #[derive(Clone, Debug)]
-pub struct TradeTickResponse {
+pub struct TickByTickResponse {
     pub request_id: i32,
     pub tick_type: i32,
-    pub time: i64,
-    pub price: f64,
-    pub size: Option<f64>,
-    pub past_limit: bool,
-    pub unreported: bool,
-    pub exchange: String,
-    pub special_conditions: String,
+    pub tick: proto::tick_by_tick_data::Tick,
 }
 
-impl Default for TradeTickResponse {
-    fn default() -> Self {
-        Self {
-            request_id: TEST_REQ_ID_FIRST,
-            tick_type: 1,
-            time: 0,
-            price: 0.0,
-            size: Some(0.0),
-            past_limit: false,
-            unreported: false,
-            exchange: String::new(),
-            special_conditions: String::new(),
-        }
-    }
-}
-
-impl TradeTickResponse {
+impl TickByTickResponse {
     pub fn tick_type(mut self, v: i32) -> Self {
         self.tick_type = v;
         self
     }
-    pub fn time(mut self, v: i64) -> Self {
-        self.time = v;
-        self
-    }
-    pub fn price(mut self, v: f64) -> Self {
-        self.price = v;
-        self
-    }
-    pub fn size(mut self, v: f64) -> Self {
-        self.size = Some(v);
-        self
-    }
-    pub fn attributes(mut self, past_limit: bool, unreported: bool) -> Self {
-        self.past_limit = past_limit;
-        self.unreported = unreported;
-        self
-    }
-    pub fn exchange(mut self, v: impl Into<String>) -> Self {
-        self.exchange = v.into();
-        self
-    }
-    pub fn special_conditions(mut self, v: impl Into<String>) -> Self {
-        self.special_conditions = v.into();
-        self
-    }
 }
 
-impl ResponseProtoEncoder for TradeTickResponse {
+impl ResponseProtoEncoder for TickByTickResponse {
     type Proto = proto::TickByTickData;
 
     fn to_proto(&self) -> Self::Proto {
         proto::TickByTickData {
             req_id: Some(self.request_id),
             tick_type: Some(self.tick_type),
-            tick: Some(proto::tick_by_tick_data::Tick::HistoricalTickLast(proto::HistoricalTickLast {
-                time: Some(self.time),
-                tick_attrib_last: Some(proto::TickAttribLast {
-                    past_limit: Some(self.past_limit),
-                    unreported: Some(self.unreported),
-                }),
-                price: Some(self.price),
-                size: self.size.map(|v| v.to_string()),
-                exchange: some_str(&self.exchange),
-                special_conditions: some_str(&self.special_conditions),
-            })),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct BidAskTickResponse {
-    pub request_id: i32,
-    pub time: i64,
-    pub price_bid: f64,
-    pub price_ask: f64,
-    pub size_bid: Option<f64>,
-    pub size_ask: Option<f64>,
-    pub bid_past_low: bool,
-    pub ask_past_high: bool,
-}
-
-impl Default for BidAskTickResponse {
-    fn default() -> Self {
-        Self {
-            request_id: TEST_REQ_ID_FIRST,
-            time: 0,
-            price_bid: 0.0,
-            price_ask: 0.0,
-            size_bid: Some(0.0),
-            size_ask: Some(0.0),
-            bid_past_low: false,
-            ask_past_high: false,
-        }
-    }
-}
-
-impl BidAskTickResponse {
-    pub fn time(mut self, v: i64) -> Self {
-        self.time = v;
-        self
-    }
-    pub fn quote(mut self, price_bid: f64, price_ask: f64, size_bid: f64, size_ask: f64) -> Self {
-        self.price_bid = price_bid;
-        self.price_ask = price_ask;
-        self.size_bid = Some(size_bid);
-        self.size_ask = Some(size_ask);
-        self
-    }
-    pub fn attributes(mut self, bid_past_low: bool, ask_past_high: bool) -> Self {
-        self.bid_past_low = bid_past_low;
-        self.ask_past_high = ask_past_high;
-        self
-    }
-}
-
-impl ResponseProtoEncoder for BidAskTickResponse {
-    type Proto = proto::TickByTickData;
-
-    fn to_proto(&self) -> Self::Proto {
-        proto::TickByTickData {
-            req_id: Some(self.request_id),
-            tick_type: Some(3),
-            tick: Some(proto::tick_by_tick_data::Tick::HistoricalTickBidAsk(proto::HistoricalTickBidAsk {
-                time: Some(self.time),
-                tick_attrib_bid_ask: Some(proto::TickAttribBidAsk {
-                    bid_past_low: Some(self.bid_past_low),
-                    ask_past_high: Some(self.ask_past_high),
-                }),
-                price_bid: Some(self.price_bid),
-                price_ask: Some(self.price_ask),
-                size_bid: self.size_bid.map(|v| v.to_string()),
-                size_ask: self.size_ask.map(|v| v.to_string()),
-            })),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct MidPointTickResponse {
-    pub request_id: i32,
-    pub time: i64,
-    pub price: f64,
-}
-
-impl Default for MidPointTickResponse {
-    fn default() -> Self {
-        Self {
-            request_id: TEST_REQ_ID_FIRST,
-            time: 0,
-            price: 0.0,
-        }
-    }
-}
-
-impl MidPointTickResponse {
-    pub fn time(mut self, v: i64) -> Self {
-        self.time = v;
-        self
-    }
-    pub fn price(mut self, v: f64) -> Self {
-        self.price = v;
-        self
-    }
-}
-
-impl ResponseProtoEncoder for MidPointTickResponse {
-    type Proto = proto::TickByTickData;
-
-    fn to_proto(&self) -> Self::Proto {
-        proto::TickByTickData {
-            req_id: Some(self.request_id),
-            tick_type: Some(4),
-            tick: Some(proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(proto::HistoricalTick {
-                time: Some(self.time),
-                price: Some(self.price),
-                // Live tick-by-tick midpoint frames carry no size.
-                size: None,
-            })),
+            tick: Some(self.tick.clone()),
         }
     }
 }
@@ -1861,16 +1698,24 @@ pub fn realtime_bar_tick() -> RealTimeBarTickResponse {
     RealTimeBarTickResponse::default()
 }
 
-pub fn trade_tick() -> TradeTickResponse {
-    TradeTickResponse::default()
+fn tick_by_tick(tick_type: i32, tick: proto::tick_by_tick_data::Tick) -> TickByTickResponse {
+    TickByTickResponse {
+        request_id: TEST_REQ_ID_FIRST,
+        tick_type,
+        tick,
+    }
 }
 
-pub fn bid_ask_tick() -> BidAskTickResponse {
-    BidAskTickResponse::default()
+pub fn tick_by_tick_last_response(tick: TickLastFields) -> TickByTickResponse {
+    tick_by_tick(1, proto::tick_by_tick_data::Tick::HistoricalTickLast(tick.to_proto()))
 }
 
-pub fn mid_point_tick() -> MidPointTickResponse {
-    MidPointTickResponse::default()
+pub fn tick_by_tick_bid_ask_response(tick: TickBidAskFields) -> TickByTickResponse {
+    tick_by_tick(3, proto::tick_by_tick_data::Tick::HistoricalTickBidAsk(tick.to_proto()))
+}
+
+pub fn tick_by_tick_midpoint_response(tick: TickMidpointFields) -> TickByTickResponse {
+    tick_by_tick(4, proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(tick.to_proto()))
 }
 
 pub fn market_depth_response() -> MarketDepthResponse {

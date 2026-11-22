@@ -17,8 +17,8 @@ use crate::subscriptions::{SubscriptionItem, SubscriptionItemStreamExt};
 use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
-    historical_schedule_response, historical_session, historical_tick_bid_ask, historical_tick_last, historical_tick_mid,
-    historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
+    historical_schedule_response, historical_session, historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request,
+    historical_ticks_response, tick_bid_ask, tick_last, tick_midpoint,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
@@ -478,9 +478,9 @@ async fn tick_subscription_methods() {
         proto_response(
             IncomingMessages::HistoricalTickBidAsk,
             historical_ticks_bid_ask_response()
-                .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
+                .tick(tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
                 .tick(
-                    historical_tick_bid_ask(1_678_838_401, 185.55, 186.05, 105.0, 205.0)
+                    tick_bid_ask(1_678_838_401, 185.55, 186.05, 105.0, 205.0)
                         .bid_past_low(true)
                         .ask_past_high(true),
                 )
@@ -490,7 +490,7 @@ async fn tick_subscription_methods() {
         proto_response(
             IncomingMessages::HistoricalTickBidAsk,
             historical_ticks_bid_ask_response()
-                .tick(historical_tick_bid_ask(1_678_838_500, 185.75, 186.25, 150.0, 250.0).bid_past_low(true))
+                .tick(tick_bid_ask(1_678_838_500, 185.75, 186.25, 150.0, 250.0).bid_past_low(true))
                 .done(true)
                 .encode_proto(),
         ),
@@ -533,9 +533,9 @@ async fn tick_subscription_buffer_and_iteration() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0))
-            .tick(historical_tick_bid_ask(1_678_838_401, 185.60, 186.10, 110.0, 210.0))
-            .tick(historical_tick_bid_ask(1_678_838_402, 185.70, 186.20, 120.0, 220.0))
+            .tick(tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0))
+            .tick(tick_bid_ask(1_678_838_401, 185.60, 186.10, 110.0, 210.0))
+            .tick(tick_bid_ask(1_678_838_402, 185.70, 186.20, 120.0, 220.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -564,7 +564,7 @@ async fn tick_subscription_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
+            .tick(tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
             .done(true)
             .encode_proto(),
     )]));
@@ -615,7 +615,7 @@ async fn tick_subscription_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
-            .tick(historical_tick_mid(1_678_838_400, 185.75, 100.0))
+            .tick(tick_midpoint(1_678_838_400, 185.75))
             .done(true)
             .encode_proto(),
     )]));
@@ -651,7 +651,7 @@ async fn historical_ticks_trade() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
+            .tick(tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
             .done(true)
             .encode_proto(),
     )]));
@@ -926,10 +926,7 @@ async fn tick_subscription_cancel_reports_cancelled_then_ends() {
         RoutedItem::Response(proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .ticks(vec![
-                    historical_tick_last(time, 15.00, 100.0, "NYSE"),
-                    historical_tick_last(time + 1, 15.01, 100.0, "NYSE"),
-                ])
+                .ticks(vec![tick_last(time, 15.00, 100.0, "NYSE"), tick_last(time + 1, 15.01, 100.0, "NYSE")])
                 .done(false)
                 .encode_proto(),
         ))
@@ -1334,7 +1331,7 @@ async fn tick_subscription_skips_unexpected_message_then_yields() {
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
+                .tick(tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
                 .done(true)
                 .encode_proto(),
         ),
@@ -1403,7 +1400,7 @@ async fn tick_subscription_lag_yields_gap_notice_then_data() {
     tx.send(RoutedItem::Response(proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
+            .tick(tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
             .done(true)
             .encode_proto(),
     )))
@@ -1437,7 +1434,7 @@ async fn tick_subscription_notice_passes_through_then_data() {
         RoutedItem::Response(proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
+                .tick(tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
                 .done(true)
                 .encode_proto(),
         )),

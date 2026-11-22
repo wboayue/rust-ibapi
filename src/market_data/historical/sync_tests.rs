@@ -18,8 +18,8 @@ use crate::stubs::MessageBusStub;
 use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
-    historical_schedule_response, historical_tick_bid_ask, historical_tick_last, historical_tick_mid, historical_ticks_bid_ask_response,
-    historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
+    historical_schedule_response, historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request,
+    historical_ticks_response, tick_bid_ask, tick_last, tick_midpoint,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::transport::common::Lease;
@@ -614,17 +614,17 @@ fn tick_subscription_buffer_and_iteration() {
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_400, 11.63, 24_547.0, "ISLAND").special_conditions(" O X"))
-                .tick(historical_tick_last(1_681_133_401, 11.64, 179.0, "FINRA"))
-                .tick(historical_tick_last(1_681_133_402, 11.65, 200.0, "NYSE"))
+                .tick(tick_last(1_681_133_400, 11.63, 24_547.0, "ISLAND").special_conditions(" O X"))
+                .tick(tick_last(1_681_133_401, 11.64, 179.0, "FINRA"))
+                .tick(tick_last(1_681_133_402, 11.65, 200.0, "NYSE"))
                 .done(false)
                 .encode_proto(),
         ),
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_403, 11.66, 100.0, "ARCA"))
-                .tick(historical_tick_last(1_681_133_404, 11.67, 300.0, "BATS"))
+                .tick(tick_last(1_681_133_403, 11.66, 100.0, "ARCA"))
+                .tick(tick_last(1_681_133_404, 11.67, 300.0, "BATS"))
                 .done(true)
                 .encode_proto(),
         ),
@@ -664,8 +664,8 @@ fn tick_subscription_owned_iterator() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 11.70, 24_547.0, "ISLAND").special_conditions(" O X"))
-            .tick(historical_tick_last(1_681_133_401, 11.71, 179.0, "FINRA"))
+            .tick(tick_last(1_681_133_400, 11.70, 24_547.0, "ISLAND").special_conditions(" O X"))
+            .tick(tick_last(1_681_133_401, 11.71, 179.0, "FINRA"))
             .done(true)
             .encode_proto(),
     )]));
@@ -694,9 +694,9 @@ fn tick_subscription_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
-            .tick(historical_tick_bid_ask(1_681_133_400, 11.64, 11.84, 2_900.0, 200.0))
-            .tick(historical_tick_bid_ask(1_681_133_401, 11.65, 11.85, 3_000.0, 300.0))
+            .tick(tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
+            .tick(tick_bid_ask(1_681_133_400, 11.64, 11.84, 2_900.0, 200.0))
+            .tick(tick_bid_ask(1_681_133_401, 11.65, 11.85, 3_000.0, 300.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -730,9 +730,9 @@ fn tick_subscription_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
-            .tick(historical_tick_mid(1_681_133_398, 91.36, 0.0))
-            .tick(historical_tick_mid(1_681_133_399, 91.37, 0.0))
-            .tick(historical_tick_mid(1_681_133_400, 91.38, 0.0))
+            .tick(tick_midpoint(1_681_133_398, 91.36))
+            .tick(tick_midpoint(1_681_133_399, 91.37))
+            .tick(tick_midpoint(1_681_133_400, 91.38))
             .done(true)
             .encode_proto(),
     )]));
@@ -1294,8 +1294,8 @@ fn tick_subscription_try_next_drains_buffer() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 12.00, 100.0, "NYSE"))
-            .tick(historical_tick_last(1_681_133_401, 12.01, 200.0, "NYSE"))
+            .tick(tick_last(1_681_133_400, 12.00, 100.0, "NYSE"))
+            .tick(tick_last(1_681_133_401, 12.01, 200.0, "NYSE"))
             .done(true)
             .encode_proto(),
     )]));
@@ -1324,7 +1324,7 @@ fn tick_subscription_next_timeout_drains_buffer() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 13.00, 100.0, "NYSE"))
+            .tick(tick_last(1_681_133_400, 13.00, 100.0, "NYSE"))
             .done(true)
             .encode_proto(),
     )]));
@@ -1376,7 +1376,7 @@ fn tick_subscription_notice_passes_through_then_data() {
         RoutedItem::Response(proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_400, 15.00, 100.0, "NYSE"))
+                .tick(tick_last(1_681_133_400, 15.00, 100.0, "NYSE"))
                 .done(true)
                 .encode_proto(),
         )),
@@ -1435,7 +1435,7 @@ fn tick_subscription_midpoint_try_iter_and_timeout_iter() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
-            .tick(historical_tick_mid(1_681_133_400, 91.50, 0.0))
+            .tick(tick_midpoint(1_681_133_400, 91.50))
             .done(true)
             .encode_proto(),
     )]));
@@ -1458,7 +1458,7 @@ fn tick_subscription_bid_ask_try_iter_and_timeout_iter() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
+            .tick(tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -1483,7 +1483,7 @@ fn tick_subscription_skips_unexpected_message_then_yields() {
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_400, 14.00, 100.0, "NYSE"))
+                .tick(tick_last(1_681_133_400, 14.00, 100.0, "NYSE"))
                 .done(true)
                 .encode_proto(),
         ),
