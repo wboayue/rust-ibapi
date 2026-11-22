@@ -129,11 +129,7 @@ pub(crate) fn decode_head_timestamp_proto(msg: crate::proto::HeadTimestamp) -> R
 }
 
 pub(crate) fn decode_historical_ticks_proto(msg: crate::proto::HistoricalTicks) -> Result<(Vec<TickMidpoint>, bool), Error> {
-    let mut ticks = Vec::with_capacity(msg.historical_ticks.len());
-    for t in msg.historical_ticks {
-        ticks.push(decode_tick_midpoint(t)?);
-    }
-
+    let ticks = msg.historical_ticks.into_iter().map(decode_tick_midpoint).collect();
     Ok((ticks, msg.is_done.unwrap_or_default()))
 }
 

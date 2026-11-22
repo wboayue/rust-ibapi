@@ -206,7 +206,6 @@ mod mid_point_tests {
         let mid = decode_mid_point_tick_proto(fixture().to_proto()).expect("decode failed");
         assert_eq!(mid.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
         assert_eq!(mid.price, 3895.375);
-        assert_eq!(mid.size, None);
     }
 
     #[test]
@@ -218,47 +217,6 @@ mod mid_point_tests {
         };
         let err = decode_mid_point_tick_proto(msg).expect_err("should reject last tick type");
         assert!(err.to_string().contains("Unexpected tick_type"));
-    }
-}
-
-mod tick_by_tick_size_tests {
-    use super::*;
-
-    // Trade and bid/ask sizes decode an absent size as `0.0`; a midpoint size keeps
-    // absent (`None`) apart from a sent "0".
-    const SIZE_CASES: [(Option<f64>, f64); 3] = [(None, 0.0), (Some(0.0), 0.0), (Some(7.0), 7.0)];
-    const MIDPOINT_SIZE_CASES: [(Option<f64>, Option<f64>); 3] = [(None, None), (Some(0.0), Some(0.0)), (Some(7.0), Some(7.0))];
-
-    #[test]
-    fn trade_tick_size() {
-        for (sent, expected) in SIZE_CASES {
-            let mut fixture = trade_tick();
-            fixture.size = sent;
-            let trade = decode_trade_tick_proto(fixture.to_proto()).expect("decode failed");
-            assert_eq!(trade.size, expected, "sent {sent:?}");
-        }
-    }
-
-    #[test]
-    fn bid_ask_tick_sizes() {
-        for (sent, expected) in SIZE_CASES {
-            let mut fixture = bid_ask_tick();
-            fixture.size_bid = sent;
-            fixture.size_ask = sent;
-            let bid_ask = decode_bid_ask_tick_proto(fixture.to_proto()).expect("decode failed");
-            assert_eq!(bid_ask.size_bid, expected, "sent {sent:?}");
-            assert_eq!(bid_ask.size_ask, expected, "sent {sent:?}");
-        }
-    }
-
-    #[test]
-    fn mid_point_tick_size() {
-        for (sent, expected) in MIDPOINT_SIZE_CASES {
-            let mut fixture = mid_point_tick();
-            fixture.size = sent;
-            let mid = decode_mid_point_tick_proto(fixture.to_proto()).expect("decode failed");
-            assert_eq!(mid.size, expected, "sent {sent:?}");
-        }
     }
 }
 
@@ -852,52 +810,6 @@ mod decimal_wire_tests {
         }
     }
 
-    fn trade_tick_proto(size: &str) -> crate::proto::TickByTickData {
-        crate::proto::TickByTickData {
-            req_id: Some(9000),
-            tick_type: Some(1),
-            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickLast(
-                crate::proto::HistoricalTickLast {
-                    time: Some(1_678_890_000),
-                    price: Some(100.0),
-                    size: Some(size.into()),
-                    ..Default::default()
-                },
-            )),
-        }
-    }
-
-    fn bid_ask_tick_proto(size_bid: &str) -> crate::proto::TickByTickData {
-        crate::proto::TickByTickData {
-            req_id: Some(9000),
-            tick_type: Some(3),
-            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickBidAsk(
-                crate::proto::HistoricalTickBidAsk {
-                    time: Some(1_678_890_000),
-                    price_bid: Some(100.0),
-                    price_ask: Some(101.0),
-                    size_bid: Some(size_bid.into()),
-                    size_ask: Some("200".into()),
-                    ..Default::default()
-                },
-            )),
-        }
-    }
-
-    fn mid_point_tick_proto(size: &str) -> crate::proto::TickByTickData {
-        crate::proto::TickByTickData {
-            req_id: Some(9000),
-            tick_type: Some(4),
-            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(
-                crate::proto::HistoricalTick {
-                    time: Some(1_678_890_000),
-                    price: Some(100.0),
-                    size: Some(size.into()),
-                },
-            )),
-        }
-    }
-
     #[test]
     fn tick_size_rejects_malformed_size() {
         assert_decimal_parse_error(decode_tick_size_proto(tick_size_proto("abc")), "abc");
@@ -920,21 +832,6 @@ mod decimal_wire_tests {
     #[test]
     fn realtime_bar_rejects_malformed_volume() {
         assert_decimal_parse_error(decode_realtime_bar_proto(realtime_bar_proto("abc")), "abc");
-    }
-
-    #[test]
-    fn trade_tick_rejects_malformed_size() {
-        assert_decimal_parse_error(decode_trade_tick_proto(trade_tick_proto("abc")), "abc");
-    }
-
-    #[test]
-    fn bid_ask_tick_rejects_malformed_size() {
-        assert_decimal_parse_error(decode_bid_ask_tick_proto(bid_ask_tick_proto("abc")), "abc");
-    }
-
-    #[test]
-    fn mid_point_tick_rejects_malformed_size() {
-        assert_decimal_parse_error(decode_mid_point_tick_proto(mid_point_tick_proto("abc")), "abc");
     }
 
     // --- behaviour change worth naming ---

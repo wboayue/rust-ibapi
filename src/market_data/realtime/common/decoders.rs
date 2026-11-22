@@ -115,7 +115,7 @@ pub(crate) fn decode_mid_point_tick_proto(msg: crate::proto::TickByTickData) -> 
     let Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(t)) = msg.tick else {
         return Err(Error::parse_proto("tick", "missing HistoricalTickMidPoint in TickByTickData"));
     };
-    decode_tick_midpoint(t)
+    Ok(decode_tick_midpoint(t))
 }
 
 pub(crate) fn decode_market_depth_exchanges_proto(p: crate::proto::MarketDepthExchanges) -> Result<Vec<DepthMarketDataDescription>, Error> {

@@ -127,7 +127,7 @@ async fn head_timestamp() {
     assert!(result.is_ok(), "head_timestamp should succeed");
 
     let timestamp = result.unwrap();
-    assert_eq!(timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong time");
+    assert_eq!(timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
@@ -632,7 +632,6 @@ async fn tick_subscription_midpoint() {
     let tick = expect_data(subscription.next().await);
     assert_eq!(tick.time, datetime!(2023-03-15 00:00:00 UTC), "Wrong time");
     assert_eq!(tick.price, 185.75, "Wrong midpoint price");
-    assert_eq!(tick.size, Some(100.0), "Wrong size");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(

@@ -95,6 +95,10 @@ pub struct TickAttributeBidAsk {
 
 /// A midpoint tick: from `tick_by_tick` `mid_point`, or `historical_ticks` `mid_point`
 /// (whatToShow = MIDPOINT).
+///
+/// A midpoint has no size. The wire message has a size field, but live tick-by-tick midpoint
+/// frames leave it out and historical midpoint ticks send `0`
+/// (`docs/wire-facts/market-data.md#tick-by-tick-sizes-and-ignoresize`), so it is not decoded.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TickMidpoint {
@@ -102,19 +106,18 @@ pub struct TickMidpoint {
     pub time: OffsetDateTime,
     /// Midpoint price.
     pub price: f64,
-    /// Tick size. `None` if TWS sends none: live tick-by-tick midpoint frames carry no size, and
-    /// historical midpoint ticks were sent with `0`, which decodes as `Some(0.0)`
-    /// (`docs/wire-facts/market-data.md#tick-by-tick-sizes-and-ignoresize`).
-    pub size: Option<f64>,
 }
 
 impl Default for TickMidpoint {
-    /// A zero midpoint with no size, timestamped at the Unix epoch.
+    /// A zero midpoint, timestamped at the Unix epoch.
     fn default() -> Self {
         Self {
             time: OffsetDateTime::UNIX_EPOCH,
             price: 0.0,
-            size: None,
         }
     }
 }
+
+#[cfg(test)]
+#[path = "ticks_tests.rs"]
+mod tests;

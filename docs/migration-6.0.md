@@ -894,10 +894,11 @@ each struct's attribute field is `attributes`.
 | `realtime::TradeAttribute`, `realtime::BidAskAttribute` | `TickAttributeLast`, `TickAttributeBidAsk` |
 | `Trade::trade_attribute`, `BidAsk::bid_ask_attribute` | `attributes` |
 | `BidAsk::bid_price`, `ask_price`, `bid_size`, `ask_size` | `price_bid`, `price_ask`, `size_bid`, `size_ask` |
-| `MidPoint::mid_point` | `price`, and a new `size: Option<f64>` |
+| `MidPoint::mid_point` | `price` |
 | historical `timestamp` | `time` |
 | historical `tick_attribute_last`, `tick_attribute_bid_ask` | `attributes` |
 | historical `TickLast::size`, `TickBidAsk::size_bid`, `size_ask` (`Option<f64>`) | `f64` |
+| historical `TickMidpoint::size` | removed: TWS sends `0` on every historical midpoint tick and no size on a live one |
 | `HistoricalTicksBuilder::trade()` | `last()` |
 
 ```rust,ignore
@@ -931,14 +932,11 @@ let history = client.historical_ticks(&contract, 100).last()?;
 (`client` is a connected `Client`, `contract` a `Contract`.)
 
 The compiler finds every use of a removed type, a renamed field or `trade()`, and every
-historical size used as an `Option`. It does not catch four runtime changes:
+historical size used as an `Option` or read from a midpoint. It does not catch three runtime changes:
 
 - A historical trade or bid/ask size TWS did not send (or sent as the unset sentinel) reads as
   `0.0`, where 5.x gave `None`. TWS sent one on every tick probed, live and historical
   ([wire facts](wire-facts/market-data.md#tick-by-tick-sizes-and-ignoresize)).
-- A live midpoint frame carries no size, so `TickMidpoint::size` is `None` on `tick_by_tick`;
-  historical midpoint ticks carry `0`. A malformed live midpoint size now ends the subscription
-  with `Error::Parse`, as a malformed trade or bid/ask size already did; 5.x did not read it.
 - The types derive `Serialize` / `Deserialize`, and the keys change with the field names
   (`timestamp` -> `time`, `bid_price` -> `price_bid`, `trade_attribute` -> `attributes`,
   `mid_point` -> `price`), so JSON written by 5.x for them no longer deserializes. The `utoipa`

@@ -98,8 +98,7 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
 /// still erroring on malformed input.
 ///
 /// **Transitional.** The fields whose absent value was reachable and meaningful
-/// use [`parse_optional_decimal`] and are `Option<f64>`: `TickMidpoint::size`
-/// (live midpoint frames carry none), the histogram sizes,
+/// use [`parse_optional_decimal`] and are `Option<f64>`: the histogram sizes,
 /// `ContractDetails::{min_size, size_increment, suggested_size_increment}`, and
 /// the realtime `Bar::{volume, wap}`, which TWS omits for every non-TRADES bar
 /// (`docs/wire-facts/market-data.md`). The C# reference client guards several

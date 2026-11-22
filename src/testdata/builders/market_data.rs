@@ -914,16 +914,6 @@ pub fn historical_tick_mid(time: i64, price: f64, size: f64) -> HistoricalTickMi
     }
 }
 
-impl HistoricalTickMidFields {
-    /// Override the raw wire value — for sentinel, empty, malformed, or (with
-    /// `None`) absent-field fixtures. Takes the wire string verbatim, unlike the
-    /// entry-point fn which stringifies an `f64`.
-    pub fn size_wire(mut self, v: Option<&str>) -> Self {
-        self.size = v.map(str::to_string);
-        self
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct HistoricalTicksResponse {
     pub request_id: i32,
@@ -1484,7 +1474,6 @@ pub struct MidPointTickResponse {
     pub request_id: i32,
     pub time: i64,
     pub price: f64,
-    pub size: Option<f64>,
 }
 
 impl Default for MidPointTickResponse {
@@ -1493,7 +1482,6 @@ impl Default for MidPointTickResponse {
             request_id: TEST_REQ_ID_FIRST,
             time: 0,
             price: 0.0,
-            size: None,
         }
     }
 }
@@ -1519,7 +1507,8 @@ impl ResponseProtoEncoder for MidPointTickResponse {
             tick: Some(proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(proto::HistoricalTick {
                 time: Some(self.time),
                 price: Some(self.price),
-                size: self.size.map(|v| v.to_string()),
+                // Live tick-by-tick midpoint frames carry no size.
+                size: None,
             })),
         }
     }

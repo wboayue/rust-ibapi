@@ -1,6 +1,6 @@
 use crate::market_data::{TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
 use crate::proto;
-use crate::proto::decoders::{parse_decimal_or_zero, parse_optional_decimal, ts};
+use crate::proto::decoders::{parse_decimal_or_zero, ts};
 use crate::Error;
 
 pub(in crate::market_data) fn decode_tick_last(t: proto::HistoricalTickLast) -> Result<TickLast, Error> {
@@ -33,10 +33,14 @@ pub(in crate::market_data) fn decode_tick_bid_ask(t: proto::HistoricalTickBidAsk
     })
 }
 
-pub(in crate::market_data) fn decode_tick_midpoint(t: proto::HistoricalTick) -> Result<TickMidpoint, Error> {
-    Ok(TickMidpoint {
+/// Infallible: the wire `size` is not decoded (see [`TickMidpoint`]).
+pub(in crate::market_data) fn decode_tick_midpoint(t: proto::HistoricalTick) -> TickMidpoint {
+    TickMidpoint {
         time: ts(t.time.unwrap_or_default()),
         price: t.price.unwrap_or_default(),
-        size: parse_optional_decimal(t.size.as_deref())?,
-    })
+    }
 }
+
+#[cfg(test)]
+#[path = "decoders_tests.rs"]
+mod tests;
