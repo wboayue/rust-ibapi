@@ -145,7 +145,7 @@ impl Client {
     /// Build a request for historical time & sales data (tick-by-tick).
     ///
     /// The terminal method selects the tick type:
-    /// [`HistoricalTicksBuilder::trade`](super::HistoricalTicksBuilder::trade) /
+    /// [`HistoricalTicksBuilder::last`](super::HistoricalTicksBuilder::last) /
     /// `.mid_point()` / `.bid_ask(IgnoreSize)`. Use
     /// [`HistoricalTicksBuilder::starting`](super::HistoricalTicksBuilder::starting) /
     /// `.ending()` to anchor the query (at least one is required per IBKR).
@@ -171,10 +171,10 @@ impl Client {
     ///     .historical_ticks(&contract, 100)
     ///     .starting(datetime!(2023-04-15 0:00 UTC))
     ///     .trading_hours(TradingHours::Regular)
-    ///     .trade()
+    ///     .last()
     ///     .expect("historical ticks request failed");
     ///
-    /// // Bid/ask ticks anchored at an end date, ignoring tick sizes:
+    /// // Bid/ask ticks anchored at an end date, skipping size-only updates:
     /// let quotes = client
     ///     .historical_ticks(&contract, 100)
     ///     .ending(datetime!(2023-04-15 0:00 UTC))
@@ -203,7 +203,7 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     ///
     /// // Holding the subscription, `subscription.cancel()` (or dropping it) does the same.
     /// client.cancel_historical_ticks(subscription.request_id()).expect("cancel failed");
@@ -431,7 +431,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     /// subscription.cancel();
     /// ```
     pub fn cancel(&self) {
@@ -467,7 +467,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     /// for item in subscription.iter() {
     ///     match item {
     ///         Ok(SubscriptionItem::Data(tick))   => println!("tick: {tick:?}"),
@@ -491,7 +491,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     /// for tick in subscription.try_iter_data() {
     ///     println!("tick: {:?}", tick.expect("decode error"));
     /// }
@@ -513,7 +513,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     /// for tick in subscription.timeout_iter_data(Duration::from_secs(5)) {
     ///     println!("tick: {:?}", tick.expect("decode error"));
     /// }
@@ -536,7 +536,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     /// for tick in subscription.iter_data() {
     ///     println!("tick: {:?}", tick.expect("decode error"));
     /// }
@@ -569,7 +569,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     /// while let Some(item) = subscription.next() {
     ///     match item {
     ///         Ok(SubscriptionItem::Data(tick))   => println!("tick: {tick:?}"),
@@ -596,7 +596,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     /// if let Some(Ok(item)) = subscription.try_next() {
     ///     println!("item: {item:?}");
     /// }
@@ -621,7 +621,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     /// if let Some(Ok(item)) = subscription.next_timeout(Duration::from_secs(5)) {
     ///     println!("item: {item:?}");
     /// }
@@ -642,7 +642,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("MSFT").build();
-    /// let subscription = client.historical_ticks(&contract, 100).trade().expect("request failed");
+    /// let subscription = client.historical_ticks(&contract, 100).last().expect("request failed");
     /// while let Some(tick) = subscription.next_data() {
     ///     println!("tick: {:?}", tick.expect("decode error"));
     /// }

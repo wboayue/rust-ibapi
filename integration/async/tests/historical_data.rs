@@ -157,7 +157,7 @@ async fn historical_ticks_trade() {
     let mut subscription = client
         .historical_ticks(&contract, 100)
         .ending(end)
-        .trade()
+        .last()
         .await
         .expect("historical_ticks_trade failed");
 

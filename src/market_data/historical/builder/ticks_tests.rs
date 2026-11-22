@@ -12,7 +12,7 @@ mod sync_tests {
     use crate::testdata::builders::market_data::historical_ticks_request;
 
     #[test]
-    fn trade_terminal_round_trip() {
+    fn last_terminal_round_trip() {
         let (client, bus) = create_blocking_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
@@ -20,8 +20,8 @@ mod sync_tests {
         let _sub = client
             .historical_ticks(&contract, 100)
             .starting(start)
-            .trade()
-            .expect("trade terminal failed");
+            .last()
+            .expect("last terminal failed");
 
         assert_request(
             &bus,
@@ -124,7 +124,7 @@ mod async_tests {
     use crate::testdata::builders::market_data::historical_ticks_request;
 
     #[tokio::test]
-    async fn trade_terminal_round_trip() {
+    async fn last_terminal_round_trip() {
         let (client, bus) = create_test_client_with_version(server_versions::HISTORICAL_TICKS);
         let contract = Contract::stock("AAPL").build();
         let start = datetime!(2026-04-15 9:30:00 UTC);
@@ -132,9 +132,9 @@ mod async_tests {
         let _sub = client
             .historical_ticks(&contract, 100)
             .starting(start)
-            .trade()
+            .last()
             .await
-            .expect("trade terminal failed");
+            .expect("last terminal failed");
 
         assert_request(
             &bus,

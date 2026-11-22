@@ -4,8 +4,8 @@
 //!
 //! Real-time methods are inherent methods on `ibapi::Client` — call
 //! `client.realtime_bars(...)`, `client.tick_by_tick(...)`,
-//! `client.market_depth(...)`, etc. The public types (`Bar`, `BidAsk`,
-//! `MidPoint`, `Trade`, `TickTypes`, `Quote`, `MarketDataBuilder`, `RealtimeBarsBuilder`,
+//! `client.market_depth(...)`, etc. The public types (`Bar`, `TickBidAsk`,
+//! `TickMidpoint`, `TickLast`, `TickTypes`, `Quote`, `MarketDataBuilder`, `RealtimeBarsBuilder`,
 //! `TickByTickBuilder`, `MarketDepthBuilder`, etc.) live at
 //! `ibapi::market_data::realtime::*` and via `ibapi::prelude::*`.
 //!
@@ -33,6 +33,8 @@ pub mod generic_tick;
 mod quote;
 pub use quote::Quote;
 
+pub use super::{TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
+
 // Feature-specific implementations
 #[doc(hidden)]
 #[cfg(feature = "sync")]
@@ -46,39 +48,7 @@ use crate::contracts::tick_types::TickType;
 
 // === Models ===
 
-/// Represents `BidAsk` tick by tick realtime tick.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct BidAsk {
-    /// The spread's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
-    pub time: OffsetDateTime,
-    /// tick-by-tick real-time tick bid price
-    pub bid_price: f64,
-    /// tick-by-tick real-time tick ask price
-    pub ask_price: f64,
-    /// tick-by-tick real-time tick bid size
-    pub bid_size: f64,
-    /// tick-by-tick real-time tick ask size
-    pub ask_size: f64,
-    /// tick-by-tick real-time bid/ask tick attribs (bit 0 - bid past low, bit 1 - ask past high)
-    pub bid_ask_attribute: BidAskAttribute,
-}
-
-impl Default for BidAsk {
-    /// Zero prices and sizes, timestamped at the Unix epoch.
-    fn default() -> Self {
-        Self {
-            time: OffsetDateTime::UNIX_EPOCH,
-            bid_price: 0.0,
-            ask_price: 0.0,
-            bid_size: 0.0,
-            ask_size: 0.0,
-            bid_ask_attribute: BidAskAttribute::default(),
-        }
-    }
-}
-
-impl StreamDecoder<BidAsk> for BidAsk {
+impl StreamDecoder<TickBidAsk> for TickBidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
@@ -99,37 +69,7 @@ impl StreamDecoder<BidAsk> for BidAsk {
     }
 }
 
-/// Attributes for bid/ask tick data.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-pub struct BidAskAttribute {
-    /// Indicates if the bid price is past the daily low.
-    pub bid_past_low: bool,
-    /// Indicates if the ask price is past the daily high.
-    pub ask_past_high: bool,
-}
-
-/// Represents `MidPoint` tick by tick realtime tick.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct MidPoint {
-    /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
-    pub time: OffsetDateTime,
-    /// mid point
-    pub mid_point: f64,
-}
-
-impl Default for MidPoint {
-    /// A zero midpoint, timestamped at the Unix epoch.
-    fn default() -> Self {
-        Self {
-            time: OffsetDateTime::UNIX_EPOCH,
-            mid_point: 0.0,
-        }
-    }
-}
-
-impl StreamDecoder<MidPoint> for MidPoint {
+impl StreamDecoder<TickMidpoint> for TickMidpoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
@@ -214,39 +154,7 @@ impl StreamDecoder<Bar> for Bar {
     }
 }
 
-/// Represents `Last` or `AllLast` tick-by-tick real-time tick.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct Trade {
-    /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
-    pub time: OffsetDateTime,
-    /// Tick last price
-    pub price: f64,
-    /// Tick last size
-    pub size: f64,
-    /// Tick attributes (bit 0 - past limit, bit 1 - unreported)
-    pub trade_attribute: TradeAttribute,
-    /// Tick exchange
-    pub exchange: String,
-    /// Tick special conditions
-    pub special_conditions: String,
-}
-
-impl Default for Trade {
-    /// A zero trade with empty exchange and conditions, timestamped at the Unix epoch.
-    fn default() -> Self {
-        Self {
-            time: OffsetDateTime::UNIX_EPOCH,
-            price: 0.0,
-            size: 0.0,
-            trade_attribute: TradeAttribute::default(),
-            exchange: String::new(),
-            special_conditions: String::new(),
-        }
-    }
-}
-
-impl StreamDecoder<Trade> for Trade {
+impl StreamDecoder<TickLast> for TickLast {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
@@ -265,16 +173,6 @@ impl StreamDecoder<Trade> for Trade {
     fn rejection_ends_request(notice: &Notice) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
     }
-}
-
-/// Attributes for trade tick data.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-pub struct TradeAttribute {
-    /// Indicates if the trade occurred past the limit price.
-    pub past_limit: bool,
-    /// Indicates if the trade was unreported.
-    pub unreported: bool,
 }
 
 /// Specifies the type of data to show for real-time bars.

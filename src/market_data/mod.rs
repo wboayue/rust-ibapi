@@ -5,6 +5,10 @@ pub mod historical;
 /// Real-time streaming market data helpers.
 pub mod realtime;
 
+mod common;
+mod ticks;
+pub use ticks::{TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
+
 use serde::{Deserialize, Serialize};
 
 /// Specifies whether to include only regular trading hours or extended hours
@@ -34,19 +38,20 @@ impl TradingHours {
     }
 }
 
-/// Whether a tick-by-tick subscription should drop tick size information.
+/// Whether a bid/ask tick request ignores size changes.
 ///
-/// IBKR's bid/ask tick-by-tick request honors this flag; the other tick types
-/// (`Last` / `AllLast` / `MidPoint`) ignore it on the wire. Exposed only on
-/// the `.bid_ask(...)` terminals of
+/// IBKR's bid/ask tick requests, tick-by-tick and historical, honor this flag;
+/// the other tick types (`Last` / `AllLast` / `MidPoint`) ignore it on the wire.
+/// Exposed only on the `.bid_ask(...)` terminals of
 /// [`HistoricalTicksBuilder`](crate::market_data::historical::HistoricalTicksBuilder)
 /// and [`TickByTickBuilder`](crate::market_data::realtime::TickByTickBuilder).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IgnoreSize {
-    /// Tick sizes are omitted from the response.
+    /// Updates that change only a size are not sent; each update still carries its sizes
+    /// (`docs/wire-facts/market-data.md#tick-by-tick-sizes-and-ignoresize`).
     Yes,
-    /// Tick sizes are included in the response.
+    /// Every update is sent, including those that change only a size.
     No,
 }
 

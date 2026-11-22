@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .historical_ticks(&contract, number_of_ticks)
         .starting(start_time)
         .ending(end_time)
-        .trade()
+        .last()
         .await?
         .filter_data();
 
@@ -62,15 +62,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(tick) = tick_subscription.next().await {
         let tick = tick?;
         tick_count += 1;
-        let size = tick.size.unwrap_or(0.0);
-        total_volume += size;
-        total_value += tick.price * size;
+        total_volume += tick.size;
+        total_value += tick.price * tick.size;
 
         // Count trades by exchange
         *trades_by_exchange.entry(tick.exchange.clone()).or_insert(0) += 1;
 
         // Format timestamp
-        let time_str = format!("{}", tick.timestamp);
+        let time_str = format!("{}", tick.time);
 
         // Format trade conditions
         let conditions = if tick.special_conditions.is_empty() {
@@ -80,12 +79,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         println!(
-            "{} | ${:7.2} | {:>6} | {:8} | {}",
-            time_str,
-            tick.price,
-            fmt_size(tick.size),
-            tick.exchange,
-            conditions
+            "{} | ${:7.2} | {:6.0} | {:8} | {}",
+            time_str, tick.price, tick.size, tick.exchange, conditions
         );
 
         // Show running statistics every 50 ticks
@@ -118,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 2: Get most recent trades (no start time)
     println!("\n\nExample 2: Most recent {} trades", 20);
-    let mut recent_trades = client.historical_ticks(&contract, 20).trade().await?.filter_data();
+    let mut recent_trades = client.historical_ticks(&contract, 20).last().await?.filter_data();
 
     println!("\nTime                     | Price    | Size");
     println!("-------------------------|----------|------");
@@ -127,17 +122,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(tick) = recent_trades.next().await {
         let tick = tick?;
         recent_count += 1;
-        let time_str = format!("{}", tick.timestamp);
-        println!("{} | ${:7.2} | {:>5}", time_str, tick.price, fmt_size(tick.size));
+        let time_str = format!("{}", tick.time);
+        println!("{} | ${:7.2} | {:5.0}", time_str, tick.price, tick.size);
     }
 
     println!("\nRetrieved {} recent trades", recent_count);
     println!("\nExample completed!");
     Ok(())
-}
-
-/// `None` means TWS reported no size for the tick — show that rather than
-/// silently printing a zero.
-fn fmt_size(size: Option<f64>) -> String {
-    size.map_or_else(|| "n/a".to_string(), |s| format!("{s:.0}"))
 }

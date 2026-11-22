@@ -3,15 +3,15 @@ use super::*;
 use crate::common::test_utils::helpers::proto_response;
 use crate::market_data::historical::TickLast;
 use crate::messages::{IncomingMessages, Notice};
-use crate::testdata::builders::market_data::{historical_tick_last, historical_ticks_last_response};
+use crate::testdata::builders::market_data::{historical_ticks_last_response, tick_last};
 use crate::testdata::builders::ResponseProtoEncoder;
 
 fn tick_batch_response(done: bool) -> RoutedItem {
     RoutedItem::Response(proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 12.00, 100.0, "NYSE"))
-            .tick(historical_tick_last(1_681_133_401, 12.01, 200.0, "NYSE"))
+            .tick(tick_last(1_681_133_400, 12.00, 100.0, "NYSE"))
+            .tick(tick_last(1_681_133_401, 12.01, 200.0, "NYSE"))
             .done(done)
             .encode_proto(),
     ))

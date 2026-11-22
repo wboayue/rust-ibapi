@@ -150,7 +150,7 @@ fn historical_ticks_trade() {
     let subscription = client
         .historical_ticks(&contract, 100)
         .ending(end)
-        .trade()
+        .last()
         .expect("historical_ticks_trade failed");
 
     let _tick = subscription.next_timeout(StdDuration::from_secs(10));
