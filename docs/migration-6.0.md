@@ -947,12 +947,12 @@ historical size used as an `Option` or read from a midpoint. It does not catch t
 
 ### 40. `OptionChain::expirations` is `Vec<Expiry>`
 
-TWS sends each option chain expiration as a `YYYYMMDD` date (stock, index and futures option
-chains, live). The field was `Vec<String>`, so finding the nearest expiration meant parsing or
+In live checks of stock, index and futures option chains, TWS sent every expiration as a
+`YYYYMMDD` date. The field was `Vec<String>`, so finding the nearest expiration meant parsing or
 comparing text. It is now `Vec<Expiry>`: each date is an `Expiry::Date(ExpirationDate)`, which
-goes straight into `Contract::option`. A `YYYYMM` entry is an `Expiry::Month`, other text is
-kept as `Expiry::Unknown`, so an unexpected value never fails the request, and an empty entry is
-dropped. `Expiry` itself has no order, so `expirations.sort()` no longer compiles: take the dates
+goes straight into `Contract::option`. A `YYYYMM` entry is an `Expiry::Month` and an empty one
+is dropped. Any other text is kept as `Expiry::Unknown`, so a value TWS adds later never ends the
+stream. `Expiry` itself has no order, so `expirations.sort()` no longer compiles: take the dates
 with `Expiry::date`, which order chronologically.
 
 ```rust,ignore
@@ -967,7 +967,7 @@ let nearest = chain
     .iter()
     .filter_map(Expiry::date)
     .min()
-    .cloned();
+    .cloned(); // None if no dates
 let text: Vec<String> = chain.expirations.iter().map(ToString::to_string).collect(); // the 5.x strings
 ```
 

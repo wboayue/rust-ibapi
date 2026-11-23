@@ -114,7 +114,7 @@ Contract details and option chains. Format: [README](README.md).
 
 ### Option chain expirations are `YYYYMMDD` dates
 
-*Live 2026-11-16 Mon 02:30 ET (US equities closed, CME Globex open), paper, server 223.*
+*Live 2026-11-16 Mon 02:30 ET (US equities closed, CME Globex open), paper, server 223; #1253.*
 
 - `reqSecDefOptParams` for AAPL (22 chains), SPX (9 chains) and ES futures options on `CME`
   (21 chains, one per trading class such as `EW1`, `E3B`): every `expirations` entry is an
