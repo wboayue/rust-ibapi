@@ -31,8 +31,8 @@ than the code it holds. No implementation file carries an inline test block, so 
 drift. (Grouping `mod` blocks *inside* a `*_tests.rs` file is fine, as is the test-support code
 in `src/common/test_utils.rs`.)
 
-Residue: four `tests.rs` files remain (`src/tests.rs`, `src/messages/tests.rs`,
-`src/transport/tests.rs`, `src/orders/tests.rs`) beside 118 `*_tests.rs` (2026-10-27;
+Residue: three `tests.rs` files remain (`src/tests.rs`, `src/messages/tests.rs`,
+`src/transport/tests.rs`) beside 130 `*_tests.rs` (2026-11-23;
 `find src -name tests.rs`, `find src -name '*_tests.rs' | wc -l`). Convert one when already
 editing that module — see [modernize touched modules](../workflow/modernize-touched-modules.md) —
 and do not treat them as precedent.
