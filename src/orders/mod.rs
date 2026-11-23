@@ -762,6 +762,64 @@ impl Order {
             _ => false,
         }
     }
+
+    /// The trail of a trailing stop or trailing stop limit order, read from the fields that
+    /// [`OrderBuilder::trailing_stop`] and [`OrderBuilder::trailing_stop_limit`] set: the inverse
+    /// of their [`TrailBy`](builder::TrailBy).
+    ///
+    /// `None` for any other order type, and for a trailing order with neither a
+    /// [`trailing_percent`](Self::trailing_percent) nor an [`aux_price`](Self::aux_price). The
+    /// order type decides: TWS echoes a `trail_stop_price` on some plain limit orders too.
+    /// Read from an order TWS sends back, `stop_price` is the stop as TWS trails it, which moves
+    /// with the market (live: 2026-11-23, paper EUR.USD; see
+    /// `docs/wire-facts/orders.md#trailing-order-echo`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::orders::builder::TrailBy;
+    /// use ibapi::orders::{Order, Trailing};
+    ///
+    /// let order = Order::builder().sell(100).trailing_stop_limit(TrailBy::Percent(1.5), 148.0, 0.5).build()?;
+    /// assert_eq!(
+    ///     order.trailing(),
+    ///     Some(Trailing { trail: TrailBy::Percent(1.5), stop_price: Some(148.0), limit_offset: Some(0.5) })
+    /// );
+    ///
+    /// let limit = Order::builder().buy(100).limit(150.0).build()?;
+    /// assert_eq!(limit.trailing(), None);
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn trailing(&self) -> Option<Trailing> {
+        let limit_offset = match self.order_type {
+            Some(OrderType::TrailingStop) => None,
+            Some(OrderType::TrailingStopLimit) => self.limit_price_offset,
+            _ => return None,
+        };
+        let trail = match (self.trailing_percent, self.aux_price) {
+            (Some(percent), _) => builder::TrailBy::Percent(percent),
+            (None, Some(amount)) => builder::TrailBy::Amount(amount),
+            (None, None) => return None,
+        };
+        Some(Trailing {
+            trail,
+            stop_price: self.trail_stop_price,
+            limit_offset,
+        })
+    }
+}
+
+/// The trail of a trailing order, from [`Order::trailing`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Trailing {
+    /// How far the stop trails the market: [`Order::aux_price`] as an amount, or
+    /// [`Order::trailing_percent`] as a percentage.
+    pub trail: builder::TrailBy,
+    /// The stop price, [`Order::trail_stop_price`].
+    pub stop_price: Option<f64>,
+    /// For a trailing stop limit, the limit price's offset from the stop,
+    /// [`Order::limit_price_offset`]; `None` for a trailing stop.
+    pub limit_offset: Option<f64>,
 }
 
 /// Identifies the side.
