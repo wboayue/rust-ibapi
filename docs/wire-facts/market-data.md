@@ -220,9 +220,16 @@ Z6, all three types, extended hours), paper TWS, server 223.*
   quotes but no trades. Over 09:16:46.5 to 09:18:46.5, paging that way returned 4345 bid/ask
   ticks with 100-tick pages and 5852 with 1000-tick pages; refetching the earliest second
   returned 6185 with both, and the same 511 trades and 992 midpoints with both.
-- Settles the paging rules of `HistoricalTicksBuilder::between`.
-- **Not probed:** stocks, RTH-only requests, `IgnoreSize::Yes` pages, whether the single tick is
-  the first or the last of its second.
+- A stock pages the same way: AAPL trades over 2026-11-23 15:00 to 15:02 UTC (RTH) returned
+  the same 5845 trades with 100-tick and 1000-tick pages.
+- A request ending in a closed market returns the ticks before it: AAPL trades over Saturday
+  2026-11-21 15:00 to 15:02 UTC (RTH) paged to `start` with no ticks in the range. A request
+  ending before TWS's tick history returns no ticks: AAPL trades over 2005-01-03 15:00 to
+  15:02 UTC (extended hours) got an empty first page. *Live 2026-11-23, paper TWS.*
+- Settles the paging rules of `HistoricalTicksBuilder::between`, and when it reports
+  `PagingStop::ReachedStart` or `PagingStop::EmptyPage`.
+- **Not probed:** stock bid/ask pages, `IgnoreSize::Yes` pages, whether the single tick is the
+  first or the last of its second.
 
 ### Size fields are always sent
 

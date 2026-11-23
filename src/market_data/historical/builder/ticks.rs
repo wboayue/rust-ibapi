@@ -67,8 +67,10 @@ impl<'a, C> HistoricalTicksBuilder<'a, C> {
     ///
     /// The tick count passed to `historical_ticks` becomes the size of each request (TWS serves
     /// up to 1000). The terminals send requests until one reaches back to `start` or returns no
-    /// ticks, and return the ticks oldest first. Any [`starting`](Self::starting) or
-    /// [`ending`](Self::ending) set before is ignored.
+    /// ticks, and return the ticks oldest first in a [`TicksBetween`], which says which of the
+    /// two ended the paging. A failed request returns a [`TicksBetweenError`] holding the ticks
+    /// fetched before it. Any [`starting`](Self::starting) or [`ending`](Self::ending) set
+    /// before is ignored.
     ///
     /// # Examples
     #[cfg_attr(
@@ -88,7 +90,8 @@ let ticks = client
     .between(datetime!(2026-11-13 14:30 UTC), datetime!(2026-11-13 14:35 UTC))
     .trading_hours(TradingHours::Extended)
     .last()
-    .expect("historical ticks request failed");
+    .expect("historical ticks request failed")
+    .ticks;
 
 println!("{} trades", ticks.len());
 ```
@@ -113,7 +116,8 @@ async fn main() {
         .trading_hours(TradingHours::Extended)
         .last()
         .await
-        .expect("historical ticks request failed");
+        .expect("historical ticks request failed")
+        .ticks;
 
     println!("{} trades", ticks.len());
 }
@@ -137,6 +141,9 @@ async fn main() {
 ///
 /// Its terminals page backward and return the ticks in `[start, end]`, oldest first. A `start`
 /// not before `end` fails with [`Error::InvalidArgument`] and nothing is sent.
+///
+/// A terminal returns [`TicksBetween`] once paging stops, and [`TicksBetweenError`] when a
+/// request fails. `?` converts the error into [`Error`], dropping the ticks it holds.
 #[must_use = "HistoricalTicksBetweenBuilder does nothing until you call .last(), .mid_point(), or .bid_ask(...)"]
 pub struct HistoricalTicksBetweenBuilder<'a, C> {
     client: &'a C,
@@ -170,15 +177,17 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::sync::Client> {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("AAPL").build();
     ///
-    /// let ticks = client
+    /// let result = client
     ///     .historical_ticks(&contract, 1000)
     ///     .between(datetime!(2026-11-13 14:30 UTC), datetime!(2026-11-13 14:35 UTC))
-    ///     .last()
-    ///     .expect("historical ticks request failed");
+    ///     .last();
     ///
-    /// println!("{} trades", ticks.len());
+    /// match result {
+    ///     Ok(trades) => println!("{} trades, stopped at {:?}", trades.ticks.len(), trades.stop),
+    ///     Err(e) => println!("{e}: kept {} trades complete from {:?}", e.ticks.len(), e.from),
+    /// }
     /// ```
-    pub fn last(self) -> Result<Vec<TickLast>, Error> {
+    pub fn last(self) -> Result<TicksBetween<TickLast>, TicksBetweenError<TickLast>> {
         self.fetch(WhatToShow::Trades, false)
     }
 
@@ -198,11 +207,12 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::sync::Client> {
     ///     .historical_ticks(&contract, 1000)
     ///     .between(datetime!(2026-11-13 14:30 UTC), datetime!(2026-11-13 14:35 UTC))
     ///     .mid_point()
-    ///     .expect("historical ticks request failed");
+    ///     .expect("historical ticks request failed")
+    ///     .ticks;
     ///
     /// println!("{} midpoints", ticks.len());
     /// ```
-    pub fn mid_point(self) -> Result<Vec<TickMidpoint>, Error> {
+    pub fn mid_point(self) -> Result<TicksBetween<TickMidpoint>, TicksBetweenError<TickMidpoint>> {
         self.fetch(WhatToShow::MidPoint, false)
     }
 
@@ -224,15 +234,16 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::sync::Client> {
     ///     .historical_ticks(&contract, 1000)
     ///     .between(datetime!(2026-11-13 14:30 UTC), datetime!(2026-11-13 14:35 UTC))
     ///     .bid_ask(IgnoreSize::No)
-    ///     .expect("historical ticks request failed");
+    ///     .expect("historical ticks request failed")
+    ///     .ticks;
     ///
     /// println!("{} quotes", ticks.len());
     /// ```
-    pub fn bid_ask(self, ignore_size: IgnoreSize) -> Result<Vec<TickBidAsk>, Error> {
+    pub fn bid_ask(self, ignore_size: IgnoreSize) -> Result<TicksBetween<TickBidAsk>, TicksBetweenError<TickBidAsk>> {
         self.fetch(WhatToShow::BidAsk, matches!(ignore_size, IgnoreSize::Yes))
     }
 
-    fn fetch<T: TickDecoder<T> + PagedTick>(self, what_to_show: WhatToShow, ignore_size: bool) -> Result<Vec<T>, Error> {
+    fn fetch<T: TickDecoder<T> + PagedTick>(self, what_to_show: WhatToShow, ignore_size: bool) -> Result<TicksBetween<T>, TicksBetweenError<T>> {
         crate::market_data::historical::sync::historical_ticks_between::<T>(
             self.client,
             self.contract,
@@ -261,17 +272,19 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::r#async::Client> {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     let contract = Contract::stock("AAPL").build();
     ///
-    ///     let ticks = client
+    ///     let result = client
     ///         .historical_ticks(&contract, 1000)
     ///         .between(datetime!(2026-11-13 14:30 UTC), datetime!(2026-11-13 14:35 UTC))
     ///         .last()
-    ///         .await
-    ///         .expect("historical ticks request failed");
+    ///         .await;
     ///
-    ///     println!("{} trades", ticks.len());
+    ///     match result {
+    ///         Ok(trades) => println!("{} trades, stopped at {:?}", trades.ticks.len(), trades.stop),
+    ///         Err(e) => println!("{e}: kept {} trades complete from {:?}", e.ticks.len(), e.from),
+    ///     }
     /// }
     /// ```
-    pub async fn last(self) -> Result<Vec<TickLast>, Error> {
+    pub async fn last(self) -> Result<TicksBetween<TickLast>, TicksBetweenError<TickLast>> {
         self.fetch(WhatToShow::Trades, false).await
     }
 
@@ -293,12 +306,13 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::r#async::Client> {
     ///         .between(datetime!(2026-11-13 14:30 UTC), datetime!(2026-11-13 14:35 UTC))
     ///         .mid_point()
     ///         .await
-    ///         .expect("historical ticks request failed");
+    ///         .expect("historical ticks request failed")
+    ///         .ticks;
     ///
     ///     println!("{} midpoints", ticks.len());
     /// }
     /// ```
-    pub async fn mid_point(self) -> Result<Vec<TickMidpoint>, Error> {
+    pub async fn mid_point(self) -> Result<TicksBetween<TickMidpoint>, TicksBetweenError<TickMidpoint>> {
         self.fetch(WhatToShow::MidPoint, false).await
     }
 
@@ -322,16 +336,21 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::r#async::Client> {
     ///         .between(datetime!(2026-11-13 14:30 UTC), datetime!(2026-11-13 14:35 UTC))
     ///         .bid_ask(IgnoreSize::No)
     ///         .await
-    ///         .expect("historical ticks request failed");
+    ///         .expect("historical ticks request failed")
+    ///         .ticks;
     ///
     ///     println!("{} quotes", ticks.len());
     /// }
     /// ```
-    pub async fn bid_ask(self, ignore_size: IgnoreSize) -> Result<Vec<TickBidAsk>, Error> {
+    pub async fn bid_ask(self, ignore_size: IgnoreSize) -> Result<TicksBetween<TickBidAsk>, TicksBetweenError<TickBidAsk>> {
         self.fetch(WhatToShow::BidAsk, matches!(ignore_size, IgnoreSize::Yes)).await
     }
 
-    async fn fetch<T: TickDecoder<T> + PagedTick + Unpin>(self, what_to_show: WhatToShow, ignore_size: bool) -> Result<Vec<T>, Error> {
+    async fn fetch<T: TickDecoder<T> + PagedTick + Unpin>(
+        self,
+        what_to_show: WhatToShow,
+        ignore_size: bool,
+    ) -> Result<TicksBetween<T>, TicksBetweenError<T>> {
         crate::market_data::historical::r#async::historical_ticks_between::<T>(
             self.client,
             self.contract,
@@ -343,6 +362,51 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::r#async::Client> {
             ignore_size,
         )
         .await
+    }
+}
+
+/// The ticks a [`HistoricalTicksBetweenBuilder`] terminal fetched, and how the paging stopped.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TicksBetween<T> {
+    /// The ticks in `[start, end]`, oldest first.
+    pub ticks: Vec<T>,
+    /// The time from which [`ticks`](Self::ticks) holds every tick TWS serves up to `end`:
+    /// `start` when paging reached it, otherwise the earliest complete second fetched. `None`
+    /// when no page held a tick.
+    pub from: Option<OffsetDateTime>,
+    /// Why paging stopped.
+    pub stop: PagingStop,
+}
+
+/// Why a [`HistoricalTicksBetweenBuilder`] terminal stopped paging.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PagingStop {
+    /// A page reached back to `start`: the ticks cover `[start, end]`. A range with no trading,
+    /// such as a weekend, ends here with no ticks, as TWS answers with earlier ticks.
+    ReachedStart,
+    /// A request returned no ticks before its end: [`TicksBetween::from`], or just after `end`
+    /// when no page held a tick. TWS serves no earlier ticks for these trading hours, as when
+    /// the range starts before the history TWS keeps.
+    EmptyPage,
+}
+
+/// A failed request in a [`HistoricalTicksBetweenBuilder`] terminal, with the ticks fetched
+/// before it.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{error} ({} ticks fetched before the failed request)", .ticks.len())]
+pub struct TicksBetweenError<T> {
+    /// Why the request failed.
+    pub error: Error,
+    /// The ticks in `[start, end]` from the pages read before the failure, oldest first:
+    /// complete from [`from`](Self::from) to `end`.
+    pub ticks: Vec<T>,
+    /// The earliest complete second fetched, or `None` when no page held a tick.
+    pub from: Option<OffsetDateTime>,
+}
+
+impl<T> From<TicksBetweenError<T>> for Error {
+    fn from(error: TicksBetweenError<T>) -> Self {
+        error.error
     }
 }
 

@@ -8,8 +8,11 @@
 //! page's complete seconds begin, which neither skips nor repeats a tick. See the wire facts in
 //! `docs/wire-facts/market-data.md`.
 
+use std::ops::ControlFlow;
+
 use time::{Duration, OffsetDateTime};
 
+use crate::market_data::historical::{PagingStop, TicksBetween, TicksBetweenError};
 use crate::market_data::{TickBidAsk, TickLast, TickMidpoint};
 use crate::Error;
 
@@ -56,11 +59,13 @@ pub(crate) struct TickPages<T> {
 impl<T: PagedTick> TickPages<T> {
     /// Starts paging over `[start, end]`. The first request ends one second after `end`'s whole
     /// second, as TWS excludes the end second.
-    pub(crate) fn new(start: OffsetDateTime, end: OffsetDateTime) -> Result<Self, Error> {
+    pub(crate) fn new(start: OffsetDateTime, end: OffsetDateTime) -> Result<Self, TicksBetweenError<T>> {
         if end <= start {
-            return Err(Error::InvalidArgument(
-                "historical_ticks: .between(start, end) requires end > start".to_owned(),
-            ));
+            return Err(TicksBetweenError {
+                error: Error::InvalidArgument("historical_ticks: .between(start, end) requires end > start".to_owned()),
+                ticks: Vec::new(),
+                from: None,
+            });
         }
 
         Ok(Self {
@@ -77,14 +82,14 @@ impl<T: PagedTick> TickPages<T> {
     }
 
     /// Adds the ticks a request ending at [`request_end`](Self::request_end) returned, and
-    /// returns whether another request is needed.
+    /// returns whether another request is needed or why paging stops.
     ///
     /// The page keeps its complete seconds: ticks at or after the request end are dropped, and so
     /// is a partial earliest second, which the next request fetches whole. Paging stops at a page
     /// that holds no ticks or whose complete seconds reach back to `start`.
-    pub(crate) fn push(&mut self, page: Vec<T>) -> bool {
+    pub(crate) fn push(&mut self, page: Vec<T>) -> ControlFlow<PagingStop> {
         let Some(earliest) = page.iter().map(PagedTick::time).filter(|time| *time < self.request_end).min() else {
-            return false;
+            return ControlFlow::Break(PagingStop::EmptyPage);
         };
 
         let earliest_second = whole_second(earliest);
@@ -103,15 +108,43 @@ impl<T: PagedTick> TickPages<T> {
             .push(page.into_iter().filter(|tick| (from..to).contains(&tick.time())).collect());
 
         if complete_from <= self.start {
-            return false;
+            return ControlFlow::Break(PagingStop::ReachedStart);
         }
 
         self.request_end = complete_from;
-        true
+        ControlFlow::Continue(())
+    }
+
+    /// The ticks fetched once paging stopped for `stop`.
+    pub(crate) fn finish(self, stop: PagingStop) -> TicksBetween<T> {
+        let from = match stop {
+            PagingStop::ReachedStart => Some(self.start),
+            PagingStop::EmptyPage => self.complete_from(),
+        };
+        TicksBetween {
+            ticks: self.into_ticks(),
+            from,
+            stop,
+        }
+    }
+
+    /// The ticks fetched before a request failed with `error`.
+    pub(crate) fn fail(self, error: Error) -> TicksBetweenError<T> {
+        TicksBetweenError {
+            from: self.complete_from(),
+            ticks: self.into_ticks(),
+            error,
+        }
+    }
+
+    // Each page pushed without reaching `start` moved the request end to where its complete
+    // seconds begin
+    fn complete_from(&self) -> Option<OffsetDateTime> {
+        (!self.pages.is_empty()).then_some(self.request_end)
     }
 
     /// The ticks in `[start, end]`, oldest first.
-    pub(crate) fn into_ticks(self) -> Vec<T> {
+    fn into_ticks(self) -> Vec<T> {
         let (start, end) = (self.start, self.end);
         self.pages
             .into_iter()

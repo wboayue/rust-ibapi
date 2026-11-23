@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::ops::ControlFlow;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -25,7 +26,7 @@ use super::common::tick_pages::{PagedTick, TickPages};
 use super::common::{self, encoders};
 use super::{
     BarRequest, BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalData, HistoricalDataFrame, Schedule,
-    ScheduleRequest, TickDecoder, WhatToShow,
+    ScheduleRequest, TickDecoder, TicksBetween, TicksBetweenError, WhatToShow,
 };
 use crate::market_data::TradingHours;
 
@@ -388,29 +389,38 @@ pub(crate) async fn historical_ticks_between<T: TickDecoder<T> + PagedTick + Unp
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
     ignore_size: bool,
-) -> Result<Vec<T>, Error> {
+) -> Result<TicksBetween<T>, TicksBetweenError<T>> {
     let mut pages = TickPages::new(start, end)?;
 
     loop {
-        let mut ticks = historical_ticks::<T>(
-            client,
-            contract,
-            None,
-            Some(pages.request_end()),
-            number_of_ticks,
-            what_to_show,
-            trading_hours,
-            ignore_size,
-        )
-        .await?
-        .filter_data();
-        let mut page = Vec::new();
-        while let Some(tick) = ticks.next().await {
-            page.push(tick?);
+        let page = async {
+            let mut ticks = historical_ticks::<T>(
+                client,
+                contract,
+                None,
+                Some(pages.request_end()),
+                number_of_ticks,
+                what_to_show,
+                trading_hours,
+                ignore_size,
+            )
+            .await?
+            .filter_data();
+            let mut page = Vec::new();
+            while let Some(tick) = ticks.next().await {
+                page.push(tick?);
+            }
+            Ok::<_, Error>(page)
         }
+        .await;
 
-        if !pages.push(page) {
-            return Ok(pages.into_ticks());
+        match page {
+            Ok(page) => {
+                if let ControlFlow::Break(stop) = pages.push(page) {
+                    return Ok(pages.finish(stop));
+                }
+            }
+            Err(error) => return Err(pages.fail(error)),
         }
     }
 }
