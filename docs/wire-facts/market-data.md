@@ -226,8 +226,8 @@ Z6, all three types, extended hours), paper TWS, server 223.*
   2026-11-21 15:00 to 15:02 UTC (RTH) paged to `start` with no ticks in the range. A request
   ending before TWS's tick history returns no ticks: AAPL trades over 2005-01-03 15:00 to
   15:02 UTC (extended hours) got an empty first page. *Live 2026-11-23, paper TWS.*
-- Settles the paging rules of `HistoricalTicksBuilder::between`, and when it reports
-  `PagingStop::ReachedStart` or `PagingStop::EmptyPage`.
+- Settles the paging rules of `HistoricalTicksBuilder::between` and `latest`, and when they
+  report `PagingStop::ReachedStart` or `PagingStop::EmptyPage`.
 - **Not probed:** stock bid/ask pages, `IgnoreSize::Yes` pages, whether the single tick is the
   first or the last of its second.
 

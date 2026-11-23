@@ -1,11 +1,12 @@
-//! Shared paging for historical ticks over a time range.
+//! Shared paging for historical ticks backward from an end time.
 //!
 //! TWS answers a historical ticks request ending at `end` with ticks before `end`, read at whole
 //! seconds: a fractional `end` is truncated and the end second itself is excluded. A page asked
 //! for `n` ticks holds whole seconds, so it can exceed `n`, except at its earliest second: a trade
 //! page holds every trade of that second, but a bid/ask or midpoint page holds only one of its
 //! ticks. [`TickPages`] pages backward under those rules: each request ends where the previous
-//! page's complete seconds begin, which neither skips nor repeats a tick. See the wire facts in
+//! page's complete seconds begin, which neither skips nor repeats a tick. Paging stops at `start`,
+//! at an empty page, or once a limit of ticks is collected. See the wire facts in
 //! `docs/wire-facts/market-data.md`.
 
 use std::ops::ControlFlow;
@@ -48,19 +49,24 @@ impl PagedTick for TickMidpoint {
     }
 }
 
-/// The pages of ticks fetched backward over `[start, end]`, and the end of the next request.
+/// The pages of ticks fetched backward from `end`, back to `start` when there is one, and the end
+/// of the next request.
 pub(crate) struct TickPages<T> {
-    start: OffsetDateTime,
+    start: Option<OffsetDateTime>,
     end: OffsetDateTime,
+    limit: Option<usize>,
     request_end: OffsetDateTime,
     pages: Vec<Vec<T>>,
+    /// The ticks in the pages that fall in the range, which `limit` counts.
+    collected: usize,
 }
 
 impl<T: PagedTick> TickPages<T> {
-    /// Starts paging over `[start, end]`. The first request ends one second after `end`'s whole
-    /// second, as TWS excludes the end second.
-    pub(crate) fn new(start: OffsetDateTime, end: OffsetDateTime) -> Result<Self, TicksBetweenError<T>> {
-        if end <= start {
+    /// Starts paging backward from `end`, back to `start` when given, until `limit` ticks are
+    /// collected when given. The first request ends one second after `end`'s whole second, as TWS
+    /// excludes the end second.
+    pub(crate) fn new(start: Option<OffsetDateTime>, end: OffsetDateTime, limit: Option<usize>) -> Result<Self, TicksBetweenError<T>> {
+        if start.is_some_and(|start| end <= start) {
             return Err(TicksBetweenError {
                 error: Error::InvalidArgument("historical_ticks: .between(start, end) requires end > start".to_owned()),
                 ticks: Vec::new(),
@@ -71,9 +77,16 @@ impl<T: PagedTick> TickPages<T> {
         Ok(Self {
             start,
             end,
+            limit,
             request_end: whole_second(end) + Duration::SECOND,
             pages: Vec::new(),
+            collected: 0,
         })
+    }
+
+    /// Whether the pages hold the limit of ticks, so no further request is needed.
+    pub(crate) fn limit_reached(&self) -> bool {
+        self.limit.is_some_and(|limit| self.collected >= limit)
     }
 
     /// The end of the next request.
@@ -104,10 +117,11 @@ impl<T: PagedTick> TickPages<T> {
         }
 
         let (from, to) = (complete_from, self.request_end);
-        self.pages
-            .push(page.into_iter().filter(|tick| (from..to).contains(&tick.time())).collect());
+        let page: Vec<T> = page.into_iter().filter(|tick| (from..to).contains(&tick.time())).collect();
+        self.collected += page.iter().filter(|tick| in_range(self.start, self.end, tick.time())).count();
+        self.pages.push(page);
 
-        if complete_from <= self.start {
+        if self.start.is_some_and(|start| complete_from <= start) {
             return ControlFlow::Break(PagingStop::ReachedStart);
         }
 
@@ -116,16 +130,29 @@ impl<T: PagedTick> TickPages<T> {
     }
 
     /// The ticks fetched once paging stopped for `stop`.
-    pub(crate) fn finish(self, stop: PagingStop) -> TicksBetween<T> {
-        let from = match stop {
-            PagingStop::ReachedStart => Some(self.start),
-            PagingStop::EmptyPage => self.complete_from(),
+    ///
+    /// Over the limit, only the latest whole seconds holding the limit are kept: the earliest one
+    /// kept is never cut, so the ticks can exceed the limit by fewer than that second holds. The
+    /// stop is then [`PagingStop::LimitReached`], even when the pages reached `start`.
+    pub(crate) fn finish(self, mut stop: PagingStop) -> TicksBetween<T> {
+        let mut from = match stop {
+            PagingStop::ReachedStart => self.start,
+            PagingStop::EmptyPage | PagingStop::LimitReached => self.complete_from(),
         };
-        TicksBetween {
-            ticks: self.into_ticks(),
-            from,
-            stop,
+        let limit = self.limit;
+        let mut ticks = self.into_ticks();
+
+        if let Some(limit) = limit.filter(|limit| (1..=ticks.len()).contains(limit)) {
+            let kept_from = whole_second(ticks[ticks.len() - limit].time());
+            let dropped = ticks.partition_point(|tick| tick.time() < kept_from);
+            if dropped > 0 {
+                ticks.drain(..dropped);
+                from = Some(kept_from);
+                stop = PagingStop::LimitReached;
+            }
         }
+
+        TicksBetween { ticks, from, stop }
     }
 
     /// The ticks fetched before a request failed with `error`.
@@ -143,16 +170,20 @@ impl<T: PagedTick> TickPages<T> {
         (!self.pages.is_empty()).then_some(self.request_end)
     }
 
-    /// The ticks in `[start, end]`, oldest first.
+    /// The ticks in the range, oldest first.
     fn into_ticks(self) -> Vec<T> {
-        let (start, end) = (self.start, self.end);
-        self.pages
+        let Self { start, end, pages, .. } = self;
+        pages
             .into_iter()
             .rev()
             .flatten()
-            .filter(|tick| (start..=end).contains(&tick.time()))
+            .filter(|tick| in_range(start, end, tick.time()))
             .collect()
     }
+}
+
+fn in_range(start: Option<OffsetDateTime>, end: OffsetDateTime, time: OffsetDateTime) -> bool {
+    time <= end && start.is_none_or(|start| time >= start)
 }
 
 fn whole_second(time: OffsetDateTime) -> OffsetDateTime {

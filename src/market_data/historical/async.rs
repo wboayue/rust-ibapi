@@ -25,7 +25,7 @@ use super::common::tick::{classify, TickAction};
 use super::common::tick_pages::{PagedTick, TickPages};
 use super::common::{self, encoders};
 use super::{
-    BarRequest, BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalData, HistoricalDataFrame, Schedule,
+    BarRequest, BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalData, HistoricalDataFrame, PagingStop, Schedule,
     ScheduleRequest, TickDecoder, TicksBetween, TicksBetweenError, WhatToShow,
 };
 use crate::market_data::TradingHours;
@@ -377,22 +377,27 @@ pub(crate) async fn historical_ticks<T: TickDecoder<T>>(
     Ok(TickSubscription::new(subscription, request_id, Arc::clone(&client.message_bus)))
 }
 
-// Pages `historical_ticks` backward over `[start, end]`; see `TickPages` for the rules. Same
-// builder-to-encoder seam as `historical_ticks`.
+// Pages `historical_ticks` backward from `end`, back to `start` or until `limit` ticks; see
+// `TickPages` for the rules. Same builder-to-encoder seam as `historical_ticks`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn historical_ticks_between<T: TickDecoder<T> + PagedTick + Unpin>(
     client: &Client,
     contract: &Contract,
-    start: OffsetDateTime,
+    start: Option<OffsetDateTime>,
     end: OffsetDateTime,
+    limit: Option<usize>,
     number_of_ticks: i32,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
     ignore_size: bool,
 ) -> Result<TicksBetween<T>, TicksBetweenError<T>> {
-    let mut pages = TickPages::new(start, end)?;
+    let mut pages = TickPages::new(start, end, limit)?;
 
     loop {
+        if pages.limit_reached() {
+            return Ok(pages.finish(PagingStop::LimitReached));
+        }
+
         let page = async {
             let mut ticks = historical_ticks::<T>(
                 client,

@@ -69,8 +69,9 @@ impl<'a, C> HistoricalTicksBuilder<'a, C> {
     /// up to 1000). The terminals send requests until one reaches back to `start` or returns no
     /// ticks, and return the ticks oldest first in a [`TicksBetween`], which says which of the
     /// two ended the paging. A failed request returns a [`TicksBetweenError`] holding the ticks
-    /// fetched before it. Any [`starting`](Self::starting) or [`ending`](Self::ending) set
-    /// before is ignored.
+    /// fetched before it. [`limit`](HistoricalTicksBetweenBuilder::limit) keeps only the latest
+    /// ticks; [`latest`](Self::latest) pages with no start. Any [`starting`](Self::starting) or
+    /// [`ending`](Self::ending) set before is ignored.
     ///
     /// # Examples
     #[cfg_attr(
@@ -129,18 +130,85 @@ async fn main() {
             client: self.client,
             contract: self.contract,
             number_of_ticks: self.number_of_ticks,
-            start,
+            start: Some(start),
             end,
+            limit: None,
+            trading_hours: self.trading_hours,
+        }
+    }
+
+    /// Fetch the latest `limit` ticks at or before `end`, by paging backward from `end`.
+    ///
+    /// Pages as [`between`](Self::between) does, with no start: requests go on until the pages
+    /// hold `limit` ticks or one returns no ticks. The result keeps whole seconds, so it can hold
+    /// more than `limit` ticks; see [`HistoricalTicksBetweenBuilder::limit`]. A `limit` of 0
+    /// sends nothing and returns no ticks.
+    ///
+    /// # Examples
+    #[cfg_attr(
+        feature = "sync",
+        doc = r#"
+```no_run
+use ibapi::client::blocking::Client;
+use ibapi::contracts::Contract;
+use time::macros::datetime;
+
+let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+let contract = Contract::stock("AAPL").build();
+
+let trades = client
+    .historical_ticks(&contract, 1000)
+    .latest(2500, datetime!(2026-11-13 21:00 UTC))
+    .last()
+    .expect("historical ticks request failed");
+
+println!("{} trades from {:?}, stopped at {:?}", trades.ticks.len(), trades.from, trades.stop);
+```
+"#
+    )]
+    #[cfg_attr(
+        feature = "async",
+        doc = r#"
+```no_run
+use ibapi::prelude::*;
+use time::macros::datetime;
+
+#[tokio::main]
+async fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    let contract = Contract::stock("AAPL").build();
+
+    let trades = client
+        .historical_ticks(&contract, 1000)
+        .latest(2500, datetime!(2026-11-13 21:00 UTC))
+        .last()
+        .await
+        .expect("historical ticks request failed");
+
+    println!("{} trades from {:?}, stopped at {:?}", trades.ticks.len(), trades.from, trades.stop);
+}
+```
+"#
+    )]
+    pub fn latest(self, limit: usize, end: OffsetDateTime) -> HistoricalTicksBetweenBuilder<'a, C> {
+        HistoricalTicksBetweenBuilder {
+            client: self.client,
+            contract: self.contract,
+            number_of_ticks: self.number_of_ticks,
+            start: None,
+            end,
+            limit: Some(limit),
             trading_hours: self.trading_hours,
         }
     }
 }
 
-/// Builder for every historical tick in a time range, returned by
-/// [`HistoricalTicksBuilder::between`].
+/// Builder for historical ticks paged backward from an end time, returned by
+/// [`HistoricalTicksBuilder::between`] and [`HistoricalTicksBuilder::latest`].
 ///
-/// Its terminals page backward and return the ticks in `[start, end]`, oldest first. A `start`
-/// not before `end` fails with [`Error::InvalidArgument`] and nothing is sent.
+/// Its terminals page backward and return the ticks in `[start, end]`, or the latest ones at or
+/// before `end` under a [`limit`](Self::limit), oldest first. A `start` not before `end` fails
+/// with [`Error::InvalidArgument`] and nothing is sent.
 ///
 /// A terminal returns [`TicksBetween`] once paging stops, and [`TicksBetweenError`] when a
 /// request fails. `?` converts the error into [`Error`], dropping the ticks it holds.
@@ -149,8 +217,9 @@ pub struct HistoricalTicksBetweenBuilder<'a, C> {
     client: &'a C,
     contract: &'a Contract,
     number_of_ticks: i32,
-    start: OffsetDateTime,
+    start: Option<OffsetDateTime>,
     end: OffsetDateTime,
+    limit: Option<usize>,
     trading_hours: TradingHours,
 }
 
@@ -159,6 +228,67 @@ impl<C> HistoricalTicksBetweenBuilder<'_, C> {
     /// [`HistoricalTicksBuilder`], which defaults to `TradingHours::Regular`).
     pub fn trading_hours(mut self, trading_hours: TradingHours) -> Self {
         self.trading_hours = trading_hours;
+        self
+    }
+
+    /// Keep only the latest `limit` ticks, and stop paging once the pages hold that many.
+    ///
+    /// The ticks kept are whole seconds: the earliest second kept is never cut, so the result
+    /// can hold more than `limit` ticks, by fewer than that second holds. [`TicksBetween::from`]
+    /// is then the start of that second and the stop is [`PagingStop::LimitReached`]. A `limit`
+    /// smaller than one second's ticks returns that whole second. A `limit` of 0 sends nothing
+    /// and returns no ticks.
+    ///
+    /// # Examples
+    #[cfg_attr(
+        feature = "sync",
+        doc = r#"
+```no_run
+use ibapi::client::blocking::Client;
+use ibapi::contracts::Contract;
+use time::macros::datetime;
+
+let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+let contract = Contract::stock("AAPL").build();
+
+let trades = client
+    .historical_ticks(&contract, 1000)
+    .between(datetime!(2026-11-13 14:30 UTC), datetime!(2026-11-13 21:00 UTC))
+    .limit(2500)
+    .last()
+    .expect("historical ticks request failed");
+
+println!("{} trades from {:?}, stopped at {:?}", trades.ticks.len(), trades.from, trades.stop);
+```
+"#
+    )]
+    #[cfg_attr(
+        feature = "async",
+        doc = r#"
+```no_run
+use ibapi::prelude::*;
+use time::macros::datetime;
+
+#[tokio::main]
+async fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    let contract = Contract::stock("AAPL").build();
+
+    let trades = client
+        .historical_ticks(&contract, 1000)
+        .between(datetime!(2026-11-13 14:30 UTC), datetime!(2026-11-13 21:00 UTC))
+        .limit(2500)
+        .last()
+        .await
+        .expect("historical ticks request failed");
+
+    println!("{} trades from {:?}, stopped at {:?}", trades.ticks.len(), trades.from, trades.stop);
+}
+```
+"#
+    )]
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = Some(limit);
         self
     }
 }
@@ -249,6 +379,7 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::sync::Client> {
             self.contract,
             self.start,
             self.end,
+            self.limit,
             self.number_of_ticks,
             what_to_show,
             self.trading_hours,
@@ -356,6 +487,7 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::r#async::Client> {
             self.contract,
             self.start,
             self.end,
+            self.limit,
             self.number_of_ticks,
             what_to_show,
             self.trading_hours,
@@ -368,11 +500,14 @@ impl HistoricalTicksBetweenBuilder<'_, crate::client::r#async::Client> {
 /// The ticks a [`HistoricalTicksBetweenBuilder`] terminal fetched, and how the paging stopped.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TicksBetween<T> {
-    /// The ticks in `[start, end]`, oldest first.
+    /// The ticks in the range, oldest first: in `[start, end]`, or at or before `end` with no
+    /// start. Under a limit, the latest whole seconds holding it; see
+    /// [`HistoricalTicksBetweenBuilder::limit`].
     pub ticks: Vec<T>,
     /// The time from which [`ticks`](Self::ticks) holds every tick TWS serves up to `end`:
-    /// `start` when paging reached it, otherwise the earliest complete second fetched. `None`
-    /// when no page held a tick.
+    /// `start` when paging reached it, the earliest second kept when the limit dropped older
+    /// ticks, and otherwise the earliest complete second fetched. Always the start of a complete
+    /// second unless it is `start`. `None` when no page held a tick.
     pub from: Option<OffsetDateTime>,
     /// Why paging stopped.
     pub stop: PagingStop,
@@ -388,6 +523,10 @@ pub enum PagingStop {
     /// when no page held a tick. TWS serves no earlier ticks for these trading hours, as when
     /// the range starts before the history TWS keeps.
     EmptyPage,
+    /// The pages held the [`limit`](HistoricalTicksBetweenBuilder::limit) of ticks. Older ticks
+    /// may exist before [`TicksBetween::from`]. Also reported when the pages reached `start` but
+    /// the limit dropped ticks after it.
+    LimitReached,
 }
 
 /// A failed request in a [`HistoricalTicksBetweenBuilder`] terminal, with the ticks fetched
@@ -397,8 +536,8 @@ pub enum PagingStop {
 pub struct TicksBetweenError<T> {
     /// Why the request failed.
     pub error: Error,
-    /// The ticks in `[start, end]` from the pages read before the failure, oldest first:
-    /// complete from [`from`](Self::from) to `end`.
+    /// The ticks in the range from the pages read before the failure, oldest first: complete
+    /// from [`from`](Self::from) to `end`. Fewer than the limit, if one was set.
     pub ticks: Vec<T>,
     /// The earliest complete second fetched, or `None` when no page held a tick.
     pub from: Option<OffsetDateTime>,

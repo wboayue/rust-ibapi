@@ -401,6 +401,162 @@ mod sync_between_tests {
         assert_request_ends(&bus, &contract, &[datetime!(2026-11-13 14:30:00 UTC), datetime!(2026-11-13 14:28:35 UTC)]);
     }
 
+    // Trades at 14:27:10 and 14:28:00, the page before `page()`
+    fn earlier_page() -> ResponseMessage {
+        proto_response(
+            IncomingMessages::HistoricalTickLast,
+            historical_ticks_last_response()
+                .tick(tick_last(1_794_580_030, 7_099.00, 1.0, "CME"))
+                .tick(tick_last(1_794_580_080, 7_099.50, 1.0, "CME"))
+                .done(true)
+                .encode_proto(),
+        )
+    }
+
+    #[test]
+    fn between_with_a_limit_stops_mid_range() {
+        let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
+            IncomingMessages::HistoricalTickLast,
+            historical_ticks_last_response()
+                // 14:28:34
+                .tick(tick_last(1_794_580_114, 7_100.00, 1.0, "CME"))
+                .tick(tick_last(1_794_580_115, 7_100.25, 2.0, "CME"))
+                .tick(tick_last(1_794_580_199, 7_101.50, 3.0, "CME"))
+                .done(true)
+                .encode_proto(),
+        )]);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_ticks(&contract, 1000)
+            .between(START, END)
+            .limit(2)
+            .trading_hours(TradingHours::Extended)
+            .last()
+            .expect("between failed");
+
+        assert_eq!(prices(&result.ticks), vec![7_100.25, 7_101.50]);
+        assert_eq!(result.from, Some(datetime!(2026-11-13 14:28:35 UTC)));
+        assert_eq!(result.stop, PagingStop::LimitReached);
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-13 14:30:00 UTC)]);
+    }
+
+    #[test]
+    fn between_with_a_limit_larger_than_the_range_stops_at_the_start() {
+        let (client, bus) = create_blocking_test_client_with_responses_per_request(vec![vec![page()], vec![earlier_page()]]);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_ticks(&contract, 1000)
+            .between(datetime!(2026-11-13 14:28:00 UTC), END)
+            .limit(1000)
+            .trading_hours(TradingHours::Extended)
+            .last()
+            .expect("between failed");
+
+        assert_eq!(prices(&result.ticks), vec![7_099.50, 7_100.25, 7_101.50]);
+        assert_eq!(result.from, Some(datetime!(2026-11-13 14:28:00 UTC)));
+        assert_eq!(result.stop, PagingStop::ReachedStart);
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-13 14:30:00 UTC), datetime!(2026-11-13 14:28:35 UTC)]);
+    }
+
+    #[test]
+    fn between_with_a_limit_failing_on_the_first_page_keeps_nothing() {
+        let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_error_response(
+            TEST_REQ_ID_FIRST,
+            162,
+            "Historical Market Data Service error message:No market data permissions",
+        )]);
+        let contract = Contract::stock("AAPL").build();
+
+        let error = client
+            .historical_ticks(&contract, 1000)
+            .between(START, END)
+            .limit(10)
+            .trading_hours(TradingHours::Extended)
+            .last()
+            .expect_err("between succeeded");
+
+        assert!(error.ticks.is_empty());
+        assert_eq!(error.from, None);
+        assert_tws_error_message(error.error, 162, "No market data permissions");
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-13 14:30:00 UTC)]);
+    }
+
+    #[test]
+    fn latest_pages_back_until_the_limit() {
+        let (client, bus) = create_blocking_test_client_with_responses_per_request(vec![vec![page()], vec![earlier_page()]]);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_ticks(&contract, 1000)
+            .latest(3, END)
+            .trading_hours(TradingHours::Extended)
+            .last()
+            .expect("latest failed");
+
+        assert_eq!(prices(&result.ticks), vec![7_099.50, 7_100.25, 7_101.50]);
+        assert_eq!(result.from, Some(datetime!(2026-11-13 14:28:00 UTC)));
+        assert_eq!(result.stop, PagingStop::LimitReached);
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-13 14:30:00 UTC), datetime!(2026-11-13 14:28:35 UTC)]);
+    }
+
+    #[test]
+    fn latest_stops_when_tws_runs_out() {
+        let (client, bus) = create_blocking_test_client_with_responses_per_request(vec![vec![page()], vec![empty_page()]]);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_ticks(&contract, 1000)
+            .latest(10, END)
+            .trading_hours(TradingHours::Extended)
+            .last()
+            .expect("latest failed");
+
+        assert_eq!(prices(&result.ticks), vec![7_100.25, 7_101.50]);
+        assert_eq!(result.from, Some(datetime!(2026-11-13 14:28:35 UTC)));
+        assert_eq!(result.stop, PagingStop::EmptyPage);
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-13 14:30:00 UTC), datetime!(2026-11-13 14:28:35 UTC)]);
+    }
+
+    #[test]
+    fn latest_failing_after_a_page_keeps_its_ticks() {
+        let (client, bus) = create_blocking_test_client_with_responses_per_request(vec![
+            vec![page()],
+            vec![proto_error_response(
+                TEST_REQ_ID_FIRST + 1,
+                162,
+                "Historical Market Data Service error message:pacing violation",
+            )],
+        ]);
+        let contract = Contract::stock("AAPL").build();
+
+        let error = client
+            .historical_ticks(&contract, 1000)
+            .latest(10, END)
+            .trading_hours(TradingHours::Extended)
+            .last()
+            .expect_err("latest succeeded");
+
+        assert_eq!(prices(&error.ticks), vec![7_100.25, 7_101.50]);
+        assert_eq!(error.from, Some(datetime!(2026-11-13 14:28:35 UTC)));
+        assert_tws_error_message(error.error, 162, "pacing violation");
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-13 14:30:00 UTC), datetime!(2026-11-13 14:28:35 UTC)]);
+    }
+
+    #[test]
+    fn latest_with_a_limit_of_zero_sends_nothing() {
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::HISTORICAL_TICKS);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client.historical_ticks(&contract, 1000).latest(0, END).last().expect("latest failed");
+
+        assert!(result.ticks.is_empty());
+        assert_eq!(result.from, None);
+        assert_eq!(result.stop, PagingStop::LimitReached);
+        assert_eq!(request_message_count(&bus), 0);
+    }
+
     #[test]
     fn between_rejects_end_not_after_start() {
         let (client, bus) = create_blocking_test_client_with_version(server_versions::HISTORICAL_TICKS);
@@ -642,5 +798,159 @@ mod async_between_tests {
         assert_eq!(error.from, Some(datetime!(2026-11-23 09:17:00 UTC)));
         assert_tws_error_message(error.error, 162, "pacing violation");
         assert_request_ends(&bus, &contract, &[datetime!(2026-11-23 09:17:02 UTC), datetime!(2026-11-23 09:17:00 UTC)]);
+    }
+
+    // Midpoints at 09:16:58 and twice at 09:16:59, the page before `page()`: complete from 09:16:59
+    fn earlier_page() -> ResponseMessage {
+        proto_response(
+            IncomingMessages::HistoricalTick,
+            historical_ticks_response()
+                .tick(tick_midpoint(1_795_425_418, 7_099.500))
+                .tick(tick_midpoint(1_795_425_419, 7_099.750))
+                .tick(tick_midpoint(1_795_425_419, 7_099.875))
+                .done(true)
+                .encode_proto(),
+        )
+    }
+
+    #[tokio::test]
+    async fn between_with_a_limit_stops_mid_range() {
+        let (client, bus) = create_test_client_with_ordered_proto_responses(vec![page()]);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_ticks(&contract, 1000)
+            .between(START, END)
+            .limit(1)
+            .mid_point()
+            .await
+            .expect("between failed");
+
+        assert_eq!(prices(&result.ticks), vec![7_100.625]);
+        assert_eq!(result.from, Some(datetime!(2026-11-23 09:17:01 UTC)));
+        assert_eq!(result.stop, PagingStop::LimitReached);
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-23 09:17:02 UTC)]);
+    }
+
+    #[tokio::test]
+    async fn between_with_a_limit_larger_than_the_range_stops_at_the_start() {
+        let (client, bus) = create_test_client_with_responses_per_request(vec![vec![page()], vec![earlier_page()]]);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_ticks(&contract, 1000)
+            .between(datetime!(2026-11-23 09:16:59 UTC), END)
+            .limit(1000)
+            .mid_point()
+            .await
+            .expect("between failed");
+
+        assert_eq!(prices(&result.ticks), vec![7_099.750, 7_099.875, 7_100.375, 7_100.625]);
+        assert_eq!(result.from, Some(datetime!(2026-11-23 09:16:59 UTC)));
+        assert_eq!(result.stop, PagingStop::ReachedStart);
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-23 09:17:02 UTC), datetime!(2026-11-23 09:17:00 UTC)]);
+    }
+
+    #[tokio::test]
+    async fn between_with_a_limit_failing_on_the_first_page_keeps_nothing() {
+        let (client, bus) = create_test_client_with_ordered_proto_responses(vec![proto_error_response(
+            TEST_REQ_ID_FIRST,
+            162,
+            "Historical Market Data Service error message:No market data permissions",
+        )]);
+        let contract = Contract::stock("AAPL").build();
+
+        let error = client
+            .historical_ticks(&contract, 1000)
+            .between(START, END)
+            .limit(10)
+            .mid_point()
+            .await
+            .expect_err("between succeeded");
+
+        assert!(error.ticks.is_empty());
+        assert_eq!(error.from, None);
+        assert_tws_error_message(error.error, 162, "No market data permissions");
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-23 09:17:02 UTC)]);
+    }
+
+    #[tokio::test]
+    async fn latest_pages_back_until_the_limit() {
+        let (client, bus) = create_test_client_with_responses_per_request(vec![vec![page()], vec![earlier_page()]]);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_ticks(&contract, 1000)
+            .latest(3, END)
+            .mid_point()
+            .await
+            .expect("latest failed");
+
+        // 09:16:59 is kept whole, so the limit of three returns four
+        assert_eq!(prices(&result.ticks), vec![7_099.750, 7_099.875, 7_100.375, 7_100.625]);
+        assert_eq!(result.from, Some(datetime!(2026-11-23 09:16:59 UTC)));
+        assert_eq!(result.stop, PagingStop::LimitReached);
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-23 09:17:02 UTC), datetime!(2026-11-23 09:17:00 UTC)]);
+    }
+
+    #[tokio::test]
+    async fn latest_stops_when_tws_runs_out() {
+        let (client, bus) = create_test_client_with_responses_per_request(vec![vec![page()], vec![empty_page()]]);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_ticks(&contract, 1000)
+            .latest(10, END)
+            .mid_point()
+            .await
+            .expect("latest failed");
+
+        assert_eq!(prices(&result.ticks), vec![7_100.375, 7_100.625]);
+        assert_eq!(result.from, Some(datetime!(2026-11-23 09:17:00 UTC)));
+        assert_eq!(result.stop, PagingStop::EmptyPage);
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-23 09:17:02 UTC), datetime!(2026-11-23 09:17:00 UTC)]);
+    }
+
+    #[tokio::test]
+    async fn latest_failing_after_a_page_keeps_its_ticks() {
+        let (client, bus) = create_test_client_with_responses_per_request(vec![
+            vec![page()],
+            vec![proto_error_response(
+                TEST_REQ_ID_FIRST + 1,
+                162,
+                "Historical Market Data Service error message:pacing violation",
+            )],
+        ]);
+        let contract = Contract::stock("AAPL").build();
+
+        let error = client
+            .historical_ticks(&contract, 1000)
+            .latest(10, END)
+            .mid_point()
+            .await
+            .expect_err("latest succeeded");
+
+        assert_eq!(prices(&error.ticks), vec![7_100.375, 7_100.625]);
+        assert_eq!(error.from, Some(datetime!(2026-11-23 09:17:00 UTC)));
+        assert_tws_error_message(error.error, 162, "pacing violation");
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-23 09:17:02 UTC), datetime!(2026-11-23 09:17:00 UTC)]);
+    }
+
+    #[tokio::test]
+    async fn latest_with_a_limit_of_zero_sends_nothing() {
+        let (client, bus) = create_test_client_with_ordered_proto_responses(Vec::new());
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_ticks(&contract, 1000)
+            .latest(0, END)
+            .mid_point()
+            .await
+            .expect("latest failed");
+
+        assert!(result.ticks.is_empty());
+        assert_eq!(result.from, None);
+        assert_eq!(result.stop, PagingStop::LimitReached);
+        assert_eq!(request_message_count(&bus), 0);
     }
 }
