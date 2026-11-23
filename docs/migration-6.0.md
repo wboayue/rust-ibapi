@@ -966,8 +966,7 @@ let nearest = chain
     .expirations
     .iter()
     .filter_map(Expiry::date)
-    .min()
-    .cloned(); // None if no dates
+    .min(); // None if no dates
 let text: Vec<String> = chain.expirations.iter().map(ToString::to_string).collect(); // the 5.x strings
 ```
 
