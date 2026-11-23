@@ -1,6 +1,6 @@
 use time::OffsetDateTime;
 
-use crate::contracts::Contract;
+use crate::contracts::{Contract, SecurityType};
 use crate::market_data::historical::{Duration, Schedule};
 use crate::market_data::TradingHours;
 use crate::Error;
@@ -30,10 +30,23 @@ impl<'a, C> HistoricalScheduleBuilder<'a, C> {
         }
     }
 
-    /// Anchor the schedule to a specific end date (defaults to now).
+    /// Anchor the schedule to a specific end date (defaults to now). TWS rejects an end date for a
+    /// [`ContinuousFuture`](SecurityType::ContinuousFuture) (error 10339, live: 2026-11-22), so
+    /// for one [`fetch`](HistoricalScheduleBuilder::fetch) fails with [`Error::InvalidArgument`]
+    /// and nothing is sent.
     pub fn ending(mut self, end_date: OffsetDateTime) -> Self {
         self.ending = Some(end_date);
         self
+    }
+
+    /// Reject what TWS is known to reject, before anything is sent.
+    fn validate(&self) -> Result<(), Error> {
+        if self.ending.is_some() && self.contract.security_type == SecurityType::ContinuousFuture {
+            return Err(Error::InvalidArgument(
+                "historical_schedules: TWS rejects .ending() for a continuous future (error 10339)".to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     /// Override regular- vs extended-hours sessions (defaults to [`TradingHours::Regular`]).
@@ -85,6 +98,7 @@ impl<'a> HistoricalScheduleBuilder<'a, crate::client::sync::Client> {
     /// }
     /// ```
     pub fn fetch(self) -> Result<Schedule, Error> {
+        self.validate()?;
         crate::market_data::historical::sync::historical_schedule(self.client, self.contract, self.ending, self.duration, self.trading_hours)
     }
 }
@@ -127,6 +141,7 @@ impl<'a> HistoricalScheduleBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn fetch(self) -> Result<Schedule, Error> {
+        self.validate()?;
         crate::market_data::historical::r#async::historical_schedule(self.client, self.contract, self.ending, self.duration, self.trading_hours).await
     }
 }

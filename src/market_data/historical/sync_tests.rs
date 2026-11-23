@@ -18,8 +18,8 @@ use crate::stubs::MessageBusStub;
 use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
-    historical_schedule_response, historical_tick_bid_ask, historical_tick_last, historical_tick_mid, historical_ticks_bid_ask_response,
-    historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
+    historical_schedule_response, historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request,
+    historical_ticks_response, tick_bid_ask, tick_last, tick_midpoint,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::transport::common::Lease;
@@ -445,7 +445,7 @@ fn historical_ticks_trade() {
         .starting(start)
         .ending(end)
         .trading_hours(trading_hours)
-        .trade()
+        .last()
         .expect("historical ticks trade request failed");
 
     assert_eq!(tick_subscription.request_id(), TEST_REQ_ID_FIRST, "request_id() is the id on the wire");
@@ -595,7 +595,7 @@ fn tick_subscription_methods() {
     let tick_subscription = client
         .historical_ticks(&contract, number_of_ticks)
         .trading_hours(trading_hours)
-        .trade()
+        .last()
         .expect("historical ticks trade request failed");
 
     // Just test that these methods can be called without panicking
@@ -614,17 +614,17 @@ fn tick_subscription_buffer_and_iteration() {
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_400, 11.63, 24_547.0, "ISLAND").special_conditions(" O X"))
-                .tick(historical_tick_last(1_681_133_401, 11.64, 179.0, "FINRA"))
-                .tick(historical_tick_last(1_681_133_402, 11.65, 200.0, "NYSE"))
+                .tick(tick_last(1_681_133_400, 11.63, 24_547.0, "ISLAND").special_conditions(" O X"))
+                .tick(tick_last(1_681_133_401, 11.64, 179.0, "FINRA"))
+                .tick(tick_last(1_681_133_402, 11.65, 200.0, "NYSE"))
                 .done(false)
                 .encode_proto(),
         ),
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_403, 11.66, 100.0, "ARCA"))
-                .tick(historical_tick_last(1_681_133_404, 11.67, 300.0, "BATS"))
+                .tick(tick_last(1_681_133_403, 11.66, 100.0, "ARCA"))
+                .tick(tick_last(1_681_133_404, 11.67, 300.0, "BATS"))
                 .done(true)
                 .encode_proto(),
         ),
@@ -639,7 +639,7 @@ fn tick_subscription_buffer_and_iteration() {
     let tick_subscription = client
         .historical_ticks(&contract, number_of_ticks)
         .trading_hours(trading_hours)
-        .trade()
+        .last()
         .expect("historical ticks trade request failed");
 
     // Test standard data iterator (notices filtered, errors surface via Result)
@@ -664,8 +664,8 @@ fn tick_subscription_owned_iterator() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 11.70, 24_547.0, "ISLAND").special_conditions(" O X"))
-            .tick(historical_tick_last(1_681_133_401, 11.71, 179.0, "FINRA"))
+            .tick(tick_last(1_681_133_400, 11.70, 24_547.0, "ISLAND").special_conditions(" O X"))
+            .tick(tick_last(1_681_133_401, 11.71, 179.0, "FINRA"))
             .done(true)
             .encode_proto(),
     )]));
@@ -675,7 +675,7 @@ fn tick_subscription_owned_iterator() {
     let contract = Contract::stock("MSFT").build();
     let tick_subscription = client
         .historical_ticks(&contract, 10)
-        .trade()
+        .last()
         .expect("historical ticks trade request failed");
 
     // Convert to owned iterator — yields the SubscriptionItem envelope.
@@ -694,9 +694,9 @@ fn tick_subscription_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
-            .tick(historical_tick_bid_ask(1_681_133_400, 11.64, 11.84, 2_900.0, 200.0))
-            .tick(historical_tick_bid_ask(1_681_133_401, 11.65, 11.85, 3_000.0, 300.0))
+            .tick(tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
+            .tick(tick_bid_ask(1_681_133_400, 11.64, 11.84, 2_900.0, 200.0))
+            .tick(tick_bid_ask(1_681_133_401, 11.65, 11.85, 3_000.0, 300.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -717,8 +717,8 @@ fn tick_subscription_bid_ask() {
     // Check first tick
     assert_eq!(ticks[0].price_bid, 11.63, "First tick bid price");
     assert_eq!(ticks[0].price_ask, 11.83, "First tick ask price");
-    assert_eq!(ticks[0].size_bid, Some(2800.0), "First tick bid size");
-    assert_eq!(ticks[0].size_ask, Some(100.0), "First tick ask size");
+    assert_eq!(ticks[0].size_bid, 2800.0, "First tick bid size");
+    assert_eq!(ticks[0].size_ask, 100.0, "First tick ask size");
 
     // Check last tick
     assert_eq!(ticks[2].price_bid, 11.65, "Last tick bid price");
@@ -730,9 +730,9 @@ fn tick_subscription_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
-            .tick(historical_tick_mid(1_681_133_398, 91.36, 0.0))
-            .tick(historical_tick_mid(1_681_133_399, 91.37, 0.0))
-            .tick(historical_tick_mid(1_681_133_400, 91.38, 0.0))
+            .tick(tick_midpoint(1_681_133_398, 91.36))
+            .tick(tick_midpoint(1_681_133_399, 91.37))
+            .tick(tick_midpoint(1_681_133_400, 91.38))
             .done(true)
             .encode_proto(),
     )]));
@@ -1294,8 +1294,8 @@ fn tick_subscription_try_next_drains_buffer() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 12.00, 100.0, "NYSE"))
-            .tick(historical_tick_last(1_681_133_401, 12.01, 200.0, "NYSE"))
+            .tick(tick_last(1_681_133_400, 12.00, 100.0, "NYSE"))
+            .tick(tick_last(1_681_133_401, 12.01, 200.0, "NYSE"))
             .done(true)
             .encode_proto(),
     )]));
@@ -1303,7 +1303,7 @@ fn tick_subscription_try_next_drains_buffer() {
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 10)
-        .trade()
+        .last()
         .expect("subscription should be created");
 
     // Drain via try_iter_data — each .next() goes through try_next() → next_helper(try_next_routed).
@@ -1324,7 +1324,7 @@ fn tick_subscription_next_timeout_drains_buffer() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_681_133_400, 13.00, 100.0, "NYSE"))
+            .tick(tick_last(1_681_133_400, 13.00, 100.0, "NYSE"))
             .done(true)
             .encode_proto(),
     )]));
@@ -1332,7 +1332,7 @@ fn tick_subscription_next_timeout_drains_buffer() {
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 10)
-        .trade()
+        .last()
         .expect("subscription should be created");
 
     // Drive timeout_iter_data — each .next() goes through next_timeout() → next_helper.
@@ -1376,7 +1376,7 @@ fn tick_subscription_notice_passes_through_then_data() {
         RoutedItem::Response(proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_400, 15.00, 100.0, "NYSE"))
+                .tick(tick_last(1_681_133_400, 15.00, 100.0, "NYSE"))
                 .done(true)
                 .encode_proto(),
         )),
@@ -1435,7 +1435,7 @@ fn tick_subscription_midpoint_try_iter_and_timeout_iter() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
-            .tick(historical_tick_mid(1_681_133_400, 91.50, 0.0))
+            .tick(tick_midpoint(1_681_133_400, 91.50))
             .done(true)
             .encode_proto(),
     )]));
@@ -1458,7 +1458,7 @@ fn tick_subscription_bid_ask_try_iter_and_timeout_iter() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
+            .tick(tick_bid_ask(1_681_133_399, 11.63, 11.83, 2_800.0, 100.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -1483,7 +1483,7 @@ fn tick_subscription_skips_unexpected_message_then_yields() {
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_681_133_400, 14.00, 100.0, "NYSE"))
+                .tick(tick_last(1_681_133_400, 14.00, 100.0, "NYSE"))
                 .done(true)
                 .encode_proto(),
         ),
@@ -1492,7 +1492,7 @@ fn tick_subscription_skips_unexpected_message_then_yields() {
 
     let subscription = client
         .historical_ticks(&Contract::stock("MSFT").build(), 1)
-        .trade()
+        .last()
         .expect("subscription should be created");
 
     let tick = subscription

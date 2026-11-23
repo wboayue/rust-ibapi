@@ -11,7 +11,7 @@ triggers:
   - splitting a builder's sync and async impl blocks
 symbols: [Client, common, proto]
 related: [narrow-reexports, sibling-test-files, dual-feature-types]
-precedents: ["#657", "#729", "#1078", "#1080"]
+precedents: ["#657", "#729", "#1078", "#1080", "#1244"]
 ---
 
 A domain owns its client surface. Its `impl Client` blocks live in `<domain>/sync.rs` and
@@ -54,3 +54,6 @@ two-file diff, and keeps `client/` from becoming the file every domain PR touche
   then `decode_contract_and_details`, `encode_subscription_params`). Helpers with a second user
   stayed: `decode_soft_dollar_tier` (accounts too), `encode_contract_with_order` (wrapped by the
   shared `encode_contract`).
+- #1244 — the tick converters shared by `realtime` and `historical` went into a new
+  `market_data/common/decoders.rs`, not `src/proto/`: two sub-modules of one domain are still one
+  domain, so the domain's own `common/` holds them.

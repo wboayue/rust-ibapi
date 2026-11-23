@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Historical Trades (last 100) ===");
     // `filter_data()` drops notices and yields `Result<_, Error>`; `?` propagates
     // a mid-stream error instead of letting it masquerade as end-of-data.
-    let mut ticks = client.historical_ticks(&contract, 100).trade().await?.filter_data();
+    let mut ticks = client.historical_ticks(&contract, 100).last().await?.filter_data();
 
     let mut trade_count = 0;
     while let Some(tick) = ticks.next().await {
@@ -51,9 +51,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Trade {}: {} - ${:.2} x {} on {} [{}]",
                 trade_count,
-                tick.timestamp.format(&Rfc3339).unwrap(),
+                tick.time.format(&Rfc3339).unwrap(),
                 tick.price,
-                fmt_size(tick.size),
+                tick.size,
                 tick.exchange,
                 tick.special_conditions
             );
@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .historical_ticks(&contract, 0) // 0 = get all ticks in range
         .starting(start_time)
         .ending(end_time)
-        .trade()
+        .last()
         .await?
         .filter_data();
 
@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(tick) = ticks.next().await {
         let tick = tick?;
         period_trades += 1;
-        total_volume += tick.size.unwrap_or(0.0);
+        total_volume += tick.size;
         min_price = min_price.min(tick.price);
         max_price = max_price.max(tick.price);
     }
@@ -115,11 +115,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Quote {}: {} - Bid: ${:.2} x {} | Ask: ${:.2} x {} | Spread: ${:.2}",
                 quote_count,
-                tick.timestamp.format(&Rfc3339).unwrap(),
+                tick.time.format(&Rfc3339).unwrap(),
                 tick.price_bid,
-                fmt_size(tick.size_bid),
+                tick.size_bid,
                 tick.price_ask,
-                fmt_size(tick.size_ask),
+                tick.size_ask,
                 spread
             );
         }
@@ -142,7 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Midpoint {}: {} - ${:.2}",
                 midpoint_count,
-                tick.timestamp.format(&Rfc3339).unwrap(),
+                tick.time.format(&Rfc3339).unwrap(),
                 tick.price
             );
         }
@@ -151,10 +151,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nHistorical ticks example completed!");
     Ok(())
-}
-
-/// `None` means TWS reported no size for the tick — show that rather than
-/// silently printing a zero.
-fn fmt_size(size: Option<f64>) -> String {
-    size.map_or_else(|| "n/a".to_string(), |s| format!("{s:.0}"))
 }

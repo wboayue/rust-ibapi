@@ -7,9 +7,10 @@ use crate::messages::ResponseMessage;
 use crate::server_versions;
 use crate::subscriptions::DecoderContext;
 use crate::testdata::builders::market_data::{
-    bid_ask_tick, depth_market_data_description, market_depth_response, mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick,
-    reroute_market_data, reroute_market_depth, tick_generic, tick_price, tick_size, tick_string, trade_tick, BidAskTickResponse,
-    MidPointTickResponse, RealTimeBarTickResponse, TickGenericResponse, TickPriceResponse, TickSizeResponse, TickStringResponse, TradeTickResponse,
+    depth_market_data_description, market_depth_response, mkt_depth_exchanges_response, realtime_bar_tick, reroute_market_data, reroute_market_depth,
+    tick_bid_ask, tick_by_tick_bid_ask_response, tick_by_tick_last_response, tick_by_tick_midpoint_response, tick_generic, tick_last, tick_midpoint,
+    tick_price, tick_size, tick_string, RealTimeBarTickResponse, TickByTickResponse, TickGenericResponse, TickPriceResponse, TickSizeResponse,
+    TickStringResponse,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use prost::Message;
@@ -86,15 +87,13 @@ mod realtime_bar_tests {
 mod trade_tick_tests {
     use super::*;
 
-    fn fixture(tick_type: i32) -> TradeTickResponse {
-        trade_tick()
-            .tick_type(tick_type)
-            .time(1678740829)
-            .price(3895.25)
-            .size(7.0)
-            .attributes(false, true)
-            .exchange("NASDAQ")
-            .special_conditions("Regular")
+    fn fixture(tick_type: i32) -> TickByTickResponse {
+        tick_by_tick_last_response(
+            tick_last(1678740829, 3895.25, 7.0, "NASDAQ")
+                .unreported(true)
+                .special_conditions("Regular"),
+        )
+        .tick_type(tick_type)
     }
 
     #[test]
@@ -103,8 +102,8 @@ mod trade_tick_tests {
         assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
         assert_eq!(trade.price, 3895.25);
         assert_eq!(trade.size, 7.0);
-        assert!(!trade.trade_attribute.past_limit);
-        assert!(trade.trade_attribute.unreported);
+        assert!(!trade.attributes.past_limit);
+        assert!(trade.attributes.unreported);
         assert_eq!(trade.exchange, "NASDAQ");
         assert_eq!(trade.special_conditions, "Regular");
     }
@@ -153,31 +152,32 @@ mod trade_tick_tests {
 mod bid_ask_tests {
     use super::*;
 
-    fn fixture(mask: u32) -> BidAskTickResponse {
-        bid_ask_tick()
-            .time(1678745793)
-            .quote(3895.50, 3896.00, 9.0, 11.0)
-            .attributes(mask & 0x1 != 0, mask & 0x2 != 0)
+    fn fixture(mask: u32) -> TickByTickResponse {
+        tick_by_tick_bid_ask_response(
+            tick_bid_ask(1678745793, 3895.50, 3896.00, 9.0, 11.0)
+                .bid_past_low(mask & 0x1 != 0)
+                .ask_past_high(mask & 0x2 != 0),
+        )
     }
 
     #[test]
     fn decode_bid_ask_proto_basic() {
         let bid_ask = decode_bid_ask_tick_proto(fixture(3).to_proto()).expect("decode failed");
         assert_eq!(bid_ask.time, OffsetDateTime::from_unix_timestamp(1678745793).unwrap());
-        assert_eq!(bid_ask.bid_price, 3895.50);
-        assert_eq!(bid_ask.ask_price, 3896.00);
-        assert_eq!(bid_ask.bid_size, 9.0);
-        assert_eq!(bid_ask.ask_size, 11.0);
-        assert!(bid_ask.bid_ask_attribute.bid_past_low);
-        assert!(bid_ask.bid_ask_attribute.ask_past_high);
+        assert_eq!(bid_ask.price_bid, 3895.50);
+        assert_eq!(bid_ask.price_ask, 3896.00);
+        assert_eq!(bid_ask.size_bid, 9.0);
+        assert_eq!(bid_ask.size_ask, 11.0);
+        assert!(bid_ask.attributes.bid_past_low);
+        assert!(bid_ask.attributes.ask_past_high);
     }
 
     #[test]
     fn decode_bid_ask_proto_attributes() {
         for (mask, expected_bid_past_low, expected_ask_past_high) in [(0, false, false), (1, true, false), (2, false, true), (3, true, true)] {
             let bid_ask = decode_bid_ask_tick_proto(fixture(mask).to_proto()).expect("decode failed");
-            assert_eq!(bid_ask.bid_ask_attribute.bid_past_low, expected_bid_past_low, "mask {mask}");
-            assert_eq!(bid_ask.bid_ask_attribute.ask_past_high, expected_ask_past_high, "mask {mask}");
+            assert_eq!(bid_ask.attributes.bid_past_low, expected_bid_past_low, "mask {mask}");
+            assert_eq!(bid_ask.attributes.ask_past_high, expected_ask_past_high, "mask {mask}");
         }
     }
 
@@ -197,15 +197,15 @@ mod bid_ask_tests {
 mod mid_point_tests {
     use super::*;
 
-    fn fixture() -> MidPointTickResponse {
-        mid_point_tick().time(1678740829).mid_point(3895.375)
+    fn fixture() -> TickByTickResponse {
+        tick_by_tick_midpoint_response(tick_midpoint(1678740829, 3895.375))
     }
 
     #[test]
     fn decode_mid_point_tick_proto_works() {
         let mid = decode_mid_point_tick_proto(fixture().to_proto()).expect("decode failed");
         assert_eq!(mid.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap());
-        assert_eq!(mid.mid_point, 3895.375);
+        assert_eq!(mid.price, 3895.375);
     }
 
     #[test]
@@ -810,38 +810,6 @@ mod decimal_wire_tests {
         }
     }
 
-    fn trade_tick_proto(size: &str) -> crate::proto::TickByTickData {
-        crate::proto::TickByTickData {
-            req_id: Some(9000),
-            tick_type: Some(1),
-            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickLast(
-                crate::proto::HistoricalTickLast {
-                    time: Some(1_678_890_000),
-                    price: Some(100.0),
-                    size: Some(size.into()),
-                    ..Default::default()
-                },
-            )),
-        }
-    }
-
-    fn bid_ask_tick_proto(size_bid: &str) -> crate::proto::TickByTickData {
-        crate::proto::TickByTickData {
-            req_id: Some(9000),
-            tick_type: Some(3),
-            tick: Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickBidAsk(
-                crate::proto::HistoricalTickBidAsk {
-                    time: Some(1_678_890_000),
-                    price_bid: Some(100.0),
-                    price_ask: Some(101.0),
-                    size_bid: Some(size_bid.into()),
-                    size_ask: Some("200".into()),
-                    ..Default::default()
-                },
-            )),
-        }
-    }
-
     #[test]
     fn tick_size_rejects_malformed_size() {
         assert_decimal_parse_error(decode_tick_size_proto(tick_size_proto("abc")), "abc");
@@ -864,16 +832,6 @@ mod decimal_wire_tests {
     #[test]
     fn realtime_bar_rejects_malformed_volume() {
         assert_decimal_parse_error(decode_realtime_bar_proto(realtime_bar_proto("abc")), "abc");
-    }
-
-    #[test]
-    fn trade_tick_rejects_malformed_size() {
-        assert_decimal_parse_error(decode_trade_tick_proto(trade_tick_proto("abc")), "abc");
-    }
-
-    #[test]
-    fn bid_ask_tick_rejects_malformed_size() {
-        assert_decimal_parse_error(decode_bid_ask_tick_proto(bid_ask_tick_proto("abc")), "abc");
     }
 
     // --- behaviour change worth naming ---

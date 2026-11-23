@@ -121,8 +121,8 @@ async fn tick_by_tick_bid_ask() {
 
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(15), subscription.next()).await;
     if let Ok(Some(Ok(SubscriptionItem::Data(tick)))) = item {
-        assert!(tick.bid_price > 0.0, "bid price should be positive");
-        assert!(tick.ask_price > 0.0, "ask price should be positive");
+        assert!(tick.price_bid > 0.0, "bid price should be positive");
+        assert!(tick.price_ask > 0.0, "ask price should be positive");
     }
 }
 
@@ -136,7 +136,7 @@ async fn tick_by_tick_midpoint() {
 
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(15), subscription.next()).await;
     if let Ok(Some(Ok(SubscriptionItem::Data(mp)))) = item {
-        assert!(mp.mid_point > 0.0, "midpoint should be positive");
+        assert!(mp.price > 0.0, "midpoint should be positive");
     }
 }
 
