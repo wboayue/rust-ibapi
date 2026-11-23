@@ -203,6 +203,27 @@ hours, TRADES.*
   2000 s before now, however short the range.
 - **Not probed:** ranges starting between 2000 and 2500 s back; other bar sizes.
 
+### Historical tick pages: whole seconds, but one tick of a quote page's earliest second
+
+*Live 2026-11-13 Fri near the US cash open (ES Z6, trades) and 2026-11-23 Mon 04:30 ET (ES
+Z6, all three types, extended hours), paper TWS, server 223.*
+
+- The end is read to the whole second and its second is excluded: ending at 14:30:00 returns
+  trades up to 14:29:59, and ending at 14:28:35.5 returns the same ticks as 14:28:35. Ending
+  at 09:17:01.5 and at 09:17:01 return the same bid/ask, midpoint and trade ticks.
+- A trade page holds whole seconds, so it can exceed the count asked for: 100 trades ending
+  09:17:01 returned 115, the earliest second (09:16:36) holding all 21 of its trades.
+- A bid/ask or midpoint page holds whole seconds after its earliest second, but only one tick of
+  that second. In all 12 quote pages probed (2 ends, 100 and 1000 ticks, both types) the
+  earliest second held 1 tick; the same seconds hold 4 to 95 when they are not the earliest.
+- So a page that ends where the previous page's earliest second begins loses that second's
+  quotes but no trades. Over 09:16:46.5 to 09:18:46.5, paging that way returned 4345 bid/ask
+  ticks with 100-tick pages and 5852 with 1000-tick pages; refetching the earliest second
+  returned 6185 with both, and the same 511 trades and 992 midpoints with both.
+- Settles the paging rules of `HistoricalTicksBuilder::between`.
+- **Not probed:** stocks, RTH-only requests, `IgnoreSize::Yes` pages, whether the single tick is
+  the first or the last of its second.
+
 ### Size fields are always sent
 
 *Live 2026-11-15 Sun 22:25 ET, paper, server 226; raw capture, same session as above.*

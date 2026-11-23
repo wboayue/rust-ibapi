@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use log::error;
 use time::OffsetDateTime;
 
@@ -16,11 +16,12 @@ use crate::contracts::Contract;
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::common::SubscriptionItem;
 use crate::subscriptions::log_cancel_error;
-use crate::subscriptions::r#async::Subscription;
+use crate::subscriptions::r#async::{Subscription, SubscriptionItemStreamExt};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::{Client, Error};
 
 use super::common::tick::{classify, TickAction};
+use super::common::tick_pages::{PagedTick, TickPages};
 use super::common::{self, encoders};
 use super::{
     BarRequest, BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalData, HistoricalDataFrame, Schedule,
@@ -373,6 +374,45 @@ pub(crate) async fn historical_ticks<T: TickDecoder<T>>(
     let subscription = builder.send_raw(request).await?;
 
     Ok(TickSubscription::new(subscription, request_id, Arc::clone(&client.message_bus)))
+}
+
+// Pages `historical_ticks` backward over `[start, end]`; see `TickPages` for the rules. Same
+// builder-to-encoder seam as `historical_ticks`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn historical_ticks_between<T: TickDecoder<T> + PagedTick + Unpin>(
+    client: &Client,
+    contract: &Contract,
+    start: OffsetDateTime,
+    end: OffsetDateTime,
+    number_of_ticks: i32,
+    what_to_show: WhatToShow,
+    trading_hours: TradingHours,
+    ignore_size: bool,
+) -> Result<Vec<T>, Error> {
+    let mut pages = TickPages::new(start, end)?;
+
+    loop {
+        let mut ticks = historical_ticks::<T>(
+            client,
+            contract,
+            None,
+            Some(pages.request_end()),
+            number_of_ticks,
+            what_to_show,
+            trading_hours,
+            ignore_size,
+        )
+        .await?
+        .filter_data();
+        let mut page = Vec::new();
+        while let Some(tick) = ticks.next().await {
+            page.push(tick?);
+        }
+
+        if !pages.push(page) {
+            return Ok(pages.into_ticks());
+        }
+    }
 }
 
 pub(crate) async fn historical_schedule(

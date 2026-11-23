@@ -203,3 +203,138 @@ mod async_tests {
         );
     }
 }
+
+// The stub serves the same page to every request. The page's earliest tick is after `start`, so
+// paging asks for the ticks before it; the repeated page then holds nothing before that end, and
+// paging stops.
+#[cfg(feature = "sync")]
+mod sync_between_tests {
+    use time::macros::datetime;
+
+    use crate::common::test_utils::helpers::{
+        assert_request, create_blocking_test_client_with_ordered_proto_responses, create_blocking_test_client_with_version, proto_response,
+        request_message_count, TEST_REQ_ID_FIRST,
+    };
+    use crate::contracts::Contract;
+    use crate::market_data::historical::WhatToShow;
+    use crate::market_data::TradingHours;
+    use crate::messages::IncomingMessages;
+    use crate::server_versions;
+    use crate::testdata::builders::market_data::{historical_ticks_last_response, historical_ticks_request, tick_last};
+    use crate::testdata::builders::ResponseProtoEncoder;
+    use crate::Error;
+
+    #[test]
+    fn between_pages_back_to_the_earliest_second() {
+        let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
+            IncomingMessages::HistoricalTickLast,
+            historical_ticks_last_response()
+                // 2026-11-13 14:28:35 and 14:29:59 UTC
+                .tick(tick_last(1_794_580_115, 7_100.25, 2.0, "CME"))
+                .tick(tick_last(1_794_580_199, 7_101.50, 3.0, "CME"))
+                .done(true)
+                .encode_proto(),
+        )]);
+        let contract = Contract::stock("AAPL").build();
+
+        let ticks = client
+            .historical_ticks(&contract, 1000)
+            .between(datetime!(2026-11-13 14:26:44 UTC), datetime!(2026-11-13 14:29:59.5 UTC))
+            .trading_hours(TradingHours::Extended)
+            .last()
+            .expect("between failed");
+
+        let prices: Vec<f64> = ticks.iter().map(|tick| tick.price).collect();
+        assert_eq!(prices, vec![7_100.25, 7_101.50]);
+        assert_eq!(request_message_count(&bus), 2);
+        for (index, end) in [datetime!(2026-11-13 14:30:00 UTC), datetime!(2026-11-13 14:28:35 UTC)]
+            .into_iter()
+            .enumerate()
+        {
+            assert_request(
+                &bus,
+                index,
+                &historical_ticks_request()
+                    .request_id(TEST_REQ_ID_FIRST + index as i32)
+                    .contract(&contract)
+                    .end(Some(end))
+                    .number_of_ticks(1000)
+                    .what_to_show(WhatToShow::Trades)
+                    .use_rth(false),
+            );
+        }
+    }
+
+    #[test]
+    fn between_rejects_end_not_after_start() {
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::HISTORICAL_TICKS);
+        let contract = Contract::stock("AAPL").build();
+        let time = datetime!(2026-11-13 14:30 UTC);
+
+        let result = client.historical_ticks(&contract, 1000).between(time, time).mid_point();
+
+        assert!(matches!(result, Err(Error::InvalidArgument(_))), "got {:?}", result.err());
+        assert_eq!(request_message_count(&bus), 0);
+    }
+}
+
+#[cfg(feature = "async")]
+mod async_between_tests {
+    use time::macros::datetime;
+
+    use crate::common::test_utils::helpers::{
+        assert_request, create_test_client_with_ordered_proto_responses, proto_response, request_message_count, TEST_REQ_ID_FIRST,
+    };
+    use crate::contracts::Contract;
+    use crate::market_data::historical::WhatToShow;
+    use crate::market_data::IgnoreSize;
+    use crate::messages::IncomingMessages;
+    use crate::testdata::builders::market_data::{historical_ticks_bid_ask_response, historical_ticks_request, tick_bid_ask};
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    #[tokio::test]
+    async fn between_pages_back_to_the_earliest_second() {
+        let (client, bus) = create_test_client_with_ordered_proto_responses(vec![proto_response(
+            IncomingMessages::HistoricalTickBidAsk,
+            historical_ticks_bid_ask_response()
+                // 2026-11-13 14:28:35 and 14:29:59 UTC
+                .tick(tick_bid_ask(1_794_580_115, 7_100.00, 7_100.25, 4.0, 5.0))
+                .tick(tick_bid_ask(1_794_580_199, 7_101.25, 7_101.50, 6.0, 7.0))
+                .done(true)
+                .encode_proto(),
+        )]);
+        let contract = Contract::stock("AAPL").build();
+
+        let ticks = client
+            .historical_ticks(&contract, 1000)
+            .between(datetime!(2026-11-13 14:26:44 UTC), datetime!(2026-11-13 14:29:59.5 UTC))
+            .bid_ask(IgnoreSize::Yes)
+            .await
+            .expect("between failed");
+
+        let bids: Vec<f64> = ticks.iter().map(|tick| tick.price_bid).collect();
+        assert_eq!(bids, vec![7_100.00, 7_101.25]);
+        // The earliest second of a bid/ask page is partial, so the second request ends after it;
+        // the repeated page then holds only that second, kept as it is
+        let ends = [
+            datetime!(2026-11-13 14:30:00 UTC),
+            datetime!(2026-11-13 14:28:36 UTC),
+            datetime!(2026-11-13 14:28:35 UTC),
+        ];
+        assert_eq!(request_message_count(&bus), ends.len());
+        for (index, end) in ends.into_iter().enumerate() {
+            assert_request(
+                &bus,
+                index,
+                &historical_ticks_request()
+                    .request_id(TEST_REQ_ID_FIRST + index as i32)
+                    .contract(&contract)
+                    .end(Some(end))
+                    .number_of_ticks(1000)
+                    .what_to_show(WhatToShow::BidAsk)
+                    .use_rth(true)
+                    .ignore_size(true),
+            );
+        }
+    }
+}
