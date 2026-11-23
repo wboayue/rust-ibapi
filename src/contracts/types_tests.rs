@@ -194,7 +194,7 @@ fn expiration_date_days_until_friday_table() {
     assert_eq!(ExpirationDate::days_until_friday(Saturday), 6);
 }
 
-fn as_date(d: &ExpirationDate) -> Date {
+fn as_date(d: ExpirationDate) -> Date {
     let month = Month::try_from(d.month).expect("valid month");
     Date::from_calendar_date(d.year as i32, month, d.day).expect("valid date")
 }
@@ -202,7 +202,7 @@ fn as_date(d: &ExpirationDate) -> Date {
 #[test]
 fn expiration_date_next_friday_is_a_future_friday() {
     let nf = ExpirationDate::next_friday();
-    let date = as_date(&nf);
+    let date = as_date(nf);
     assert_eq!(date.weekday(), time::Weekday::Friday);
 
     let today = OffsetDateTime::now_utc().date();
@@ -213,7 +213,7 @@ fn expiration_date_next_friday_is_a_future_friday() {
 #[test]
 fn expiration_date_third_friday_is_a_friday_in_15_to_21() {
     let tf = ExpirationDate::third_friday_of_month();
-    let date = as_date(&tf);
+    let date = as_date(tf);
     assert_eq!(date.weekday(), time::Weekday::Friday);
     assert!((15..=21).contains(&date.day()), "third Friday day must be 15..=21, got {}", date.day());
 
