@@ -117,8 +117,7 @@ pub(crate) fn decode_symbol_samples_proto(p: crate::proto::SymbolSamples) -> Res
                 derivative_security_types: d
                     .derivative_sec_types
                     .iter()
-                    .filter(|s| !s.is_empty())
-                    .map(|s| s.parse())
+                    .filter_map(|s| parse_optional(Some(s.as_str())).transpose())
                     .collect::<Result<_, _>>()?,
             })
         })

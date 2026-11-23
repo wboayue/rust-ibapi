@@ -56,7 +56,8 @@ fn matching_symbols() {
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let symbols = result.unwrap();
-        assert_eq!(symbols.len(), test_case.expected_count, "Test '{}' count mismatch", test_case.name);
+        let types: Vec<_> = symbols.into_iter().map(|s| s.derivative_security_types).collect();
+        assert_eq!(types, test_case.expected_derivative_security_types, "Test '{}'", test_case.name);
     }
 }
 

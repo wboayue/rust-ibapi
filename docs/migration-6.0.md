@@ -966,8 +966,7 @@ let nearest = chain
     .expirations
     .iter()
     .filter_map(Expiry::date)
-    .min()
-    .cloned(); // None if no dates
+    .min(); // None if no dates
 let text: Vec<String> = chain.expirations.iter().map(ToString::to_string).collect(); // the 5.x strings
 ```
 
@@ -1027,4 +1026,5 @@ The compiler finds an exhaustive `match` on `SecurityType` that lacks the new ar
 catch a comparison or match against `Other("IOPT")` or `Other("EC")`: that code still compiles
 and no longer matches. A serialized `Contract` with one of these types writes `"StructuredProduct"`
 or `"EventContract"` where it wrote `{"Other":"IOPT"}`, and JSON written by 5.x for them still
-deserializes as `Other`.
+deserializes as `Other`, which compares unequal to the new variant; re-parse with
+`t.as_str().parse()` to normalize.

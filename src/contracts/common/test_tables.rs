@@ -26,7 +26,8 @@ pub struct MatchingSymbolsTestCase {
     pub name: &'static str,
     pub pattern: &'static str,
     pub ordered_responses: Vec<ResponseMessage>,
-    pub expected_count: usize,
+    /// Each returned description's derivative types, in order; its length is the match count.
+    pub expected_derivative_security_types: Vec<Vec<SecurityType>>,
 }
 
 /// Test case for market rule tests
@@ -421,7 +422,7 @@ pub fn matching_symbols_test_cases() -> Vec<MatchingSymbolsTestCase> {
                     .entry(symbol_samples_entry(12345, "AAPL").primary_exchange("NASDAQ").description("APPLE INC"))
                     .encode_proto(),
             )],
-            expected_count: 1,
+            expected_derivative_security_types: vec![vec![]],
         },
         MatchingSymbolsTestCase {
             name: "multiple matches",
@@ -439,7 +440,7 @@ pub fn matching_symbols_test_cases() -> Vec<MatchingSymbolsTestCase> {
                     .entry(symbol_samples_entry(12346, "AAPL").primary_exchange("SMART").description("APPLE INC"))
                     .encode_proto(),
             )],
-            expected_count: 2,
+            expected_derivative_security_types: vec![vec![SecurityType::Option], vec![]],
         },
     ]
 }
