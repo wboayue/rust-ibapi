@@ -25,6 +25,7 @@ mod sync_tests {
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
+    use crate::Error;
 
     fn client_with_schedule() -> (Client, Arc<MessageBusStub>) {
         let bus = Arc::new(MessageBusStub::with_ordered_responses(schedule_response()));
@@ -79,6 +80,20 @@ mod sync_tests {
     }
 
     #[test]
+    fn ending_on_continuous_future_errors() {
+        let (client, bus) = client_with_schedule();
+        let contract = Contract::continuous_futures("ES").build();
+
+        let result = client
+            .historical_schedules(&contract, 5.days())
+            .ending(datetime!(2026-11-13 20:00 UTC))
+            .fetch();
+
+        assert!(matches!(result, Err(Error::InvalidArgument(_))), "got: {result:?}");
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
+    }
+
+    #[test]
     fn trading_hours_sets_use_rth() {
         for (name, trading_hours, use_rth) in [
             ("explicit Regular", TradingHours::Regular, true),
@@ -115,13 +130,14 @@ mod async_tests {
 
     use super::schedule_response;
     use crate::client::r#async::Client;
-    use crate::common::test_utils::helpers::assert_request;
+    use crate::common::test_utils::helpers::{assert_request, request_message_count};
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, ToDuration, WhatToShow};
     use crate::market_data::TradingHours;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::testdata::builders::market_data::historical_data_request;
+    use crate::Error;
 
     fn client_with_schedule() -> (Client, Arc<MessageBusStub>) {
         let bus = Arc::new(MessageBusStub::with_ordered_responses(schedule_response()));
@@ -173,6 +189,21 @@ mod async_tests {
                 .what_to_show(WhatToShow::Schedule)
                 .use_rth(true),
         );
+    }
+
+    #[tokio::test]
+    async fn ending_on_continuous_future_errors() {
+        let (client, bus) = client_with_schedule();
+        let contract = Contract::continuous_futures("ES").build();
+
+        let result = client
+            .historical_schedules(&contract, 5.days())
+            .ending(datetime!(2026-11-13 20:00 UTC))
+            .fetch()
+            .await;
+
+        assert!(matches!(result, Err(Error::InvalidArgument(_))), "got: {result:?}");
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
     }
 
     #[tokio::test]
