@@ -91,6 +91,40 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
 - **Not probed:** ASK bars; AAPL realtime bars (no data overnight); `HistoricalDataUpdate`
   (keep-up-to-date) bars.
 
+### Historical bars for a continuous future take no end date
+
+*Live 2026-11-16 Mon 02:20 ET (CME Globex open), paper, server 223.*
+
+- `reqHistoricalData` on ES `CONTFUT`, 1-hour TRADES bars: a 2-day duration with no end date
+  returns 16 bars (2026-11-12 14:30 to 2026-11-13 21:00 UTC). The same request with an end date
+  of 2026-11-13 21:00 UTC returns error 10339, "Setting end date/time for continuous future
+  security type is not allowed". `between` sent an end date, so it got 10339 too.
+- Settles that `between` on a continuous future must omit the end date and ask for a duration
+  reaching back to `start` from now.
+- **Not probed:** `keepUpToDate` streaming; CONTFUT on another exchange.
+
+### Continuous future: schedule rejects an end date, ticks accept one; bar depth and cost
+
+*Live 2026-11-22 Sun 19:56 ET (CME Globex open), paper, server 226. ES `CONTFUT`, extended
+hours, TRADES.*
+
+- `reqHistoricalData` with `whatToShow` SCHEDULE, 5 D: with an end date of 2026-11-13 20:00 UTC,
+  error 10339, the same text as for bars. With no end date, 5 sessions.
+- `reqHistoricalTicks`, 100 trade ticks: with an end date of 2026-11-13 20:00 UTC, 114 ticks
+  ending 19:59:52; with a start date of 15:00 UTC, 128 ticks from 15:00:00. No 10339 either way.
+- Bars with no end date: the bar-size step limit still applies. 1-second bars over 1800 S
+  return 1800 bars; over 1 D they draw 162 "invalid step: 1".
+- Longer durations are accepted but slow. 1 M of 30-second bars took 74 s (55433 bars), 1 M of
+  1-minute bars 73 s (27720), 1 Y of hourly bars 41 s (5896), 5 Y of hourly bars 122 s
+  (16063). 2 M of 30-second bars and 1 Y of 1-minute bars did not finish within 90 s.
+- History is shallower than asked: 5 Y of hourly bars starts 2023-09-27, and 20 Y of daily bars
+  returns 1391 bars from 2021-06-07.
+- Settles that schedule's `ending()` needs the same up-front rejection as bars and ticks'
+  does not, and that `between` on a continuous future pays for `now - start` in wall-clock
+  time rather than drawing an error.
+- **Not probed:** whether the 90 s timeouts end in data or an error; bid/ask and midpoint
+  ticks; daily bars over 5 Y or less.
+
 ### Size fields are always sent
 
 *Live 2026-11-15 Sun 22:25 ET, paper, server 226; raw capture, same session as above.*
