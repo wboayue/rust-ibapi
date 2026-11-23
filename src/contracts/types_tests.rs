@@ -482,8 +482,8 @@ fn expiry_accessors_match_their_variant() {
     let month = ContractMonth::new(2026, 12).unwrap();
     // (label, expiry, expected date(), expected month())
     let cases = [
-        ("date", Expiry::Date(date.clone()), Some(&date), None),
-        ("month", Expiry::Month(month.clone()), None, Some(&month)),
+        ("date", Expiry::Date(date), Some(date), None),
+        ("month", Expiry::Month(month), None, Some(month)),
         ("unknown", Expiry::Unknown("2026Q4".into()), None, None),
     ];
     for (label, expiry, expected_date, expected_month) in cases {

@@ -289,7 +289,7 @@ impl Strike {
 /// Date for option expiration
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 // Field order (year, month, day) makes the derived `Ord` chronological.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ExpirationDate {
     year: u16,
     month: u8,
@@ -439,7 +439,7 @@ impl fmt::Display for ExpirationDate {
 /// Contract month for futures
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 // Field order (year, month) makes the derived `Ord` chronological.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ContractMonth {
     year: u16,
     month: u8,
@@ -692,12 +692,12 @@ impl Expiry {
     ///
     /// let expirations: Vec<Expiry> = vec!["20261218".parse()?, "202612".parse()?, "20260918".parse()?];
     /// let nearest = expirations.iter().filter_map(Expiry::date).min();
-    /// assert_eq!(nearest, Some(&ExpirationDate::new(2026, 9, 18)?));
+    /// assert_eq!(nearest, Some(ExpirationDate::new(2026, 9, 18)?));
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn date(&self) -> Option<&ExpirationDate> {
+    pub fn date(&self) -> Option<ExpirationDate> {
         match self {
-            Expiry::Date(date) => Some(date),
+            Expiry::Date(date) => Some(*date),
             _ => None,
         }
     }
@@ -710,13 +710,13 @@ impl Expiry {
     /// use ibapi::contracts::{ContractMonth, Expiry};
     ///
     /// let month: Expiry = "202612".parse()?;
-    /// assert_eq!(month.month(), Some(&ContractMonth::new(2026, 12)?));
+    /// assert_eq!(month.month(), Some(ContractMonth::new(2026, 12)?));
     /// assert_eq!(month.date(), None);
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn month(&self) -> Option<&ContractMonth> {
+    pub fn month(&self) -> Option<ContractMonth> {
         match self {
-            Expiry::Month(month) => Some(month),
+            Expiry::Month(month) => Some(*month),
             _ => None,
         }
     }
