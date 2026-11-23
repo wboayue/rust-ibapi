@@ -97,7 +97,8 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     /// (error 10339), so for one the request has no end date and covers `[start, now)`; the bars
     /// after `end` are then dropped. Such a range must start before now. The request size grows
     /// with `now - start`, not `end - start`: a short range far in the past fetches every bar
-    /// since `start`, and TWS may reject that duration for a small bar size. Use
+    /// since `start`. TWS still applies its bar-size step limit (error 162), and a large request
+    /// is slow: a month of 1-minute ES bars took over a minute (live: 2026-11-22). Use
     /// [`duration`](Self::duration) alone for one, or a larger bar size.
     pub fn between(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
         self.between = Some((start, end));
