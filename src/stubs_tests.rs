@@ -47,6 +47,15 @@ fn without_connection_resets_every_request_gets_the_responses() {
 }
 
 #[test]
+fn with_responses_per_request_answers_each_request_in_turn() {
+    let stub = MessageBusStub::with_responses_per_request(vec![sample_response_messages(), vec![text_response("3|9003|")]]);
+
+    assert_eq!(stub.routed_items_for_request().len(), 2);
+    assert_eq!(stub.routed_items_for_request().len(), 1);
+    assert!(stub.routed_items_for_request().is_empty(), "requests past the script get no responses");
+}
+
+#[test]
 fn request_messages_returns_clone() {
     let stub = MessageBusStub::default();
     stub.request_messages.write().unwrap().push(b"hello".to_vec());
