@@ -51,7 +51,7 @@ pub mod r#async;
 /// let client = Client::connect("127.0.0.1:4002", 100)?;
 /// let contract = Contract::stock("TSLA").build();
 ///
-/// let ticks: TickSubscription<TickLast> = client.historical_ticks(&contract, 100).trade()?;
+/// let ticks: TickSubscription<TickLast> = client.historical_ticks(&contract, 100).last()?;
 /// for tick in ticks.iter_data() {
 ///     println!("{:?}", tick?);
 /// }

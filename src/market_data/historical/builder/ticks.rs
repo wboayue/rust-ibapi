@@ -17,7 +17,7 @@ mod tests;
 /// [`ending`](Self::ending) to anchor the query. The builder does not
 /// pre-flight this — the wire encoder accepts both unset, and IBKR
 /// surfaces its own error if neither is provided.
-#[must_use = "HistoricalTicksBuilder does nothing until you call .trade(), .mid_point(), or .bid_ask(...)"]
+#[must_use = "HistoricalTicksBuilder does nothing until you call .last(), .mid_point(), or .bid_ask(...)"]
 pub struct HistoricalTicksBuilder<'a, C> {
     client: &'a C,
     contract: &'a Contract,
@@ -75,14 +75,14 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::sync::Client> {
     /// let ticks = client
     ///     .historical_ticks(&contract, 100)
     ///     .starting(datetime!(2023-04-15 0:00 UTC))
-    ///     .trade()
+    ///     .last()
     ///     .expect("historical ticks request failed");
     ///
     /// for tick in ticks.iter_data() {
     ///     println!("{:?}", tick.expect("decode error"));
     /// }
     /// ```
-    pub fn trade(self) -> Result<crate::market_data::historical::sync::TickSubscription<TickLast>, Error> {
+    pub fn last(self) -> Result<crate::market_data::historical::sync::TickSubscription<TickLast>, Error> {
         crate::market_data::historical::sync::historical_ticks::<TickLast>(
             self.client,
             self.contract,
@@ -131,7 +131,7 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::sync::Client> {
     }
 
     /// Submit the request and return bid/ask ticks. Pass [`IgnoreSize::Yes`]
-    /// to drop tick sizes from the response.
+    /// to skip updates that change only a size; see [`IgnoreSize`].
     ///
     /// # Examples
     ///
@@ -186,7 +186,7 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::r#async::Client> {
     ///     let mut ticks = client
     ///         .historical_ticks(&contract, 100)
     ///         .starting(datetime!(2023-04-15 0:00 UTC))
-    ///         .trade()
+    ///         .last()
     ///         .await
     ///         .expect("historical ticks request failed")
     ///         .filter_data();
@@ -196,7 +196,7 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::r#async::Client> {
     ///     }
     /// }
     /// ```
-    pub async fn trade(self) -> Result<TickSubscription<TickLast>, Error> {
+    pub async fn last(self) -> Result<TickSubscription<TickLast>, Error> {
         crate::market_data::historical::r#async::historical_ticks::<TickLast>(
             self.client,
             self.contract,
@@ -251,7 +251,7 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::r#async::Client> {
     }
 
     /// Submit the request and return bid/ask ticks. Pass [`IgnoreSize::Yes`]
-    /// to drop tick sizes from the response.
+    /// to skip updates that change only a size; see [`IgnoreSize`].
     ///
     /// # Examples
     ///

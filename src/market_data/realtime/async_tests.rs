@@ -11,9 +11,10 @@ use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
-    bid_ask_tick, depth_market_data_description, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response,
-    mid_point_tick, mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, reroute_market_data, reroute_market_depth,
-    tick_by_tick_request, tick_generic, tick_price, tick_size, tick_string, trade_tick,
+    depth_market_data_description, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response,
+    mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, reroute_market_data, reroute_market_depth, tick_bid_ask,
+    tick_by_tick_bid_ask_response, tick_by_tick_last_response, tick_by_tick_midpoint_response, tick_by_tick_request, tick_generic, tick_last,
+    tick_midpoint, tick_price, tick_size, tick_string,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
@@ -125,26 +126,16 @@ async fn tick_by_tick_all_last() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::TickByTick,
-            trade_tick()
-                .tick_type(1)
-                .time(1678740829)
-                .price(3895.25)
-                .size(7.0)
-                .attributes(false, true)
-                .exchange("NASDAQ")
-                .special_conditions("Regular")
-                .encode_proto(),
+            tick_by_tick_last_response(
+                tick_last(1678740829, 3895.25, 7.0, "NASDAQ")
+                    .unreported(true)
+                    .special_conditions("Regular"),
+            )
+            .encode_proto(),
         ),
         proto_response(
             IncomingMessages::TickByTick,
-            trade_tick()
-                .tick_type(1)
-                .time(1678740830)
-                .price(3895.50)
-                .size(5.0)
-                .exchange("NYSE")
-                .special_conditions("Regular")
-                .encode_proto(),
+            tick_by_tick_last_response(tick_last(1678740830, 3895.50, 5.0, "NYSE").special_conditions("Regular")).encode_proto(),
         ),
     ]));
 
@@ -205,15 +196,12 @@ async fn tick_by_tick_all_last() {
 async fn tick_by_tick_last() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickByTick,
-        trade_tick()
-            .tick_type(1)
-            .time(1678740829)
-            .price(3895.25)
-            .size(7.0)
-            .attributes(false, true)
-            .exchange("NASDAQ")
-            .special_conditions("Regular")
-            .encode_proto(),
+        tick_by_tick_last_response(
+            tick_last(1678740829, 3895.25, 7.0, "NASDAQ")
+                .unreported(true)
+                .special_conditions("Regular"),
+        )
+        .encode_proto(),
     )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
@@ -264,11 +252,12 @@ async fn tick_by_tick_last() {
 async fn tick_by_tick_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::TickByTick,
-        bid_ask_tick()
-            .time(1678745793)
-            .quote(3895.50, 3896.00, 9.0, 11.0)
-            .attributes(true, true)
-            .encode_proto(),
+        tick_by_tick_bid_ask_response(
+            tick_bid_ask(1678745793, 3895.50, 3896.00, 9.0, 11.0)
+                .bid_past_low(true)
+                .ask_past_high(true),
+        )
+        .encode_proto(),
     )]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
@@ -299,10 +288,10 @@ async fn tick_by_tick_bid_ask() {
 
     // Verify tick data
     let tick = &received_ticks[0];
-    assert_eq!(tick.bid_price, 3895.50, "Wrong bid price");
-    assert_eq!(tick.ask_price, 3896.00, "Wrong ask price");
-    assert_eq!(tick.bid_size, 9.0, "Wrong bid size");
-    assert_eq!(tick.ask_size, 11.0, "Wrong ask size");
+    assert_eq!(tick.price_bid, 3895.50, "Wrong bid price");
+    assert_eq!(tick.price_ask, 3896.00, "Wrong ask price");
+    assert_eq!(tick.size_bid, 9.0, "Wrong bid size");
+    assert_eq!(tick.size_ask, 11.0, "Wrong ask size");
 
     assert_request(
         &message_bus,
@@ -321,11 +310,11 @@ async fn tick_by_tick_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
         proto_response(
             IncomingMessages::TickByTick,
-            mid_point_tick().time(1678740829).mid_point(3895.375).encode_proto(),
+            tick_by_tick_midpoint_response(tick_midpoint(1678740829, 3895.375)).encode_proto(),
         ),
         proto_response(
             IncomingMessages::TickByTick,
-            mid_point_tick().time(1678740830).mid_point(3895.425).encode_proto(),
+            tick_by_tick_midpoint_response(tick_midpoint(1678740830, 3895.425)).encode_proto(),
         ),
     ]));
 
@@ -359,7 +348,7 @@ async fn tick_by_tick_midpoint() {
 
     // Verify first midpoint
     let midpoint = &received_midpoints[0];
-    assert_eq!(midpoint.mid_point, 3895.375, "Wrong midpoint for first update");
+    assert_eq!(midpoint.price, 3895.375, "Wrong midpoint for first update");
     assert_eq!(
         midpoint.time,
         OffsetDateTime::from_unix_timestamp(1678740829).unwrap(),
@@ -368,7 +357,7 @@ async fn tick_by_tick_midpoint() {
 
     // Verify second midpoint
     let midpoint = &received_midpoints[1];
-    assert_eq!(midpoint.mid_point, 3895.425, "Wrong midpoint for second update");
+    assert_eq!(midpoint.price, 3895.425, "Wrong midpoint for second update");
     assert_eq!(
         midpoint.time,
         OffsetDateTime::from_unix_timestamp(1678740830).unwrap(),

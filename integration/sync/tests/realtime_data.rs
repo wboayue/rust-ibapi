@@ -106,8 +106,8 @@ fn tick_by_tick_bid_ask() {
         .expect("tick_by_tick_bid_ask failed");
 
     if let Some(Ok(SubscriptionItem::Data(tick))) = subscription.next_timeout(Duration::from_secs(15)) {
-        assert!(tick.bid_price > 0.0, "bid price should be positive");
-        assert!(tick.ask_price > 0.0, "ask price should be positive");
+        assert!(tick.price_bid > 0.0, "bid price should be positive");
+        assert!(tick.price_ask > 0.0, "ask price should be positive");
     }
 }
 
@@ -120,7 +120,7 @@ fn tick_by_tick_midpoint() {
     let subscription = client.tick_by_tick(&contract, 0).mid_point().expect("tick_by_tick_midpoint failed");
 
     if let Some(Ok(SubscriptionItem::Data(mp))) = subscription.next_timeout(Duration::from_secs(15)) {
-        assert!(mp.mid_point > 0.0, "midpoint should be positive");
+        assert!(mp.price > 0.0, "midpoint should be positive");
     }
 }
 

@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         prices.push(tick.price);
 
         // Format timestamp
-        let time_str = format!("{}", tick.timestamp);
+        let time_str = format!("{}", tick.time);
 
         println!("{} | {:.5}", time_str, tick.price);
 
@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Show last 10 ticks
     for tick in recent_ticks.iter().rev().take(10).rev() {
-        let time_str = format!("{}", tick.timestamp);
+        let time_str = format!("{}", tick.time);
         println!("{} | ${:.2}", time_str, tick.price);
     }
 

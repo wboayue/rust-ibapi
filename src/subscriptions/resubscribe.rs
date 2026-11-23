@@ -28,9 +28,9 @@ macro_rules! resubscribable {
 resubscribable!(
     crate::market_data::realtime::TickTypes,
     crate::market_data::realtime::Bar,
-    crate::market_data::realtime::Trade,
-    crate::market_data::realtime::BidAsk,
-    crate::market_data::realtime::MidPoint,
+    crate::market_data::TickLast,
+    crate::market_data::TickBidAsk,
+    crate::market_data::TickMidpoint,
     crate::market_data::realtime::MarketDepths,
     crate::market_data::historical::HistoricalBarUpdate,
     crate::accounts::AccountUpdate,

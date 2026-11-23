@@ -6,10 +6,7 @@ use time::macros::{date, datetime};
 use crate::common::test_utils::helpers::assert_rejects_text_framing;
 use crate::market_data::historical::BarTimestamp;
 use crate::messages::IncomingMessages;
-use crate::testdata::builders::market_data::{
-    histogram_data_response, histogram_entry, historical_data_daily_bar, historical_data_response, historical_tick_bid_ask, historical_tick_last,
-    historical_tick_mid, historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_response,
-};
+use crate::testdata::builders::market_data::{histogram_data_response, histogram_entry, historical_data_daily_bar, historical_data_response};
 use crate::testdata::builders::ResponseProtoEncoder;
 
 // ---------------------------------------------------------------------------
@@ -97,18 +94,18 @@ fn decode_historical_ticks_last_proto_works() {
     assert!(done);
     assert_eq!(ticks.len(), 2);
 
-    assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
-    assert!(ticks[0].tick_attribute_last.past_limit);
-    assert!(!ticks[0].tick_attribute_last.unreported);
+    assert_eq!(ticks[0].time, datetime!(2023-04-10 13:30:00 UTC));
+    assert!(ticks[0].attributes.past_limit);
+    assert!(!ticks[0].attributes.unreported);
     assert_eq!(ticks[0].price, 11.63);
-    assert_eq!(ticks[0].size, Some(100.0));
+    assert_eq!(ticks[0].size, 100.0);
     assert_eq!(ticks[0].exchange, "ISLAND");
     assert_eq!(ticks[0].special_conditions, "O X");
 
-    assert_eq!(ticks[1].timestamp, datetime!(2023-04-10 13:30:01 UTC));
-    assert!(!ticks[1].tick_attribute_last.past_limit);
-    assert!(ticks[1].tick_attribute_last.unreported);
-    assert_eq!(ticks[1].size, Some(50.0));
+    assert_eq!(ticks[1].time, datetime!(2023-04-10 13:30:01 UTC));
+    assert!(!ticks[1].attributes.past_limit);
+    assert!(ticks[1].attributes.unreported);
+    assert_eq!(ticks[1].size, 50.0);
     assert_eq!(ticks[1].exchange, "FINRA");
 }
 
@@ -145,9 +142,8 @@ fn decode_historical_ticks_proto_works() {
     let (ticks, done) = decode_historical_ticks_proto(proto_msg).unwrap();
     assert_eq!(ticks.len(), 2);
     assert!(!done);
-    assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
+    assert_eq!(ticks[0].time, datetime!(2023-04-10 13:30:00 UTC));
     assert_eq!(ticks[0].price, 150.0);
-    assert_eq!(ticks[0].size, Some(100.0));
 }
 
 #[test]
@@ -171,13 +167,13 @@ fn decode_historical_ticks_bid_ask_proto_works() {
     let (ticks, done) = decode_historical_ticks_bid_ask_proto(proto_msg).unwrap();
     assert_eq!(ticks.len(), 1);
     assert!(done);
-    assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
-    assert!(ticks[0].tick_attribute_bid_ask.bid_past_low);
-    assert!(!ticks[0].tick_attribute_bid_ask.ask_past_high);
+    assert_eq!(ticks[0].time, datetime!(2023-04-10 13:30:00 UTC));
+    assert!(ticks[0].attributes.bid_past_low);
+    assert!(!ticks[0].attributes.ask_past_high);
     assert_eq!(ticks[0].price_bid, 149.0);
     assert_eq!(ticks[0].price_ask, 151.0);
-    assert_eq!(ticks[0].size_bid, Some(100.0));
-    assert_eq!(ticks[0].size_ask, Some(200.0));
+    assert_eq!(ticks[0].size_bid, 100.0);
+    assert_eq!(ticks[0].size_ask, 200.0);
 }
 
 #[test]
@@ -526,41 +522,10 @@ fn decode_historical_data_update_proto_rejects_malformed_volume() {
     assert_decimal_parse_error(super::decode_historical_data_update_proto(p), "abc");
 }
 
-// === tick and histogram sizes preserve fractional wire values (issue #716) ===
+// === histogram sizes preserve fractional wire values (issue #716; tick sizes: market_data/common/decoders_tests.rs) ===
 //
 // These are the regression the issue reports: under the old `i32` typing a wire
 // value of "0.5" failed `parse::<i32>()` and silently decoded as 0.
-
-#[test]
-fn decode_historical_ticks_proto_preserves_fractional_size() {
-    let p = historical_ticks_response()
-        .tick(historical_tick_mid(1_681_133_400, 150.0, 0.5))
-        .to_proto();
-
-    let (ticks, _) = super::decode_historical_ticks_proto(p).unwrap();
-    assert_eq!(ticks[0].size, Some(0.5));
-}
-
-#[test]
-fn decode_historical_ticks_last_proto_preserves_fractional_size() {
-    let p = historical_ticks_last_response()
-        .tick(historical_tick_last(1_681_133_400, 150.0, 0.25, "NYSE"))
-        .to_proto();
-
-    let (ticks, _) = super::decode_historical_ticks_last_proto(p).unwrap();
-    assert_eq!(ticks[0].size, Some(0.25));
-}
-
-#[test]
-fn decode_historical_ticks_bid_ask_proto_preserves_fractional_sizes() {
-    let p = historical_ticks_bid_ask_response()
-        .tick(historical_tick_bid_ask(1_681_133_400, 149.0, 151.0, 0.5, 0.75))
-        .to_proto();
-
-    let (ticks, _) = super::decode_historical_ticks_bid_ask_proto(p).unwrap();
-    assert_eq!(ticks[0].size_bid, Some(0.5));
-    assert_eq!(ticks[0].size_ask, Some(0.75));
-}
 
 #[test]
 fn decode_histogram_data_proto_preserves_fractional_size() {
@@ -579,15 +544,6 @@ fn decode_histogram_data_proto_rejects_malformed_size() {
         .to_proto();
 
     assert_decimal_parse_error(super::decode_histogram_data_proto(p), "abc");
-}
-
-#[test]
-fn decode_historical_ticks_proto_rejects_malformed_size() {
-    let p = historical_ticks_response()
-        .tick(historical_tick_mid(1_681_133_400, 150.0, 0.0).size_wire(Some("abc")))
-        .to_proto();
-
-    assert_decimal_parse_error(super::decode_historical_ticks_proto(p), "abc");
 }
 
 /// `HistoricalDataEnd` echoes the requested window, and the schedule decoder

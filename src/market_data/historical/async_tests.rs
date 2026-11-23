@@ -17,8 +17,8 @@ use crate::subscriptions::{SubscriptionItem, SubscriptionItemStreamExt};
 use crate::testdata::builders::market_data::{
     head_timestamp_request, head_timestamp_response, histogram_data_request, histogram_data_response, histogram_entry, historical_data_bar,
     historical_data_daily_bar, historical_data_end_response, historical_data_request, historical_data_response, historical_data_update_response,
-    historical_schedule_response, historical_session, historical_tick_bid_ask, historical_tick_last, historical_tick_mid,
-    historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request, historical_ticks_response,
+    historical_schedule_response, historical_session, historical_ticks_bid_ask_response, historical_ticks_last_response, historical_ticks_request,
+    historical_ticks_response, tick_bid_ask, tick_last, tick_midpoint,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use futures::StreamExt;
@@ -478,9 +478,9 @@ async fn tick_subscription_methods() {
         proto_response(
             IncomingMessages::HistoricalTickBidAsk,
             historical_ticks_bid_ask_response()
-                .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
+                .tick(tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
                 .tick(
-                    historical_tick_bid_ask(1_678_838_401, 185.55, 186.05, 105.0, 205.0)
+                    tick_bid_ask(1_678_838_401, 185.55, 186.05, 105.0, 205.0)
                         .bid_past_low(true)
                         .ask_past_high(true),
                 )
@@ -490,7 +490,7 @@ async fn tick_subscription_methods() {
         proto_response(
             IncomingMessages::HistoricalTickBidAsk,
             historical_ticks_bid_ask_response()
-                .tick(historical_tick_bid_ask(1_678_838_500, 185.75, 186.25, 150.0, 250.0).bid_past_low(true))
+                .tick(tick_bid_ask(1_678_838_500, 185.75, 186.25, 150.0, 250.0).bid_past_low(true))
                 .done(true)
                 .encode_proto(),
         ),
@@ -509,10 +509,10 @@ async fn tick_subscription_methods() {
     let tick1 = expect_data(subscription.next().await);
     assert_eq!(tick1.price_bid, 185.50, "Wrong bid price for first tick");
     assert_eq!(tick1.price_ask, 186.00, "Wrong ask price for first tick");
-    assert_eq!(tick1.size_bid, Some(100.0), "Wrong bid size for first tick");
-    assert_eq!(tick1.size_ask, Some(200.0), "Wrong ask size for first tick");
-    assert!(tick1.tick_attribute_bid_ask.bid_past_low, "Wrong bid past low for first tick");
-    assert!(!tick1.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high for first tick");
+    assert_eq!(tick1.size_bid, 100.0, "Wrong bid size for first tick");
+    assert_eq!(tick1.size_ask, 200.0, "Wrong ask size for first tick");
+    assert!(tick1.attributes.bid_past_low, "Wrong bid past low for first tick");
+    assert!(!tick1.attributes.ask_past_high, "Wrong ask past high for first tick");
 
     // Get second tick
     let tick2 = expect_data(subscription.next().await);
@@ -533,9 +533,9 @@ async fn tick_subscription_buffer_and_iteration() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0))
-            .tick(historical_tick_bid_ask(1_678_838_401, 185.60, 186.10, 110.0, 210.0))
-            .tick(historical_tick_bid_ask(1_678_838_402, 185.70, 186.20, 120.0, 220.0))
+            .tick(tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0))
+            .tick(tick_bid_ask(1_678_838_401, 185.60, 186.10, 110.0, 210.0))
+            .tick(tick_bid_ask(1_678_838_402, 185.70, 186.20, 120.0, 220.0))
             .done(true)
             .encode_proto(),
     )]));
@@ -564,7 +564,7 @@ async fn tick_subscription_bid_ask() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickBidAsk,
         historical_ticks_bid_ask_response()
-            .tick(historical_tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
+            .tick(tick_bid_ask(1_678_838_400, 185.50, 186.00, 100.0, 200.0).bid_past_low(true))
             .done(true)
             .encode_proto(),
     )]));
@@ -586,13 +586,13 @@ async fn tick_subscription_bid_ask() {
         .expect("Failed to create bid/ask tick subscription");
 
     let tick = expect_data(subscription.next().await);
-    assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
+    assert_eq!(tick.time, datetime!(2023-03-15 00:00:00 UTC), "Wrong time");
     assert_eq!(tick.price_bid, 185.50, "Wrong bid price");
     assert_eq!(tick.price_ask, 186.00, "Wrong ask price");
-    assert_eq!(tick.size_bid, Some(100.0), "Wrong bid size");
-    assert_eq!(tick.size_ask, Some(200.0), "Wrong ask size");
-    assert!(tick.tick_attribute_bid_ask.bid_past_low, "Wrong bid past low");
-    assert!(!tick.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high");
+    assert_eq!(tick.size_bid, 100.0, "Wrong bid size");
+    assert_eq!(tick.size_ask, 200.0, "Wrong ask size");
+    assert!(tick.attributes.bid_past_low, "Wrong bid past low");
+    assert!(!tick.attributes.ask_past_high, "Wrong ask past high");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
@@ -615,7 +615,7 @@ async fn tick_subscription_midpoint() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTick,
         historical_ticks_response()
-            .tick(historical_tick_mid(1_678_838_400, 185.75, 100.0))
+            .tick(tick_midpoint(1_678_838_400, 185.75))
             .done(true)
             .encode_proto(),
     )]));
@@ -630,9 +630,8 @@ async fn tick_subscription_midpoint() {
         .expect("Failed to create midpoint tick subscription");
 
     let tick = expect_data(subscription.next().await);
-    assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
+    assert_eq!(tick.time, datetime!(2023-03-15 00:00:00 UTC), "Wrong time");
     assert_eq!(tick.price, 185.75, "Wrong midpoint price");
-    assert_eq!(tick.size, Some(100.0), "Wrong size");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(
@@ -652,7 +651,7 @@ async fn historical_ticks_trade() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
+            .tick(tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
             .done(true)
             .encode_proto(),
     )]));
@@ -662,18 +661,18 @@ async fn historical_ticks_trade() {
 
     let mut subscription = client
         .historical_ticks(&contract, 1)
-        .trade()
+        .last()
         .await
         .expect("Failed to create trade tick subscription");
 
     let tick = expect_data(subscription.next().await);
-    assert_eq!(tick.timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
+    assert_eq!(tick.time, datetime!(2023-03-15 00:00:00 UTC), "Wrong time");
     assert_eq!(tick.price, 185.50, "Wrong trade price");
-    assert_eq!(tick.size, Some(100.0), "Wrong trade size");
+    assert_eq!(tick.size, 100.0, "Wrong trade size");
     assert_eq!(tick.exchange, "ISLAND", "Wrong exchange");
     assert_eq!(tick.special_conditions, "APR", "Wrong special conditions");
-    assert!(!tick.tick_attribute_last.past_limit, "Wrong past limit");
-    assert!(!tick.tick_attribute_last.unreported, "Wrong unreported");
+    assert!(!tick.attributes.past_limit, "Wrong past limit");
+    assert!(!tick.attributes.unreported, "Wrong unreported");
 
     assert_eq!(subscription.request_id(), TEST_REQ_ID_FIRST, "request_id() is the id on the wire");
     assert_eq!(request_message_count(&message_bus), 1);
@@ -927,10 +926,7 @@ async fn tick_subscription_cancel_reports_cancelled_then_ends() {
         RoutedItem::Response(proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .ticks(vec![
-                    historical_tick_last(time, 15.00, 100.0, "NYSE"),
-                    historical_tick_last(time + 1, 15.01, 100.0, "NYSE"),
-                ])
+                .ticks(vec![tick_last(time, 15.00, 100.0, "NYSE"), tick_last(time + 1, 15.01, 100.0, "NYSE")])
                 .done(false)
                 .encode_proto(),
         ))
@@ -1335,7 +1331,7 @@ async fn tick_subscription_skips_unexpected_message_then_yields() {
         proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
+                .tick(tick_last(1_678_838_400, 185.50, 100.0, "ISLAND").special_conditions("APR"))
                 .done(true)
                 .encode_proto(),
         ),
@@ -1345,7 +1341,7 @@ async fn tick_subscription_skips_unexpected_message_then_yields() {
 
     let mut subscription = client
         .historical_ticks(&test_contract(), 1)
-        .trade()
+        .last()
         .await
         .expect("subscription should be created");
 
@@ -1404,7 +1400,7 @@ async fn tick_subscription_lag_yields_gap_notice_then_data() {
     tx.send(RoutedItem::Response(proto_response(
         IncomingMessages::HistoricalTickLast,
         historical_ticks_last_response()
-            .tick(historical_tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
+            .tick(tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
             .done(true)
             .encode_proto(),
     )))
@@ -1438,7 +1434,7 @@ async fn tick_subscription_notice_passes_through_then_data() {
         RoutedItem::Response(proto_response(
             IncomingMessages::HistoricalTickLast,
             historical_ticks_last_response()
-                .tick(historical_tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
+                .tick(tick_last(1_678_838_400, 15.00, 100.0, "NYSE"))
                 .done(true)
                 .encode_proto(),
         )),

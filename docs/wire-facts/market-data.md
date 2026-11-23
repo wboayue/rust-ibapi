@@ -91,6 +91,40 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
 - **Not probed:** ASK bars; AAPL realtime bars (no data overnight); `HistoricalDataUpdate`
   (keep-up-to-date) bars.
 
+### Historical bars for a continuous future take no end date
+
+*Live 2026-11-16 Mon 02:20 ET (CME Globex open), paper, server 223.*
+
+- `reqHistoricalData` on ES `CONTFUT`, 1-hour TRADES bars: a 2-day duration with no end date
+  returns 16 bars (2026-11-12 14:30 to 2026-11-13 21:00 UTC). The same request with an end date
+  of 2026-11-13 21:00 UTC returns error 10339, "Setting end date/time for continuous future
+  security type is not allowed". `between` sent an end date, so it got 10339 too.
+- Settles that `between` on a continuous future must omit the end date and ask for a duration
+  reaching back to `start` from now.
+- **Not probed:** `keepUpToDate` streaming; CONTFUT on another exchange.
+
+### Continuous future: schedule rejects an end date, ticks accept one; bar depth and cost
+
+*Live 2026-11-22 Sun 19:56 ET (CME Globex open), paper, server 226. ES `CONTFUT`, extended
+hours, TRADES.*
+
+- `reqHistoricalData` with `whatToShow` SCHEDULE, 5 D: with an end date of 2026-11-13 20:00 UTC,
+  error 10339, the same text as for bars. With no end date, 5 sessions.
+- `reqHistoricalTicks`, 100 trade ticks: with an end date of 2026-11-13 20:00 UTC, 114 ticks
+  ending 19:59:52; with a start date of 15:00 UTC, 128 ticks from 15:00:00. No 10339 either way.
+- Bars with no end date: the bar-size step limit still applies. 1-second bars over 1800 S
+  return 1800 bars; over 1 D they draw 162 "invalid step: 1".
+- Longer durations are accepted but slow. 1 M of 30-second bars took 74 s (55433 bars), 1 M of
+  1-minute bars 73 s (27720), 1 Y of hourly bars 41 s (5896), 5 Y of hourly bars 122 s
+  (16063). 2 M of 30-second bars and 1 Y of 1-minute bars did not finish within 90 s.
+- History is shallower than asked: 5 Y of hourly bars starts 2023-09-27, and 20 Y of daily bars
+  returns 1391 bars from 2021-06-07.
+- Settles that schedule's `ending()` needs the same up-front rejection as bars and ticks'
+  does not, and that `between` on a continuous future pays for `now - start` in wall-clock
+  time rather than drawing an error.
+- **Not probed:** whether the 90 s timeouts end in data or an error; bid/ask and midpoint
+  ticks; daily bars over 5 Y or less.
+
 ### Size fields are always sent
 
 *Live 2026-11-15 Sun 22:25 ET, paper, server 226; raw capture, same session as above.*
@@ -113,3 +147,28 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
 - Not decoded: one stock out of three contracts, with no documented meaning.
 - **Not probed:** options, crypto, non-US stocks.
 
+### Tick-by-tick sizes and `IgnoreSize`
+
+*Live 2026-11-16 03:33Z (Sunday evening ET), paper Gateway, server 226, BTC/PAXOS; #1244.*
+
+- `last` / `all_last` (24 frames) and `bid_ask` (121 frames, both `IgnoreSize` values): every
+  frame carried its size fields (`size`; `size_bid` and `size_ask`).
+- `mid_point` (84 frames): no size field in any frame.
+- `bid_ask` with `IgnoreSize::Yes` (one window, 40 updates read): every update changed a price
+  (0 of 39 consecutive pairs with both prices unchanged). With `IgnoreSize::No` (two windows, 40
+  updates read in each), 12 of 39 and 4 of 39 pairs changed only sizes. Consistent with `Yes`
+  dropping size-only updates rather than the size fields.
+- Requested right after the `IgnoreSize::No` subscription on the same contract was cancelled,
+  `IgnoreSize::Yes` got no frames and no error in 25 s. Requested first, it delivered. One run,
+  not explained.
+- Historical ticks (live 2026-11-15 08:27 ET, Sunday, paper Gateway, server 226; AAPL ticks of
+  2026-11-13): every trade tick (1018) carried `size` and every bid/ask tick (17) `size_bid` and
+  `size_ask`; every midpoint tick (19) carried `size`, always `"0"`.
+- Historical bid/ask ticks with `IgnoreSize` (live 2026-11-16 05:02Z, Monday 00:02 ET, paper
+  Gateway, server 226; AAPL, 200 ticks requested ending 2026-11-13 21:00 UTC, all returned
+  ticks fall in 20:59:58-59 UTC; each request drew notice 2188 and still delivered): decoded
+  from the capture, `Yes` 475 ticks and `No` 1009, every one with `size_bid` and `size_ask`. 0
+  of 474 consecutive `Yes` pairs and 534 of 1008 `No` pairs had both prices unchanged: `Yes`
+  drops size-only updates here too.
+- ES and EUR.USD tick-by-tick sizes, all sent: [Size fields are always sent](#size-fields-are-always-sent).
+- **Not probed:** live stock ticks during RTH, live accounts, TWS rather than the Gateway.
