@@ -477,6 +477,22 @@ fn expiry_from_wire_is_lenient() {
 }
 
 #[test]
+fn expiry_accessors_match_their_variant() {
+    let date = ExpirationDate::new(2026, 12, 18).unwrap();
+    let month = ContractMonth::new(2026, 12).unwrap();
+    // (label, expiry, expected date(), expected month())
+    let cases = [
+        ("date", Expiry::Date(date.clone()), Some(&date), None),
+        ("month", Expiry::Month(month.clone()), None, Some(&month)),
+        ("unknown", Expiry::Unknown("2026Q4".into()), None, None),
+    ];
+    for (label, expiry, expected_date, expected_month) in cases {
+        assert_eq!(expiry.date(), expected_date, "{label}");
+        assert_eq!(expiry.month(), expected_month, "{label}");
+    }
+}
+
+#[test]
 fn expiry_display_is_the_wire_text() {
     for raw in ["20261218", "202612", "20430504 16:00 Europe/London"] {
         assert_eq!(Expiry::from_wire(raw).unwrap().to_string(), raw);

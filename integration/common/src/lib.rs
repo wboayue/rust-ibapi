@@ -35,8 +35,7 @@ pub fn yyyymmdd_today() -> String {
     yyyymmdd_from_now(0)
 }
 
-/// The UTC date `days` from now as `YYYYMMDD`. Compares lexically against
-/// `OptionChain::expirations`, which TWS renders in the same form.
+/// The UTC date `days` from now as `YYYYMMDD`, the form TWS uses for option expirations.
 pub fn yyyymmdd_from_now(days: i64) -> String {
     let date = time::OffsetDateTime::now_utc() + time::Duration::days(days);
     format!("{:04}{:02}{:02}", date.year(), date.month() as u8, date.day())
