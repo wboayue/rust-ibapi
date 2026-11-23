@@ -1,4 +1,5 @@
 #![allow(clippy::uninlined_format_args)]
+use ibapi::contracts::SecurityType;
 use ibapi::Client;
 
 #[tokio::main]
@@ -29,7 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("    Currency: {}", contract_desc.contract.currency);
 
                 if !contract_desc.derivative_security_types.is_empty() {
-                    println!("    Derivative Types: {}", contract_desc.derivative_security_types.join(", "));
+                    let types: Vec<&str> = contract_desc.derivative_security_types.iter().map(SecurityType::as_str).collect();
+                    println!("    Derivative Types: {}", types.join(", "));
                 }
             }
         }

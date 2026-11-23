@@ -61,7 +61,7 @@ fn v2_builders() {
 /// Every modeled `SecurityType` with its wire string. A new variant stops
 /// `all_security_types_covers_every_variant` compiling until it gets an arm there; give it the
 /// next index, grow `seen`, and add its row here.
-const ALL_SECURITY_TYPES: [(SecurityType, &str); 15] = [
+const ALL_SECURITY_TYPES: [(SecurityType, &str); 17] = [
     (SecurityType::Stock, "STK"),
     (SecurityType::Option, "OPT"),
     (SecurityType::Future, "FUT"),
@@ -77,6 +77,8 @@ const ALL_SECURITY_TYPES: [(SecurityType, &str); 15] = [
     (SecurityType::MutualFund, "FUND"),
     (SecurityType::Crypto, "CRYPTO"),
     (SecurityType::CFD, "CFD"),
+    (SecurityType::StructuredProduct, "IOPT"),
+    (SecurityType::EventContract, "EC"),
 ];
 
 #[test]
@@ -118,13 +120,15 @@ fn all_security_types_covers_every_variant() {
             SecurityType::MutualFund => Some(12),
             SecurityType::Crypto => Some(13),
             SecurityType::CFD => Some(14),
+            SecurityType::StructuredProduct => Some(15),
+            SecurityType::EventContract => Some(16),
             // Other carries a raw string, so it has no place in a table of
             // modeled wire values; `security_type_round_trip` covers it.
             SecurityType::Other(_) => None,
         }
     }
 
-    let mut seen = [false; 15];
+    let mut seen = [false; 17];
     for (variant, _) in &ALL_SECURITY_TYPES {
         if let Some(index) = modeled_index(variant) {
             seen[index] = true;
@@ -151,6 +155,8 @@ fn security_type_display_all_variants() {
         (SecurityType::MutualFund, "FUND"),
         (SecurityType::Crypto, "CRYPTO"),
         (SecurityType::CFD, "CFD"),
+        (SecurityType::StructuredProduct, "IOPT"),
+        (SecurityType::EventContract, "EC"),
         (SecurityType::Other("XYZ".to_string()), "XYZ"),
     ];
     for (variant, expected) in &cases {

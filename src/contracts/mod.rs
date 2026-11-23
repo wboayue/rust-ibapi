@@ -89,6 +89,10 @@ pub enum SecurityType {
     Crypto,
     /// Contract for difference
     CFD,
+    /// Dutch warrant or structured product (`IOPT`)
+    StructuredProduct,
+    /// Event contract (`EC`)
+    EventContract,
     /// A security type this crate does not model, holding the raw wire value
     Other(String),
 }
@@ -118,6 +122,8 @@ impl SecurityType {
             SecurityType::MutualFund => "FUND",
             SecurityType::Crypto => "CRYPTO",
             SecurityType::CFD => "CFD",
+            SecurityType::StructuredProduct => "IOPT",
+            SecurityType::EventContract => "EC",
             SecurityType::Other(name) => name,
         }
     }
@@ -139,6 +145,8 @@ impl SecurityType {
             "FUND" => Some(Self::MutualFund),
             "CRYPTO" => Some(Self::Crypto),
             "CFD" => Some(Self::CFD),
+            "IOPT" => Some(Self::StructuredProduct),
+            "EC" => Some(Self::EventContract),
             _ => None,
         }
     }
@@ -1054,8 +1062,11 @@ pub struct OptionChain {
 pub struct ContractDescription {
     /// Fully qualified contract metadata.
     pub contract: Contract,
-    /// Derivative security types available for the contract.
-    pub derivative_security_types: Vec<String>,
+    /// Security types of the derivatives listed on this contract, such as
+    /// [`Option`](SecurityType::Option), [`Warrant`](SecurityType::Warrant) or
+    /// [`Future`](SecurityType::Future). A code the crate doesn't model is
+    /// [`SecurityType::Other`]; an empty entry is dropped.
+    pub derivative_security_types: Vec<SecurityType>,
 }
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

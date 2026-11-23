@@ -114,7 +114,11 @@ pub(crate) fn decode_symbol_samples_proto(p: crate::proto::SymbolSamples) -> Res
                 .unwrap_or_default();
             Ok(ContractDescription {
                 contract,
-                derivative_security_types: d.derivative_sec_types,
+                derivative_security_types: d
+                    .derivative_sec_types
+                    .iter()
+                    .filter_map(|s| parse_optional(Some(s.as_str())).transpose())
+                    .collect::<Result<_, _>>()?,
             })
         })
         .collect()
