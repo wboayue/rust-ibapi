@@ -883,8 +883,10 @@ non-TRADES bars rather than leaving them out, so they stay `f64` and `i32`.
 TWS sends each option chain expiration as a `YYYYMMDD` date (stock, index and futures option
 chains, live). The field was `Vec<String>`, so finding the nearest expiration meant parsing or
 comparing text. It is now `Vec<Expiry>`: each date is an `Expiry::Date(ExpirationDate)`, which
-orders by date and goes straight into `Contract::option`. Text in another form is kept as
-`Expiry::Unknown`, so an unexpected value never fails the request.
+goes straight into `Contract::option`. A `YYYYMM` entry is an `Expiry::Month`, other text is
+kept as `Expiry::Unknown`, so an unexpected value never fails the request, and an empty entry is
+dropped. `Expiry` itself has no order, so `expirations.sort()` no longer compiles: take the dates
+with `Expiry::date`, which order chronologically.
 
 ```rust,ignore
 // 5.x
@@ -896,11 +898,9 @@ let nearest: ExpirationDate = expirations[0].parse()?;
 let nearest = chain
     .expirations
     .iter()
-    .filter_map(|expiry| match expiry {
-        Expiry::Date(date) => Some(date.clone()),
-        _ => None,
-    })
-    .min();
+    .filter_map(Expiry::date)
+    .min()
+    .cloned();
 let text: Vec<String> = chain.expirations.iter().map(ToString::to_string).collect(); // the 5.x strings
 ```
 

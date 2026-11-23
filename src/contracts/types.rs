@@ -679,6 +679,47 @@ impl Expiry {
         }
         Some(raw.parse().unwrap_or_else(|_| Expiry::Unknown(raw.to_owned())))
     }
+
+    /// The last trading day, if this is an [`Expiry::Date`].
+    ///
+    /// `Expiry` has no order of its own; take the dates to sort or find the
+    /// nearest one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{ExpirationDate, Expiry};
+    ///
+    /// let expirations: Vec<Expiry> = vec!["20261218".parse()?, "202612".parse()?, "20260918".parse()?];
+    /// let nearest = expirations.iter().filter_map(Expiry::date).min();
+    /// assert_eq!(nearest, Some(&ExpirationDate::new(2026, 9, 18)?));
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn date(&self) -> Option<&ExpirationDate> {
+        match self {
+            Expiry::Date(date) => Some(date),
+            _ => None,
+        }
+    }
+
+    /// The contract month, if this is an [`Expiry::Month`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{ContractMonth, Expiry};
+    ///
+    /// let month: Expiry = "202612".parse()?;
+    /// assert_eq!(month.month(), Some(&ContractMonth::new(2026, 12)?));
+    /// assert_eq!(month.date(), None);
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn month(&self) -> Option<&ContractMonth> {
+        match self {
+            Expiry::Month(month) => Some(month),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Expiry {

@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::common::test_utils::helpers::{assert_decimal_parse_error, assert_missing_field, assert_rejects_text_framing};
-use crate::contracts::{ExpirationDate, FundAssetType, FundDistributionPolicyIndicator};
+use crate::contracts::{ContractMonth, ExpirationDate, FundAssetType, FundDistributionPolicyIndicator};
 use crate::messages::IncomingMessages;
 use prost::Message;
 
@@ -148,7 +148,14 @@ fn decode_option_chain_proto_works() {
         underlying_con_id: Some(265598),
         trading_class: Some("AAPL".into()),
         multiplier: Some("100".into()),
-        expirations: vec!["20260619".into(), "20260918".into(), "2026Q4".into()],
+        expirations: vec![
+            "20260619".into(),
+            "20260918".into(),
+            "202612".into(),
+            "2026Q4".into(),
+            // Empty entries are dropped.
+            "".into(),
+        ],
         strikes: vec![150.0, 175.0, 200.0],
     };
 
@@ -162,6 +169,7 @@ fn decode_option_chain_proto_works() {
         vec![
             Expiry::Date(ExpirationDate::new(2026, 6, 19).unwrap()),
             Expiry::Date(ExpirationDate::new(2026, 9, 18).unwrap()),
+            Expiry::Month(ContractMonth::new(2026, 12).unwrap()),
             Expiry::Unknown("2026Q4".into()),
         ]
     );

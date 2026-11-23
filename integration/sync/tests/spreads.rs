@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use ibapi::client::blocking::Client;
-use ibapi::contracts::{ButterflyLegs, CollarLegs, Contract, IronCondorLegs, OptionRight, SecurityType, SpreadBuilder};
+use ibapi::contracts::{ButterflyLegs, CollarLegs, Contract, ExpirationDate, Expiry, IronCondorLegs, OptionRight, SecurityType, SpreadBuilder};
 use ibapi_integration_sync::connect;
 use ibapi_test::{yyyymmdd_from_now, ClientId};
 
@@ -48,11 +48,11 @@ fn underlying_and_expiries(client: &Client) -> (i32, String, String) {
         .expect("option_chain did not end");
     let chain = chains.iter().find(|c| c.exchange == "SMART").expect("no SMART option chain");
 
-    let cutoff = yyyymmdd_from_now(14);
-    let mut later: Vec<String> = chain.expirations.iter().map(ToString::to_string).filter(|e| *e >= cutoff).collect();
+    let cutoff: ExpirationDate = yyyymmdd_from_now(14).parse().expect("cutoff date");
+    let mut later: Vec<&ExpirationDate> = chain.expirations.iter().filter_map(Expiry::date).filter(|d| **d >= cutoff).collect();
     later.sort();
     assert!(later.len() >= 2, "need two expirations after {cutoff}: {later:?}");
-    (stock_id, later[0].clone(), later[1].clone())
+    (stock_id, later[0].to_string(), later[1].to_string())
 }
 
 /// Five consecutive strikes listed in every map, around the middle, and a limit price inside

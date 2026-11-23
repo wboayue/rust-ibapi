@@ -33,15 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let chain = smart_chain.ok_or("no SMART option chain for SPY")?;
 
-    let expiration = chain
-        .expirations
-        .iter()
-        .filter_map(|expiry| match expiry {
-            Expiry::Date(date) => Some(date.clone()),
-            _ => None,
-        })
-        .min()
-        .ok_or("no expirations")?;
+    let expiration = chain.expirations.iter().filter_map(Expiry::date).min().cloned().ok_or("no expirations")?;
 
     // The chain's strikes span every expiration. A strike of 0 asks TWS for each strike this
     // expiration lists; take the middle one.
