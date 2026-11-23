@@ -650,8 +650,11 @@ pub struct ContractDetails {
     pub sec_id_list: Vec<TagValue>,
     /// For derivatives, the symbol of the underlying contract.
     pub under_symbol: String,
-    /// For derivatives, returns the underlying security type.
-    pub under_security_type: String,
+    /// For a derivative, the security type of its underlying: [`Stock`](SecurityType::Stock)
+    /// for a stock option, [`Future`](SecurityType::Future) for a futures option,
+    /// [`Index`](SecurityType::Index) for a future on an index. `None` when the contract has no
+    /// underlying, as for a stock or an index.
+    pub under_security_type: Option<SecurityType>,
     /// Market rule ids, one per entry of [`valid_exchanges`](Self::valid_exchanges)
     /// and in the same order: the rule for that exchange. Ids can differ by
     /// exchange, so look one up with [`market_rule_id`](Self::market_rule_id)
