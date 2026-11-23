@@ -106,8 +106,11 @@ pub(crate) type StartupCallback = Arc<dyn Fn(StartupMessage) + Send + Sync>;
 /// Validated connection settings shared by both transports. Each side passes
 /// its notice sink alongside.
 pub(crate) struct ConnectionConfig {
+    /// Only the sockets read it; a caller's stream is already open
+    #[cfg_attr(all(target_family = "wasm", not(feature = "sync")), allow(dead_code))]
     pub(crate) address: String,
     pub(crate) client_id: i32,
+    #[cfg_attr(all(target_family = "wasm", not(feature = "sync")), allow(dead_code))]
     pub(crate) tcp_no_delay: bool,
     pub(crate) startup_callback: Option<StartupCallback>,
     /// `None` means retry forever.

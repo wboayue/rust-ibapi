@@ -112,6 +112,17 @@ pub mod client;
 
 pub(crate) mod transport;
 
+/// Bring your own connection to TWS or IB Gateway: implement
+/// [`AsyncStream`](stream::AsyncStream) (with [`AsyncIo`](stream::AsyncIo) and
+/// [`AsyncReconnect`](stream::AsyncReconnect)) and pass it to
+/// [`ClientBuilder::connect_with_stream`](crate::ClientBuilder::connect_with_stream).
+/// The client frames, handshakes, routes and reconnects over it as it does
+/// over its own TCP socket.
+#[cfg(feature = "async")]
+pub mod stream {
+    pub use crate::transport::r#async::{AsyncIo, AsyncReconnect, AsyncStream, ShutdownSignal};
+}
+
 /// Connection management
 pub(crate) mod connection;
 

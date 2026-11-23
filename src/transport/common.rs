@@ -138,11 +138,14 @@ pub(crate) const MAX_RECONNECT_ATTEMPTS: u32 = 20;
 /// official client's `Constants.MaxMsgSize` (`0x00FFFFFF`, ~16 MiB), which
 /// `EReader.readSingleMessage` enforces with `BAD_LENGTH`. Nothing in the wire
 /// format bounds the 4-byte prefix on its own.
+// Only the sockets read frames themselves
+#[cfg_attr(all(target_family = "wasm", not(feature = "sync")), allow(dead_code))]
 pub(crate) const MAX_FRAME_LENGTH: usize = 0x00FF_FFFF;
 
 /// Smallest valid frame body: every TWS frame is `[4-byte BE msg_id][payload]`,
 /// so a body that cannot hold the message id is malformed by definition. An
 /// empty payload after the id is legal.
+#[cfg_attr(all(target_family = "wasm", not(feature = "sync")), allow(dead_code))]
 pub(crate) const MIN_FRAME_LENGTH: usize = MESSAGE_ID_LEN;
 
 /// Reject a length prefix that cannot describe a TWS frame, before it is used
@@ -151,6 +154,7 @@ pub(crate) const MIN_FRAME_LENGTH: usize = MESSAGE_ID_LEN;
 /// Returns a hard [`Error::InvalidFrame`] rather than skipping the frame,
 /// because either direction desynchronizes the stream permanently instead of
 /// corrupting one message — see that variant's docs for why.
+#[cfg_attr(all(target_family = "wasm", not(feature = "sync")), allow(dead_code))]
 pub(crate) fn validate_frame_length(length: usize) -> Result<usize, Error> {
     if length > MAX_FRAME_LENGTH {
         return Err(Error::InvalidFrame(format!(

@@ -686,3 +686,44 @@ async fn reconnect_gives_up_with_client_id_in_use() {
     let err = connection.reconnect().await.expect_err("every attempt met a held id");
     assert!(matches!(err, Error::ClientIdInUse { client_id: CLIENT_ID }), "got {err:?}");
 }
+
+#[tokio::test]
+async fn a_client_connects_over_a_callers_stream() {
+    let stream = MemoryStream::default();
+    push_handshake(&stream);
+    let client = Client::builder()
+        .client_id(CLIENT_ID)
+        .connect_with_stream(stream.clone())
+        .await
+        .expect("connect over the stream");
+    assert_eq!(client.client_id(), CLIENT_ID);
+    assert_eq!(client.server_version(), SERVER_VERSION);
+    assert_eq!(client.next_order_id(), 90);
+    let expected = AsyncConnection::stubbed(MemoryStream::default(), CLIENT_ID)
+        .connection_handler
+        .format_handshake();
+    assert!(stream.captured().starts_with(&expected), "the handshake went out over the stream");
+}
+
+#[tokio::test]
+async fn connecting_over_a_stream_still_needs_a_client_id() {
+    let Err(err) = Client::builder().connect_with_stream(MemoryStream::default()).await else {
+        panic!("connected without a client id");
+    };
+    assert!(
+        matches!(&err, crate::errors::Error::InvalidArgument(m) if m.contains("client_id")),
+        "{err:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_stream_connection_gets_the_handshakes_notices() {
+    let stream = MemoryStream::default();
+    push_handshake(&stream);
+    let (client, _notices) = Client::builder()
+        .client_id(CLIENT_ID)
+        .connect_with_stream_and_notice_stream(stream)
+        .await
+        .expect("connect over the stream");
+    assert_eq!(client.server_version(), SERVER_VERSION);
+}

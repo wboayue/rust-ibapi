@@ -9,12 +9,11 @@ pub(crate) use connection_signal::ConnectionSignal;
 /// rather than a socket. Production callers reach it through `AsyncIo`.
 #[cfg(test)]
 pub(crate) use io::read_framed_message;
-/// The stream traits, for test fixtures that stand in for a socket.
-#[cfg(test)]
-pub(crate) use io::{AsyncIo, AsyncReconnect};
-pub(crate) use io::{AsyncStream, AsyncTcpSocket};
+#[cfg(not(target_family = "wasm"))]
+pub(crate) use io::AsyncTcpSocket;
+pub use io::{AsyncIo, AsyncReconnect, AsyncStream};
 use registry::{Route, SenderHash, SharedChannels};
-pub(crate) use shutdown::ShutdownSignal;
+pub use shutdown::ShutdownSignal;
 
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -488,7 +487,7 @@ impl Drop for AsyncInternalSubscription {
 }
 
 /// Asynchronous TCP message bus implementation
-pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
+pub struct AsyncTcpMessageBus<S: AsyncStream> {
     connection: Arc<AsyncConnection<S>>,
     requests: Arc<SenderHash<RequestId>>,
     orders: Arc<SenderHash<OrderId>>,

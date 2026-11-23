@@ -13,8 +13,9 @@ use crate::client::builders::client_builder::async_impl::ClientBuilder;
 use crate::client::builders::client_builder::ClientConfig;
 use crate::connection::{r#async::AsyncConnection, ConnectionMetadata};
 use crate::messages::{Notice, OutgoingMessages};
+use crate::transport::rate_limiter::RateLimiter;
 use crate::transport::{
-    r#async::{AsyncInternalSubscription, AsyncTcpMessageBus},
+    r#async::{AsyncInternalSubscription, AsyncStream, AsyncTcpMessageBus},
     AsyncMessageBus,
 };
 use crate::Error;
@@ -77,6 +78,7 @@ impl Client {
     ///     println!("next_order_id: {}", client.next_order_id());
     /// }
     /// ```
+    #[cfg(not(target_family = "wasm"))]
     pub async fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
         Self::builder().address(address).client_id(client_id).connect().await
     }
@@ -109,24 +111,48 @@ impl Client {
     /// Internal entry point shared by `Client::connect` and `ClientBuilder`.
     /// Builds the `AsyncConnection`, wraps it in an `AsyncTcpMessageBus`, and
     /// kicks off the dispatcher task.
+    #[cfg(not(target_family = "wasm"))]
     pub(crate) async fn connect_with_config(
         config: ClientConfig,
         notice_sender: broadcast::Sender<Notice>,
         channel_capacity: usize,
     ) -> Result<Client, Error> {
         let connection = AsyncConnection::connect(config.connection, notice_sender).await?;
+        Self::start(connection, config.rate_limiter, config.one_shot_timeout, channel_capacity).await
+    }
+
+    /// As [`connect_with_config`](Self::connect_with_config), over `stream`, a
+    /// connection the caller opened. Behind `ClientBuilder::connect_with_stream`.
+    pub(crate) async fn connect_over_stream<S: AsyncStream>(
+        stream: S,
+        config: ClientConfig,
+        notice_sender: broadcast::Sender<Notice>,
+        channel_capacity: usize,
+    ) -> Result<Client, Error> {
+        let connection = AsyncConnection::connect_over(stream, config.connection, notice_sender).await?;
+        Self::start(connection, config.rate_limiter, config.one_shot_timeout, channel_capacity).await
+    }
+
+    /// Wraps a connection that has finished its handshake in an
+    /// `AsyncTcpMessageBus`, and kicks off the dispatcher task.
+    async fn start<S: AsyncStream>(
+        connection: AsyncConnection<S>,
+        rate_limiter: Option<RateLimiter>,
+        one_shot_timeout: Option<Duration>,
+        channel_capacity: usize,
+    ) -> Result<Client, Error> {
         let connection_metadata = connection.connection_metadata().await;
 
         let message_bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, channel_capacity));
 
         let mut client = Client::new(connection_metadata, message_bus.clone())?;
-        client.one_shot_timeout = config.one_shot_timeout;
+        client.one_shot_timeout = one_shot_timeout;
 
         // Share the state a reconnect's handshake refreshes (order-id floor,
         // server version) with the bus; must be installed before the
         // processing task starts.
         message_bus.set_handshake_state(client.handshake_state());
-        if let Some(limiter) = config.rate_limiter {
+        if let Some(limiter) = rate_limiter {
             message_bus.set_rate_limiter(limiter);
         }
 

@@ -14,15 +14,18 @@ use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{encode_raw_length, Notice, ResponseMessage};
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
-use crate::transport::r#async::{AsyncStream, AsyncTcpSocket, NoticeBroadcaster, ShutdownSignal};
+#[cfg(not(target_family = "wasm"))]
+use crate::transport::r#async::AsyncTcpSocket;
+use crate::transport::r#async::{AsyncStream, NoticeBroadcaster, ShutdownSignal};
 use crate::transport::recorder::MessageRecorder;
 
 type Response = Result<ResponseMessage, Error>;
 
 /// Asynchronous connection to TWS, generic over the underlying `AsyncStream`.
-/// The default `AsyncTcpSocket` is the production wiring; tests can substitute
-/// an in-memory stream to drive the bus deterministically.
-pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
+/// `AsyncTcpSocket` is the production wiring; a caller may supply its own
+/// stream, and tests substitute an in-memory one to drive the bus
+/// deterministically.
+pub struct AsyncConnection<S: AsyncStream> {
     pub(crate) client_id: i32,
     pub(crate) socket: S,
     pub(crate) connection_metadata: Mutex<ConnectionMetadata>,
@@ -58,6 +61,7 @@ impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl AsyncConnection<AsyncTcpSocket> {
     /// Open the socket and run the TWS handshake. Settings come from the
     /// builder's validated `ConnectionConfig`.
@@ -67,6 +71,15 @@ impl AsyncConnection<AsyncTcpSocket> {
     /// reconnects.
     pub(crate) async fn connect(config: ConnectionConfig, notice_sender: broadcast::Sender<Notice>) -> Result<Self, Error> {
         let socket = AsyncTcpSocket::connect(&config.address, config.tcp_no_delay).await?;
+        Self::connect_over(socket, config, notice_sender).await
+    }
+}
+
+impl<S: AsyncStream> AsyncConnection<S> {
+    /// Run the TWS handshake over `socket`, a stream already open, as
+    /// [`connect`](AsyncConnection::connect) does over TCP. The config's
+    /// address and `tcp_no_delay` go unused.
+    pub(crate) async fn connect_over(socket: S, config: ConnectionConfig, notice_sender: broadcast::Sender<Notice>) -> Result<Self, Error> {
         let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_sender);
         connection.max_reconnect_attempts = config.max_reconnect_attempts;
         connection.establish_connection().await?;

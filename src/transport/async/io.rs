@@ -3,23 +3,39 @@
 //! Mirrors the sync `transport::sync::{Io, Reconnect, Stream}` triple, but
 //! method-async via `#[async_trait]`. Frame-level: `read_message` returns the
 //! already-unframed body so callers don't repeat the length-prefix dance.
+//!
+//! The traits are public, as [`crate::stream`], so a caller can supply its own
+//! connection to TWS through `ClientBuilder::connect_with_stream`. The TCP
+//! socket behind `ClientBuilder::connect` is left out on wasm targets.
 
 use std::time::Duration;
 
 use async_trait::async_trait;
+#[cfg(not(target_family = "wasm"))]
 use log::warn;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+#[cfg(not(target_family = "wasm"))]
+use tokio::io::AsyncWriteExt;
+#[cfg(any(not(target_family = "wasm"), test))]
+use tokio::io::{AsyncRead, AsyncReadExt};
+#[cfg(not(target_family = "wasm"))]
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+#[cfg(not(target_family = "wasm"))]
 use tokio::net::TcpStream;
+#[cfg(not(target_family = "wasm"))]
 use tokio::sync::{watch, Mutex, MutexGuard};
 
 use crate::errors::Error;
+#[cfg(any(not(target_family = "wasm"), test))]
 use crate::transport::common::validate_frame_length;
 use crate::transport::r#async::ShutdownSignal;
+#[cfg(any(not(target_family = "wasm"), test))]
 use crate::transport::raw_capture::RawFrameTap;
 
+/// Reading and writing whole TWS frames: each a 4-byte big-endian length, then
+/// that many bytes.
 #[async_trait]
-pub(crate) trait AsyncIo {
+pub trait AsyncIo {
+    /// The next frame's body, without its length prefix.
     async fn read_message(&self) -> Result<Vec<u8>, Error>;
     /// Write `buf` whole. A caller dropped before any byte is written sends
     /// nothing. A write that stops partway (its caller dropped, or a failure)
@@ -34,8 +50,9 @@ pub(crate) trait AsyncIo {
     async fn close(&self);
 }
 
+/// Replacing a lost connection, for the client's automatic reconnect.
 #[async_trait]
-pub(crate) trait AsyncReconnect {
+pub trait AsyncReconnect {
     /// Replace the connection, clearing a break left by a cut-off write (see
     /// [`AsyncIo::write_all`]).
     async fn reconnect(&self) -> Result<(), Error>;
@@ -52,8 +69,12 @@ pub(crate) trait AsyncReconnect {
     fn sever(&self) {}
 }
 
-pub(crate) trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static + std::fmt::Debug {}
+/// A connection to TWS or IB Gateway that the client can run over. The crate's
+/// TCP socket is one (not on wasm targets); a caller supplies another to
+/// `ClientBuilder::connect_with_stream`.
+pub trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static + std::fmt::Debug {}
 
+#[cfg(not(target_family = "wasm"))]
 /// Where an [`AsyncTcpSocket`] stands. `Live` and `Broken` alternate: a write
 /// cut off mid-frame or a `sever` breaks the socket, `reconnect` makes it live
 /// again.
@@ -65,6 +86,7 @@ enum SocketState {
     Closed,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl SocketState {
     /// The error I/O fails with in this state; `None` while live.
     fn error(self) -> Option<Error> {
@@ -76,6 +98,7 @@ impl SocketState {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 /// Production async stream over `tokio::net::TcpStream`. Holds the split halves
 /// behind `Mutex` so reads and writes can run concurrently from the dispatcher
 /// task and the request senders.
@@ -97,6 +120,7 @@ pub(crate) struct AsyncTcpSocket {
     tap: RawFrameTap,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl AsyncTcpSocket {
     pub async fn connect(address: &str, tcp_no_delay: bool) -> Result<Self, Error> {
         let stream = TcpStream::connect(address).await?;
@@ -155,6 +179,7 @@ impl AsyncTcpSocket {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 /// How much of a frame `write_all` has handed to the socket. Dropped partway,
 /// with its caller cancelled or after a failed write, it breaks the connection:
 /// the wire now ends mid-frame, and the next frame would be misread from there.
@@ -166,6 +191,7 @@ struct FrameProgress<'a> {
     remaining: &'a [u8],
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl Drop for FrameProgress<'_> {
     fn drop(&mut self) {
         let written = self.len - self.remaining.len();
@@ -182,6 +208,7 @@ impl Drop for FrameProgress<'_> {
 /// it, because a prefix that fails validation is precisely the artifact a
 /// framing desync leaves behind. Mirrors the blocking
 /// [`transport::sync::read_message`](crate::transport::sync::read_message).
+#[cfg(any(not(target_family = "wasm"), test))]
 pub(crate) async fn read_framed_message<R>(reader: &mut R, tap: &RawFrameTap) -> Result<Vec<u8>, Error>
 where
     R: AsyncRead + Unpin + Send + ?Sized,
@@ -196,6 +223,7 @@ where
     Ok(data)
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[async_trait]
 impl AsyncIo for AsyncTcpSocket {
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
@@ -242,6 +270,7 @@ impl AsyncIo for AsyncTcpSocket {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[async_trait]
 impl AsyncReconnect for AsyncTcpSocket {
     async fn reconnect(&self) -> Result<(), Error> {
@@ -275,6 +304,7 @@ impl AsyncReconnect for AsyncTcpSocket {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl AsyncStream for AsyncTcpSocket {}
 
 #[cfg(test)]

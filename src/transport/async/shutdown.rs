@@ -10,8 +10,12 @@ use tokio::sync::watch;
 /// the dispatcher is inside `reconnect()` - with no `Notified` future
 /// registered - is still observed by the next wait. `request` takes no lock
 /// and needs no runtime, so `Drop` can call it (`request_shutdown_sync`).
+///
+/// A caller's [`AsyncStream`](crate::stream::AsyncStream) gets it in
+/// `AsyncReconnect::sleep`, to wait out the reconnect backoff with
+/// [`sleep`](Self::sleep).
 #[derive(Debug)]
-pub(crate) struct ShutdownSignal {
+pub struct ShutdownSignal {
     sender: watch::Sender<bool>,
 }
 
@@ -44,7 +48,7 @@ impl ShutdownSignal {
     }
 
     /// Sleep for `duration`, returning early once shutdown is requested.
-    pub(crate) async fn sleep(&self, duration: Duration) {
+    pub async fn sleep(&self, duration: Duration) {
         tokio::select! {
             _ = tokio::time::sleep(duration) => {}
             _ = self.wait() => {}

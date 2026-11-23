@@ -372,7 +372,7 @@ pub mod async_impl {
     use crate::errors::Error;
     use crate::messages::Notice;
     use crate::subscriptions::notice_stream::async_impl::NoticeStream;
-    use crate::transport::r#async::BROADCAST_CHANNEL_CAPACITY;
+    use crate::transport::r#async::{AsyncStream, BROADCAST_CHANNEL_CAPACITY};
     use crate::transport::rate_limiter::RateLimiter;
 
     /// Builder for an async [`Client`]. Acquire via
@@ -619,9 +619,49 @@ pub mod async_impl {
         /// drop(client);
         /// # Ok(()) }
         /// ```
+        #[cfg(not(target_family = "wasm"))]
         pub async fn connect(self) -> Result<Client, Error> {
             let (sender, _rx) = broadcast::channel::<Notice>(BROADCAST_CHANNEL_CAPACITY);
             self.connect_with_sender(sender).await
+        }
+
+        /// Establish the connection over `stream`, a connection to TWS or IB
+        /// Gateway the caller opened, and return a [`Client`]. Everything else
+        /// is as [`connect`](Self::connect): the handshake, the routing, and
+        /// reconnects, which call the stream's
+        /// [`reconnect`](crate::stream::AsyncReconnect::reconnect). `address`
+        /// and `tcp_no_delay` go unused; `client_id` is required.
+        ///
+        /// # Errors
+        ///
+        /// [`Error::ClientIdInUse`] when another connection holds the client
+        /// id; connect with a different id. Not retried here.
+        pub async fn connect_with_stream<S: AsyncStream>(self, stream: S) -> Result<Client, Error> {
+            let (sender, _rx) = broadcast::channel::<Notice>(BROADCAST_CHANNEL_CAPACITY);
+            self.connect_stream_with_sender(stream, sender).await
+        }
+
+        /// [`connect_with_stream`](Self::connect_with_stream) with a pre-bound
+        /// [`NoticeStream`], as
+        /// [`connect_with_notice_stream`](Self::connect_with_notice_stream)
+        /// gives over TCP.
+        ///
+        /// # Errors
+        ///
+        /// [`Error::ClientIdInUse`] when another connection holds the client
+        /// id; connect with a different id. Not retried here.
+        pub async fn connect_with_stream_and_notice_stream<S: AsyncStream>(self, stream: S) -> Result<(Client, NoticeStream), Error> {
+            let (sender, receiver) = broadcast::channel::<Notice>(BROADCAST_CHANNEL_CAPACITY);
+            let notices = NoticeStream::new(receiver);
+            let client = self.connect_stream_with_sender(stream, sender).await?;
+            Ok((client, notices))
+        }
+
+        async fn connect_stream_with_sender<S: AsyncStream>(self, stream: S, sender: broadcast::Sender<Notice>) -> Result<Client, Error> {
+            let channel_capacity = self.checked_channel_capacity()?;
+            let mut state = self.state;
+            state.address.get_or_insert_with(String::new);
+            Client::connect_over_stream(stream, state.validate()?, sender, channel_capacity).await
         }
 
         /// Establish the connection AND a pre-bound [`NoticeStream`] that
@@ -650,6 +690,7 @@ pub mod async_impl {
         /// drop(client);
         /// # Ok(()) }
         /// ```
+        #[cfg(not(target_family = "wasm"))]
         pub async fn connect_with_notice_stream(self) -> Result<(Client, NoticeStream), Error> {
             let (sender, receiver) = broadcast::channel::<Notice>(BROADCAST_CHANNEL_CAPACITY);
             let stream = NoticeStream::new(receiver);
@@ -657,14 +698,20 @@ pub mod async_impl {
             Ok((client, stream))
         }
 
+        #[cfg(not(target_family = "wasm"))]
         async fn connect_with_sender(self, sender: broadcast::Sender<Notice>) -> Result<Client, Error> {
+            let channel_capacity = self.checked_channel_capacity()?;
+            Client::connect_with_config(self.state.validate()?, sender, channel_capacity).await
+        }
+
+        /// The channel capacity, refusing 0.
+        fn checked_channel_capacity(&self) -> Result<usize, Error> {
             if self.channel_capacity == Some(0) {
                 // tokio's broadcast::channel panics on capacity 0; fail the
                 // build instead, at the seam every other invalid input uses.
                 return Err(Error::InvalidArgument("ClientBuilder: channel_capacity must be at least 1".into()));
             }
-            let channel_capacity = self.channel_capacity.unwrap_or(BROADCAST_CHANNEL_CAPACITY);
-            Client::connect_with_config(self.state.validate()?, sender, channel_capacity).await
+            Ok(self.channel_capacity.unwrap_or(BROADCAST_CHANNEL_CAPACITY))
         }
     }
 }

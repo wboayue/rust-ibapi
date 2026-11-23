@@ -573,6 +573,8 @@ pub use sync::TcpMessageBus;
 pub use r#async::{AsyncInternalSubscription, AsyncMessageBus};
 
 pub mod connection;
+// Only the sockets read frames themselves; a caller's stream reads its own
+#[cfg_attr(all(target_family = "wasm", not(feature = "sync")), allow(dead_code))]
 pub(crate) mod raw_capture;
 pub mod recorder;
 pub mod routing;
