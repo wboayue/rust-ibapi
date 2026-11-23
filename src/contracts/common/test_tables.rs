@@ -254,6 +254,42 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             }),
         },
         ContractDetailsTestCase {
+            // ICE Europe's zone name holds a `-` (Z 202612, paper TWS, server 223, 2026-11-23).
+            name: "ice europe future with a hyphenated zone",
+            contract: Contract {
+                symbol: Symbol::from("Z"),
+                security_type: Some(SecurityType::Future),
+                exchange: Exchange::from("ICEEU"),
+                last_trade_date_or_contract_month: Some("202612".parse().unwrap()),
+                currency: Currency::from("GBP"),
+                ..Default::default()
+            },
+            ordered_responses: vec![
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .contract_id(841228424)
+                        .symbol("Z")
+                        .security_type("FUT")
+                        .last_trade_date_or_contract_month("20261218 10:15:00 GB-Eire")
+                        .multiplier("1000")
+                        .exchange("ICEEU")
+                        .currency("GBP")
+                        .local_symbol("ZZ6")
+                        .time_zone_id("GB-Eire")
+                        .encode_proto(),
+                ),
+                proto_response(IncomingMessages::ContractDataEnd, contract_data_end().request_id(9001).encode_proto()),
+            ],
+            expected_count: 1,
+            validations: Box::new(|contracts| {
+                assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, Some("20261218".parse().unwrap()));
+                assert_eq!(contracts[0].last_trade_time, "10:15:00");
+                assert_eq!(contracts[0].time_zone_id, "GB-Eire");
+            }),
+        },
+        ContractDetailsTestCase {
             name: "stock contract details - multiple exchanges",
             contract: Contract {
                 symbol: Symbol::from("AAPL"),

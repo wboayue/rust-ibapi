@@ -223,6 +223,7 @@ fn decode_bond_contract_details_splits_last_trade_date() {
     let cases = [
         ("20430504 16:00 Europe/London", "20430504", "16:00", "Europe/London"),
         ("20430504-16:00", "20430504", "16:00", "US/Eastern"),
+        ("20430504 16:00 GB-Eire", "20430504", "16:00", "GB-Eire"),
         ("20430504", "20430504", "", "US/Eastern"),
         ("", "", "", "US/Eastern"),
     ];
@@ -270,6 +271,8 @@ fn decode_contract_details_splits_last_trade_date() {
     let cases = [
         ("20261218 08:30:00 US/Central", "20261218", "08:30:00"),
         ("20261218-08:30:00", "20261218", "08:30:00"),
+        // ICE Europe zone name holds a `-` (Z 202612, paper TWS, server 223, 2026-11-23).
+        ("20261218 10:15:00 GB-Eire", "20261218", "10:15:00"),
         ("20261218", "20261218", ""),
         ("202612", "202612", ""),
         ("", "", ""),

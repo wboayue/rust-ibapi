@@ -45,6 +45,19 @@ Contract details and option chains. Format: [README](README.md).
   an NT adapter note of 10372 on Gateway 10.51 is neither confirmed nor ruled out; live
   (non-what-if) orders; bonds.
 
+### `GB-Eire` last trade dates
+
+*Live 2026-11-23 18:45 ET off-hours, paper TWS, server 223; contract_details.*
+
+- ICE Europe sends tag 4 with a hyphenated zone: `20261218 16:30:00 GB-Eire` (VOD options,
+  144 contracts), `20261218 10:15:00 GB-Eire` (Z 202612), `20270325 11:00:00 GB-Eire` (R
+  202703), `20270315 10:00:00 GB-Eire` (I 202703). `time_zone_id` is `GB-Eire`, and an LSE
+  stock (VOD, BARC, HSBA) carries it too.
+- C#'s `SetLastTradeDate` splits on `-` whenever the text holds one, so it cuts these inside the
+  zone name: date `20261218 16:30:00 GB`, time `Eire`. The decoder splits text holding
+  whitespace on whitespace and keeps the `-` split for text without it.
+- **Not probed:** whether TWS ever sends the `YYYYMMDD-HH:MM:SS` form the `-` split exists for.
+
 ### Open-order echo of `lastTradeDateOrContractMonth` (tag 4)
 
 *Live 2026-11-14 weekend, paper Gateway, server 226; #1214.*
