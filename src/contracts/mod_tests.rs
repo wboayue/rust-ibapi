@@ -572,3 +572,36 @@ fn combo_leg_json_short_sale_slot_is_wire_code() {
 
     assert_eq!(serde_json::from_value::<ComboLeg>(json).unwrap(), leg);
 }
+
+#[test]
+fn last_trade_date_time_joins_expiry_date_and_time() {
+    use time::macros::datetime;
+
+    // Values from contract details, paper TWS, server 223, 2026-11-23.
+    let details = |expiry: Option<&str>, time: &str| ContractDetails {
+        contract: Contract {
+            last_trade_date_or_contract_month: expiry.map(|raw| Expiry::from_wire(raw).unwrap()),
+            ..Default::default()
+        },
+        last_trade_time: time.into(),
+        ..Default::default()
+    };
+    let cases = [
+        ("AAPL weekly", details(Some("20261127"), "13:15:00"), Some(datetime!(2026-11-27 13:15))),
+        ("N225 future", details(Some("20261210"), "15:45:00"), Some(datetime!(2026-12-10 15:45))),
+        ("AAPL monthly sends the date alone", details(Some("20261218"), ""), None),
+        ("contract month", details(Some("202612"), "08:30:00"), None),
+        (
+            "zoned bond text stays unknown",
+            details(Some("20430504 16:00 Europe/London"), "16:00"),
+            None,
+        ),
+        ("no expiry", details(None, "08:30:00"), None),
+    ];
+    for (label, details, expected) in cases {
+        assert_eq!(details.last_trade_date_time().unwrap(), expected, "{label}");
+    }
+
+    let bad = details(Some("20261218"), "8:30");
+    assert!(matches!(bad.last_trade_date_time(), Err(Error::Parse { value, .. }) if value == "8:30"));
+}
