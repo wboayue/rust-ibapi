@@ -948,9 +948,10 @@ historical size used as an `Option` or read from a midpoint. It does not catch t
 ### 41. `ContractDetails::under_security_type` is `Option<SecurityType>`
 
 TWS sends the underlying's security type as one of its codes: `STK` for a stock option, `FUT`
-for a futures option, `IND` for a future on an index, and nothing for a stock or an index. The
-field was a `String`, empty when TWS sent nothing. It is now `Option<SecurityType>`, `None`
-when TWS sends nothing; a code the crate doesn't model is `SecurityType::Other`.
+for a futures option, `IND` for a future on an index, and nothing when the contract has no
+underlying (a stock or an index). The field was a `String`, empty when TWS sent nothing. It is
+now `Option<SecurityType>`, `None` when TWS sends nothing; a code the crate doesn't model is
+`SecurityType::Other`.
 
 ```rust,ignore
 // 5.x

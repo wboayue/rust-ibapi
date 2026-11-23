@@ -652,8 +652,8 @@ pub struct ContractDetails {
     pub under_symbol: String,
     /// For a derivative, the security type of its underlying: [`Stock`](SecurityType::Stock)
     /// for a stock option, [`Future`](SecurityType::Future) for a futures option,
-    /// [`Index`](SecurityType::Index) for a future on an index. `None` when TWS sends none, as
-    /// for a stock or an index.
+    /// [`Index`](SecurityType::Index) for a future on an index. `None` when the contract has no
+    /// underlying, as for a stock or an index.
     pub under_security_type: Option<SecurityType>,
     /// Market rule ids, one per entry of [`valid_exchanges`](Self::valid_exchanges)
     /// and in the same order: the rule for that exchange. Ids can differ by
