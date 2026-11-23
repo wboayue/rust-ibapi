@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use crate::accounts::types::AccountId;
 use crate::builder::ValidationError;
+use crate::market_data::historical::BarsBetweenError;
 use crate::messages::{Notice, ResponseMessage};
 
 /// The main error type for IBAPI operations.
@@ -260,6 +261,11 @@ pub enum Error {
     /// `Display`; [`source`](std::error::Error::source) is `None`.
     #[error("protobuf decode error: {0}")]
     ProtobufDecode(ProtobufDecodeError),
+
+    /// A request after the first in a split `historical_data(..).between(..).fetch()` of
+    /// 1-second bars failed. Carries that request's error and the bars fetched before it.
+    #[error("{0}")]
+    BarsBetween(Box<BarsBetweenError>),
 }
 
 /// A protobuf message from TWS failed to decode. Payload of
@@ -549,7 +555,8 @@ impl Error {
             | Error::InvalidFrame(_)
             | Error::Notice(_)
             | Error::ProtobufDecode(_)
-            | Error::OrdersPartiallySent { .. } => false,
+            | Error::OrdersPartiallySent { .. }
+            | Error::BarsBetween(_) => false,
         }
     }
 
@@ -620,6 +627,7 @@ impl Clone for Error {
                 not_sent: not_sent.clone(),
                 source: source.clone(),
             },
+            Error::BarsBetween(e) => Error::BarsBetween(e.clone()),
         }
     }
 }

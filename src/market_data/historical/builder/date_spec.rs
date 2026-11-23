@@ -24,7 +24,7 @@
 use time::OffsetDateTime;
 
 use crate::contracts::{Contract, SecurityType};
-use crate::market_data::historical::Duration;
+use crate::market_data::historical::{BarSize, Duration};
 use crate::Error;
 
 #[cfg(doc)]
@@ -65,14 +65,30 @@ const SECONDS_PER_DAY: u64 = 86_400;
 /// IBKR rejects `S` durations above one day and `D` durations above 365.
 const MAX_DAYS: u64 = 365;
 
+/// TWS rejects `S` durations under 30 with error 321, for each bar size probed (1 and 5 seconds,
+/// 1 minute, 1 hour; live: 2026-11-23, server 223).
+const MIN_SECONDS: u64 = 30;
+/// TWS's longest request for 1-second bars: 2000 S returns bars, 2001 S draws error 162 "invalid
+/// step: 1" (live: 2026-11-23, server 223).
+const SECOND_BARS_MAX_SECONDS: i64 = 2000;
+
+/// The longest span one request for `bar_size` may ask for, for the bar sizes whose TWS limit is
+/// below what [`covering_duration`] asks for.
+pub(super) fn max_request_span(bar_size: BarSize) -> Option<time::Duration> {
+    match bar_size {
+        BarSize::Sec => Some(time::Duration::seconds(SECOND_BARS_MAX_SECONDS)),
+        _ => None,
+    }
+}
+
 /// An IBKR duration that covers a wall-clock `span` ending at the request's end date.
 ///
 /// IBKR counts `S` in trading seconds, `D` in whole sessions counted back from the
 /// session containing the end date, and `Y` in calendar years. Trading time never exceeds
 /// wall-clock time, so `S` and `D` over-fetch rather than fall short, provided `D` asks for
 /// one extra session to cover a range that starts partway through one. `span` is positive.
-fn covering_duration(span: time::Duration) -> Duration {
-    let seconds = span.whole_seconds().unsigned_abs() + u64::from(span.subsec_nanoseconds() != 0);
+pub(super) fn covering_duration(span: time::Duration) -> Duration {
+    let seconds = (span.whole_seconds().unsigned_abs() + u64::from(span.subsec_nanoseconds() != 0)).max(MIN_SECONDS);
     if seconds <= SECONDS_PER_DAY {
         return Duration::seconds(seconds as i32);
     }
@@ -86,11 +102,17 @@ fn covering_duration(span: time::Duration) -> Duration {
 /// The `(end_date, duration)` of a [`between`](super::HistoricalDataBuilder::between) request for a
 /// continuous future. TWS rejects any end date for one (error 10339), so the request covers
 /// `[start, now)` and the trim to `[start, end)` drops the bars after `end`.
-fn continuous_future_range(start: OffsetDateTime, now: OffsetDateTime) -> Result<(Option<OffsetDateTime>, Duration), Error> {
+fn continuous_future_range(start: OffsetDateTime, now: OffsetDateTime, bar_size: BarSize) -> Result<(Option<OffsetDateTime>, Duration), Error> {
     if start >= now {
         return Err(Error::InvalidArgument(
             "historical_data: .between(start, end) on a continuous future requires start before now".to_owned(),
         ));
+    }
+    if let Some(limit) = max_request_span(bar_size).filter(|limit| now - start > *limit) {
+        let seconds = limit.whole_seconds();
+        return Err(Error::InvalidArgument(format!(
+            "historical_data: .between(start, end) on a continuous future requests [start, now), and TWS serves at most {seconds} S of {bar_size} bars (error 162); start must be within {seconds} s of now"
+        )));
     }
     Ok((None, covering_duration(now - start)))
 }
@@ -113,11 +135,11 @@ mod sealed {
         /// The request's end date and duration, and the range to trim to. Errors
         /// for what only a runtime value can show: `end <= start`, or an end
         /// date TWS rejects for a continuous future.
-        fn resolve(&self, contract: &Contract) -> Result<Resolved, Error>;
+        fn resolve(&self, contract: &Contract, bar_size: BarSize) -> Result<Resolved, Error>;
     }
 
     impl Sealed for DurationOnly {
-        fn resolve(&self, _contract: &Contract) -> Result<Resolved, Error> {
+        fn resolve(&self, _contract: &Contract, _bar_size: BarSize) -> Result<Resolved, Error> {
             Ok(Resolved {
                 end_date: None,
                 duration: self.0,
@@ -127,7 +149,7 @@ mod sealed {
     }
 
     impl Sealed for DurationEnding {
-        fn resolve(&self, contract: &Contract) -> Result<Resolved, Error> {
+        fn resolve(&self, contract: &Contract, _bar_size: BarSize) -> Result<Resolved, Error> {
             if contract.security_type == Some(SecurityType::ContinuousFuture) {
                 return Err(Error::InvalidArgument(
                     "historical_data: TWS rejects .ending() for a continuous future (error 10339); use .duration() alone".to_owned(),
@@ -142,7 +164,7 @@ mod sealed {
     }
 
     impl Sealed for Between {
-        fn resolve(&self, contract: &Contract) -> Result<Resolved, Error> {
+        fn resolve(&self, contract: &Contract, bar_size: BarSize) -> Result<Resolved, Error> {
             let Between { start, end } = *self;
             if end <= start {
                 return Err(Error::InvalidArgument(
@@ -150,7 +172,7 @@ mod sealed {
                 ));
             }
             let (end_date, duration) = if contract.security_type == Some(SecurityType::ContinuousFuture) {
-                continuous_future_range(start, OffsetDateTime::now_utc())?
+                continuous_future_range(start, OffsetDateTime::now_utc(), bar_size)?
             } else {
                 (Some(end), covering_duration(end - start))
             };

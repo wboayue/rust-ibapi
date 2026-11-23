@@ -1,9 +1,14 @@
-use crate::common::test_utils::helpers::proto_response;
-use crate::market_data::historical::{BarTimestamp, HistoricalData};
+use crate::common::test_utils::helpers::{assert_request, proto_error_response, proto_response, request_message_count, TEST_REQ_ID_FIRST};
+use crate::contracts::Contract;
+use crate::market_data::historical::{BarSize, BarTimestamp, Duration, HistoricalData, WhatToShow};
 use crate::messages::IncomingMessages;
 use crate::messages::ResponseMessage;
-use crate::testdata::builders::market_data::{historical_data_bar, historical_data_end_response, historical_data_response, HistoricalDataBarFields};
+use crate::stubs::MessageBusStub;
+use crate::testdata::builders::market_data::{
+    historical_data_bar, historical_data_end_response, historical_data_request, historical_data_response, HistoricalDataBarFields,
+};
 use crate::testdata::builders::ResponseProtoEncoder;
+use crate::Error;
 use time::macros::datetime;
 use time::OffsetDateTime;
 
@@ -53,6 +58,108 @@ fn assert_trimmed(data: &HistoricalData) {
     );
     assert_eq!((data.start, data.end), (TRIM_START, TRIM_END), "window should report the requested range");
 }
+const SPLIT_START: OffsetDateTime = datetime!(2026-11-23 15:00 UTC);
+const SPLIT_END: OffsetDateTime = datetime!(2026-11-23 16:30 UTC);
+const SPLIT_REQUESTS: [(OffsetDateTime, i32); 3] = [
+    (SPLIT_END, 2000),
+    (datetime!(2026-11-23 15:56:40 UTC), 2000),
+    (datetime!(2026-11-23 15:23:20 UTC), 1400),
+];
+const SPLIT_BARS: [OffsetDateTime; 6] = [
+    datetime!(2026-11-23 15:00:00 UTC),
+    datetime!(2026-11-23 15:23:19 UTC),
+    datetime!(2026-11-23 15:23:20 UTC),
+    datetime!(2026-11-23 15:56:39 UTC),
+    datetime!(2026-11-23 15:56:40 UTC),
+    datetime!(2026-11-23 16:29:59 UTC),
+];
+const NO_DATA_MESSAGE: &str = "Historical Market Data Service error message:HMDS query returned no data: AAPL@SMART Trades";
+const PACING_MESSAGE: &str = "Historical Market Data Service error message:pacing violation";
+const OTHER_SPLIT_ERRORS: [(i32, &str); 4] = [
+    (162, PACING_MESSAGE),
+    (162, "Historical Market Data Service error message:API historical data query cancelled"),
+    (162, "Historical Market Data Service error message:invalid step: 1"),
+    (200, NO_DATA_MESSAGE),
+];
+
+fn bars_at(times: &[OffsetDateTime]) -> Vec<ResponseMessage> {
+    response_pair(
+        times
+            .iter()
+            .map(|time| historical_data_bar(time.unix_timestamp()).ohlc(1.0, 1.0, 1.0, 1.0))
+            .collect(),
+    )
+}
+
+fn split_replies() -> Vec<Vec<ResponseMessage>> {
+    vec![
+        bars_at(&[datetime!(2026-11-23 15:56:40 UTC), datetime!(2026-11-23 16:29:59 UTC)]),
+        bars_at(&[
+            datetime!(2026-11-23 15:23:20 UTC),
+            datetime!(2026-11-23 15:56:39 UTC),
+            datetime!(2026-11-23 15:56:40 UTC),
+        ]),
+        bars_at(&[
+            datetime!(2026-11-23 14:59:59 UTC),
+            datetime!(2026-11-23 15:00:00 UTC),
+            datetime!(2026-11-23 15:23:19 UTC),
+        ]),
+    ]
+}
+
+fn no_data_reply(request_offset: i32) -> Vec<ResponseMessage> {
+    vec![proto_error_response(TEST_REQ_ID_FIRST + request_offset, 162, NO_DATA_MESSAGE)]
+}
+
+fn split_bus(replies: Vec<Vec<ResponseMessage>>) -> std::sync::Arc<MessageBusStub> {
+    std::sync::Arc::new(MessageBusStub::with_responses_per_request(replies))
+}
+
+/// The first `count` requests of the split range, each under its own request id.
+fn assert_split_requests(bus: &MessageBusStub, contract: &Contract, count: usize) {
+    assert_eq!(request_message_count(bus), count);
+    for (index, (end, seconds)) in SPLIT_REQUESTS.into_iter().take(count).enumerate() {
+        assert_request(
+            bus,
+            index,
+            &historical_data_request()
+                .request_id(TEST_REQ_ID_FIRST + index as i32)
+                .contract(contract)
+                .end_date(Some(end))
+                .duration(Duration::seconds(seconds))
+                .bar_size(BarSize::Sec)
+                .what_to_show(WhatToShow::Trades)
+                .use_rth(true),
+        );
+    }
+}
+
+fn assert_split_bars(data: &HistoricalData, expected_dates: &[OffsetDateTime]) {
+    let dates: Vec<BarTimestamp> = data.bars.iter().map(|bar| bar.date).collect();
+    assert_eq!(dates, expected_dates.iter().copied().map(BarTimestamp::from).collect::<Vec<_>>());
+    assert_eq!((data.start, data.end), (SPLIT_START, SPLIT_END));
+}
+
+fn assert_split_failure(result: Result<HistoricalData, Error>, code: i32, message: &str, expected_dates: &[OffsetDateTime]) {
+    let Err(Error::BarsBetween(partial)) = result else {
+        panic!("expected BarsBetween, got: {result:?}");
+    };
+    assert_notice_error(partial.error, TEST_REQ_ID_FIRST + 1, code, message);
+    assert_eq!((partial.fetched.start, partial.fetched.end), (SPLIT_REQUESTS[1].0, SPLIT_END));
+    let dates: Vec<_> = partial.fetched.bars.iter().map(|bar| bar.date).collect();
+    assert_eq!(dates, expected_dates.iter().copied().map(BarTimestamp::from).collect::<Vec<_>>());
+}
+
+fn assert_notice_error(error: Error, request_id: i32, code: i32, message: &str) {
+    let Error::Notice(notice) = error else {
+        panic!("expected notice error, got: {error:?}");
+    };
+    assert_eq!(
+        (notice.request_id, notice.code, notice.message.as_str()),
+        (Some(request_id), code, message)
+    );
+}
+
 #[cfg(feature = "sync")]
 mod sync_tests {
     use std::sync::Arc;
@@ -259,6 +366,180 @@ mod sync_tests {
             .expect("fetch should succeed");
 
         super::assert_trimmed(&data);
+    }
+
+    #[test]
+    fn between_splits_one_second_range_over_requests() {
+        let bus = super::split_bus(super::split_replies());
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .fetch()
+            .expect("fetch should succeed");
+
+        super::assert_split_requests(&bus, &contract, 3);
+        super::assert_split_bars(&data, &super::SPLIT_BARS);
+    }
+
+    #[test]
+    fn between_split_no_data_page_preserves_populated_pages() {
+        let mut replies = super::split_replies();
+        replies[1] = super::no_data_reply(1);
+        let bus = super::split_bus(replies);
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .fetch()
+            .expect("fetch should skip the no-data page");
+
+        super::assert_split_requests(&bus, &contract, 3);
+        let bars = super::SPLIT_BARS;
+        super::assert_split_bars(&data, &[bars[0], bars[1], bars[4], bars[5]]);
+    }
+
+    #[test]
+    fn between_split_no_data_on_every_page_returns_empty() {
+        let bus = super::split_bus((0..3).map(super::no_data_reply).collect());
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .fetch()
+            .expect("fetch should return the empty range");
+
+        super::assert_split_requests(&bus, &contract, 3);
+        super::assert_split_bars(&data, &[]);
+    }
+
+    #[test]
+    fn between_split_pacing_error_after_empty_first_page_reports_progress() {
+        let bus = super::split_bus(vec![
+            super::no_data_reply(0),
+            vec![proto_error_response(TEST_REQ_ID_FIRST + 1, 162, super::PACING_MESSAGE)],
+        ]);
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .fetch();
+
+        super::assert_split_failure(result, 162, super::PACING_MESSAGE, &[]);
+        super::assert_split_requests(&bus, &contract, 2);
+    }
+
+    #[test]
+    fn between_split_propagates_other_errors_with_partial_bars() {
+        let contract = Contract::stock("AAPL").build();
+        for (code, message) in super::OTHER_SPLIT_ERRORS {
+            let replies = vec![
+                super::split_replies().remove(0),
+                vec![proto_error_response(TEST_REQ_ID_FIRST + 1, code, message)],
+            ];
+            let bus = super::split_bus(replies);
+            let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+
+            let result = client
+                .historical_data(&contract, BarSize::Sec)
+                .between(super::SPLIT_START, super::SPLIT_END)
+                .fetch();
+
+            super::assert_split_failure(result, code, message, &super::SPLIT_BARS[4..]);
+            super::assert_split_requests(&bus, &contract, 2);
+        }
+    }
+
+    #[test]
+    fn between_single_request_propagates_no_data_error() {
+        let bus = super::split_bus(vec![super::no_data_reply(0)]);
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let error = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_REQUESTS[1].0, super::SPLIT_END)
+            .fetch()
+            .expect_err("fetch should return the original notice");
+
+        super::assert_notice_error(error, TEST_REQ_ID_FIRST, 162, super::NO_DATA_MESSAGE);
+        super::assert_split_requests(&bus, &contract, 1);
+    }
+
+    #[test]
+    fn between_within_one_second_bar_limit_sends_one_request() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+        let end = datetime!(2026-11-23 16:30 UTC);
+
+        client
+            .historical_data(&contract, BarSize::Sec)
+            .between(end - time::Duration::seconds(2000), end)
+            .fetch()
+            .expect("fetch should succeed");
+
+        assert_eq!(request_message_count(&bus), 1);
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .end_date(Some(end))
+                .duration(Duration::seconds(2000))
+                .bar_size(BarSize::Sec)
+                .what_to_show(WhatToShow::Trades)
+                .use_rth(true),
+        );
+    }
+
+    #[test]
+    fn between_one_request_cannot_serve_errors_up_front() {
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
+        let stock = Contract::stock("AAPL").build();
+        let future = Contract::continuous_futures("ES").build();
+        let now = time::OffsetDateTime::now_utc();
+        let (start, end) = (now - time::Duration::seconds(3000), now - time::Duration::seconds(2500));
+
+        let Err(subscribed) = client
+            .historical_data(&stock, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .subscribe()
+        else {
+            panic!("expected InvalidArgument")
+        };
+        let fetched = client.historical_data(&future, BarSize::Sec).between(start, end).fetch();
+        let Err(future_subscribed) = client.historical_data(&future, BarSize::Sec).between(start, end).subscribe() else {
+            panic!("expected InvalidArgument")
+        };
+
+        assert!(matches!(subscribed, Error::InvalidArgument(_)), "got: {subscribed}");
+        assert!(matches!(fetched, Err(Error::InvalidArgument(_))), "got: {fetched:?}");
+        assert!(matches!(future_subscribed, Error::InvalidArgument(_)), "got: {future_subscribed}");
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
+    }
+
+    #[test]
+    fn between_needing_more_than_thirty_requests_errors_up_front() {
+        let (client, bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
+        let contract = Contract::stock("AAPL").build();
+        let end = super::SPLIT_END;
+
+        let at_limit = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(end - time::Duration::seconds(60_001), end)
+            .fetch();
+
+        assert!(matches!(at_limit, Err(Error::InvalidArgument(_))), "got: {at_limit:?}");
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
     }
 
     #[test]
@@ -633,6 +914,207 @@ mod async_tests {
     }
 
     #[tokio::test]
+    async fn between_splits_one_second_range_over_requests() {
+        let bus = super::split_bus(super::split_replies());
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .fetch()
+            .await
+            .expect("fetch should succeed");
+
+        super::assert_split_requests(&bus, &contract, 3);
+        super::assert_split_bars(&data, &super::SPLIT_BARS);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn between_split_no_data_page_preserves_populated_pages() {
+        let mut replies = super::split_replies();
+        replies[1] = super::no_data_reply(1);
+        let bus = super::split_bus(replies);
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .fetch()
+            .await
+            .expect("fetch should skip the no-data page");
+
+        super::assert_split_requests(&bus, &contract, 3);
+        let bars = super::SPLIT_BARS;
+        super::assert_split_bars(&data, &[bars[0], bars[1], bars[4], bars[5]]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn between_split_no_data_on_every_page_returns_empty() {
+        let bus = super::split_bus((0..3).map(super::no_data_reply).collect());
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .fetch()
+            .await
+            .expect("fetch should return the empty range");
+
+        super::assert_split_requests(&bus, &contract, 3);
+        super::assert_split_bars(&data, &[]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn between_split_pacing_error_after_empty_first_page_reports_progress() {
+        let bus = super::split_bus(vec![
+            super::no_data_reply(0),
+            vec![proto_error_response(TEST_REQ_ID_FIRST + 1, 162, super::PACING_MESSAGE)],
+        ]);
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .fetch()
+            .await;
+
+        super::assert_split_failure(result, 162, super::PACING_MESSAGE, &[]);
+        super::assert_split_requests(&bus, &contract, 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn between_split_propagates_other_errors_with_partial_bars() {
+        let contract = Contract::stock("AAPL").build();
+        for (code, message) in super::OTHER_SPLIT_ERRORS {
+            let replies = vec![
+                super::split_replies().remove(0),
+                vec![proto_error_response(TEST_REQ_ID_FIRST + 1, code, message)],
+            ];
+            let bus = super::split_bus(replies);
+            let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+
+            let result = client
+                .historical_data(&contract, BarSize::Sec)
+                .between(super::SPLIT_START, super::SPLIT_END)
+                .fetch()
+                .await;
+
+            super::assert_split_failure(result, code, message, &super::SPLIT_BARS[4..]);
+            super::assert_split_requests(&bus, &contract, 2);
+        }
+    }
+
+    #[tokio::test]
+    async fn between_single_request_propagates_no_data_error() {
+        let bus = super::split_bus(vec![super::no_data_reply(0)]);
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let error = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_REQUESTS[1].0, super::SPLIT_END)
+            .fetch()
+            .await
+            .expect_err("fetch should return the original notice");
+
+        super::assert_notice_error(error, TEST_REQ_ID_FIRST, 162, super::NO_DATA_MESSAGE);
+        super::assert_split_requests(&bus, &contract, 1);
+    }
+
+    #[tokio::test]
+    async fn between_within_one_second_bar_limit_sends_one_request() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+        let end = datetime!(2026-11-23 16:30 UTC);
+
+        client
+            .historical_data(&contract, BarSize::Sec)
+            .between(end - time::Duration::seconds(2000), end)
+            .fetch()
+            .await
+            .expect("fetch should succeed");
+
+        assert_eq!(request_message_count(&bus), 1);
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .end_date(Some(end))
+                .duration(Duration::seconds(2000))
+                .bar_size(BarSize::Sec)
+                .what_to_show(WhatToShow::Trades)
+                .use_rth(true),
+        );
+    }
+
+    #[tokio::test]
+    async fn between_one_request_cannot_serve_errors_up_front() {
+        let (client, bus) = create_test_client_with_version(server_versions::SIZE_RULES);
+        let stock = Contract::stock("AAPL").build();
+        let future = Contract::continuous_futures("ES").build();
+        let now = time::OffsetDateTime::now_utc();
+        let (start, end) = (now - time::Duration::seconds(3000), now - time::Duration::seconds(2500));
+
+        let Err(subscribed) = client
+            .historical_data(&stock, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .subscribe()
+            .await
+        else {
+            panic!("expected InvalidArgument")
+        };
+        let fetched = client.historical_data(&future, BarSize::Sec).between(start, end).fetch().await;
+        let Err(future_subscribed) = client.historical_data(&future, BarSize::Sec).between(start, end).subscribe().await else {
+            panic!("expected InvalidArgument")
+        };
+
+        assert!(matches!(subscribed, Error::InvalidArgument(_)), "got: {subscribed}");
+        assert!(matches!(fetched, Err(Error::InvalidArgument(_))), "got: {fetched:?}");
+        assert!(matches!(future_subscribed, Error::InvalidArgument(_)), "got: {future_subscribed}");
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
+    }
+
+    #[tokio::test]
+    async fn between_needing_more_than_thirty_requests_errors_up_front() {
+        let (client, bus) = create_test_client_with_version(server_versions::SIZE_RULES);
+        let contract = Contract::stock("AAPL").build();
+        let end = super::SPLIT_END;
+
+        let at_limit = client
+            .historical_data(&contract, BarSize::Sec)
+            .between(end - time::Duration::seconds(60_001), end)
+            .fetch()
+            .await;
+
+        assert!(matches!(at_limit, Err(Error::InvalidArgument(_))), "got: {at_limit:?}");
+        assert_eq!(request_message_count(&bus), 0, "nothing sent");
+    }
+
+    /// Three split requests start at least 0.5 s apart (paused clock).
+    #[tokio::test(start_paused = true)]
+    async fn between_split_requests_are_spaced() {
+        let bus = super::split_bus(super::split_replies());
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+        let started = tokio::time::Instant::now();
+
+        client
+            .historical_data(&contract, BarSize::Sec)
+            .between(super::SPLIT_START, super::SPLIT_END)
+            .fetch()
+            .await
+            .expect("split fetch");
+
+        assert!(started.elapsed() >= std::time::Duration::from_secs(1), "took {:?}", started.elapsed());
+    }
+
+    #[tokio::test]
     async fn subscribe_sends_once_under_request_id() {
         let (client, bus) = client_with_data_pair();
         let contract = Contract::stock("AAPL").build();
@@ -825,5 +1307,93 @@ mod async_tests {
         assert!(matches!(subscription.next().await, Some(Err(Error::ConnectionReset))));
         assert!(subscription.next().await.is_none());
         assert_eq!(request_message_count(&bus), 1, "subscribe never resends");
+    }
+}
+
+mod bar_pages_tests {
+    use super::super::BarPages;
+    use crate::market_data::historical::{Bar, BarTimestamp, Duration};
+    use time::macros::datetime;
+    use time::OffsetDateTime;
+
+    const LIMIT: time::Duration = time::Duration::seconds(2000);
+
+    fn bars(times: &[OffsetDateTime]) -> Vec<Bar> {
+        times
+            .iter()
+            .map(|time| Bar {
+                date: BarTimestamp::DateTime(*time),
+                ..Bar::default()
+            })
+            .collect()
+    }
+
+    fn dates(pages: BarPages) -> Vec<BarTimestamp> {
+        pages.finish().bars.iter().map(|bar| bar.date).collect()
+    }
+
+    // TWS counts trading time, so a request ending Monday 14:40 returns Friday's last bars too
+    // (live: 2026-11-23). Its earliest bar reaches back past `start`: one request covers the range.
+    #[test]
+    fn earliest_bar_before_start_ends_the_requests() {
+        let mut pages = BarPages::new(datetime!(2026-11-20 20:50 UTC), datetime!(2026-11-23 14:40 UTC), LIMIT);
+
+        assert_eq!(pages.next_request(), Some((datetime!(2026-11-23 14:40 UTC), Duration::seconds(2000))));
+        pages.push(bars(&[
+            datetime!(2026-11-20 20:36:40 UTC),
+            datetime!(2026-11-20 20:59:59 UTC),
+            datetime!(2026-11-23 14:30:00 UTC),
+            datetime!(2026-11-23 14:39:59 UTC),
+        ]));
+
+        assert_eq!(pages.next_request(), None);
+        assert_eq!(
+            dates(pages),
+            [
+                datetime!(2026-11-20 20:59:59 UTC),
+                datetime!(2026-11-23 14:30:00 UTC),
+                datetime!(2026-11-23 14:39:59 UTC),
+            ]
+            .map(BarTimestamp::from)
+        );
+    }
+
+    // An empty reply, or one whose earliest bar is later than one limit back (sparse bars), steps
+    // back one limit: the request's trading-time duration covered at least that much wall clock.
+    #[test]
+    fn empty_or_sparse_reply_steps_back_one_limit() {
+        let mut pages = BarPages::new(datetime!(2026-11-23 15:00 UTC), datetime!(2026-11-23 16:10 UTC), LIMIT);
+
+        pages.push(Vec::new());
+        assert_eq!(pages.next_request(), Some((datetime!(2026-11-23 15:36:40 UTC), Duration::seconds(2000))));
+        pages.push(bars(&[datetime!(2026-11-23 15:05 UTC)]));
+        assert_eq!(pages.next_request(), Some((datetime!(2026-11-23 15:03:20 UTC), Duration::seconds(200))));
+        pages.push(bars(&[datetime!(2026-11-23 15:00 UTC)]));
+
+        assert_eq!(pages.next_request(), None);
+        assert_eq!(
+            dates(pages),
+            [datetime!(2026-11-23 15:00 UTC), datetime!(2026-11-23 15:05 UTC)].map(BarTimestamp::from)
+        );
+    }
+
+    #[test]
+    fn split_requests_start_at_least_half_a_second_apart() {
+        use super::super::split_request_wait;
+        use std::time::Duration as Wait;
+
+        assert_eq!(split_request_wait(Wait::ZERO), Wait::from_millis(500));
+        assert_eq!(split_request_wait(Wait::from_millis(200)), Wait::from_millis(300));
+        assert_eq!(split_request_wait(Wait::from_secs(2)), Wait::ZERO);
+    }
+
+    // TWS rejects a duration under 30 S (error 321, live: 2026-11-23).
+    #[test]
+    fn last_request_asks_for_at_least_thirty_seconds() {
+        let mut pages = BarPages::new(datetime!(2026-11-23 15:00:00 UTC), datetime!(2026-11-23 15:33:30 UTC), LIMIT);
+
+        pages.push(bars(&[datetime!(2026-11-23 15:00:10 UTC)]));
+
+        assert_eq!(pages.next_request(), Some((datetime!(2026-11-23 15:00:10 UTC), Duration::seconds(30))));
     }
 }

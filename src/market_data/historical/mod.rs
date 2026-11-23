@@ -495,6 +495,36 @@ pub struct HistoricalData {
     pub bars: Vec<Bar>,
 }
 
+/// A failed request after the first in a split
+/// [`between`](HistoricalDataBuilder::between)`(..).fetch()` of 1-second bars, with the bars
+/// fetched before it. Carried by [`Error::BarsBetween`].
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::market_data::historical::{BarsBetweenError, HistoricalData};
+/// use ibapi::Error;
+///
+/// fn bars_or_partial(result: Result<HistoricalData, Error>) -> Result<HistoricalData, Error> {
+///     match result {
+///         // Keep what arrived; `fetched.start` is where the complete bars begin.
+///         Err(Error::BarsBetween(partial)) => Ok(partial.fetched),
+///         other => other,
+///     }
+/// }
+/// # let _ = bars_or_partial;
+/// # let _: Option<BarsBetweenError> = None;
+/// ```
+#[derive(Clone, Debug, thiserror::Error)]
+#[error("{error} ({} bars fetched before the failed request)", .fetched.bars.len())]
+pub struct BarsBetweenError {
+    /// Why the request failed.
+    pub error: Error,
+    /// The bars of the requests before it, oldest first: every bar in
+    /// `[fetched.start, fetched.end)`, where `fetched.end` is the range's end.
+    pub fetched: HistoricalData,
+}
+
 impl HistoricalData {
     /// Keeps the bars in `[start, end)` and reports that range as the window.
     ///
