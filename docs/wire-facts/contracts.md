@@ -121,6 +121,18 @@ Contract details and option chains. Format: [README](README.md).
 - Settles typing `ContractDetails::under_security_type` as an optional `SecurityType`.
 - **Not probed:** bonds, warrants, CFDs, forex, and futures on other underlyings.
 
+### Matching-symbols `derivativeSecTypes` are security type codes
+
+*Live 2026-11-22 Sun 23:54 ET (markets closed), paper, server 226.*
+
+- `reqMatchingSymbols` for 30 patterns (AAPL, SPX, ES, EUR, BTC, GOLD, SAP, DAX, ZN, CL, HSI,
+  7203, and others): 1330 descriptions across STK, IND, BOND, FUND, CASH, CMDTY and CRYPTO.
+  953 carry an empty list; the rest carry only `BAG`, `CFD`, `EC`, `FOP`, `FUT`, `IOPT`, `OPT` and
+  `WAR`. No entry was an empty string.
+- `IOPT` and `EC` have no `SecurityType` variant and decode as `SecurityType::Other`.
+- Settles typing `ContractDescription::derivative_security_types` as `Vec<SecurityType>`.
+- **Not probed:** patterns outside this list; only one session.
+
 ### Option chain expirations are `YYYYMMDD` dates
 
 *Live 2026-11-16 Mon 02:30 ET (US equities closed, CME Globex open), paper, server 223; #1253.*

@@ -1054,8 +1054,11 @@ pub struct OptionChain {
 pub struct ContractDescription {
     /// Fully qualified contract metadata.
     pub contract: Contract,
-    /// Derivative security types available for the contract.
-    pub derivative_security_types: Vec<String>,
+    /// Security types of the derivatives listed on this contract, such as
+    /// [`Option`](SecurityType::Option), [`Warrant`](SecurityType::Warrant) or
+    /// [`Future`](SecurityType::Future). A code the crate doesn't model, such as `IOPT` or `EC`, is
+    /// [`SecurityType::Other`]; an empty entry is dropped.
+    pub derivative_security_types: Vec<SecurityType>,
 }
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

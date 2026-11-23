@@ -111,7 +111,7 @@ fn decode_symbol_samples_proto_works() {
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].contract.contract_id, 265598);
     assert_eq!(result[0].contract.symbol.to_string(), "AAPL");
-    assert_eq!(result[0].derivative_security_types, vec!["OPT", "WAR"]);
+    assert_eq!(result[0].derivative_security_types, vec![SecurityType::Option, SecurityType::Warrant]);
     assert_eq!(result[1].contract.contract_id, 76792991);
     assert!(result[1].derivative_security_types.is_empty());
 }
@@ -418,6 +418,42 @@ fn decode_contract_details_types_under_security_type() {
         let decoded = decode_contract_and_details(&stk_contract(), &details).unwrap();
 
         assert_eq!(decoded.under_security_type, expected, "input {input:?}");
+    }
+}
+
+/// Codes from a live `reqMatchingSymbols` sweep (server 226); `IOPT` and `EC` are unmodeled.
+#[test]
+fn decode_symbol_samples_types_derivative_security_types() {
+    let cases: [(&[&str], Vec<SecurityType>); 4] = [
+        (
+            &["CFD", "OPT", "WAR", "BAG", "FUT", "FOP"],
+            vec![
+                SecurityType::CFD,
+                SecurityType::Option,
+                SecurityType::Warrant,
+                SecurityType::Spread,
+                SecurityType::Future,
+                SecurityType::FuturesOption,
+            ],
+        ),
+        (
+            &["IOPT", "EC"],
+            vec![SecurityType::Other("IOPT".into()), SecurityType::Other("EC".into())],
+        ),
+        (&["OPT", ""], vec![SecurityType::Option]),
+        (&[], vec![]),
+    ];
+    for (input, expected) in cases {
+        let proto_msg = crate::proto::SymbolSamples {
+            contract_descriptions: vec![crate::proto::ContractDescription {
+                contract: None,
+                derivative_sec_types: input.iter().map(|s| s.to_string()).collect(),
+            }],
+            ..Default::default()
+        };
+        let result = decode_symbol_samples_proto(proto_msg).unwrap();
+
+        assert_eq!(result[0].derivative_security_types, expected, "input {input:?}");
     }
 }
 

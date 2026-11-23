@@ -975,11 +975,11 @@ The compiler finds every use as a `String`.
 
 ### 41. `ContractDetails::under_security_type` is `Option<SecurityType>`
 
-TWS sends the underlying's security type as one of its codes: `STK` for a stock option, `FUT`
-for a futures option, `IND` for a future on an index, and nothing when the contract has no
-underlying (a stock or an index). The field was a `String`, empty when TWS sent nothing. It is
-now `Option<SecurityType>`, `None` when TWS sends nothing; a code the crate doesn't model is
-`SecurityType::Other`.
+TWS sends the underlying's security type as one of its codes, for example `STK` for a stock
+option, `FUT` for a futures option and `IND` for a future on an index. It sends nothing when
+the contract has no underlying (a stock or an index). The field was a `String`, empty when TWS
+sent nothing. It is now `Option<SecurityType>`, `None` when TWS sends nothing; a code the crate
+doesn't model is `SecurityType::Other`.
 
 ```rust,ignore
 // 5.x
@@ -994,3 +994,24 @@ The compiler finds every use as a `String`. It doesn't catch the serialized form
 `ContractDetails` derives `Serialize` / `Deserialize`, and the field now serializes like
 `Contract::security_type` (the variant name, `"Stock"`) or as `null`, where it was the wire code
 (`"STK"`) or `""`. JSON written by 5.x doesn't deserialize into the new field.
+
+### 42. `ContractDescription::derivative_security_types` is `Vec<SecurityType>`
+
+`matching_symbols` lists the security types of the derivatives on each contract it finds. TWS
+sends them as codes (`OPT`, `WAR`, `FUT`, `CFD`, ...), and the field was a `Vec<String>` of that
+text. It is now `Vec<SecurityType>`. A code the crate doesn't model, such as `IOPT` or `EC`, is
+`SecurityType::Other`, and an empty entry is dropped.
+
+```rust,ignore
+// 5.x
+if description.derivative_security_types.iter().any(|t| t == "OPT") { /* has options */ }
+println!("{}", description.derivative_security_types.join(", "));
+
+// 6.0
+if description.derivative_security_types.contains(&SecurityType::Option) { /* has options */ }
+let codes: Vec<&str> = description.derivative_security_types.iter().map(SecurityType::as_str).collect();
+println!("{}", codes.join(", ")); // the 5.x text
+```
+
+The compiler finds every use as a `String`. `ContractDescription` doesn't derive `Serialize`,
+so there is no serialized form to migrate.
