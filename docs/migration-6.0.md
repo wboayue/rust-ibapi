@@ -945,6 +945,34 @@ historical size used as an `Option` or read from a midpoint. It does not catch t
   `{:?}` gives `100.0` where it gave `Some(100.0)`, and a stored `null` size no longer
   deserializes.
 
+### 40. `OptionChain::expirations` is `Vec<Expiry>`
+
+In live checks of stock, index and futures option chains, TWS sent every expiration as a
+`YYYYMMDD` date. The field was `Vec<String>`, so finding the nearest expiration meant parsing or
+comparing text. It is now `Vec<Expiry>`: each date is an `Expiry::Date(ExpirationDate)`, which
+goes straight into `Contract::option`. A `YYYYMM` entry is an `Expiry::Month` and an empty one
+is dropped. Any other text is kept as `Expiry::Unknown`, so a value TWS adds later never ends the
+stream. `Expiry` itself has no order, so `expirations.sort()` no longer compiles: take the dates
+with `Expiry::date`, which order chronologically.
+
+```rust,ignore
+// 5.x
+let mut expirations = chain.expirations.clone();
+expirations.sort();
+let nearest: ExpirationDate = expirations[0].parse()?;
+
+// 6.0
+let nearest = chain
+    .expirations
+    .iter()
+    .filter_map(Expiry::date)
+    .min()
+    .cloned(); // None if no dates
+let text: Vec<String> = chain.expirations.iter().map(ToString::to_string).collect(); // the 5.x strings
+```
+
+The compiler finds every use as a `String`.
+
 ### 41. `ContractDetails::under_security_type` is `Option<SecurityType>`
 
 TWS sends the underlying's security type as one of its codes: `STK` for a stock option, `FUT`

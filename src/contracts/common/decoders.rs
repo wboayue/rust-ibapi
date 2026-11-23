@@ -151,7 +151,7 @@ pub(crate) fn decode_option_chain_proto(p: crate::proto::SecDefOptParameter) -> 
         underlying_contract_id: p.underlying_con_id.unwrap_or_default(),
         trading_class: p.trading_class.unwrap_or_default(),
         multiplier: p.multiplier.unwrap_or_default(),
-        expirations: p.expirations,
+        expirations: p.expirations.iter().filter_map(|raw| Expiry::from_wire(raw)).collect(),
         strikes: p.strikes,
     })
 }
