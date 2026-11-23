@@ -999,8 +999,8 @@ The compiler finds every use as a `String`. It doesn't catch the serialized form
 
 `matching_symbols` lists the security types of the derivatives on each contract it finds. TWS
 sends them as codes (`OPT`, `WAR`, `FUT`, `CFD`, ...), and the field was a `Vec<String>` of that
-text. It is now `Vec<SecurityType>`. A code the crate doesn't model, such as `IOPT` or `EC`, is
-`SecurityType::Other`, and an empty entry is dropped.
+text. It is now `Vec<SecurityType>`. A code the crate doesn't model is `SecurityType::Other`, and
+an empty entry is dropped.
 
 ```rust,ignore
 // 5.x
@@ -1015,3 +1015,16 @@ println!("{}", codes.join(", ")); // the 5.x text
 
 The compiler finds every use as a `String`. `ContractDescription` doesn't derive `Serialize`,
 so there is no serialized form to migrate.
+
+### 43. `SecurityType` gains `StructuredProduct` and `EventContract`
+
+TWS uses `IOPT` for Dutch warrants and structured products and `EC` for event contracts; both
+appear among the derivative types `matching_symbols` reports (§42). 5.x decoded them as
+`SecurityType::Other("IOPT")` and `Other("EC")`. They are now `SecurityType::StructuredProduct`
+and `SecurityType::EventContract`, and they encode back to the same codes.
+
+The compiler finds an exhaustive `match` on `SecurityType` that lacks the new arms. It doesn't
+catch a comparison or match against `Other("IOPT")` or `Other("EC")`: that code still compiles
+and no longer matches. A serialized `Contract` with one of these types writes `"StructuredProduct"`
+or `"EventContract"` where it wrote `{"Other":"IOPT"}`, and JSON written by 5.x for them still
+deserializes as `Other`.

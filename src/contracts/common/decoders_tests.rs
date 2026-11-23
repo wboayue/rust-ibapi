@@ -421,7 +421,7 @@ fn decode_contract_details_types_under_security_type() {
     }
 }
 
-/// Codes from a live `reqMatchingSymbols` sweep (server 226); `IOPT` and `EC` are unmodeled.
+/// Codes from a live `reqMatchingSymbols` sweep (server 226), plus one the crate doesn't model.
 #[test]
 fn decode_symbol_samples_types_derivative_security_types() {
     let cases: [(&[&str], Vec<SecurityType>); 4] = [
@@ -437,8 +437,12 @@ fn decode_symbol_samples_types_derivative_security_types() {
             ],
         ),
         (
-            &["IOPT", "EC"],
-            vec![SecurityType::Other("IOPT".into()), SecurityType::Other("EC".into())],
+            &["IOPT", "EC", "NEWTYPE"],
+            vec![
+                SecurityType::StructuredProduct,
+                SecurityType::EventContract,
+                SecurityType::Other("NEWTYPE".into()),
+            ],
         ),
         (&["OPT", ""], vec![SecurityType::Option]),
         (&[], vec![]),

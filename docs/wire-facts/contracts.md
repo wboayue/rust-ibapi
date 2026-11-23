@@ -129,9 +129,12 @@ Contract details and option chains. Format: [README](README.md).
   7203, and others): 1330 descriptions across STK, IND, BOND, FUND, CASH, CMDTY and CRYPTO.
   953 carry an empty list; the rest carry only `BAG`, `CFD`, `EC`, `FOP`, `FUT`, `IOPT`, `OPT` and
   `WAR`. No entry was an empty string.
-- `IOPT` and `EC` have no `SecurityType` variant and decode as `SecurityType::Other`.
+- `IOPT` appeared on 93 descriptions (68 STK, 23 IND, 2 CASH); `EC` on 12, all IND, among them
+  event-contract indices such as `KXBTCY` and `KXGOLDD`. #1261 models both as `SecurityType`
+  variants.
 - Settles typing `ContractDescription::derivative_security_types` as `Vec<SecurityType>`.
-- **Not probed:** patterns outside this list; only one session.
+- **Not probed:** patterns outside this list; only one session; whether TWS accepts `IOPT` or `EC`
+  as a request contract's `secType`.
 
 ### Option chain expirations are `YYYYMMDD` dates
 
