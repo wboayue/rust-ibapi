@@ -33,7 +33,10 @@ path is a text decoder or a signature copied from one.
 filter: all three drivers (`StreamDecoder` sync and async, and
 `market_data/historical/common/tick.rs::classify` for `TickDecoder`) drop anything not listed,
 via `is_undeclared`, *before* calling `decode`. An arm for an unlisted type is dead code. The
-const stays a slice even for single-type decoders.
+const stays a slice even for single-type decoders. One exception: `classify` ends a tick
+subscription with `Error::UnexpectedTickKind` on a historical-tick frame of another kind,
+because TWS sends that frame instead of the requested kind and nothing after it
+([wire fact](../../wire-facts/market-data.md#historical-ticks-of-another-kind)).
 
 **Every `decode` needs a backstop.** A multi-type match ends with
 `_ => Err(Error::unexpected_response(message))`. A single-type decoder has no match, so

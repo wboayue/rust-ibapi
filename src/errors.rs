@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use crate::accounts::types::AccountId;
 use crate::builder::ValidationError;
+use crate::market_data::historical::WhatToShow;
 use crate::messages::{Notice, ResponseMessage};
 
 /// The main error type for IBAPI operations.
@@ -155,6 +156,22 @@ pub enum Error {
     /// Stream ended unexpectedly.
     #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
+
+    /// TWS answered a historical-ticks request with ticks of another kind. It
+    /// does this when the contract has no ticks of the requested kind: a
+    /// `TRADES` request (`historical_ticks(..).last()`) for a forex pair, a
+    /// spot metal or an index CFD is answered with midpoint ticks. Terminal;
+    /// TWS sends nothing more for the request. Request `received` instead.
+    ///
+    /// A window with no ticks of the requested kind is not this error: TWS
+    /// answers it with an empty batch of the requested kind.
+    #[error("historical ticks requested as {requested}, but TWS answered with {received} ticks")]
+    UnexpectedTickKind {
+        /// The kind the request asked for.
+        requested: WhatToShow,
+        /// The kind TWS sent.
+        received: WhatToShow,
+    },
 
     /// The deadline passed before the request ended. Says nothing about the
     /// request at TWS, which may still be running; see
@@ -544,6 +561,7 @@ impl Error {
             | Error::UnexpectedResponse(_)
             | Error::UnexpectedWireFormat(_)
             | Error::UnexpectedEndOfStream
+            | Error::UnexpectedTickKind { .. }
             | Error::Timeout
             | Error::BufferLimitExceeded { .. }
             | Error::InvalidFrame(_)
@@ -604,6 +622,10 @@ impl Clone for Error {
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
             Error::UnexpectedWireFormat(m) => Error::UnexpectedWireFormat(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
+            Error::UnexpectedTickKind { requested, received } => Error::UnexpectedTickKind {
+                requested: *requested,
+                received: *received,
+            },
             Error::Timeout => Error::Timeout,
             Error::BufferLimitExceeded { limit } => Error::BufferLimitExceeded { limit: *limit },
             Error::InvalidFrame(m) => Error::InvalidFrame(m.clone()),

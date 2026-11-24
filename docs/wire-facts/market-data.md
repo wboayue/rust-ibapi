@@ -276,6 +276,28 @@ server 223.*
 - **Not probed:** real-time `Volume` (8) (no real-time US equity permission on this account);
   delayed volume during regular hours; other markets.
 
+### Historical ticks of another kind
+
+*Live 2026-11-24 00:46Z (Monday 19:46 ET, off-hours), paper TWS, server 223; raw capture.*
+
+- `reqHistoricalTicks` TRADES, 50 ticks ending 2026-11-23 20:00 UTC, for EUR.USD (IDEALPRO),
+  XAUUSD (CMDTY, SMART) and the IBUS500 CFD: one `HistoricalTick` (midpoint) frame each, with
+  `isDone` true, then nothing for 20 s. No `HistoricalTickLast` frame and no error. EUR.USD
+  sent the same 56 ticks for TRADES and for MIDPOINT (first tick 1.09043, `size` `"0"`).
+  1,000 ticks and a `startDateTime` request instead of an end date answered the same way.
+- AAPL TRADES got one `HistoricalTickLast` frame (114 ticks, `isDone` true). An AAPL TRADES
+  window with no ticks (start 2026-11-24 00:30 UTC, regular hours) got one
+  `HistoricalTickLast` frame with no ticks and `isDone` true: an empty answer keeps the
+  requested kind, so a frame of another kind means TWS has none of the requested kind.
+- BID_ASK and MIDPOINT were each answered with their own kind for all four contracts. Earlier
+  the same day (23:56Z), SPX index BID_ASK and MIDPOINT drew error 10187 and BTC (PAXOS)
+  TRADES drew 10299 ("Expected what to show is AGGTRADES"): errors, not another kind.
+- So `TickSubscription` ends with `Error::UnexpectedTickKind` on a frame of another kind; it
+  skipped the frame and waited forever, because the channel stays open.
+- **Not probed:** a BID_ASK or MIDPOINT request answered with another kind (none provoked);
+  futures, options and bonds TRADES without trades; whether the substitute frame is ever
+  split across several frames with `isDone` false.
+
 ### Tick-by-tick sizes and `IgnoreSize`
 
 *Live 2026-11-16 03:33Z (Sunday evening ET), paper Gateway, server 226, BTC/PAXOS; #1244.*
