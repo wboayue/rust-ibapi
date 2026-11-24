@@ -164,6 +164,26 @@ hours, TRADES.*
 - Not decoded: one stock out of three contracts, with no documented meaning.
 - **Not probed:** options, crypto, non-US stocks.
 
+### Index ticks
+
+*Live 2026-11-24 Tue 09:41-09:44 UTC (Xetra open; CBOE, OSE and HKFE closed), paper, server 223;
+#1284.*
+
+- `reqMktData` real-time on SPX (CBOE), DAX and ESTX50 (EUREX), N225 (OSE.JPN) and HSI (HKFE):
+  354 for each; this account has no index subscription. Delayed (type 3) works after 10167.
+- Delayed, on SPX, DAX, N225 and HSI: one `DelayedBid` and one `DelayedAsk` of `-1` with size `0` at the start,
+  never a real one. `DelayedLast` is a real price with size `1`, closed markets included (SPX
+  `7236.85`, N225 and HSI their last value), with a `DelayedLastTimestamp`. No `-1` last price
+  arrived.
+- `DelayedOpen` is `0` (a price tick, no size) on all four, DAX included while it traded.
+  `DelayedHigh` and `DelayedLow` are real; SPX sent neither while CBOE was closed.
+- DAX during its session: a new `DelayedLast` every 5 seconds, size `1` each time.
+- Settles that an index's bid and ask are the no-quote placeholder of every other contract
+  (`-1` with size `0`, #1284), and that its last price is a value, not a placeholder, even with
+  the market closed. The size `1` is not a traded size.
+- **Not probed:** real-time index data (no subscription); delayed ESTX50; SPX during US trading
+  hours; an index before its first value of a day; snapshots.
+
 ### Tick-by-tick sizes and `IgnoreSize`
 
 *Live 2026-11-16 03:33Z (Sunday evening ET), paper Gateway, server 226, BTC/PAXOS; #1244.*
