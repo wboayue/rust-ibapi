@@ -152,6 +152,43 @@ ending now, regular hours; wire dates read from a recording.*
 - **Not probed:** daily bars in this run; a holiday on a period's last weekday, so the last
   trading day is not separated from the last weekday; other instruments; the Gateway.
 
+### Keep-up-to-date bar updates
+
+*Live 2026-11-24 Tue 09:15-09:35 UTC (FX, crypto and Xetra open; US equities overnight), paper,
+server 223.*
+
+- `reqHistoricalData` with `keepUpToDate`, EUR.USD MIDPOINT (5-second, 30-second, 1-minute and
+  5-minute bars), BTC PAXOS MIDPOINT and SAP IBIS TRADES (1-minute bars): `HistoricalDataUpdate`
+  arrives on a 5-second grid of the wall clock, 0.05 to 1 s after each boundary (one outlier at
+  4.3 s). Each carries the bar that holds the 5 seconds just ended, sent even when nothing
+  changed: 16 identical consecutive updates in 3 minutes of SAP, 10 in 5 minutes of EUR.USD.
+- A 1-minute bar gets 12 updates. The 12th arrives 0.3 to 2.6 s after the bar ends and carries
+  its final values; the next bar's first update arrives 5.3 to 6.1 s after that bar starts. A
+  5-second bar gets one update, 5.3 to 9.3 s after it starts, so every update is already final.
+- The initial batch sometimes ends with the forming bar (1-minute at 34 s into the bar, 5-minute
+  at 2 min in), and the first update repeats or revises it. Other times it ends with the last
+  complete bar (30-second at 6 s into the bar), and the first update is for the next bar. Once,
+  with 5-second bars, the bar between the batch and the first update was never sent: the batch
+  ended at 09:16:25, the first update was for 09:16:35.
+- No update carried an earlier bar than the one before it (700+ updates).
+- MIDPOINT updates send `volume`, `WAP` and `barCount` as `-1`, like the batch. TRADES updates
+  send real values, but a bar's first update can report `barCount` 0 with volume 305.
+- Refused or silent: crypto `AGGTRADES` and `BID_ASK` draw 321 "Source price not supported with
+  live updates"; crypto `TRADES` draws 10299 (use AGGTRADES). Without real-time permission (ES,
+  DAX and ESTX50 indices) and for AAPL and NVDA overnight, TWS sends the batch and then no update
+  and no error.
+- **Batch, then nothing** (*11:23 UTC, ES Dec 26 TRADES 1-minute, no real-time permission*): the
+  batch's 30 bars ended with the 21:59 UTC bar of the previous day, the last before CME's
+  daily break, followed by the batch end and no update in 150 s. `BarCompletion::apply` left
+  that bar forming; `BarCompletion::expire` with a 10 s grace completed it at once. EUR.USD
+  MIDPOINT on the same connection: updates completed each bar 0.3 to 0.5 s after its end, and
+  `expire` with a 10 s grace never fired.
+- Settles `historical::BarCompletion`: a bar is final when
+  an update for it arrives after its end, or when an update for a later bar arrives.
+- **Not probed:** a session end (the last bar before a close or the FX daily break); RTH-only
+  requests; daily and longer bars; BID, ASK and other MIDPOINT contracts; a TRADES contract with
+  no trade for a whole bar.
+
 ### Historical bars for a continuous future take no end date
 
 *Live 2026-11-16 Mon 02:20 ET (CME Globex open), paper, server 223.*

@@ -5,8 +5,8 @@ use crate::common::test_utils::helpers::{
 };
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::market_data::historical::common::test_tables::{HMDS_CONNECTED_MESSAGE, PRE_DATA_NOTICES};
-use crate::market_data::historical::BarTimestamp;
 use crate::market_data::historical::TickLast;
+use crate::market_data::historical::{BarCompletion, BarTimestamp, StreamedBar};
 use crate::market_data::IgnoreSize;
 use crate::messages::{IncomingMessages, OutgoingMessages, HMDS_QUERY_MESSAGE_CODE};
 use crate::protocol::{Features, ProtocolFeature};
@@ -794,6 +794,66 @@ async fn historical_data_streaming_with_updates() {
             .what_to_show(WhatToShow::Trades)
             .use_rth(true)
             .keep_up_to_date(true),
+    );
+}
+
+// Async twin of the sync test. Bars from 2023 have ended by now, so each update completes its bar on arrival.
+#[tokio::test]
+async fn historical_data_streaming_bar_completion() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::HistoricalData,
+            historical_data_response()
+                .bar(historical_data_bar(1_678_886_400).ohlc(1.0, 1.0, 1.0, 1.0))
+                .bar(historical_data_bar(1_678_886_460).ohlc(2.0, 2.0, 2.0, 2.0))
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalDataUpdate,
+            historical_data_update_response()
+                .bar(historical_data_bar(1_678_886_460).ohlc(2.0, 2.5, 2.0, 2.5))
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::HistoricalDataUpdate,
+            historical_data_update_response()
+                .bar(historical_data_bar(1_678_886_520).ohlc(3.0, 3.0, 3.0, 3.0))
+                .encode_proto(),
+        ),
+    ]));
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
+    let contract = Contract::stock("SPY").build();
+    let mut subscription = client
+        .historical_data(&contract, BarSize::Min)
+        .duration(Duration::days(1))
+        .subscribe_with_updates()
+        .await
+        .expect("streaming request should succeed");
+
+    let mut completion = BarCompletion::new(BarSize::Min);
+    let mut items = Vec::new();
+    for _ in 0..3 {
+        let Some(Ok(SubscriptionItem::Data(update))) = subscription.next().await else {
+            panic!("expected an update");
+        };
+        items.extend(completion.apply(update));
+    }
+
+    let summary: Vec<(bool, BarTimestamp, f64)> = items
+        .iter()
+        .map(|item| match item {
+            StreamedBar::Completed(bar) => (true, bar.date, bar.close),
+            StreamedBar::Forming(bar) => (false, bar.date, bar.close),
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (true, BarTimestamp::DateTime(datetime!(2023-03-15 13:20 UTC)), 1.0),
+            (false, BarTimestamp::DateTime(datetime!(2023-03-15 13:21 UTC)), 2.0),
+            (true, BarTimestamp::DateTime(datetime!(2023-03-15 13:21 UTC)), 2.5),
+            (true, BarTimestamp::DateTime(datetime!(2023-03-15 13:22 UTC)), 3.0),
+        ]
     );
 }
 

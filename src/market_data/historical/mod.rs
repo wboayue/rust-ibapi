@@ -34,6 +34,9 @@ pub(crate) mod common;
 mod builder;
 pub use builder::{date_spec, HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder};
 
+mod completion;
+pub use completion::{BarCompletion, StreamedBar};
+
 pub use super::{TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
 
 #[doc(hidden)]
@@ -574,8 +577,9 @@ pub enum HistoricalDataFrame {
     /// window comes in `End`.
     Bars(Vec<Bar>),
     /// The current (incomplete) bar, from `subscribe_with_updates` only. TWS
-    /// resends it every few seconds as it builds, with the same timestamp,
-    /// until a new bar begins.
+    /// sends it just after each 5-second boundary of the wall clock, changed or
+    /// not, with the same timestamp until a new bar begins, and never marks a
+    /// bar as final; [`BarCompletion`] turns the updates into completed bars.
     Update(Bar),
     /// The window TWS served. Follows `Bars`.
     End {
