@@ -343,7 +343,7 @@ fn notice_category_partition() {
         (*ORDER_REJECTION_CODE_RANGE.end(), NoticeCategory::OrderRejection),   // 399
         (317, NoticeCategory::DataAdvisory),                                   // precedence over the 200..=399 band (#806)
         (2188, NoticeCategory::DataAdvisory),                                  // precedence over the 21xx band
-        (10089, NoticeCategory::DataAdvisory),
+        (10089, NoticeCategory::Error),                                        // ends the request: nothing follows it
         (10090, NoticeCategory::DataAdvisory),
         (10091, NoticeCategory::DataAdvisory),
         (10167, NoticeCategory::DataAdvisory),

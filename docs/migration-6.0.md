@@ -1778,3 +1778,23 @@ for update in subscription.iter_data() {
 
 A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
 Check `notice.code` to tell them apart.
+
+### 64. Error 10089 ends the subscription
+
+5.x treated 10089 ("Requested market data requires additional subscription for API ... Delayed
+market data is available") as a data advisory (#677): a `market_data`, `realtime_bars` or
+`tick_by_tick` stream yielded it as `SubscriptionItem::Notice` and stayed open. TWS sends
+nothing after it, whatever the market data type, so the stream waited forever, and its drop sent
+a cancel TWS answered with 300 (`docs/wire-facts/market-data.md#market-data-type-and-permission-notices`).
+
+It is now the stream's terminal error, `Err(Error::Notice)` with code 10089, and no cancel is
+sent. `Notice::category()` returns `NoticeCategory::Error` for it, `is_informational()` is
+`false`, and `DATA_ADVISORY_CODES` no longer lists it. Code that waited for delayed data after
+10089 should instead set a delayed market data type (`switch_market_data_type`). For a contract
+TWS has delayed data for (MSFT and IBM in the probe), it then sends 10167, which stays an
+advisory, before the delayed ticks; for one it has none for (AAPL on the probing account), it
+still sends 10089 and the stream ends.
+
+`market_depth` also ends on 10089 now, with the same `Err(Error::Notice)`; it used to stay open
+after the notice with no rows. Its drop still writes the cancel, which TWS answers with 310: one
+AAPL `ISLAND` request was probed for depth, against 36 for the other request kinds.
