@@ -83,6 +83,38 @@ impl Default for TickBidAsk {
     }
 }
 
+impl TickBidAsk {
+    /// The bid, or `None` when the tick reports no bid (see [`QuoteSide::new`]).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::market_data::TickBidAsk;
+    ///
+    /// // A far out-of-the-money option with only an offer.
+    /// let tick = TickBidAsk { price_bid: 0.0, size_bid: 0.0, price_ask: 0.01, size_ask: 8.0, ..Default::default() };
+    /// assert_eq!(tick.bid(), None);
+    /// assert_eq!(tick.ask().map(|ask| ask.price), Some(0.01));
+    /// ```
+    pub fn bid(&self) -> Option<QuoteSide> {
+        QuoteSide::new(self.price_bid, self.size_bid)
+    }
+
+    /// The ask, or `None` when the tick reports no ask (see [`QuoteSide::new`]).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::market_data::TickBidAsk;
+    ///
+    /// let tick = TickBidAsk { price_bid: 1.0906, size_bid: 2e6, price_ask: 1.0907, size_ask: 1e6, ..Default::default() };
+    /// assert_eq!(tick.ask().map(|ask| (ask.price, ask.size)), Some((1.0907, 1e6)));
+    /// ```
+    pub fn ask(&self) -> Option<QuoteSide> {
+        QuoteSide::new(self.price_ask, self.size_ask)
+    }
+}
+
 /// Attributes of a [`TickBidAsk`].
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -115,6 +147,43 @@ impl Default for TickMidpoint {
             time: OffsetDateTime::UNIX_EPOCH,
             price: 0.0,
         }
+    }
+}
+
+/// One side of a quote: a price with the size available at it.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct QuoteSide {
+    /// Price, as TWS sends it. Can be negative: a combo's bid or ask often is.
+    pub price: f64,
+    /// Size available at [`price`](Self::price). Positive in a side from [`new`](Self::new).
+    pub size: f64,
+}
+
+impl QuoteSide {
+    /// The side TWS reports as `price` and `size`, or `None` when it reports no quote.
+    ///
+    /// TWS has no quote on a side when its size is zero. It sends such a side with a placeholder
+    /// price that varies by contract and source:
+    ///
+    /// - `-1` on market data for options and indices, streaming and snapshot.
+    /// - `-1` times the price magnifier on a magnified contract (`-100` for a CBOT corn option).
+    /// - `0` on market data for combos, and on historical bid/ask ticks.
+    ///
+    /// The placeholder always comes with size `0`, so the size decides. A negative price with a
+    /// positive size is a real quote: a calendar spread's bid can be `-71`
+    /// (`docs/wire-facts/market-data.md#no-quote-sides`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::market_data::QuoteSide;
+    ///
+    /// assert_eq!(QuoteSide::new(-1.0, 0.0), None);
+    /// assert_eq!(QuoteSide::new(-71.0, 1.0), Some(QuoteSide { price: -71.0, size: 1.0 }));
+    /// ```
+    pub fn new(price: f64, size: f64) -> Option<Self> {
+        (size > 0.0).then_some(Self { price, size })
     }
 }
 

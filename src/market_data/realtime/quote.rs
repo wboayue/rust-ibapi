@@ -1,9 +1,9 @@
 //! [`Quote`]: market data ticks folded into one value.
 
-use super::TickTypes;
+use super::{TickAttribute, TickTypes};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::OptionComputation;
-use crate::market_data::MarketDataType;
+use crate::market_data::{MarketDataType, QuoteSide};
 
 /// Latest known market data for one contract, folded from [`TickTypes`].
 ///
@@ -17,8 +17,9 @@ use crate::market_data::MarketDataType;
 /// String, generic, snapshot-end, request-parameter and reroute ticks, and tick types without a
 /// field here, are ignored.
 ///
-/// Values are stored as TWS sends them: TWS may report a missing bid or ask as `-1.0` rather
-/// than omitting it.
+/// Values are stored as TWS sends them, including the placeholder price and zero size TWS sends
+/// for a side with no quote. [`bid_side`](Self::bid_side) and [`ask_side`](Self::ask_side) return
+/// a side only when it has a quote.
 ///
 /// The struct is `#[non_exhaustive]` so fields can be added; outside this crate, build one with
 /// [`Quote::default`] plus [`apply`](Self::apply), or with [`from_ticks`](Self::from_ticks).
@@ -44,6 +45,14 @@ pub struct Quote {
     pub bid_size: Option<f64>,
     /// Size at the ask.
     pub ask_size: Option<f64>,
+    /// Attributes of the latest bid price tick: whether it can auto-execute, is past the limit, or
+    /// is a pre-open price.
+    ///
+    /// Delayed ticks carry no attributes: every flag is `false`
+    /// (`docs/wire-facts/market-data.md#no-quote-sides`).
+    pub bid_attributes: Option<TickAttribute>,
+    /// Attributes of the latest ask price tick, as for [`bid_attributes`](Self::bid_attributes).
+    pub ask_attributes: Option<TickAttribute>,
     /// Size of the last trade.
     pub last_size: Option<f64>,
     /// Session volume.
@@ -111,10 +120,10 @@ impl Quote {
     /// ```
     pub fn apply(&mut self, tick: &TickTypes) {
         match tick {
-            TickTypes::Price(tick) => self.set_price(tick.tick_type, tick.price),
+            TickTypes::Price(tick) => self.set_price(tick.tick_type, tick.price, tick.attributes),
             TickTypes::Size(tick) => self.set_size(tick.tick_type, tick.size),
             TickTypes::PriceSize(tick) => {
-                self.set_price(tick.price_tick_type, tick.price);
+                self.set_price(tick.price_tick_type, tick.price, tick.attributes);
                 self.set_size(tick.size_tick_type, tick.size);
             }
             TickTypes::OptionComputation(computation) => self.set_greeks(computation),
@@ -123,7 +132,68 @@ impl Quote {
         }
     }
 
-    fn set_price(&mut self, tick_type: TickType, price: f64) {
+    /// The bid with its size, or `None` while the quote has no bid.
+    ///
+    /// TWS reports an empty side with size `0` and a placeholder price (`-1`, `-1` times the
+    /// price magnifier, or `0`); see [`QuoteSide::new`]. [`bid`](Self::bid) and
+    /// [`bid_size`](Self::bid_size) keep those values.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "sync")]
+    /// # {
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::Quote;
+    /// use std::time::Duration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// let ticks = client.market_data(&contract).snapshot_once(Duration::from_secs(5)).expect("snapshot failed");
+    /// match Quote::from_ticks(&ticks).bid_side() {
+    ///     Some(bid) => println!("bid {} x {}", bid.price, bid.size),
+    ///     None => println!("no bid"),
+    /// }
+    /// # }
+    /// ```
+    pub fn bid_side(&self) -> Option<QuoteSide> {
+        QuoteSide::new(self.bid?, self.bid_size?)
+    }
+
+    /// The ask with its size, or `None` while the quote has no ask. See [`bid_side`](Self::bid_side).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::prelude::*;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// let mut ticks = client.market_data(&contract).subscribe().await?.filter_data();
+    /// let mut quote = Quote::default();
+    /// while let Some(tick) = ticks.next().await {
+    ///     quote.apply(&tick?);
+    ///     if let (Some(bid), Some(ask)) = (quote.bid_side(), quote.ask_side()) {
+    ///         println!("{} x {} / {} x {}", bid.price, bid.size, ask.price, ask.size);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn ask_side(&self) -> Option<QuoteSide> {
+        QuoteSide::new(self.ask?, self.ask_size?)
+    }
+
+    fn set_price(&mut self, tick_type: TickType, price: f64, attributes: TickAttribute) {
+        match tick_type {
+            TickType::Bid | TickType::DelayedBid => self.bid_attributes = Some(attributes),
+            TickType::Ask | TickType::DelayedAsk => self.ask_attributes = Some(attributes),
+            _ => {}
+        }
         let slot = match tick_type {
             TickType::Bid | TickType::DelayedBid => &mut self.bid,
             TickType::Ask | TickType::DelayedAsk => &mut self.ask,

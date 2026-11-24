@@ -7,7 +7,7 @@ pub mod realtime;
 
 mod common;
 mod ticks;
-pub use ticks::{TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
+pub use ticks::{QuoteSide, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
 
 use serde::{Deserialize, Serialize};
 
