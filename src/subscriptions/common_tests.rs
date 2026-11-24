@@ -255,7 +255,7 @@ fn rejection_ends_request_only_for_verified_codes() {
     // where one is known (10197 on market data).
     let cases = [
         case("TickTypes", rejection_ends::<TickTypes>, &[200, 354, 10168], 10197),
-        case("Bar", rejection_ends::<Bar>, &[200, 354], 10197),
+        case("Bar", rejection_ends::<Bar>, &[200, 354, 420], 10197),
         case("TickLast", rejection_ends::<TickLast>, &[200, 10189], 10197),
         case("TickBidAsk", rejection_ends::<TickBidAsk>, &[200, 10189], 10197),
         case("TickMidpoint", rejection_ends::<TickMidpoint>, &[200, 10189], 10197),

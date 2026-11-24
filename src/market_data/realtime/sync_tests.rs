@@ -772,6 +772,14 @@ fn realtime_bars_rejected_with_354_skips_cancel() {
 }
 
 #[test]
+fn realtime_bars_rejected_with_420_skips_cancel() {
+    let (message_bus, client) = rejecting_client(420);
+    let contract = Contract::stock("IBM").build();
+    let subscription = client.realtime_bars(&contract).subscribe().expect("subscribe failed");
+    assert_rejection_ends_without_cancel(&message_bus, subscription, 420);
+}
+
+#[test]
 fn market_depth_rejected_with_354_skips_cancel() {
     let (message_bus, client) = rejecting_client(354);
     let contract = Contract::stock("AAPL").build();

@@ -69,6 +69,11 @@ pub(crate) const REQUEST_VALIDATION_CODE: i32 = 321;
 /// or market depth request without the exchange's data permission.
 pub(crate) const MARKET_DATA_NOT_SUBSCRIBED_CODE: i32 = 354;
 
+/// "Invalid Real-time Query": a realtime bars request without the exchange's
+/// data permission, or with a `whatToShow` the contract has no data for
+/// (`TRADES` on a forex pair).
+pub(crate) const REALTIME_QUERY_INVALID_CODE: i32 = 420;
+
 /// "Requested market data is not subscribed. Delayed market data is not
 /// enabled." A market data request without the permission.
 pub(crate) const MARKET_DATA_DELAYED_NOT_ENABLED_CODE: i32 = 10168;

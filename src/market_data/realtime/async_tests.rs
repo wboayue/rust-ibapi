@@ -852,6 +852,14 @@ async fn realtime_bars_rejected_with_354_skips_cancel() {
 }
 
 #[tokio::test]
+async fn realtime_bars_rejected_with_420_skips_cancel() {
+    let (message_bus, client) = rejecting_client(420);
+    let contract = Contract::stock("IBM").build();
+    let subscription = client.realtime_bars(&contract).subscribe().await.expect("subscribe failed");
+    assert_rejection_ends_without_cancel(&message_bus, subscription, 420).await;
+}
+
+#[tokio::test]
 async fn market_depth_rejected_with_354_skips_cancel() {
     let (message_bus, client) = rejecting_client(354);
     let contract = Contract::stock("AAPL").build();
