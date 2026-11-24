@@ -20,7 +20,7 @@ use crate::common::error_helpers;
 use crate::contracts::OptionComputation;
 use crate::messages::{
     IncomingMessages, Notice, ResponseMessage, MARKET_DATA_DELAYED_NOT_ENABLED_CODE, MARKET_DATA_NOT_SUBSCRIBED_CODE, MARKET_DEPTH_RESET_CODE,
-    NO_SECURITY_DEFINITION_CODE, TICK_BY_TICK_FAILED_CODE,
+    NO_SECURITY_DEFINITION_CODE, REALTIME_QUERY_INVALID_CODE, TICK_BY_TICK_FAILED_CODE,
 };
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
@@ -151,9 +151,12 @@ impl StreamDecoder<Bar> for Bar {
         common::encoders::encode_cancel_realtime_bars(request_id).map(Some)
     }
 
-    /// Live: after 200 or 354 TWS answers the cancel with 300 (no such request).
+    /// Live: after 200, 354 or 420 TWS answers the cancel with 300 (no such request).
     fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
-        matches!(notice.code, NO_SECURITY_DEFINITION_CODE | MARKET_DATA_NOT_SUBSCRIBED_CODE)
+        matches!(
+            notice.code,
+            NO_SECURITY_DEFINITION_CODE | MARKET_DATA_NOT_SUBSCRIBED_CODE | REALTIME_QUERY_INVALID_CODE
+        )
     }
 }
 

@@ -37,7 +37,7 @@ the cancel; types whose code is verified here now skip it, so the reply no longe
 | Request | Terminal error | Cancel reply |
 | --- | --- | --- |
 | market_data (stream and snapshot) | 200, 354, 10168 | 300 |
-| realtime_bars | 200, 354 | 300 |
+| realtime_bars | 200, 354, 420 | 300 |
 | tick_by_tick | 200, 10189 | 300 |
 | market_depth | 200, 354 | 310 |
 | market_depth | 10092 (no depth for the security type and exchange) | none |
@@ -51,6 +51,15 @@ the cancel; types whose code is verified here now skip it, so the reply no longe
 
 - 354, 10168 and 10189 came from a CME future and a US stock without real-time permission. The
   same ES market data request drew 10168 in one run and 354 in the next, minutes apart.
+- 420 on realtime bars (*live 2026-11-24 17:47-17:48 UTC, US market open, paper TWS, server
+  223, market data types real-time and delayed*): IBM `TRADES` ("Invalid Real-time Query:No
+  market data permissions for NYSE STK ..."), ESZ6 `TRADES` ("... for CME FUT") and EUR.USD
+  `TRADES` ("... No historical market data for EUR/CASH@FXSUBPIP Last 0"). No bar followed for
+  that request id, and the cancel the client sent drew 300 "Can't find EId with
+  tickerId:1500000001" 1 to 2 ms later, under both types. The same session's EUR.USD `MIDPOINT`
+  bars streamed. With the delayed type, ESZ6 drew 354 instead and MSFT drew 10089 under both
+  types (420 at 16:42 UTC). Market data, tick-by-tick and keep-up-to-date requests on these
+  contracts drew 10089, 354, 162 or 321, never 420.
 - The reply has no recipient; the transport logs `no recipient for error` at INFO. It does not
   reach `notice_stream()`. Cost: one wasted write and one log line.
 - A cancel that draws no reply proves nothing either way, so those types keep cancelling.
