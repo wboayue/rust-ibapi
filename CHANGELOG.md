@@ -90,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dropping or cancelling a market data, realtime bars, tick-by-tick or market depth subscription that TWS already refused for missing permissions (354, 10168, 10189) no longer sends a cancel. TWS had ended the request, so it answered each cancel with error 300 or 310 (#1291).
 - `Client::resubscribing` (sync and async) ends after a market data snapshot's `TickTypes::SnapshotEnd`, as its docs said. Previously it kept waiting on a snapshot TWS had finished, and a later reconnect sent the snapshot request again. The same holds for `historical_data(..).subscribe()`, which it now accepts, after `End` (#1246).
 - Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning` on any order. TWS goes on with the order after it. It arrives on every `exercise_options` request, where it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading (#1210).
 
