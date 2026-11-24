@@ -1745,3 +1745,38 @@ async fn is_unsent_implies_the_order_call_wrote_nothing() {
         assert_eq!(written, usize::from(matches!(sends, Sends::Fail)), "{name}: requests written");
     }
 }
+
+#[tokio::test]
+async fn executions_filter_by_utc_time_and_read_utc_execution_time() {
+    use time::macros::datetime;
+
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::ExecutionData,
+            execution_data().request_id(TEST_REQ_ID_FIRST).time("20261111-02:37:49Z").encode_proto(),
+        ),
+        proto_response(IncomingMessages::ExecutionDataEnd, execution_data_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let filter = ExecutionFilter {
+        time: Some(datetime!(2026-11-10 20:30:00 -6)),
+        ..ExecutionFilter::default()
+    };
+    let mut subscription = client.executions(filter).await.expect("failed to get executions");
+    let execution = match subscription.next().await {
+        Some(Ok(SubscriptionItem::Data(Executions::ExecutionData(data)))) => data.execution,
+        other => panic!("Expected Executions::ExecutionData, got {other:?}"),
+    };
+
+    assert_eq!(execution.time_utc(), Some(datetime!(2026-11-11 02:37:49 UTC)));
+    let expected_filter = ExecutionFilter {
+        time: Some(datetime!(2026-11-11 02:30:00 UTC)),
+        ..ExecutionFilter::default()
+    };
+    assert_request(
+        &message_bus,
+        0,
+        &executions_request().request_id(TEST_REQ_ID_FIRST).filter(expected_filter),
+    );
+}

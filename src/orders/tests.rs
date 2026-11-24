@@ -539,3 +539,32 @@ fn order_type_fields_serde_unset_is_null_and_reads_legacy_strings() {
     assert_eq!(order.order_type, Some(OrderType::StopLimit));
     assert_eq!(order.adjusted_order_type, Some(OrderType::TrailingStop));
 }
+
+#[test]
+fn utc_time_accessors_parse_only_the_utc_rendering() {
+    use time::macros::datetime;
+
+    let instant = Some(datetime!(2026-11-11 02:17:28 UTC));
+    let cases = [
+        ("20261111-02:17:28Z", instant),
+        ("20261111-02:17:28", instant),
+        ("20261110 20:17:28 US/Central", None),
+        ("20261111 02:17:28 Europe/London", None),
+        ("20261111-02:17:28 UTC", None),
+        ("20261311-02:17:28Z", None),
+        ("", None),
+    ];
+
+    for (text, expected) in cases {
+        let execution = Execution {
+            time: text.to_string(),
+            ..Execution::default()
+        };
+        let state = OrderState {
+            completed_time: text.to_string(),
+            ..OrderState::default()
+        };
+        assert_eq!(execution.time_utc(), expected, "Execution::time {text:?}");
+        assert_eq!(state.completed_time_utc(), expected, "OrderState::completed_time {text:?}");
+    }
+}
