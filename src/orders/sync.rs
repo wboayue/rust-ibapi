@@ -311,6 +311,11 @@ impl Client {
     /// The generator only moves up, never below order IDs already allocated
     /// locally, including IDs whose order has not yet reached the server.
     ///
+    /// TWS keeps one order-ID sequence per client ID: the same ID from another client ID places
+    /// a separate order, and an ID this client ID has not used, below the highest it has used,
+    /// draws error 103 ("Duplicate order id") (live: 2026-11-24, server 223;
+    /// `docs/wire-facts/orders.md#order-ids-are-per-client-id`).
+    ///
     /// Use this method when coordinating order IDs across multiple client instances or when you need to synchronize with the server's order ID sequence at the start of a session.
     ///
     /// # Errors

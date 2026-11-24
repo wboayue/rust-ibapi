@@ -220,8 +220,20 @@ SELL 20000 MKT to flatten.*
   to `None`; which one TWS sent was not captured.
 - No `-1`, `f64::MAX` or other sentinel in `commission_and_fees`, live or in the six reports
   `executions()` replayed 8-16 s later (2.0, 2.0, 2.24, 2.24, 2.0, 2.0).
-- **Not probed:** partial fills; stocks, futures and options; a later corrected report; a raw
-  capture of `realized_pnl`; the Gateway.
+- **Stocks and options during US hours** (*live 2026-11-24 16:04-16:21 UTC, paper TWS, server
+  223; AAPL 1 share and an AAPL Dec 2026 350 call, 1 contract, each bought and sold at market;
+  MSFT orders of 500 shares filled in 7 to 9 parts*): one report per execution, 1 to 2 ms after
+  it, 20 ms for the option sale. The sequence is the forex BUY's: ExecutionData; OpenOrder
+  Filled with `commission_and_fees` `None`; OrderStatus Filled; OpenOrder Filled with the
+  commission; OrderStatus; the report. Values: 1.000003 and 1.007222 USD for the stock, 0.7653
+  and 0.7859 for the option; `realized_pnl` `None` on the opening executions, set on the
+  closing ones (-2.127225, -21.5512).
+- **Partial fills**: each part got its own report right after its execution. The first part
+  carried the order's minimum (1.000126 USD for 42 MSFT shares), later parts the increment
+  (0.00012 for 40 shares, 0.60036 for 120), and OpenOrder's `commission_and_fees` ran as the
+  order's total (1.000126, 1.000246, ... 2.5015 after 500 shares).
+- **Not probed:** futures; a later corrected report; a raw capture of `realized_pnl`; the
+  Gateway.
 
 ### `Execution.time` rendering
 
@@ -399,6 +411,24 @@ with `override_natural_action`.*
   list (it listed nothing in both runs, so it had nothing to raise the id above); whether TWS
   sends a `nextValidId` frame after the listing; `reqCompletedOrders(apiOnly=true)`; client
   id 0; the Gateway.
+
+
+### Order ids are per client id
+
+*Live 2026-11-24 16:35 UTC, US market open, paper TWS, server 223; clients A and B on two
+connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
+
+- Both read next valid id 1 at connect. A placed id 2 (Submitted); `reqIds` then returned 3 to A
+  and still 1 to B.
+- B sent id 2, A's working id: TWS placed a second order with its own perm id, and
+  `all_open_orders` listed both, under A's and B's client ids. `reqIds` then returned 3 to B.
+- B sent id 2 again with quantity 2: TWS modified B's order (same perm id, quantity 2).
+- A sent id 1, which it had never used and which is below its highest id 2: 103 "Duplicate order
+  id: 1", 3 ms later.
+- Settles that the next valid id and the duplicate check run per client id. An id the client has
+  used names that client's order with the id (a modify, or 104 once the order is finished); an
+  unused id below the client's highest draws 103.
+- **Not probed:** client id 0, which can see other clients' orders; the Gateway.
 
 ### `ext_operator` and `manual_order_indicator` on orders and cancels
 
