@@ -181,8 +181,17 @@ hours, TRADES.*
 - Settles that an index's bid and ask are the no-quote placeholder of every other contract
   (`-1` with size `0`, #1284), and that its last price is a value, not a placeholder, even with
   the market closed. The size `1` is not a traded size.
-- **Not probed:** real-time index data (no subscription); delayed ESTX50; SPX during US trading
-  hours; an index before its first value of a day; snapshots.
+- **US trading hours** (*live 2026-11-24 16:00-16:02 UTC, CBOE and Nasdaq open, paper TWS,
+  server 223*): delayed SPX (CBOE), NDX (NASDAQ) and VIX (CBOE) the same way. One `DelayedBid`
+  and one `DelayedAsk` of `-1` with size `0` first, then a `DelayedLast` with size `1` and a
+  `DelayedLastTimestamp` every 5 seconds (SPX `7158.43`, `7154.96`, ...). `DelayedOpen` was `0`
+  on all three with the session open; `DelayedHigh`, `DelayedLow` and `DelayedClose` (the
+  previous close) were real. `DelayedVolume` came as a small count that grew (SPX `4535`, then
+  `4565` 10 s later; NDX `4561`; VIX `1776`, then `1778`); what it counts was not
+  established, since an index does not trade. Real-time on SPX
+  and VIX: 354.
+- **Not probed:** real-time index data (no subscription); delayed ESTX50; an index before its
+  first value of a day; snapshots.
 
 ### Tick-by-tick sizes and `IgnoreSize`
 
