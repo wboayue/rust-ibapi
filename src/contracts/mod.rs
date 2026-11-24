@@ -184,7 +184,10 @@ pub struct Contract {
     /// unset (stocks, an open futures query).
     #[serde(default, deserialize_with = "types::deserialize_optional_expiry")]
     pub last_trade_date_or_contract_month: Option<Expiry>,
-    /// The option's strike price.
+    /// The option's strike price. For a contract whose
+    /// [`price_magnifier`](ContractDetails::price_magnifier) is above 1, TWS expects it in the
+    /// market-data sub-unit (`450` cents for a $4.50 corn option) but reports it in contract
+    /// details in the currency unit (`4.5`).
     pub strike: f64,
     /// Option type (only meaningful when `security_type == SecurityType::Option`).
     /// `None` on non-option contracts. Wire values are `"C"` (Call) and `"P"` (Put).
@@ -621,7 +624,32 @@ pub struct ContractDetails {
     pub market_name: String,
     /// The minimum allowed price variation. Note that many securities vary their minimum tick size according to their price. This value will only show the smallest of the different minimum tick sizes regardless of the product's price. Full information about the minimum increment price structure can be obtained with the reqMarketRule function or the IB Contract and Security Search site.
     pub min_tick: f64,
-    /// Allows execution and strike prices to be reported consistently with market data, historical data and the order price, i.e. Z on LIFFE is reported in Index points and not GBP. In TWS versions prior to 972, the price magnifier is used in defining future option strike prices (e.g. in the API the strike is specified in dollars, but in TWS it is specified in cents). In TWS versions 972 and higher, the price magnifier is not used in defining futures option strike prices so they are consistent in TWS and the API.
+    /// How many market-data price units make one currency unit: `100` for a contract quoted in
+    /// a sub-unit, such as CBOT corn in cents or an LSE stock in pence, otherwise `1`. TWS sent
+    /// `1` or `100` for every contract checked, never `0` (live: 2026-11-23, server 223).
+    ///
+    /// For a contract with a magnifier above 1, TWS uses both units:
+    ///
+    /// | Value | Unit | ZC corn |
+    /// | --- | --- | --- |
+    /// | Market data and historical bar prices | sub-unit | `449` |
+    /// | [`OptionChain::strikes`] | sub-unit | `450` |
+    /// | [`Contract::strike`] in a request | sub-unit | `450` |
+    /// | [`Contract::strike`] in contract details | currency unit | `4.5` |
+    /// | [`OptionComputation::option_price`] and [`OptionComputation::underlying_price`] | currency unit | `0.07875`, `4.4875` |
+    /// | The underlying price passed to `calculate_option_price` | currency unit | `4.49` |
+    /// | [`min_tick`](Self::min_tick) | currency unit | `0.0025` |
+    ///
+    /// So price × multiplier / magnifier is the notional value (ZC `449` × `5000` / `100` is
+    /// $22,450), even where the sub-unit is not a currency: the FTSE 100 future (`Z` on ICEEU)
+    /// trades in index points with a magnifier of `100` and a multiplier of `1000`.
+    ///
+    /// IB's documentation says that from TWS 972 the magnifier no longer applies to
+    /// futures-option strikes. Only contract details report the currency unit: a ZC option
+    /// requested with strike `4.5` draws error 200 and needs `450`, and `historical_data`
+    /// rejects the contract details' own contract (strike `4.5` with its contract id) the same
+    /// way. Send the strike multiplied by the magnifier, or `0` with the contract id
+    /// (`docs/wire-facts/contracts.md#price-magnifier-units`).
     pub price_magnifier: i32,
     /// Supported order types for this product.
     pub order_types: Vec<String>,
@@ -1023,7 +1051,8 @@ pub struct OptionComputation {
     pub implied_volatility: Option<f64>,
     /// The option delta value.
     pub delta: Option<f64>,
-    /// The option price.
+    /// The option price, in the currency unit even for a contract whose market data uses a
+    /// sub-unit (see [`ContractDetails::price_magnifier`]).
     pub option_price: Option<f64>,
     /// The present value of dividends expected on the option’s underlying.
     pub present_value_dividend: Option<f64>,
@@ -1033,7 +1062,8 @@ pub struct OptionComputation {
     pub vega: Option<f64>,
     /// The option theta value.
     pub theta: Option<f64>,
-    /// The price of the underlying.
+    /// The price of the underlying, in the currency unit like
+    /// [`option_price`](Self::option_price).
     pub underlying_price: Option<f64>,
 }
 
@@ -1055,7 +1085,10 @@ pub struct OptionChain {
     /// empty entry is dropped. `Expiry` has no order: take the dates with [`Expiry::date`] to sort
     /// them or find the nearest.
     pub expirations: Vec<Expiry>,
-    /// A list of the possible strikes for options of this underlying on this exchange.
+    /// A list of the possible strikes for options of this underlying on this exchange, in the
+    /// unit TWS expects in a request: the market-data sub-unit for a contract whose
+    /// [`price_magnifier`](ContractDetails::price_magnifier) is above 1 (`450` for a $4.50 corn
+    /// option, which contract details report as `4.5`).
     pub strikes: Vec<f64>,
 }
 

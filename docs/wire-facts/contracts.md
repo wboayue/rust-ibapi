@@ -96,6 +96,47 @@ Contract details and option chains. Format: [README](README.md).
 - **Not probed:** futures options, bonds, and products whose `timeZoneId` differs from the
   exchange's.
 
+### Price magnifier units
+
+*Live 2026-11-23 18:50-19:10 ET off-hours, paper TWS, server 223; contract_details,
+option_chain, delayed-frozen market data, historical bars, calculate_option_price.*
+
+`priceMagnifier` by product:
+
+| Magnifier | Contracts |
+| --- | --- |
+| `100` | FUT ZC, ZS, ZW, ZL (CBOT), HE, LE (CME), KC, SB (NYBOT); FOP ZC; STK VOD, BARC, HSBA (LSE); OPT VOD (ICEEU); FUT and IND Z (ICEEU) |
+| `1` | FUT ES, GC, CL, ZM, N225, HSI, FESX, FDAX, R; FOP ES; OPT AAPL, SPX, SAP, 9984; STK AAPL, 7203 (TSEJ), 700 (SEHK), SAP; CASH EUR.USD; IND SPX, N225; CFD AAPL |
+
+No contract sent `0` or a negative value.
+
+Units for the magnified contracts probed (ZC FUT 202703, ZC OPT OZC Jan 2027 450 C, VOD
+STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
+
+| Value | Unit | ZC future / ZC option | VOD stock / VOD option |
+| --- | --- | --- | --- |
+| Market data bid, ask, last, close | sub-unit | `449` / `7.875` | `102.85` / `6.25` |
+| Historical bar prices | sub-unit | `449` / `7.75` | `103` / 200 with the details strike `1` |
+| `option_chain` strikes | sub-unit | `360`, `365`, ... | `50`, `60`, ... |
+| Strike TWS accepts in a request | sub-unit | `450` (`4.5` draws 200) | `120` (`1.2` draws 200) |
+| Strike in contract details | currency | `4.5` | `1.2`, `1` |
+| Option computation `optPrice` | currency | `0.07875` | `0.0525` |
+| Option computation `undPrice` | currency | `4.4875` | `1.0293` |
+| `calculateOptionPrice` underlying price | currency | `4.49` gives `0.0767`; `449` treats the option as deep in the money | not tried |
+| `minTick` | currency (ZC's quarter-cent tick is `0.0025`) | `0.0025` / `0.00125` | `0.000001` / `0.0025` |
+
+- Price × multiplier / magnifier gives the notional value: ZC `449` × `5000` / `100` =
+  $22,450. Z on ICEEU quotes index points (`10524`) with magnifier `100` and multiplier `1000`,
+  so its sub-unit is not a currency unit.
+- The contract details return for the ZC option (conid 896736796, strike `4.5`) drew 200 from
+  `historical_data`. The same contract with strike `450`, strike `0` or the contract id alone
+  returned bars. A delayed market-data request accepted it with strike `4.5`.
+- IB's documentation says the magnifier is not used for futures-option strikes from TWS 972.
+  That holds only for the strike in contract details.
+- **Not probed:** orders and executions (no orders placed), HKD and JPY products with a
+  magnifier above 1 (none found), real-time market data (no CME or LSE subscription; values
+  are delayed-frozen).
+
 ### Option chain `exchange` is a futures-options filter
 
 *Live 2026-09-03, paper Gateway, server 220, `reqSecDefOptParams`; #792.*
