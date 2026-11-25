@@ -326,9 +326,13 @@ async fn close_ends_a_reconnect_stuck_in_the_connector() {
         let socket = Arc::clone(&socket);
         async move { socket.reconnect().await }
     });
-    while calls.load(std::sync::atomic::Ordering::SeqCst) < 2 {
-        tokio::task::yield_now().await;
-    }
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while calls.load(std::sync::atomic::Ordering::SeqCst) < 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("reconnect never called the connector");
     socket.close().await;
 
     let reconnected = tokio::time::timeout(Duration::from_secs(1), reconnecting)

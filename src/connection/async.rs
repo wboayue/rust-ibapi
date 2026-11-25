@@ -152,9 +152,10 @@ impl<S: AsyncStream> AsyncConnection<S> {
     /// hold the dropped session's client id until it notices that socket is
     /// dead (live: 326 on each attempt until then, then a clean reconnect).
     ///
-    /// Returns [`Error::Shutdown`] once shutdown is requested. The backoff
-    /// wait ends immediately on the request; a connect already in flight is
-    /// not interrupted, so the check runs again as soon as it returns.
+    /// Returns [`Error::Shutdown`] once shutdown is requested. The request
+    /// ends the backoff wait and a connect in flight alike: a caller's
+    /// connector has no OS connect timeout behind it, so a dropped client
+    /// must not leave the dispatcher parked inside one.
     pub async fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
         let mut last_error = None;
@@ -179,7 +180,12 @@ impl<S: AsyncStream> AsyncConnection<S> {
                 return Err(Error::Shutdown);
             }
 
-            match self.socket.reconnect().await {
+            let reconnected = tokio::select! {
+                biased;
+                () = self.shutdown.wait() => return Err(Error::Shutdown),
+                reconnected = self.socket.reconnect() => reconnected,
+            };
+            match reconnected {
                 Ok(_) => {
                     self.reset_connection_metadata().await;
                     match self.establish_connection().await {

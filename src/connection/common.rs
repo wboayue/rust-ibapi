@@ -115,7 +115,8 @@ pub(crate) struct ConnectionConfig {
 }
 
 /// Where a connection reaches TWS: exactly one of the builder's `address` or
-/// `connector`.
+/// `connector`. The async client turns it into a socket connector with
+/// `Endpoint::into_connector`, in `transport/async/io.rs`, beside the TCP one.
 pub(crate) enum Endpoint {
     /// The built-in TCP socket.
     Tcp {
