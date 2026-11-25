@@ -209,7 +209,7 @@ impl OptionRight {
     }
 }
 
-impl_wire_enum!(OptionRight);
+impl_wire_enum!(OptionRight { Call, Put });
 
 /// Security identifier scheme. Matches IBKR's `secIdType` wire vocabulary.
 ///
@@ -996,7 +996,7 @@ impl LegAction {
     }
 }
 
-impl_wire_enum!(LegAction);
+impl_wire_enum!(LegAction { Buy, Sell, SellShort });
 
 /// Marker type for a futures builder with an unspecified contract month (open query).
 ///

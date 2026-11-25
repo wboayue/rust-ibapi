@@ -15,6 +15,16 @@ pub(crate) fn segments(dir: &Path, extension: &str) -> Vec<PathBuf> {
     paths
 }
 
+/// Each `.bin` segment's bytes, in segment order. A test that sets `IBAPI_RAW_CAPTURE_DIR`
+/// process-wide can also collect segments from a client another test connects meanwhile, so
+/// such a test looks for its own connection among these rather than concatenating them.
+pub(crate) fn segment_frames(dir: &Path) -> Vec<Vec<u8>> {
+    segments(dir, "bin")
+        .iter()
+        .map(|path| fs::read(path).expect("readable capture"))
+        .collect()
+}
+
 /// Every captured byte, segments concatenated in order. For a single-segment
 /// capture this is the inbound stream verbatim.
 pub(crate) fn frames(dir: &Path) -> Vec<u8> {

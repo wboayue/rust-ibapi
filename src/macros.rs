@@ -53,29 +53,40 @@ macro_rules! impl_str_partial_eq {
 /// preserved. `as_str` then borrows from `self`, so such enums implement
 /// `as_str(&self) -> &str`.
 ///
-/// The `$name` and `fallback $variant` forms also generate serde and utoipa impls that use the wire string
+/// The `$name { .. }` and `fallback $variant` forms also generate serde and utoipa impls that use the wire string
 /// in both directions, so JSON matches what TWS sends and stays stable against
 /// Rust-side renames, and an open enum's `Unknown("X")` round-trips as `"X"`
 /// rather than the externally tagged `{"Unknown":"X"}` a derive gives the one
 /// payload variant. Deserialize goes through `FromStr`, so it rejects `""`, and
 /// a closed enum rejects a string it does not list; serde is not on the wire
 /// path (decoding goes through `parse_required` / `parse_optional`). The
-/// utoipa schema is exactly a string, because the derive would mirror serde's
-/// default representation, which is not what these impls emit. An enum built
+/// utoipa schema is a string, because the derive would mirror serde's default
+/// representation, which is not what these impls emit. An enum built
 /// with this macro must not derive `Serialize`, `Deserialize` or `ToSchema`;
 /// the impls would conflict.
 ///
-/// The `$name, integer` form is for a closed enum whose wire value is an
+/// The `$name, integer { .. }` form is for a closed enum whose wire value is an
 /// integer code but whose `as_str` table spells it as text (`FaDataType`,
 /// `ServerLogLevel`): serde and the utoipa schema use the integer, read back
 /// through the same `from_wire` table, so a code it does not list is an
 /// error. Both directions read that one table.
+///
+/// A closed form lists every variant (`impl_wire_enum!(Action { Buy, Sell, .. })`),
+/// and its schema enumerates their serialized values; see
+/// `impl_wire_string_serde!`'s `@closed_schema` arm. The schema describes the
+/// serialized form only, so an alias `FromStr` also accepts is not in it. An
+/// open enum's schema stays unconstrained, since it accepts values it does not
+/// list.
 macro_rules! impl_wire_enum {
-    ($name:ident) => {
+    ($name:ident { $($v:ident),+ $(,)? }) => {
         impl_wire_enum!(@closed $name);
-        impl_wire_string_serde!($name);
+        impl_wire_string_serde!($name { $($v),+ });
     };
-    ($name:ident, integer) => {
+    ($name:ident as $schema:literal { $($v:ident),+ $(,)? }) => {
+        impl_wire_enum!(@closed $name);
+        impl_wire_string_serde!($name as $schema { $($v),+ });
+    };
+    ($name:ident, integer { $($v:ident),+ $(,)? }) => {
         impl_wire_enum!(@closed $name);
 
         impl ::serde::Serialize for $name {
@@ -92,15 +103,7 @@ macro_rules! impl_wire_enum {
             }
         }
 
-        #[cfg(feature = "utoipa")]
-        impl ::utoipa::PartialSchema for $name {
-            fn schema() -> ::utoipa::openapi::RefOr<::utoipa::openapi::schema::Schema> {
-                <i32 as ::utoipa::PartialSchema>::schema()
-            }
-        }
-
-        #[cfg(feature = "utoipa")]
-        impl ::utoipa::ToSchema for $name {}
+        impl_wire_string_serde!(@closed_schema $name, i32, stringify!($name), [$($v),+]);
     };
     (@closed $name:ident) => {
         impl_wire_enum!(@common $name);
@@ -146,8 +149,37 @@ macro_rules! impl_wire_enum {
 /// `impl_wire_enum!` invokes it for every string-form enum it builds; an enum with
 /// hand-written `Display` / `FromStr` that round-trip the wire string
 /// (historical `WhatToShow`, `BarSize`) invokes it directly.
+///
+/// `$name` alone is the open form: the schema is any string. `$name { .. }`
+/// is the closed form, listing every variant: the schema's `enum` holds each
+/// one's serialized value. The list is checked by an exhaustive `match`, so a
+/// variant missing from it fails to compile. The schema's OpenAPI component
+/// name is the type name; `$name as "Name" { .. }` overrides it, for two types
+/// that share a name (`WhatToShow`) but not a code list. The override form
+/// exists on `impl_wire_enum!` too.
 macro_rules! impl_wire_string_serde {
     ($name:ident) => {
+        impl_wire_string_serde!(@serde $name);
+
+        #[cfg(feature = "utoipa")]
+        impl ::utoipa::PartialSchema for $name {
+            fn schema() -> ::utoipa::openapi::RefOr<::utoipa::openapi::schema::Schema> {
+                <String as ::utoipa::PartialSchema>::schema()
+            }
+        }
+
+        #[cfg(feature = "utoipa")]
+        impl ::utoipa::ToSchema for $name {}
+    };
+    ($name:ident { $($v:ident),+ $(,)? }) => {
+        impl_wire_string_serde!(@serde $name);
+        impl_wire_string_serde!(@closed_schema $name, String, stringify!($name), [$($v),+]);
+    };
+    ($name:ident as $schema:literal { $($v:ident),+ $(,)? }) => {
+        impl_wire_string_serde!(@serde $name);
+        impl_wire_string_serde!(@closed_schema $name, String, $schema, [$($v),+]);
+    };
+    (@serde $name:ident) => {
         impl ::serde::Serialize for $name {
             fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error> {
                 serializer.collect_str(self)
@@ -161,16 +193,41 @@ macro_rules! impl_wire_string_serde {
                     .map_err(::serde::de::Error::custom)
             }
         }
+    };
+    // `$base`'s schema (`String` or `i32`) with `enum` set to every listed
+    // variant's serialized value, so the schema cannot disagree with serde.
+    // `$schema` is the OpenAPI component name.
+    (@closed_schema $name:ident, $base:ty, $schema:expr, [$($v:ident),+]) => {
+        const _: () = {
+            // Never called: fails to compile when the list misses a variant.
+            #[allow(dead_code)]
+            fn every_variant_listed(value: $name) {
+                match value {
+                    $($name::$v => {})+
+                }
+            }
+        };
 
         #[cfg(feature = "utoipa")]
         impl ::utoipa::PartialSchema for $name {
             fn schema() -> ::utoipa::openapi::RefOr<::utoipa::openapi::schema::Schema> {
-                <String as ::utoipa::PartialSchema>::schema()
+                let mut schema = <$base as ::utoipa::PartialSchema>::schema();
+                let ::utoipa::openapi::RefOr::T(::utoipa::openapi::schema::Schema::Object(object)) = &mut schema else {
+                    unreachable!(concat!(stringify!($base), " schema is an inline object"));
+                };
+                object.enum_values = Some(vec![$(
+                    ::serde_json::to_value($name::$v).expect(concat!(stringify!($name), " serializes")),
+                )+]);
+                schema
             }
         }
 
         #[cfg(feature = "utoipa")]
-        impl ::utoipa::ToSchema for $name {}
+        impl ::utoipa::ToSchema for $name {
+            fn name() -> ::std::borrow::Cow<'static, str> {
+                ::std::borrow::Cow::Borrowed($schema)
+            }
+        }
     };
 }
 

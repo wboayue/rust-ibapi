@@ -536,7 +536,7 @@ impl FaDataType {
     }
 }
 
-impl_wire_enum!(FaDataType, integer);
+impl_wire_enum!(FaDataType, integer { Groups, AccountAliases });
 
 /// Financial Advisor configuration data returned by `Client::request_fa`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -596,7 +596,16 @@ impl ServerLogLevel {
     }
 }
 
-impl_wire_enum!(ServerLogLevel, integer);
+impl_wire_enum!(
+    ServerLogLevel,
+    integer {
+        System,
+        Error,
+        Warning,
+        Info,
+        Detail
+    }
+);
 
 /// API verification data returned by `Client::verify_request`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
