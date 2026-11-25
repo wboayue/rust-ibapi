@@ -27,6 +27,7 @@ Examples are organized by execution mode:
 - `sync/` - Synchronous examples using threads and blocking calls
 - `async/` - Asynchronous examples using Tokio and async/await
 - Root directory - Demos that need no gateway connection (`contract_builders`, `conditional_orders`) and tools (`replay_raw_capture`)
+- `wasi/` - Standalone crate: the async client in a `wasm32-wasip2` component, connecting through `ClientBuilder::connector`. Needs `wasmtime`; `cd examples/wasi && cargo run`
 
 Examples cover these functional areas:
 - **Core**: Connection, market data, historical data, orders, account management, contracts

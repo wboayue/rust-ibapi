@@ -14,15 +14,15 @@ use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{encode_raw_length, Notice, ResponseMessage};
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
-use crate::transport::r#async::{AsyncStream, AsyncTcpSocket, NoticeBroadcaster, ShutdownSignal};
+use crate::transport::r#async::{AsyncSocket, AsyncStream, NoticeBroadcaster, ShutdownSignal};
 use crate::transport::recorder::MessageRecorder;
 
 type Response = Result<ResponseMessage, Error>;
 
 /// Asynchronous connection to TWS, generic over the underlying `AsyncStream`.
-/// The default `AsyncTcpSocket` is the production wiring; tests can substitute
+/// The default `AsyncSocket` is the production wiring; tests can substitute
 /// an in-memory stream to drive the bus deterministically.
-pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
+pub struct AsyncConnection<S: AsyncStream = AsyncSocket> {
     pub(crate) client_id: i32,
     pub(crate) socket: S,
     pub(crate) connection_metadata: Mutex<ConnectionMetadata>,
@@ -58,15 +58,15 @@ impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
     }
 }
 
-impl AsyncConnection<AsyncTcpSocket> {
-    /// Open the socket and run the TWS handshake. Settings come from the
+impl AsyncConnection<AsyncSocket> {
+    /// Open the stream and run the TWS handshake. Settings come from the
     /// builder's validated `ConnectionConfig`.
     ///
     /// `notice_sender` is shared with any pre-bound `NoticeStream`; the builder
     /// allocates the broadcast channel before calling here. Persists across
     /// reconnects.
     pub(crate) async fn connect(config: ConnectionConfig, notice_sender: broadcast::Sender<Notice>) -> Result<Self, Error> {
-        let socket = AsyncTcpSocket::connect(&config.address, config.tcp_no_delay).await?;
+        let socket = AsyncSocket::connect(config.endpoint.into_connector()?).await?;
         let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_sender);
         connection.max_reconnect_attempts = config.max_reconnect_attempts;
         connection.establish_connection().await?;

@@ -2191,7 +2191,7 @@ async fn sends_are_refused_during_the_reconnect_handshake() {
     assert!(bus.send_request(RequestId::nth(100), b"req-bytes".to_vec()).await.is_ok());
 }
 
-/// Stands in for `AsyncTcpSocket`'s writer lock. A write carrying `marker`
+/// Stands in for `AsyncSocket`'s writer lock. A write carrying `marker`
 /// models a sender that passed its state check and is queued on the writer
 /// behind a stalled write: it waits until the test releases it or the
 /// reconnect swaps the stream, and the reconnect hands the writer to it before
@@ -2763,10 +2763,10 @@ async fn close_ends_dispatch_without_reconnecting() {
 use super::io::tests::assert_peer_sees_eof;
 
 /// A client on a dispatching bus over loopback TCP, and the peer end.
-async fn tcp_client_with_peer() -> (crate::Client, Arc<AsyncTcpMessageBus<AsyncTcpSocket>>, tokio::net::TcpStream) {
+async fn tcp_client_with_peer() -> (crate::Client, Arc<AsyncTcpMessageBus<AsyncSocket>>, tokio::net::TcpStream) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
-    let (socket, peer) = tokio::join!(AsyncTcpSocket::connect(&address, true), listener.accept());
+    let (socket, peer) = tokio::join!(AsyncSocket::connect(Connector::tcp(address, true)), listener.accept());
     let bus = Arc::new(AsyncTcpMessageBus::new(AsyncConnection::stubbed(socket.unwrap(), CLIENT_ID)));
     bus.clone().process_messages().unwrap();
     let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);

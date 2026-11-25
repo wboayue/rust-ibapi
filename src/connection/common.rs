@@ -107,12 +107,27 @@ pub(crate) type StartupCallback = Arc<dyn Fn(StartupMessage) + Send + Sync>;
 /// Validated connection settings shared by both transports. Each side passes
 /// its notice sink alongside.
 pub(crate) struct ConnectionConfig {
-    pub(crate) address: String,
+    pub(crate) endpoint: Endpoint,
     pub(crate) client_id: i32,
-    pub(crate) tcp_no_delay: bool,
     pub(crate) startup_callback: Option<StartupCallback>,
     /// `None` means retry forever.
     pub(crate) max_reconnect_attempts: Option<u32>,
+}
+
+/// Where a connection reaches TWS: exactly one of the builder's `address` or
+/// `connector`.
+pub(crate) enum Endpoint {
+    /// The built-in TCP socket.
+    Tcp {
+        address: String,
+        // The async client has no TCP socket on wasm, so only the blocking one reads it there.
+        #[cfg_attr(all(target_family = "wasm", not(feature = "sync")), allow(dead_code))]
+        tcp_no_delay: bool,
+    },
+    /// A caller's stream, opened again on every reconnect. Async client only:
+    /// the blocking builder has no `connector`.
+    #[cfg(feature = "async")]
+    Stream(crate::transport::r#async::Connector),
 }
 
 /// How long connect, and each reconnect attempt, waits for each startup frame

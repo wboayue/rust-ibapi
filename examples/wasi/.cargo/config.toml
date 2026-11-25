@@ -1,0 +1,8 @@
+[build]
+target = "wasm32-wasip2"
+
+[target.wasm32-wasip2]
+# tokio's `net` (TcpStream) is unstable on WASI.
+rustflags = ["--cfg", "tokio_unstable"]
+# WASI denies sockets by default; let the component reach the gateway.
+runner = "wasmtime run -S inherit-network"

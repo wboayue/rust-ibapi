@@ -6,7 +6,7 @@ use log::{debug, info};
 
 use super::common::{
     parse_handshake_ack, parse_raw_message, require_protobuf_support, startup_stall_error, AccountInfo, ConnectionConfig, ConnectionHandler,
-    ConnectionProtocol, StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS,
+    ConnectionProtocol, Endpoint, StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -62,7 +62,11 @@ impl Connection<TcpSocket> {
     /// builder allocates it (and the matching receiver) before calling here.
     /// Persists across reconnects.
     pub(crate) fn connect(config: ConnectionConfig, notice_broadcaster: Arc<NoticeBroadcaster>) -> Result<Self, Error> {
-        let socket = TcpSocket::connect(&config.address, config.tcp_no_delay)?;
+        let socket = match config.endpoint {
+            Endpoint::Tcp { address, tcp_no_delay } => TcpSocket::connect(&address, tcp_no_delay)?,
+            #[cfg(feature = "async")]
+            Endpoint::Stream(_) => return Err(Error::InvalidArgument("ClientBuilder: the blocking client has no connector".into())),
+        };
         let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_broadcaster);
         connection.max_reconnect_attempts = config.max_reconnect_attempts;
         connection.establish_connection()?;
