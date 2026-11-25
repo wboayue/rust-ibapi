@@ -398,6 +398,8 @@ pub(crate) async fn historical_ticks_between<T: TickDecoder<T> + PagedTick + Unp
             return Ok(pages.finish(PagingStop::LimitReached));
         }
 
+        // Each page has its own deadline, as each request of a split bar range does
+        let deadline = request_helpers::one_shot_deadline(client);
         let page = async {
             let mut ticks = historical_ticks::<T>(
                 client,
@@ -416,8 +418,12 @@ pub(crate) async fn historical_ticks_between<T: TickDecoder<T> + PagedTick + Unp
                 page.push(tick?);
             }
             Ok::<_, Error>(page)
-        }
-        .await;
+        };
+        // Dropping the page future on timeout drops its subscription, which cancels the request
+        let page = match deadline {
+            Some(deadline) => tokio::time::timeout_at(deadline, page).await.unwrap_or(Err(Error::Timeout)),
+            None => page.await,
+        };
 
         match page {
             Ok(page) => {

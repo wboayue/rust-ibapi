@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use log::error;
 use time::OffsetDateTime;
@@ -367,6 +368,8 @@ pub(crate) fn historical_ticks_between<T: TickDecoder<T> + PagedTick>(
             return Ok(pages.finish(PagingStop::LimitReached));
         }
 
+        // Each page has its own deadline, as each request of a split bar range does
+        let deadline = request_helpers::blocking::one_shot_deadline(client);
         let page = historical_ticks::<T>(
             client,
             contract,
@@ -377,7 +380,7 @@ pub(crate) fn historical_ticks_between<T: TickDecoder<T> + PagedTick>(
             trading_hours,
             ignore_size,
         )
-        .and_then(|subscription| subscription.iter_data().collect::<Result<Vec<T>, Error>>());
+        .and_then(|subscription| tick_page(&subscription, deadline));
 
         match page {
             Ok(page) => {
@@ -386,6 +389,34 @@ pub(crate) fn historical_ticks_between<T: TickDecoder<T> + PagedTick>(
                 }
             }
             Err(error) => return Err(pages.fail(error)),
+        }
+    }
+}
+
+/// The ticks of one page, read until TWS's last batch. `deadline` passing first is
+/// `Error::Timeout`; dropping the subscription then cancels the request at TWS.
+fn tick_page<T: TickDecoder<T>>(subscription: &TickSubscription<T>, deadline: Option<Instant>) -> Result<Vec<T>, Error> {
+    let mut page = Vec::new();
+    loop {
+        let item = match deadline {
+            None => subscription.next(),
+            Some(deadline) => {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(Error::Timeout);
+                }
+                // `next_timeout` returns `None` for a timeout and for an ended stream
+                match subscription.next_timeout(remaining) {
+                    None if !subscription.is_terminated() && Instant::now() >= deadline => return Err(Error::Timeout),
+                    item => item,
+                }
+            }
+        };
+        match item {
+            None => return Ok(page),
+            Some(Ok(SubscriptionItem::Data(tick))) => page.push(tick),
+            Some(Ok(SubscriptionItem::Notice(_))) => {}
+            Some(Err(error)) => return Err(error),
         }
     }
 }

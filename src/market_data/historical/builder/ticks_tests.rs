@@ -401,6 +401,28 @@ mod sync_between_tests {
         assert_request_ends(&bus, &contract, &[datetime!(2026-11-13 14:30:00 UTC), datetime!(2026-11-13 14:28:35 UTC)]);
     }
 
+    // TWS can leave a historical request unanswered for hours with no error
+    #[test]
+    fn between_times_out_an_unanswered_page_and_keeps_the_ticks_before_it() {
+        let bus = std::sync::Arc::new(MessageBusStub::with_responses_per_request(vec![vec![page()], vec![]]).keeping_channels_open());
+        let client = crate::client::blocking::Client::stubbed(bus.clone(), server_versions::SIZE_RULES)
+            .with_one_shot_timeout(std::time::Duration::from_millis(50));
+        let contract = Contract::stock("AAPL").build();
+
+        let error = client
+            .historical_ticks(&contract, 1000)
+            .between(START, END)
+            .trading_hours(TradingHours::Extended)
+            .last()
+            .expect_err("between succeeded");
+
+        assert!(matches!(error.error, Error::Timeout), "got {:?}", error.error);
+        assert_eq!(prices(&error.ticks), vec![7_100.25, 7_101.50]);
+        assert_eq!(error.from, Some(datetime!(2026-11-13 14:28:35 UTC)));
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-13 14:30:00 UTC), datetime!(2026-11-13 14:28:35 UTC)]);
+        assert_eq!(count_proto_msgs(&bus.request_messages(), OutgoingMessages::CancelHistoricalTicks), 1);
+    }
+
     // Trades at 14:27:10 and 14:28:00, the page before `page()`
     fn earlier_page() -> ResponseMessage {
         proto_response(
@@ -798,6 +820,30 @@ mod async_between_tests {
         assert_eq!(error.from, Some(datetime!(2026-11-23 09:17:00 UTC)));
         assert_tws_error_message(error.error, 162, "pacing violation");
         assert_request_ends(&bus, &contract, &[datetime!(2026-11-23 09:17:02 UTC), datetime!(2026-11-23 09:17:00 UTC)]);
+    }
+
+    // TWS can leave a historical request unanswered for hours with no error
+    #[tokio::test]
+    async fn between_times_out_an_unanswered_page_and_keeps_the_ticks_before_it() {
+        let bus = std::sync::Arc::new(MessageBusStub::with_responses_per_request(vec![vec![page()], vec![]]).keeping_channels_open());
+        let client =
+            crate::Client::stubbed(bus.clone(), crate::server_versions::SIZE_RULES).with_one_shot_timeout(std::time::Duration::from_millis(50));
+        let contract = Contract::stock("AAPL").build();
+
+        let error = client
+            .historical_ticks(&contract, 1000)
+            .between(START, END)
+            .mid_point()
+            .await
+            .expect_err("between succeeded");
+        // Drop spawns its cancel; give it the chance to run.
+        tokio::task::yield_now().await;
+
+        assert!(matches!(error.error, crate::Error::Timeout), "got {:?}", error.error);
+        assert_eq!(prices(&error.ticks), vec![7_100.375, 7_100.625]);
+        assert_eq!(error.from, Some(datetime!(2026-11-23 09:17:00 UTC)));
+        assert_request_ends(&bus, &contract, &[datetime!(2026-11-23 09:17:02 UTC), datetime!(2026-11-23 09:17:00 UTC)]);
+        assert_eq!(count_proto_msgs(&bus.request_messages(), OutgoingMessages::CancelHistoricalTicks), 1);
     }
 
     // Midpoints at 09:16:58 and twice at 09:16:59, the page before `page()`: complete from 09:16:59

@@ -69,8 +69,11 @@ impl<'a, C> HistoricalTicksBuilder<'a, C> {
     /// up to 1000). The terminals send requests until one reaches back to `start` or returns no
     /// ticks, and return the ticks oldest first in a [`TicksBetween`], which says which of the
     /// two ended the paging. A failed request returns a [`TicksBetweenError`] holding the ticks
-    /// fetched before it. [`limit`](HistoricalTicksBetweenBuilder::limit) keeps only the latest
-    /// ticks; [`latest`](Self::latest) pages with no start. Any [`starting`](Self::starting) or
+    /// fetched before it. Each request fails with [`Error::Timeout`] when TWS has not finished its
+    /// answer within the client's `one_shot_timeout`, and is then cancelled at TWS; without a
+    /// `one_shot_timeout`, each request waits without a limit.
+    /// [`limit`](HistoricalTicksBetweenBuilder::limit) keeps only the latest ticks;
+    /// [`latest`](Self::latest) pages with no start. Any [`starting`](Self::starting) or
     /// [`ending`](Self::ending) set before is ignored.
     ///
     /// # Examples
