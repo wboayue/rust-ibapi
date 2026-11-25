@@ -88,7 +88,7 @@ When in doubt, default to the lightest:
 
 1. **Are you testing a `Client` method that talks to TWS via the bus?** → `MessageBusStub`.
 2. **Are you testing the dispatcher, handshake, or disconnect?** → `MemoryStream`.
-3. **Are you testing `Client::connect*` itself or `AsyncSocket`?** → `spawn_handshake_listener`.
+3. **Are you testing `Client::connect*` itself or `AsyncSocket` over the TCP connector?** → `spawn_handshake_listener`.
 
 Going heavier than necessary adds threads, ports, or framing that doesn't earn its keep.
 

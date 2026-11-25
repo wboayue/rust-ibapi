@@ -152,7 +152,9 @@ jobs:
 
       - name: Build WASI example
         working-directory: examples/wasi
-        run: cargo clippy -- -D warnings
+        run: |
+          cargo clippy -- -D warnings
+          cargo build
 
   # Separate minimal job for basic checks that don't need feature matrix
   basic-checks:

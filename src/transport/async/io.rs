@@ -16,6 +16,7 @@ use log::warn;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{watch, Mutex, MutexGuard};
 
+use crate::connection::common::Endpoint;
 use crate::errors::Error;
 use crate::transport::common::validate_frame_length;
 use crate::transport::r#async::ShutdownSignal;
@@ -128,6 +129,22 @@ impl Connector {
     }
 }
 
+impl Endpoint {
+    /// The connector that reaches this endpoint. On wasm there is no built-in
+    /// TCP socket, so an `address` is refused.
+    pub(crate) fn into_connector(self) -> Result<Connector, Error> {
+        match self {
+            #[cfg(not(target_family = "wasm"))]
+            Self::Tcp { address, tcp_no_delay } => Ok(Connector::tcp(address, tcp_no_delay)),
+            #[cfg(target_family = "wasm")]
+            Self::Tcp { address, .. } => Err(Error::InvalidArgument(format!(
+                "ClientBuilder: no built-in TCP socket on wasm to reach {address}; open the stream yourself with `connector`"
+            ))),
+            Self::Stream(connector) => Ok(connector),
+        }
+    }
+}
+
 /// Production async stream over whatever byte stream its [`Connector`] opens:
 /// TCP by default, or a caller's (`ClientBuilder::connector`). Holds the split
 /// halves behind `Mutex` so reads and writes can run concurrently from the
@@ -201,6 +218,13 @@ impl AsyncSocket {
             return Err(err);
         }
         half.as_mut().ok_or(Error::Shutdown)
+    }
+
+    /// Resolves once the socket is closed.
+    async fn closed(&self) {
+        let mut rx = self.state.subscribe();
+        // `Err` is unreachable: `self` owns the sender.
+        let _ = rx.wait_for(|state| *state == SocketState::Closed).await;
     }
 
     /// Resolves once the socket is closed or a cut-off write breaks it, with
@@ -306,7 +330,14 @@ impl AsyncReconnect for AsyncSocket {
         if self.is_closed() {
             return Err(Error::Shutdown);
         }
-        let (new_reader, new_writer) = self.connector.connect().await?;
+        // A caller's connector has no OS connect timeout behind it: `close`
+        // must still end a connect that never resolves, or `disconnect` waits
+        // on the dispatcher forever.
+        let (new_reader, new_writer) = tokio::select! {
+            biased;
+            () = self.closed() => return Err(Error::Shutdown),
+            opened = self.connector.connect() => opened?,
+        };
         let (mut reader, mut writer) = self.lock_halves().await;
         if self.is_closed() {
             return Err(Error::Shutdown);

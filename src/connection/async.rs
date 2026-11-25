@@ -8,7 +8,7 @@ use tokio::sync::{broadcast, Mutex};
 
 use super::common::{
     parse_handshake_ack, parse_raw_message, require_protobuf_support, startup_stall_error, AccountInfo, ConnectionConfig, ConnectionHandler,
-    ConnectionProtocol, Endpoint, StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS, STARTUP_STALL,
+    ConnectionProtocol, StartupCallback, StartupHandshakeContext, MAX_ACCOUNT_INFO_ATTEMPTS, STARTUP_STALL,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -66,18 +66,7 @@ impl AsyncConnection<AsyncSocket> {
     /// allocates the broadcast channel before calling here. Persists across
     /// reconnects.
     pub(crate) async fn connect(config: ConnectionConfig, notice_sender: broadcast::Sender<Notice>) -> Result<Self, Error> {
-        let connector = match config.endpoint {
-            #[cfg(not(target_family = "wasm"))]
-            Endpoint::Tcp { address, tcp_no_delay } => crate::transport::r#async::Connector::tcp(address, tcp_no_delay),
-            #[cfg(target_family = "wasm")]
-            Endpoint::Tcp { address, .. } => {
-                return Err(Error::InvalidArgument(format!(
-                    "ClientBuilder: no built-in TCP socket on wasm to reach {address}; open the stream yourself with `connector`"
-                )))
-            }
-            Endpoint::Stream(connector) => connector,
-        };
-        let socket = AsyncSocket::connect(connector).await?;
+        let socket = AsyncSocket::connect(config.endpoint.into_connector()?).await?;
         let mut connection = Self::with_socket(socket, config.client_id, config.startup_callback, notice_sender);
         connection.max_reconnect_attempts = config.max_reconnect_attempts;
         connection.establish_connection().await?;

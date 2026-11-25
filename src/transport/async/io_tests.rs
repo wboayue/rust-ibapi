@@ -303,3 +303,37 @@ async fn caller_stream_rejects_an_invalid_frame_length() {
     let read = socket.read_message().await;
     assert!(matches!(read, Err(Error::InvalidFrame(_))), "got {read:?}");
 }
+
+/// A caller's connector that never resolves on reconnect cannot hold up
+/// `close`: the pending reconnect fails with `Shutdown`, so `disconnect`'s
+/// join of the dispatcher returns.
+#[tokio::test]
+async fn close_ends_a_reconnect_stuck_in_the_connector() {
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = Arc::clone(&calls);
+    let connector = Connector::from_stream(move || {
+        let first = counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
+        async move {
+            if !first {
+                std::future::pending::<()>().await;
+            }
+            Ok(tokio::io::duplex(1024).0)
+        }
+    });
+    let socket = Arc::new(AsyncSocket::connect(connector).await.unwrap());
+
+    let reconnecting = tokio::spawn({
+        let socket = Arc::clone(&socket);
+        async move { socket.reconnect().await }
+    });
+    while calls.load(std::sync::atomic::Ordering::SeqCst) < 2 {
+        tokio::task::yield_now().await;
+    }
+    socket.close().await;
+
+    let reconnected = tokio::time::timeout(Duration::from_secs(1), reconnecting)
+        .await
+        .expect("reconnect still stuck after close")
+        .unwrap();
+    assert!(matches!(reconnected, Err(Error::Shutdown)), "got {reconnected:?}");
+}

@@ -447,22 +447,24 @@ pub mod async_impl {
 
         /// Connect over a stream you open, in place of [`address`](Self::address).
         ///
-        /// `connect` opens one byte stream to TWS or IB Gateway: a TLS or SSH
+        /// `open` opens one byte stream to TWS or IB Gateway: a TLS or SSH
         /// tunnel, a proxy, or a socket on a target without tokio's `net`, such
         /// as WASI. The client calls it to connect and again on every
         /// reconnect. It speaks the TWS wire protocol over the stream as it
         /// does over its own TCP socket: framing, handshake, routing, frame
         /// validation and `IBAPI_RAW_CAPTURE_DIR` capture all apply.
         /// [`tcp_no_delay`](Self::tcp_no_delay) does not: set socket options in
-        /// `connect`.
+        /// `open`. Put a timeout inside `open` if the stream can stall while
+        /// opening; [`Client::disconnect`] still ends a reconnect stuck there.
         ///
         /// On wasm targets this is the only way to connect.
         ///
         /// # Errors
         ///
         /// [`Error::InvalidArgument`] from the terminal when
-        /// [`address`](Self::address) is also set. An error from `connect`
-        /// fails the connect, or counts as one failed reconnect attempt.
+        /// [`address`](Self::address) is also set. An error from `open` fails
+        /// [`connect`](Self::connect), or counts as one failed reconnect
+        /// attempt.
         ///
         /// # Examples
         ///
@@ -479,13 +481,13 @@ pub mod async_impl {
         /// drop(client);
         /// # Ok(()) }
         /// ```
-        pub fn connector<F, Fut, T>(mut self, connect: F) -> Self
+        pub fn connector<F, Fut, T>(mut self, open: F) -> Self
         where
             F: Fn() -> Fut + Send + Sync + 'static,
             Fut: Future<Output = std::io::Result<T>> + Send + 'static,
             T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
         {
-            self.state.connector = Some(Connector::from_stream(connect));
+            self.state.connector = Some(Connector::from_stream(open));
             self
         }
 
@@ -498,6 +500,7 @@ pub mod async_impl {
         /// A single request never notices; a burst of orders does, because each
         /// one queues behind the ACK of the one before. Pass `false` only if you
         /// want Nagle's coalescing back.
+        /// Ignored with [`connector`](Self::connector); set socket options there.
         ///
         /// # Examples
         ///
