@@ -18,6 +18,8 @@ fn utoipa_schemas_resolve() {
         ("OrderType", json(orders::OrderType::schema())),
         ("Action", json(orders::Action::schema())),
         ("WhatToShow", json(market_data::historical::WhatToShow::schema())),
+        ("realtime WhatToShow", json(market_data::realtime::WhatToShow::schema())),
+        ("BarSize", json(market_data::historical::BarSize::schema())),
     ] {
         assert_eq!(schema, string, "{name} schema");
     }

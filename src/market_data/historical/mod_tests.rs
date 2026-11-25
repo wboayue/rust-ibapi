@@ -1,58 +1,6 @@
 use super::*;
 
 #[test]
-fn bar_size_to_string() {
-    assert_eq!("1 secs", BarSize::Sec.to_string());
-    assert_eq!("5 secs", BarSize::Sec5.to_string());
-    assert_eq!("10 secs", BarSize::Sec10.to_string());
-    assert_eq!("15 secs", BarSize::Sec15.to_string());
-    assert_eq!("30 secs", BarSize::Sec30.to_string());
-    assert_eq!("1 min", BarSize::Min.to_string());
-    assert_eq!("2 mins", BarSize::Min2.to_string());
-    assert_eq!("3 mins", BarSize::Min3.to_string());
-    assert_eq!("4 mins", BarSize::Min4.to_string());
-    assert_eq!("5 mins", BarSize::Min5.to_string());
-    assert_eq!("10 mins", BarSize::Min10.to_string());
-    assert_eq!("15 mins", BarSize::Min15.to_string());
-    assert_eq!("20 mins", BarSize::Min20.to_string());
-    assert_eq!("30 mins", BarSize::Min30.to_string());
-    assert_eq!("1 hour", BarSize::Hour.to_string());
-    assert_eq!("2 hours", BarSize::Hour2.to_string());
-    assert_eq!("3 hours", BarSize::Hour3.to_string());
-    assert_eq!("4 hours", BarSize::Hour4.to_string());
-    assert_eq!("8 hours", BarSize::Hour8.to_string());
-    assert_eq!("1 day", BarSize::Day.to_string());
-    assert_eq!("1 week", BarSize::Week.to_string());
-    assert_eq!("1 month", BarSize::Month.to_string());
-}
-
-#[test]
-fn bar_size_parse() {
-    assert_eq!("SEC".parse::<BarSize>(), Ok(BarSize::Sec));
-    assert_eq!("SEC5".parse::<BarSize>(), Ok(BarSize::Sec5));
-    assert_eq!("SEC10".parse::<BarSize>(), Ok(BarSize::Sec10));
-    assert_eq!("SEC15".parse::<BarSize>(), Ok(BarSize::Sec15));
-    assert_eq!("SEC30".parse::<BarSize>(), Ok(BarSize::Sec30));
-    assert_eq!("MIN".parse::<BarSize>(), Ok(BarSize::Min));
-    assert_eq!("MIN2".parse::<BarSize>(), Ok(BarSize::Min2));
-    assert_eq!("MIN3".parse::<BarSize>(), Ok(BarSize::Min3));
-    assert_eq!("MIN4".parse::<BarSize>(), Ok(BarSize::Min4));
-    assert_eq!("MIN5".parse::<BarSize>(), Ok(BarSize::Min5));
-    assert_eq!("MIN10".parse::<BarSize>(), Ok(BarSize::Min10));
-    assert_eq!("MIN15".parse::<BarSize>(), Ok(BarSize::Min15));
-    assert_eq!("MIN20".parse::<BarSize>(), Ok(BarSize::Min20));
-    assert_eq!("MIN30".parse::<BarSize>(), Ok(BarSize::Min30));
-    assert_eq!("HOUR".parse::<BarSize>(), Ok(BarSize::Hour));
-    assert_eq!("HOUR2".parse::<BarSize>(), Ok(BarSize::Hour2));
-    assert_eq!("HOUR3".parse::<BarSize>(), Ok(BarSize::Hour3));
-    assert_eq!("HOUR4".parse::<BarSize>(), Ok(BarSize::Hour4));
-    assert_eq!("HOUR8".parse::<BarSize>(), Ok(BarSize::Hour8));
-    assert_eq!("DAY".parse::<BarSize>(), Ok(BarSize::Day));
-    assert_eq!("WEEK".parse::<BarSize>(), Ok(BarSize::Week));
-    assert_eq!("MONTH".parse::<BarSize>(), Ok(BarSize::Month));
-}
-
-#[test]
 fn what_to_show_to_string() {
     assert_eq!("TRADES", WhatToShow::Trades.to_string());
     assert_eq!("MIDPOINT", WhatToShow::MidPoint.to_string());
@@ -80,6 +28,97 @@ fn what_to_show_parse() {
     assert_eq!("FEE_RATE".parse::<WhatToShow>(), Ok(WhatToShow::FeeRate));
     assert_eq!("SCHEDULE".parse::<WhatToShow>(), Ok(WhatToShow::Schedule));
     assert_eq!("ADJUSTED_LAST".parse::<WhatToShow>(), Ok(WhatToShow::AdjustedLast));
+}
+
+/// `(variant, wire text, 5.x variant name)` for every variant, written independently of the
+/// `Display` and `FromStr` matches.
+const BAR_SIZES: [(BarSize, &str, &str); 22] = [
+    (BarSize::Sec, "1 secs", "Sec"),
+    (BarSize::Sec5, "5 secs", "Sec5"),
+    (BarSize::Sec10, "10 secs", "Sec10"),
+    (BarSize::Sec15, "15 secs", "Sec15"),
+    (BarSize::Sec30, "30 secs", "Sec30"),
+    (BarSize::Min, "1 min", "Min"),
+    (BarSize::Min2, "2 mins", "Min2"),
+    (BarSize::Min3, "3 mins", "Min3"),
+    (BarSize::Min4, "4 mins", "Min4"),
+    (BarSize::Min5, "5 mins", "Min5"),
+    (BarSize::Min10, "10 mins", "Min10"),
+    (BarSize::Min15, "15 mins", "Min15"),
+    (BarSize::Min20, "20 mins", "Min20"),
+    (BarSize::Min30, "30 mins", "Min30"),
+    (BarSize::Hour, "1 hour", "Hour"),
+    (BarSize::Hour2, "2 hours", "Hour2"),
+    (BarSize::Hour3, "3 hours", "Hour3"),
+    (BarSize::Hour4, "4 hours", "Hour4"),
+    (BarSize::Hour8, "8 hours", "Hour8"),
+    (BarSize::Day, "1 day", "Day"),
+    (BarSize::Week, "1 week", "Week"),
+    (BarSize::Month, "1 month", "Month"),
+];
+
+/// Exhaustive, so a new variant fails to compile here until it gets a `BAR_SIZES` row.
+fn bar_size_index(bar_size: BarSize) -> usize {
+    match bar_size {
+        BarSize::Sec => 0,
+        BarSize::Sec5 => 1,
+        BarSize::Sec10 => 2,
+        BarSize::Sec15 => 3,
+        BarSize::Sec30 => 4,
+        BarSize::Min => 5,
+        BarSize::Min2 => 6,
+        BarSize::Min3 => 7,
+        BarSize::Min4 => 8,
+        BarSize::Min5 => 9,
+        BarSize::Min10 => 10,
+        BarSize::Min15 => 11,
+        BarSize::Min20 => 12,
+        BarSize::Min30 => 13,
+        BarSize::Hour => 14,
+        BarSize::Hour2 => 15,
+        BarSize::Hour3 => 16,
+        BarSize::Hour4 => 17,
+        BarSize::Hour8 => 18,
+        BarSize::Day => 19,
+        BarSize::Week => 20,
+        BarSize::Month => 21,
+    }
+}
+
+#[test]
+fn bar_size_table_covers_every_variant() {
+    for (i, (bar_size, _, _)) in BAR_SIZES.iter().enumerate() {
+        assert_eq!(bar_size_index(*bar_size), i, "{bar_size:?} row out of place");
+    }
+}
+
+#[test]
+fn bar_size_round_trips_its_wire_text() {
+    use crate::common::test_utils::wire_enum::check_serde_form;
+
+    for (bar_size, wire, name) in BAR_SIZES {
+        assert_eq!(bar_size.to_string(), wire, "Display for {bar_size:?}");
+        assert_eq!(bar_size.to_field(), wire, "ToField for {bar_size:?}");
+        check_serde_form(&bar_size, serde_json::json!(wire));
+        // FromStr is case-insensitive on both the wire text and the 5.x variant name, so 5.x
+        // JSON (`"Min5"`) still loads.
+        for input in [
+            wire.to_string(),
+            wire.to_uppercase(),
+            name.to_string(),
+            name.to_uppercase(),
+            name.to_lowercase(),
+        ] {
+            assert_eq!(input.parse::<BarSize>(), Ok(bar_size), "FromStr({input})");
+        }
+        assert_eq!(
+            serde_json::from_value::<BarSize>(serde_json::json!(name)).unwrap(),
+            bar_size,
+            "5.x JSON {name}"
+        );
+    }
+    assert!("5 minutes".parse::<BarSize>().is_err());
+    assert!(serde_json::from_str::<BarSize>("\"\"").is_err());
 }
 
 #[test]

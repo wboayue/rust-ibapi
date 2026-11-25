@@ -145,7 +145,7 @@ macro_rules! impl_wire_enum {
 /// Deserialize goes through `FromStr`, and the utoipa schema is a string.
 /// `impl_wire_enum!` invokes it for every string-form enum it builds; an enum with
 /// hand-written `Display` / `FromStr` that round-trip the wire string
-/// (`WhatToShow`) invokes it directly.
+/// (historical `WhatToShow`, `BarSize`) invokes it directly.
 macro_rules! impl_wire_string_serde {
     ($name:ident) => {
         impl ::serde::Serialize for $name {
