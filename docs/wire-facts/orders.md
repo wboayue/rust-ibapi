@@ -224,6 +224,12 @@ Time"; four BTC (PAXOS) fills of 2026-11-15 at 15:37:22Z, 15:50:40Z, 15:53:03Z a
   use yyyymmdd-hh:mm:ss in UTC or use instrument time zone, like US/Eastern. Implied time
   zone functionality will be removed in the next API release") on the first such request of
   the connection and not on the second.
+- *Live 2026-11-24 Tue 19:30 ET, paper Gateway, server 226; 32 ES fills over 2026-11-18 to
+  2026-11-24, `last_n_days = 7`.* The client's `yyyymmdd hh:mm:ss UTC` form drew no 10314 and
+  cut at the instant: `20261124 15:00:00 UTC` returned the four fills from 15:05:05Z on, as
+  did 09:00 at −06:00 (the same instant, sent as UTC); `20261119 15:12:00 UTC` twenty, from
+  15:13:06Z on. `20261124 15:05:05 UTC` still returned the fill stamped 15:05:05Z, so the
+  cutoff is inclusive at whole-second precision (or the fill's sub-seconds fall after it).
 - **Not probed:** live (non-paper) accounts; a space-form zone suffix against an instrument
   in that zone other than US/Eastern (BTC); the dual-mode setting other than Instrument
   timezone, which both runs used for `time`, so whether "Operator timezone" or "UTC format"
