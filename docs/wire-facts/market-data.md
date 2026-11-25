@@ -185,9 +185,50 @@ server 223.*
   `expire` with a 10 s grace never fired.
 - Settles `historical::BarCompletion`: a bar is final when
   an update for it arrives after its end, or when an update for a later bar arrives.
-- **Not probed:** a session end (the last bar before a close or the FX daily break); RTH-only
-  requests; daily and longer bars; BID, ASK and other MIDPOINT contracts; a TRADES contract with
-  no trade for a whole bar.
+- **Not probed:** RTH-only requests; daily and longer bars; BID, ASK and other MIDPOINT
+  contracts. Session ends: see
+  [keep-up-to-date bars at session boundaries](#keep-up-to-date-bars-at-session-boundaries).
+
+### Keep-up-to-date bars at session boundaries
+
+*Live 2026-11-24 16:24-16:49 UTC (Xetra close), 21:41-22:35 UTC (FX daily break, CME close),
+paper TWS, server 223; 1-minute bars.*
+
+- **Xetra close, SAP SMART TRADES** (primary IBIS, continuous trading ends 16:30 UTC, closing
+  auction after it): updates kept coming every 5 seconds through the end of the run at 16:49,
+  because SMART includes German venues that trade until 21:00 UTC. The 16:30 to 16:33 bars
+  carried volume 0 and `barCount` 0 at the last price, updated 12 times each. The closing
+  auction reached the 16:35 bar at 16:35:25 as volume 1,053,001 with `barCount` 0; later
+  updates of that bar moved its open from 189.42 to 190.1.
+- The full-day historical request for the same contract afterwards returned the same zero-volume
+  bars (168 of 930 bars between 06:30 and 21:59 had volume 0: 16:30 to 16:33, 16:37 and 16:42 around
+  the close), so they are TWS's bars, not artifacts of the stream. Several carried a new price with
+  volume 0 (16:37: 190.08 after 189.94).
+- The last update of each streamed bar matched that bar in the later historical reply on open,
+  high, low, close and volume, for all 26 bars from 16:23 to 16:48. WAP matched to the three
+  decimals the historical reply sends, except the auction bar: streamed 189.4236, historical
+  190.1.
+- **FX daily break, EUR.USD MIDPOINT**: a stream opened at 22:01:57 got a batch ending with the
+  21:59 bar, then no update and no notice until 22:15:06, when the first update carried the
+  22:15 bar. No bar for 22:00 to 22:14 was ever sent, neither in the batch nor later. The stream
+  survived the break; `BarCompletion` completed the 22:15 bar at 22:16:00.8 from its last
+  update.
+- **Farm disconnect ends the stream**: at 21:56:59 notice 2105 "HMDS data farm connection is
+  broken:cashhmds" was followed on the EUR.USD stream (and on a second client's EUR.USD stream)
+  by error 10182 "Failed to request live updates (disconnected)." No update followed it. Reuse
+  the `BarCompletion` across the new subscription.
+- **No real-time permission, CME close**: ES and MES TRADES streams, with and without
+  `switch_market_data_type(Delayed)`, got a batch whose last bar was 10 to 11 minutes old
+  (21:35 at 21:46) and no update through the 22:00 close and the break. `BarCompletion::expire`
+  completed the batch's last bar one second after the batch.
+- **Historical service silent** (*2026-11-25 00:55-06:19 UTC, until a TWS restart*): every
+  historical request, keep-up-to-date or not, on 700 SEHK, the HSI future and EUR.USD, got no
+  batch, no update and no error, while `reqMktData` and realtime bars on the same connections
+  kept working. A stream gives no sign of this: it looks like a session break.
+  Contract-detail and completed-order requests went unanswered in the same stall.
+- **Not probed:** whether TWS sends a final update for the last bar before a break (the farm
+  disconnect ended the EUR.USD stream at 21:56, before the 22:00 break, and the historical
+  service was silent across the SEHK and HKFE lunch break); SEHK and HKFE closes.
 
 ### Historical bars for a continuous future take no end date
 

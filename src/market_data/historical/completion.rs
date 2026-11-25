@@ -41,6 +41,15 @@ pub enum StreamedBar {
 /// the last one before TWS stops sending, stays forming; [`expire`](BarCompletion::expire)
 /// completes it once the local clock is past its end plus a grace the caller chooses.
 ///
+/// At a session break TWS sends nothing until the next session's first bar and never sends bars
+/// for the break: a EUR.USD stream opened during the FX daily break got a batch ending with the
+/// 21:59 UTC bar, then nothing until the first update for 22:15 at 22:15:06 (live: 2026-11-24).
+/// Without [`expire`](BarCompletion::expire), the last bar before a break completes only when the
+/// next session starts.
+///
+/// Bars with volume 0 are TWS's own: they come in historical replies too, and some carry a new
+/// price. They are classified like any other bar.
+///
 /// Updates for a bar already completed are dropped. Reuse one `BarCompletion` across a
 /// resubscription: the new batch replays the bars already completed, and they are not
 /// repeated.
@@ -207,8 +216,9 @@ impl BarCompletion {
     /// at all for contracts without real-time permission (ES futures, DAX and ESTX50 indices)
     /// and for AAPL and NVDA overnight, so [`apply`](Self::apply) left the batch's last bar
     /// forming for good: for ES at 11:23 UTC, the 21:59 UTC bar of the day before
-    /// (2026-11-24, server 223). Whether TWS sends a final update for the last bar before a
-    /// session close is not probed.
+    /// (2026-11-24, server 223). The same holds at a session break: after a batch ending with
+    /// the 21:59 UTC EUR.USD bar, TWS sent nothing until the next session's first bar at 22:15.
+    /// Whether TWS sends a final update for the last bar before a break is not probed.
     ///
     /// The bar is completed with the last values received, which are final only if TWS sent
     /// its last update for the bar. TWS sent that update 0.3 to 2.6 s after a 1-minute bar ended,
