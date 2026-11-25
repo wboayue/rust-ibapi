@@ -1781,6 +1781,30 @@ pub enum Orders {
     OrderStatus(OrderStatus),
 }
 
+/// Which completed orders [`completed_orders`](crate::Client::completed_orders) returns.
+///
+/// Sent as TWS's `apiOnly` flag: `Yes` is `true`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ApiOnly {
+    /// Only orders placed through the API.
+    Yes,
+    /// Orders submitted from TWS as well as through the API.
+    No,
+}
+
+/// Whether [`auto_open_orders`](crate::Client::auto_open_orders) binds orders placed from TWS to this client.
+///
+/// Sent as TWS's `autoBind` flag: `Yes` is `true`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AutoBind {
+    /// Newly created orders are assigned an API order ID and implicitly associated with this client.
+    Yes,
+    /// Newly created orders are not bound to this client.
+    No,
+}
+
 /// Side filter on outbound execution requests. IBKR's wire vocabulary for
 /// `ExecutionFilter.side` is `"BUY"` / `"SELL"` only.
 ///

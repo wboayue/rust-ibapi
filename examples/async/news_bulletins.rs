@@ -1,5 +1,6 @@
 #![allow(clippy::uninlined_format_args)]
 use futures::StreamExt;
+use ibapi::news::AllMessages;
 use ibapi::subscriptions::SubscriptionItemStreamExt;
 use ibapi::Client;
 
@@ -12,9 +13,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("=== Subscribing to News Bulletins ===");
 
-    // Subscribe to all news bulletins (true) or just regular bulletins (false)
-    let all_messages = true;
-    let bulletins = client.news_bulletins(all_messages).await?;
+    // `Yes` also delivers the current day's existing bulletins; `No` only new ones
+    let bulletins = client.news_bulletins(AllMessages::Yes).await?;
 
     println!("Waiting for news bulletins... (Press Ctrl+C to stop)");
 

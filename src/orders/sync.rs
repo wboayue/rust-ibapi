@@ -4,8 +4,8 @@ use std::time::{Duration, Instant};
 use super::common::fill::{completed_status, lists_order, lookup_wait, FillTracker};
 use super::common::{decoders, encoders, verify};
 use super::{
-    CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderCancel, OrderOutcome, OrderStatus, OrderUpdate,
-    Orders, PlaceOrder,
+    ApiOnly, AutoBind, CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OrderBuilder, OrderCancel, OrderOutcome,
+    OrderStatus, OrderUpdate, Orders, PlaceOrder,
 };
 use crate::client::blocking::Subscription;
 use crate::common::request_helpers::{self, expect_proto};
@@ -67,16 +67,17 @@ impl Client {
     /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
     ///
     /// # Arguments
-    /// * `auto_bind` - if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
+    /// * `auto_bind` - [`AutoBind::Yes`] assigns newly created orders an API order ID and implicitly associates them with this client; with [`AutoBind::No`] future orders are not bound.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
+    /// use ibapi::orders::AutoBind;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 0).expect("connection failed");
     ///
-    /// let subscription = client.auto_open_orders(false).expect("request failed");
+    /// let subscription = client.auto_open_orders(AutoBind::No).expect("request failed");
     /// for order_data in subscription.iter_data() {
     ///     match order_data {
     ///         Ok(order_data) => println!("{order_data:?}"),
@@ -84,7 +85,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
+    pub fn auto_open_orders(&self, auto_bind: AutoBind) -> Result<Subscription<Orders>, Error> {
         let request = encoders::encode_auto_open_orders(auto_bind)?;
         let subscription = self.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request)?;
 
@@ -187,16 +188,17 @@ impl Client {
     /// ordered: `0` for a filled order. The size ordered is `total_quantity + filled_quantity`.
     ///
     /// # Arguments
-    /// * `api_only` - request only orders placed by the API.
+    /// * `api_only` - [`ApiOnly::Yes`] for only orders placed through the API, [`ApiOnly::No`] for orders submitted from TWS as well.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
+    /// use ibapi::orders::ApiOnly;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let subscription = client.completed_orders(false).expect("request failed");
+    /// let subscription = client.completed_orders(ApiOnly::No).expect("request failed");
     /// for order_data in subscription.iter_data() {
     ///     match order_data {
     ///         Ok(order_data) => println!("{order_data:?}"),
@@ -204,7 +206,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
+    pub fn completed_orders(&self, api_only: ApiOnly) -> Result<Subscription<Orders>, Error> {
         let request = encoders::encode_completed_orders(api_only)?;
         let subscription = self.send_shared_request(OutgoingMessages::RequestCompletedOrders, request)?;
 
@@ -635,7 +637,7 @@ impl Client {
     /// cases, rebuild state from snapshots:
     ///
     /// 1. [`Self::all_open_orders`]: every open order and its status.
-    /// 2. [`Self::completed_orders`]`(false)`: orders that filled or were
+    /// 2. [`Self::completed_orders`]`(ApiOnly::No)`: orders that filled or were
     ///    cancelled during the gap.
     /// 3. [`Self::executions`] with a default [`ExecutionFilter`]: fills and
     ///    their commissions. The default covers the current day only; set
@@ -806,7 +808,7 @@ impl Client {
         if lists_order(&open, order_id) {
             return Ok(None);
         }
-        let Ok(completed) = read(self.completed_orders(false)?) else {
+        let Ok(completed) = read(self.completed_orders(ApiOnly::No)?) else {
             return Ok(None);
         };
         Ok(completed_status(&completed, self.client_id(), order_id))

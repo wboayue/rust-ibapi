@@ -1053,7 +1053,40 @@ UTC, so it parses with
 As before, `time` filters within the days the filter covers and never extends them
 ([wire facts](wire-facts/orders.md#executiontime-rendering)).
 
-### 45. `ComboLeg::short_sale_slot` and `Order::delta_neutral_short_sale_slot` are `ShortSaleSlot`
+### 45. `completed_orders`, `auto_open_orders` and `news_bulletins` take an enum, not a `bool`
+
+The last three `bool` flags on `Client` methods are two-variant enums, as `LedgerOnly` (§16),
+`SmartDepth` and `IgnoreSize` already are, so the call site says what the flag selects:
+
+| Method (sync and async) | 5.x | 6.0 |
+|---|---|---|
+| `completed_orders` | `api_only: bool` | `api_only: orders::ApiOnly` |
+| `auto_open_orders` | `auto_bind: bool` | `auto_bind: orders::AutoBind` |
+| `news_bulletins` | `all_messages: bool` | `all_messages: news::AllMessages` |
+
+`Yes` is the old `true` and `No` the old `false`. None of the three has a `Default`. `ApiOnly`
+and `AutoBind` are in the prelude; `AllMessages` is imported from `ibapi::news`.
+
+```rust,ignore
+use ibapi::news::AllMessages;
+use ibapi::orders::{ApiOnly, AutoBind};
+
+// client: ibapi::client::blocking::Client (the async calls add `.await`)
+
+// 5.x
+let completed = client.completed_orders(true)?;
+let orders = client.auto_open_orders(false)?;
+let bulletins = client.news_bulletins(true)?;
+
+// 6.0
+let completed = client.completed_orders(ApiOnly::Yes)?;   // only orders placed through the API
+let orders = client.auto_open_orders(AutoBind::No)?;      // new TWS orders are not bound to this client
+let bulletins = client.news_bulletins(AllMessages::Yes)?; // all the existing bulletins for the current day
+```
+
+The compiler reports every call. Nothing changes on the wire or at runtime.
+
+### 46. `ComboLeg::short_sale_slot` and `Order::delta_neutral_short_sale_slot` are `ShortSaleSlot`
 
 Both were `i32` codes (`1` clearing broker, `2` third party) beside `Order::short_sale_slot`,
 which is an `orders::ShortSaleSlot`. All three now hold the enum. A code the crate doesn't
