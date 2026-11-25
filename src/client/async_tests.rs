@@ -141,17 +141,18 @@ async fn raw_capture_env_var_records_framed_wire_bytes() {
         let client = Client::connect(&addr.to_string(), 100).await.expect("Client::connect");
         assert_eq!(client.server_version(), SERVER_VERSION);
 
-        let capture = test_support::frames(dir.path());
-        // Anything past the handshake races the dispatcher task, so this asserts
-        // a prefix of the capture rather than the whole of it.
+        // The env var is process-wide, so a client another test connects meanwhile can add its own
+        // segment; look for this connection's. The handshake response is the first thing off the
+        // socket, prefix and all. Anything after it races the dispatcher, so this asserts a prefix
+        // of the segment rather than the whole of it.
+        let segments = test_support::segment_frames(dir.path());
+        let handshake = encode_raw_length(&frames[0]);
         assert!(
-            capture.starts_with(&encode_raw_length(&frames[0])),
-            "capture must begin with the framed handshake response, got {:?}",
-            &capture[..capture.len().min(32)]
-        );
-        assert!(
-            capture.windows(frames[1].len()).any(|window| window == frames[1]),
-            "capture must contain the next-valid-id frame"
+            segments
+                .iter()
+                .any(|capture| capture.starts_with(&handshake) && capture.windows(frames[1].len()).any(|window| window == frames[1])),
+            "a segment must begin with the framed handshake response and contain the next-valid-id frame, got {:?}",
+            segments.iter().map(|s| &s[..s.len().min(32)]).collect::<Vec<_>>()
         );
     })
     .await;
