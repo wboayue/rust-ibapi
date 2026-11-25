@@ -120,6 +120,40 @@ jobs:
       - name: Check library
         run: cargo +1.88 check -p ibapi --lib ${{ matrix.flags }}
 
+  # The async client on WASI: no tokio `net`, so a stray TCP use outside the
+  # wasm gate breaks this build. The example connects through `connector`.
+  wasm:
+    runs-on: ubuntu-latest
+    name: wasm32-wasip2
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          targets: wasm32-wasip2
+          components: clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+          workspaces: |
+            .
+            examples/wasi
+
+      - name: Clippy, async only
+        run: cargo clippy --lib --target wasm32-wasip2 --no-default-features --features async -- -D warnings
+
+      - name: Clippy, all features
+        run: cargo clippy --lib --target wasm32-wasip2 --all-features -- -D warnings
+
+      - name: Build WASI example
+        working-directory: examples/wasi
+        run: cargo clippy -- -D warnings
+
   # Separate minimal job for basic checks that don't need feature matrix
   basic-checks:
     runs-on: ubuntu-latest

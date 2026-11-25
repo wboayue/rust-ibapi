@@ -46,6 +46,8 @@ default = ["async"]
 ## Async (tokio-based) client. When enabled alone, the async API is exposed as
 ## `client::Client`. When combined with `sync`, the async client remains at
 ## `client::Client` and the blocking client moves to `client::blocking::Client`.
+## On wasm targets it has no built-in TCP socket: connect over a stream you
+## open with `ClientBuilder::connector`.
 async = ["dep:tokio", "dep:tokio-stream", "dep:futures", "dep:async-trait"]
 
 ## Synchronous, blocking client backed by `crossbeam` channels. When enabled
@@ -79,10 +81,16 @@ prost = "0.14"
 utoipa6 = { package = "utoipa", version = "6", optional = true, features = ["time"] }
 
 # Async dependencies
-tokio = { version = "1.41", features = ["net", "rt-multi-thread", "sync", "time", "macros", "io-util"], optional = true }
+tokio = { version = "1.41", features = ["rt", "sync", "time", "macros", "io-util"], optional = true }
 tokio-stream = { version = "0.1", default-features = false, features = ["sync"], optional = true }
 futures = { version = "0.3.31", optional = true }
 async-trait = { version = "0.1.83", optional = true }
+
+# The async client's built-in TCP socket. Left out on wasm, where tokio's `net`
+# and `rt-multi-thread` are unavailable; connect with `ClientBuilder::connector`
+# there.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+tokio = { version = "1.41", features = ["net", "rt-multi-thread"], optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.92"

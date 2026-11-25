@@ -65,6 +65,14 @@ cargo test --all-features
 
 Apply the same pattern to `cargo clippy` and other verification commands.
 
+## WASI
+
+The async client builds for `wasm32-wasip2`. tokio's `net` and `rt-multi-thread` are unavailable there, so `Cargo.toml` enables them only off wasm, and the client has no built-in TCP socket: open the stream with `ClientBuilder::connector` and run on a current-thread runtime. `examples/wasi` is a standalone crate that does this with tokio's `TcpStream` under `--cfg tokio_unstable`; CI's `wasm32-wasip2` job builds it.
+
+```bash
+cargo clippy --lib --target wasm32-wasip2 --no-default-features --features async -- -D warnings
+```
+
 ## Key Differences
 
 ### Sync Mode

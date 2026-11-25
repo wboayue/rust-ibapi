@@ -37,7 +37,7 @@
 
 use std::time::Duration;
 
-use crate::connection::common::{ConnectionConfig, StartupCallback};
+use crate::connection::common::{ConnectionConfig, Endpoint, StartupCallback};
 use crate::errors::Error;
 use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 use crate::transport::rate_limiter::RateLimiter;
@@ -49,6 +49,9 @@ use crate::transport::rate_limiter::RateLimiter;
 /// extract the checked [`ClientConfig`].
 pub(super) struct BuilderState {
     pub(super) address: Option<String>,
+    /// Set by the async builder's `connector`, in place of `address`.
+    #[cfg(feature = "async")]
+    pub(super) connector: Option<crate::transport::r#async::Connector>,
     pub(super) client_id: Option<i32>,
     pub(super) tcp_no_delay: bool,
     pub(super) startup_callback: Option<StartupCallback>,
@@ -64,6 +67,8 @@ impl Default for BuilderState {
     fn default() -> Self {
         Self {
             address: None,
+            #[cfg(feature = "async")]
+            connector: None,
             client_id: None,
             tcp_no_delay: true,
             startup_callback: None,
@@ -83,7 +88,7 @@ pub(crate) struct ClientConfig {
 }
 
 impl BuilderState {
-    pub(super) fn validate(self) -> Result<ClientConfig, Error> {
+    pub(super) fn validate(mut self) -> Result<ClientConfig, Error> {
         if self.rate_limiter.as_ref().is_some_and(|limiter| limiter.messages_per_second() == 0) {
             return Err(Error::InvalidArgument(
                 "ClientBuilder: rate_limiter must allow at least 1 message per second".into(),
@@ -92,20 +97,37 @@ impl BuilderState {
         if self.one_shot_timeout == Some(Duration::ZERO) {
             return Err(Error::InvalidArgument("ClientBuilder: one_shot_timeout must be longer than zero".into()));
         }
+        let endpoint = self.endpoint()?;
         Ok(ClientConfig {
             connection: ConnectionConfig {
-                address: self
-                    .address
-                    .ok_or_else(|| Error::InvalidArgument("ClientBuilder: address is required".into()))?,
+                endpoint,
                 client_id: self
                     .client_id
                     .ok_or_else(|| Error::InvalidArgument("ClientBuilder: client_id is required".into()))?,
-                tcp_no_delay: self.tcp_no_delay,
                 startup_callback: self.startup_callback,
                 max_reconnect_attempts: self.max_reconnect_attempts,
             },
             rate_limiter: self.rate_limiter,
             one_shot_timeout: self.one_shot_timeout,
+        })
+    }
+
+    /// Exactly one of `address` and `connector`.
+    fn endpoint(&mut self) -> Result<Endpoint, Error> {
+        #[cfg(feature = "async")]
+        if let Some(connector) = self.connector.take() {
+            if self.address.is_some() {
+                return Err(Error::InvalidArgument("ClientBuilder: set address or connector, not both".into()));
+            }
+            return Ok(Endpoint::Stream(connector));
+        }
+        let address = self
+            .address
+            .take()
+            .ok_or_else(|| Error::InvalidArgument("ClientBuilder: address is required".into()))?;
+        Ok(Endpoint::Tcp {
+            address,
+            tcp_no_delay: self.tcp_no_delay,
         })
     }
 }
@@ -361,9 +383,11 @@ pub mod sync_impl {
 pub mod async_impl {
     //! Async `ClientBuilder` for the tokio-backed transport.
 
+    use std::future::Future;
     use std::sync::Arc;
     use std::time::Duration;
 
+    use tokio::io::{AsyncRead, AsyncWrite};
     use tokio::sync::broadcast;
 
     use super::BuilderState;
@@ -372,14 +396,15 @@ pub mod async_impl {
     use crate::errors::Error;
     use crate::messages::Notice;
     use crate::subscriptions::notice_stream::async_impl::NoticeStream;
-    use crate::transport::r#async::BROADCAST_CHANNEL_CAPACITY;
+    use crate::transport::r#async::{Connector, BROADCAST_CHANNEL_CAPACITY};
     use crate::transport::rate_limiter::RateLimiter;
 
     /// Builder for an async [`Client`]. Acquire via
     /// [`Client::builder`](crate::Client::builder).
     ///
-    /// Configurators (`address`, `client_id`, `tcp_no_delay`, `startup_callback`)
-    /// chain on `self`. Terminate with [`connect`](Self::connect) or
+    /// Configurators (`address` or `connector`, `client_id`, `tcp_no_delay`,
+    /// `startup_callback`) chain on `self`. Terminate with
+    /// [`connect`](Self::connect) or
     /// [`connect_with_notice_stream`](Self::connect_with_notice_stream).
     #[derive(Default)]
     #[must_use = "ClientBuilder does nothing until you call connect() or connect_with_notice_stream()"]
@@ -389,7 +414,8 @@ pub mod async_impl {
     }
 
     impl ClientBuilder {
-        /// TWS / IB Gateway address, e.g. `"127.0.0.1:4002"`. Required.
+        /// TWS / IB Gateway address, e.g. `"127.0.0.1:4002"`. Required unless
+        /// [`connector`](Self::connector) opens the stream instead.
         ///
         /// # Examples
         ///
@@ -416,6 +442,50 @@ pub mod async_impl {
         /// ```
         pub fn client_id(mut self, id: i32) -> Self {
             self.state.client_id = Some(id);
+            self
+        }
+
+        /// Connect over a stream you open, in place of [`address`](Self::address).
+        ///
+        /// `connect` opens one byte stream to TWS or IB Gateway: a TLS or SSH
+        /// tunnel, a proxy, or a socket on a target without tokio's `net`, such
+        /// as WASI. The client calls it to connect and again on every
+        /// reconnect. It speaks the TWS wire protocol over the stream as it
+        /// does over its own TCP socket: framing, handshake, routing, frame
+        /// validation and `IBAPI_RAW_CAPTURE_DIR` capture all apply.
+        /// [`tcp_no_delay`](Self::tcp_no_delay) does not: set socket options in
+        /// `connect`.
+        ///
+        /// On wasm targets this is the only way to connect.
+        ///
+        /// # Errors
+        ///
+        /// [`Error::InvalidArgument`] from the terminal when
+        /// [`address`](Self::address) is also set. An error from `connect`
+        /// fails the connect, or counts as one failed reconnect attempt.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// # async fn run() -> Result<(), ibapi::Error> {
+        /// use ibapi::Client;
+        /// use tokio::net::TcpStream;
+        ///
+        /// let client = Client::builder()
+        ///     .connector(|| TcpStream::connect("127.0.0.1:4002"))
+        ///     .client_id(100)
+        ///     .connect()
+        ///     .await?;
+        /// drop(client);
+        /// # Ok(()) }
+        /// ```
+        pub fn connector<F, Fut, T>(mut self, connect: F) -> Self
+        where
+            F: Fn() -> Fut + Send + Sync + 'static,
+            Fut: Future<Output = std::io::Result<T>> + Send + 'static,
+            T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        {
+            self.state.connector = Some(Connector::from_stream(connect));
             self
         }
 

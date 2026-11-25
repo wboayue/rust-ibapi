@@ -110,8 +110,25 @@ async fn connect_handshakes_against_real_socket() {
     assert_eq!(client.next_order_id(), 9000);
 }
 
+/// The builder's `connector` reaches the handshake over the caller's stream,
+/// with no `address`.
+#[tokio::test]
+async fn connector_handshakes_over_caller_stream() {
+    let (addr, _h) = spawn_handshake_listener(default_handshake_frames()).await;
+
+    let client = Client::builder()
+        .connector(move || tokio::net::TcpStream::connect(addr))
+        .client_id(100)
+        .connect()
+        .await
+        .expect("connect over connector");
+
+    assert_eq!(client.server_version(), SERVER_VERSION);
+    assert_eq!(client.handshake_managed_accounts(), [TEST_ACCOUNT]);
+}
+
 /// Async twin of `client::sync_tests::raw_capture_env_var_records_framed_wire_bytes`.
-/// `AsyncTcpSocket` builds its own tap, so the blocking test says nothing about
+/// `AsyncSocket` builds its own tap, so the blocking test says nothing about
 /// this path.
 #[tokio::test]
 #[serial]

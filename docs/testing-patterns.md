@@ -8,7 +8,7 @@ This document describes the test-fixture strategy for the rust-ibapi crate. Test
 | --- | --- | --- | --- |
 | `MessageBusStub` | Domain logic | `src/stubs.rs` | Testing methods on `Client` (e.g. `realtime_bars`, `place_order`) — verify request encoding and response decoding through the `MessageBus` / `AsyncMessageBus` trait. Skips the dispatcher and framing entirely. |
 | `MemoryStream` | Transport / connection | `src/transport/sync/memory.rs`, `src/transport/async/memory.rs` | Testing the dispatcher (routing, cancel coalescing, EOF handling) or the handshake (`establish_connection`, disconnect, reconnect). Implements the `Stream` / `AsyncStream` trait so it slots into `Connection<S>` / `AsyncConnection<S>` directly. |
-| `spawn_handshake_listener` | Production TCP entry points | `src/transport/sync/test_listener.rs`, `src/transport/async/test_listener.rs` | Testing `Client::connect*` and `AsyncTcpSocket::*` — the production-only seam that does `TcpStream::connect(addr)`. One-shot listener bound to `127.0.0.1:0`. |
+| `spawn_handshake_listener` | Production TCP entry points | `src/transport/sync/test_listener.rs`, `src/transport/async/test_listener.rs` | Testing `Client::connect*` and `AsyncSocket::*` over the built-in TCP connector — the production-only seam that does `TcpStream::connect(addr)`. One-shot listener bound to `127.0.0.1:0`. An `AsyncSocket` over a caller's `Connector` needs no socket: `io_tests.rs` drives one over `tokio::io::duplex`. |
 
 ## Pattern 1: `MessageBusStub` for domain tests
 
@@ -80,7 +80,7 @@ fn connect_handshakes_against_real_socket() {
 }
 ```
 
-This is *not* a re-implementation of MockGateway — it has no per-API-call interaction surface. It exists only because `Client::connect`, `Client::builder()...connect()`, and the underlying `TcpSocket::connect` / `AsyncTcpSocket::connect` cannot otherwise be exercised without a real socket.
+This is *not* a re-implementation of MockGateway — it has no per-API-call interaction surface. It exists only because `Client::connect`, `Client::builder()...connect()`, and the underlying `TcpSocket::connect` / `AsyncSocket::connect` with the TCP connector cannot otherwise be exercised without a real socket.
 
 ## Picking the right fixture
 
@@ -88,7 +88,7 @@ When in doubt, default to the lightest:
 
 1. **Are you testing a `Client` method that talks to TWS via the bus?** → `MessageBusStub`.
 2. **Are you testing the dispatcher, handshake, or disconnect?** → `MemoryStream`.
-3. **Are you testing `Client::connect*` itself or `AsyncTcpSocket`?** → `spawn_handshake_listener`.
+3. **Are you testing `Client::connect*` itself or `AsyncSocket`?** → `spawn_handshake_listener`.
 
 Going heavier than necessary adds threads, ports, or framing that doesn't earn its keep.
 
