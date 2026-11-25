@@ -198,10 +198,45 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   date, time, or time-zone entered is invalid") and no fills. The 10314 text itself says "If
   no time-zone is specified, local time-zone is assumed(deprecated)" and "yyyymmddd-hh:mm:ss
   time is in UTC".
-- **Not probed:** live (non-paper) accounts; instruments other than a CME future, so one
-  instrument zone; an operator zone that differs from UTC on the day (London and UTC
-  coincide in November), so whether `specific_dates` and the zone-less `time` filter read
-  UTC or the operator zone; TWS as opposed to the Gateway.
+
+*Live 2026-11-16 Mon 09:18 ET, paper Gateway, server 226, handshake zone "Greenwich Mean
+Time"; four BTC (PAXOS) fills of 2026-11-15 at 15:37:22Z, 15:50:40Z, 15:53:03Z and 15:53:23Z,
+`Execution.time` rendered in US/Eastern; #1255.*
+
+- `ExecutionFilter::time` zone suffix, each string naming 15:52 on 2026-11-15 in its zone,
+  with `last_n_days = 2`: `"20261115 15:52:00 UTC"` and `"20261115 15:52:00
+  Europe/London"` returned the two fills after 15:52Z, as did `"20261115-15:52:00"` and the
+  zone-less `"20261115 15:52:00"`. `GMT`, `Etc/UTC`, `Europe/Paris`, `US/Eastern`,
+  `America/New_York`, `US/Central`, `America/Chicago`, `US/Pacific`, `Asia/Tokyo` and `EST` each
+  drew 10314 and no fills, as did `"20261115-15:52:00 UTC"`; a rejection settles those strings
+  whatever instant each named. So the accepted zones were `UTC` and `Europe/London`: the
+  login zone of the 2026-11-11 run, and the zone the handshake's "Greenwich Mean Time" most
+  likely names (Java uses that display name for both `GMT` and `Europe/London`, and `GMT`
+  itself was rejected). Which of the two decides was not probed.
+  The instrument's zone was rejected, although the 10314 text gives `20031126 15:59:00
+  US/Eastern` as its example.
+- `time` does not reach past the days the filter covers (see
+  [Executions: `last_n_days` and `specific_dates`](#executions-last_n_days-and-specific_dates)).
+  With `last_n_days = 0` the four accepted forms above returned nothing (the fills were a day
+  old); the same strings with `last_n_days = 2` returned the two fills. Controls: default filter
+  none, `last_n_days = 2` four, `last_n_days = 7` fourteen.
+- The zone-less form drew warning 2174 ("... without explicit time zone. Please switch to
+  use yyyymmdd-hh:mm:ss in UTC or use instrument time zone, like US/Eastern. Implied time
+  zone functionality will be removed in the next API release") on the first such request of
+  the connection and not on the second.
+- *Live 2026-11-24 Tue 19:30 ET, paper Gateway, server 226; 32 ES fills over 2026-11-18 to
+  2026-11-24, `last_n_days = 7`.* The client's `yyyymmdd hh:mm:ss UTC` form drew no 10314 and
+  cut at the instant: `20261124 15:00:00 UTC` returned the four fills from 15:05:05Z on, as
+  did 09:00 at −06:00 (the same instant, sent as UTC); `20261119 15:12:00 UTC` twenty, from
+  15:13:06Z on. `20261124 15:05:05 UTC` still returned the fill stamped 15:05:05Z, so the
+  cutoff is inclusive at whole-second precision (or the fill's sub-seconds fall after it).
+- **Not probed:** live (non-paper) accounts; a space-form zone suffix against an instrument
+  in that zone other than US/Eastern (BTC); the dual-mode setting other than Instrument
+  timezone, which both runs used for `time`, so whether "Operator timezone" or "UTC format"
+  changes the accepted zones; a Gateway running in a zone other than London's, so whether
+  the accepted zone follows the Gateway and whether `specific_dates` and the zone-less
+  `time` filter read UTC or the operator zone (London and UTC coincide in November); `time`
+  together with `specific_dates`; TWS as opposed to the Gateway.
 
 ### `exercise_options` account
 

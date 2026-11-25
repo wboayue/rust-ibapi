@@ -6,6 +6,7 @@ use crate::orders::{ExecutionFilter, ExerciseAction, Order, OrderCancel, OrderCo
 use crate::proto;
 use crate::proto::encoders::{some_bool, some_display, some_f64_ne, some_i32_ne, some_i64_ne, some_str, tag_values_to_map};
 use crate::Error;
+use crate::ToField;
 
 pub(crate) fn encode_place_order(order_id: i32, contract: &Contract, order: &Order) -> Result<Vec<u8>, Error> {
     use prost::Message;
@@ -110,14 +111,6 @@ pub(crate) fn encode_exercise_options(
     professional_customer: bool,
 ) -> Result<Vec<u8>, Error> {
     use prost::Message;
-    use time::macros::format_description;
-    use time_tz::OffsetDateTimeExt;
-
-    let manual_order_time_str = manual_order_time.map(|dt| {
-        let adjusted = dt.to_timezone(time_tz::timezones::db::UTC);
-        let fmt = format_description!("[year][month][day] [hour]:[minute]:[second]");
-        format!("{} UTC", adjusted.format(fmt).unwrap())
-    });
 
     let request = crate::proto::ExerciseOptionsRequest {
         order_id: Some(order_id),
@@ -126,7 +119,7 @@ pub(crate) fn encode_exercise_options(
         exercise_quantity: Some(exercise_quantity),
         account: some_str(account),
         r#override: some_bool(ovrd),
-        manual_order_time: manual_order_time_str,
+        manual_order_time: manual_order_time.as_ref().map(ToField::to_field),
         customer_account: some_str(customer_account),
         professional_customer: some_bool(professional_customer),
     };
@@ -380,7 +373,7 @@ pub(crate) fn encode_execution_filter(filter: &ExecutionFilter) -> proto::Execut
     proto::ExecutionFilter {
         client_id: filter.client_id,
         acct_code: some_str(&filter.account_code),
-        time: some_str(&filter.time),
+        time: filter.time.as_ref().map(ToField::to_field),
         symbol: some_str(&filter.symbol),
         sec_type: some_str(&filter.security_type),
         exchange: some_str(&filter.exchange),
