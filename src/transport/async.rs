@@ -12,7 +12,7 @@ pub(crate) use io::read_framed_message;
 /// The stream traits, for test fixtures that stand in for a socket.
 #[cfg(test)]
 pub(crate) use io::{AsyncIo, AsyncReconnect};
-pub(crate) use io::{AsyncStream, AsyncTcpSocket};
+pub(crate) use io::{AsyncSocket, AsyncStream, Connector};
 use registry::{Route, SenderHash, SharedChannels};
 pub(crate) use shutdown::ShutdownSignal;
 
@@ -488,7 +488,7 @@ impl Drop for AsyncInternalSubscription {
 }
 
 /// Asynchronous TCP message bus implementation
-pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
+pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncSocket> {
     connection: Arc<AsyncConnection<S>>,
     requests: Arc<SenderHash<RequestId>>,
     orders: Arc<SenderHash<OrderId>>,

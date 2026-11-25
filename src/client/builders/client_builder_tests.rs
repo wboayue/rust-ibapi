@@ -138,6 +138,7 @@ mod sync_tests {
 mod async_tests {
     use super::super::async_impl::ClientBuilder;
     use super::assert_invalid_argument;
+    use crate::connection::common::Endpoint;
 
     #[tokio::test]
     async fn connect_without_address_returns_invalid_argument() {
@@ -149,6 +150,26 @@ mod async_tests {
     async fn connect_without_client_id_returns_invalid_argument() {
         let result = ClientBuilder::default().address("127.0.0.1:4002").connect().await;
         assert_invalid_argument(result.err(), "client_id");
+    }
+
+    #[tokio::test]
+    async fn connect_with_address_and_connector_returns_invalid_argument() {
+        let result = ClientBuilder::default()
+            .address("127.0.0.1:4002")
+            .connector(|| tokio::net::TcpStream::connect("127.0.0.1:4002"))
+            .client_id(100)
+            .connect()
+            .await;
+        assert_invalid_argument(result.err(), "not both");
+    }
+
+    #[test]
+    fn connector_stands_in_for_address() {
+        let builder = ClientBuilder::default()
+            .connector(|| tokio::net::TcpStream::connect("127.0.0.1:4002"))
+            .client_id(100);
+        let config = builder.state.validate().expect("validate");
+        assert!(matches!(config.connection.endpoint, Endpoint::Stream(_)));
     }
 
     #[tokio::test]

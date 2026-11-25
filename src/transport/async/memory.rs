@@ -67,7 +67,7 @@ impl MemoryStream {
     }
 
     /// Signal EOF. Subsequent `read_message` calls return `Error::Io(UnexpectedEof)`,
-    /// matching `AsyncTcpSocket::read_message`'s behavior on a closed peer.
+    /// matching `AsyncSocket::read_message`'s behavior on a closed peer.
     pub fn hang_up(&self) {
         self.inner.lock().unwrap().hung_up = true;
         self.notify.notify_waiters();

@@ -1,0 +1,14 @@
+# Standalone: built for wasm32-wasip2 (see .cargo/config.toml), so it sits
+# outside the ibapi workspace and its native builds.
+[package]
+name = "ibapi-wasi-example"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ibapi = { path = "../..", default-features = false, features = ["async"] }
+# `net` on WASI needs `--cfg tokio_unstable`, set in .cargo/config.toml.
+tokio = { version = "1.41", features = ["rt", "macros", "net", "time"] }
+
+[workspace]
