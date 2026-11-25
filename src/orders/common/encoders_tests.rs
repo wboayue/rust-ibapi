@@ -296,7 +296,7 @@ fn encode_execution_filter_works() {
     let filter = orders::ExecutionFilter {
         client_id: Some(1),
         account_code: "DU123".to_string(),
-        time: "20240101 00:00:00".to_string(),
+        time: Some(time::macros::datetime!(2024-01-01 9:30:15.75 -5)),
         symbol: "AAPL".to_string(),
         security_type: "STK".to_string(),
         exchange: "SMART".to_string(),
@@ -308,10 +308,18 @@ fn encode_execution_filter_works() {
     let proto = encode_execution_filter(&filter);
     assert_eq!(proto.client_id, Some(1));
     assert_eq!(proto.acct_code.as_deref(), Some("DU123"));
+    // Converted to UTC, sub-seconds dropped, `UTC` suffix: the zone form TWS accepts.
+    assert_eq!(proto.time.as_deref(), Some("20240101 14:30:15 UTC"));
     assert_eq!(proto.symbol.as_deref(), Some("AAPL"));
     assert_eq!(proto.side.as_deref(), Some("BUY"));
     assert_eq!(proto.last_n_days, Some(5));
     assert_eq!(proto.specific_dates, vec![20240101, 20261130]);
+}
+
+#[test]
+fn encode_execution_filter_default_sends_no_filters() {
+    let proto = encode_execution_filter(&orders::ExecutionFilter::default());
+    assert_eq!(proto, proto::ExecutionFilter::default());
 }
 
 fn preset_legs(stop_loss: Option<i32>, profit_taker: Option<i32>) -> Order {

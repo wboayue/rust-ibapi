@@ -1908,11 +1908,17 @@ pub struct ExecutionFilter {
     pub client_id: Option<i32>,
     /// The account to which the order was allocated to
     pub account_code: String,
-    /// Time from which the executions will be returned. Prefer `yyyymmdd-hh:mm:ss`, which
-    /// TWS reads as UTC; `yyyymmdd hh:mm:ss <zone>` is also accepted. A zone after the
-    /// dashed form is rejected with error 10314.
-    /// Only those executions reported after the specified time will be returned.
-    pub time: String,
+    /// Return only executions reported after this instant, e.g.
+    /// `Some(datetime!(2026-11-15 15:52 UTC))`. `None` sends no time filter.
+    ///
+    /// Sent as `yyyymmdd hh:mm:ss UTC` whatever the offset, with sub-seconds dropped. TWS
+    /// rejected other zone suffixes, the instrument's included, with error 10314; see
+    /// `docs/wire-facts/orders.md#executiontime-rendering`.
+    ///
+    /// `time` filters within the days the filter covers and never extends them: with
+    /// [`last_n_days`](Self::last_n_days) at 0 that is today only, so a `time` on an earlier
+    /// day returns nothing unless `last_n_days` reaches back to it.
+    pub time: Option<time::OffsetDateTime>,
     /// The instrument's symbol
     pub symbol: String,
     /// The Contract's security's type (i.e. STK, OPT...)
@@ -1922,7 +1928,7 @@ pub struct ExecutionFilter {
     /// Side filter — `None` for no filter, `Some(ExecutionFilterSide::Buy)`
     /// or `Some(ExecutionFilterSide::Sell)` to restrict the response.
     pub side: Option<ExecutionFilterSide>,
-    /// Filter executions from the last N days (0 = no filter). At most 7, per IB's
+    /// Filter executions from the last N days (0 = today only). At most 7, per IB's
     /// `ExecutionFilter.proto`: above 7, TWS returned no executions at all, not even those
     /// inside the window (live: 2026-11-16, paper, 8, 14 and 30).
     pub last_n_days: i32,

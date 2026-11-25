@@ -462,7 +462,7 @@ fn executions() {
     let filter = ExecutionFilter {
         client_id: Some(100),
         account_code: "xyz".to_owned(),
-        time: "yyyymmdd hh:mm:ss EST".to_owned(),
+        time: Some(time::macros::datetime!(2026-11-15 10:52 -5)),
         symbol: "TSLA".to_owned(),
         security_type: "STK".to_owned(),
         exchange: "ISLAND".to_owned(),
@@ -472,7 +472,7 @@ fn executions() {
     let expected_filter = ExecutionFilter {
         client_id: Some(100),
         account_code: "xyz".to_owned(),
-        time: "yyyymmdd hh:mm:ss EST".to_owned(),
+        time: Some(time::macros::datetime!(2026-11-15 10:52 -5)),
         symbol: "TSLA".to_owned(),
         security_type: "STK".to_owned(),
         exchange: "ISLAND".to_owned(),

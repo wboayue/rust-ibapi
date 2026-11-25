@@ -17,7 +17,7 @@ fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
     // filter.account_code = account_code.to_owned();
-    // filter.time = time.to_owned();
+    // filter.time = Some(time::macros::datetime!(2026-11-15 15:52 UTC));
     // filter.symbol = symbol.to_owned();
     // filter.security_type = security_type.to_owned();
     // filter.exchange = exchange.to_owned();
