@@ -2,7 +2,8 @@ use super::*;
 use crate::messages::encode_raw_length;
 use crate::transport::raw_capture::test_support;
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 
 /// Async twin of `transport::sync::tests::read_message_taps_raw_bytes_including_rejected_prefixes`.
 ///
@@ -34,22 +35,22 @@ async fn read_framed_message_taps_raw_bytes_including_rejected_prefixes() {
 const LARGE: usize = 32 * 1024 * 1024;
 
 /// A connected socket, its peer, and the listener, kept for reconnects.
-async fn socket_pair() -> (Arc<AsyncTcpSocket>, TcpStream, tokio::net::TcpListener) {
+async fn socket_pair() -> (Arc<AsyncSocket>, TcpStream, tokio::net::TcpListener) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap().to_string();
-    let (socket, peer) = tokio::join!(AsyncTcpSocket::connect(&address, true), listener.accept());
+    let (socket, peer) = tokio::join!(AsyncSocket::connect(Connector::tcp(address, true)), listener.accept());
     (Arc::new(socket.unwrap()), peer.unwrap().0, listener)
 }
 
 /// Write `bytes` with a caller that gives up after 100ms; the write must not
 /// have completed by then.
-async fn abandon_write(socket: &AsyncTcpSocket, bytes: &[u8]) {
+async fn abandon_write(socket: &AsyncSocket, bytes: &[u8]) {
     let written = tokio::time::timeout(Duration::from_millis(100), socket.write_all(bytes)).await;
     assert!(written.is_err(), "write completed; the peer should not be reading yet");
 }
 
 /// Wait until a pending write holds the writer (stalled on the full buffer).
-async fn until_writer_held(socket: &AsyncTcpSocket) {
+async fn until_writer_held(socket: &AsyncSocket) {
     tokio::time::timeout(Duration::from_secs(1), async {
         while socket.writer.try_lock().is_ok() {
             tokio::task::yield_now().await;
@@ -250,4 +251,89 @@ async fn sever_fails_a_stuck_write_until_reconnect() {
     let mut received = [0u8; 4];
     new_peer.read_exact(&mut received).await.unwrap();
     assert_eq!(&received, b"live");
+}
+
+/// A caller's connector, over in-memory duplex pipes: each call opens a fresh
+/// pipe and hands its far end to the test.
+fn duplex_connector() -> (Connector, tokio::sync::mpsc::UnboundedReceiver<tokio::io::DuplexStream>) {
+    let (peers, opened) = tokio::sync::mpsc::unbounded_channel();
+    let connector = Connector::from_stream(move || {
+        let (near, far) = tokio::io::duplex(1024);
+        let opened = peers.send(far);
+        async move {
+            opened.map_err(|_| std::io::Error::other("test dropped the peer receiver"))?;
+            Ok(near)
+        }
+    });
+    (connector, opened)
+}
+
+/// A caller's stream gets the same framing as TCP, and `reconnect` calls the
+/// connector again rather than reusing the stream it replaced.
+#[tokio::test]
+async fn caller_stream_is_framed_and_reopened_on_reconnect() {
+    let (connector, mut opened) = duplex_connector();
+    let socket = AsyncSocket::connect(connector).await.unwrap();
+    let mut first = opened.try_recv().expect("connect did not open a stream");
+
+    socket.write_all(&encode_raw_length(&[0, 0, 0, 1, 7])).await.unwrap();
+    let mut sent = [0u8; 9];
+    first.read_exact(&mut sent).await.unwrap();
+    assert_eq!(sent, [0, 0, 0, 5, 0, 0, 0, 1, 7]);
+    first.write_all(&encode_raw_length(&[0, 0, 0, 2, 8])).await.unwrap();
+    assert_eq!(socket.read_message().await.unwrap(), [0, 0, 0, 2, 8]);
+
+    socket.reconnect().await.unwrap();
+    let mut second = opened.try_recv().expect("reconnect did not open a new stream");
+    second.write_all(&encode_raw_length(&[0, 0, 0, 3, 9])).await.unwrap();
+    assert_eq!(socket.read_message().await.unwrap(), [0, 0, 0, 3, 9]);
+    // The replaced stream was released.
+    assert_eq!(first.read_u8().await.unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+}
+
+/// Frame validation covers a caller's stream: an impossible length prefix
+/// fails the read instead of being trusted.
+#[tokio::test]
+async fn caller_stream_rejects_an_invalid_frame_length() {
+    let (connector, mut opened) = duplex_connector();
+    let socket = AsyncSocket::connect(connector).await.unwrap();
+    let mut peer = opened.try_recv().unwrap();
+
+    peer.write_all(&u32::MAX.to_be_bytes()).await.unwrap();
+    let read = socket.read_message().await;
+    assert!(matches!(read, Err(Error::InvalidFrame(_))), "got {read:?}");
+}
+
+/// A caller's connector that never resolves on reconnect cannot hold up
+/// `close`: the pending reconnect fails with `Shutdown`, so `disconnect`'s
+/// join of the dispatcher returns.
+#[tokio::test]
+async fn close_ends_a_reconnect_stuck_in_the_connector() {
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = Arc::clone(&calls);
+    let connector = Connector::from_stream(move || {
+        let first = counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
+        async move {
+            if !first {
+                std::future::pending::<()>().await;
+            }
+            Ok(tokio::io::duplex(1024).0)
+        }
+    });
+    let socket = Arc::new(AsyncSocket::connect(connector).await.unwrap());
+
+    let reconnecting = tokio::spawn({
+        let socket = Arc::clone(&socket);
+        async move { socket.reconnect().await }
+    });
+    while calls.load(std::sync::atomic::Ordering::SeqCst) < 2 {
+        tokio::task::yield_now().await;
+    }
+    socket.close().await;
+
+    let reconnected = tokio::time::timeout(Duration::from_secs(1), reconnecting)
+        .await
+        .expect("reconnect still stuck after close")
+        .unwrap();
+    assert!(matches!(reconnected, Err(Error::Shutdown)), "got {reconnected:?}");
 }

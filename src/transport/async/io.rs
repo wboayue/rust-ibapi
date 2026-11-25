@@ -4,15 +4,19 @@
 //! method-async via `#[async_trait]`. Frame-level: `read_message` returns the
 //! already-unframed body so callers don't repeat the length-prefix dance.
 
+use std::fmt;
+use std::future::Future;
+use std::io;
+use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use log::warn;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::TcpStream;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{watch, Mutex, MutexGuard};
 
+use crate::connection::common::Endpoint;
 use crate::errors::Error;
 use crate::transport::common::validate_frame_length;
 use crate::transport::r#async::ShutdownSignal;
@@ -54,7 +58,7 @@ pub(crate) trait AsyncReconnect {
 
 pub(crate) trait AsyncStream: AsyncIo + AsyncReconnect + Send + Sync + 'static + std::fmt::Debug {}
 
-/// Where an [`AsyncTcpSocket`] stands. `Live` and `Broken` alternate: a write
+/// Where an [`AsyncSocket`] stands. `Live` and `Broken` alternate: a write
 /// cut off mid-frame or a `sever` breaks the socket, `reconnect` makes it live
 /// again.
 /// `Closed` is terminal.
@@ -76,38 +80,109 @@ impl SocketState {
     }
 }
 
-/// Production async stream over `tokio::net::TcpStream`. Holds the split halves
-/// behind `Mutex` so reads and writes can run concurrently from the dispatcher
-/// task and the request senders.
-#[derive(Debug)]
-pub(crate) struct AsyncTcpSocket {
+type Reader = Box<dyn AsyncRead + Send + Unpin>;
+type Writer = Box<dyn AsyncWrite + Send + Unpin>;
+type ConnectFuture = Pin<Box<dyn Future<Output = io::Result<(Reader, Writer)>> + Send>>;
+
+/// Opens one byte stream to TWS, already split. [`AsyncSocket`] calls it to
+/// connect and again on every reconnect.
+#[derive(Clone)]
+pub(crate) struct Connector(Arc<dyn Fn() -> ConnectFuture + Send + Sync>);
+
+impl Connector {
+    /// Wrap a caller's connect function. The stream is split with
+    /// [`tokio::io::split`], so reads and writes can still run concurrently.
+    pub(crate) fn from_stream<F, Fut, T>(connect: F) -> Self
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = io::Result<T>> + Send + 'static,
+        T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
+        Self(Arc::new(move || {
+            let connecting = connect();
+            Box::pin(async move {
+                let (reader, writer) = tokio::io::split(connecting.await?);
+                Ok((Box::new(reader) as Reader, Box::new(writer) as Writer))
+            })
+        }))
+    }
+
+    /// The built-in TCP connector. Unavailable on wasm, where tokio has no
+    /// `net` without `tokio_unstable`.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn tcp(address: impl Into<String>, tcp_no_delay: bool) -> Self {
+        let address: Arc<str> = address.into().into();
+        Self(Arc::new(move || {
+            let address = Arc::clone(&address);
+            Box::pin(async move {
+                let stream = tokio::net::TcpStream::connect(&*address).await?;
+                stream.set_nodelay(tcp_no_delay)?;
+                // Owned halves, not `tokio::io::split`: no lock between them.
+                let (reader, writer) = stream.into_split();
+                Ok((Box::new(reader) as Reader, Box::new(writer) as Writer))
+            })
+        }))
+    }
+
+    async fn connect(&self) -> io::Result<(Reader, Writer)> {
+        (self.0)().await
+    }
+}
+
+impl Endpoint {
+    /// The connector that reaches this endpoint. On wasm there is no built-in
+    /// TCP socket, so an `address` is refused.
+    pub(crate) fn into_connector(self) -> Result<Connector, Error> {
+        match self {
+            #[cfg(not(target_family = "wasm"))]
+            Self::Tcp { address, tcp_no_delay } => Ok(Connector::tcp(address, tcp_no_delay)),
+            #[cfg(target_family = "wasm")]
+            Self::Tcp { address, .. } => Err(Error::InvalidArgument(format!(
+                "ClientBuilder: no built-in TCP socket on wasm to reach {address}; open the stream yourself with `connector`"
+            ))),
+            Self::Stream(connector) => Ok(connector),
+        }
+    }
+}
+
+/// Production async stream over whatever byte stream its [`Connector`] opens:
+/// TCP by default, or a caller's (`ClientBuilder::connector`). Holds the split
+/// halves behind `Mutex` so reads and writes can run concurrently from the
+/// dispatcher task and the request senders. Framing, frame validation, raw
+/// capture and the break/close state below apply to every stream alike.
+pub(crate) struct AsyncSocket {
     /// `None` once `close` has released them.
-    reader: Mutex<Option<OwnedReadHalf>>,
-    writer: Mutex<Option<OwnedWriteHalf>>,
+    reader: Mutex<Option<Reader>>,
+    writer: Mutex<Option<Writer>>,
     /// Anything but `Live` wakes pending reads and writes and turns away
     /// whoever acquires a half after it. `Broken` once a write stops mid-frame
     /// (see [`FrameProgress`]), so reads fail and the dispatcher reconnects,
     /// or once the dispatcher severs a lost connection; `Closed` wakes the I/O
     /// holding the locks so `close` can take them.
     state: watch::Sender<SocketState>,
-    connection_url: String,
-    tcp_no_delay: bool,
+    /// Opens the stream again on `reconnect`.
+    connector: Connector,
     /// Byte-level capture of the inbound stream. Disabled unless
     /// `IBAPI_RAW_CAPTURE_DIR` is set; see [`RawFrameTap`].
     tap: RawFrameTap,
 }
 
-impl AsyncTcpSocket {
-    pub async fn connect(address: &str, tcp_no_delay: bool) -> Result<Self, Error> {
-        let stream = TcpStream::connect(address).await?;
-        stream.set_nodelay(tcp_no_delay)?;
-        let (read_half, write_half) = stream.into_split();
+impl fmt::Debug for AsyncSocket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AsyncSocket")
+            .field("state", &*self.state.borrow())
+            .finish_non_exhaustive()
+    }
+}
+
+impl AsyncSocket {
+    pub(crate) async fn connect(connector: Connector) -> Result<Self, Error> {
+        let (reader, writer) = connector.connect().await?;
         Ok(Self {
-            reader: Mutex::new(Some(read_half)),
-            writer: Mutex::new(Some(write_half)),
+            reader: Mutex::new(Some(reader)),
+            writer: Mutex::new(Some(writer)),
             state: watch::Sender::new(SocketState::Live),
-            connection_url: address.to_string(),
-            tcp_no_delay,
+            connector,
             tap: RawFrameTap::from_env(),
         })
     }
@@ -130,7 +205,7 @@ impl AsyncTcpSocket {
 
     /// Both halves, reader then writer. `close` and `reconnect` hold them
     /// together only through here, so they cannot deadlock on the order.
-    async fn lock_halves(&self) -> (MutexGuard<'_, Option<OwnedReadHalf>>, MutexGuard<'_, Option<OwnedWriteHalf>>) {
+    async fn lock_halves(&self) -> (MutexGuard<'_, Option<Reader>>, MutexGuard<'_, Option<Writer>>) {
         let reader = self.reader.lock().await;
         let writer = self.writer.lock().await;
         (reader, writer)
@@ -143,6 +218,13 @@ impl AsyncTcpSocket {
             return Err(err);
         }
         half.as_mut().ok_or(Error::Shutdown)
+    }
+
+    /// Resolves once the socket is closed.
+    async fn closed(&self) {
+        let mut rx = self.state.subscribe();
+        // `Err` is unreachable: `self` owns the sender.
+        let _ = rx.wait_for(|state| *state == SocketState::Closed).await;
     }
 
     /// Resolves once the socket is closed or a cut-off write breaks it, with
@@ -159,7 +241,7 @@ impl AsyncTcpSocket {
 /// with its caller cancelled or after a failed write, it breaks the connection:
 /// the wire now ends mid-frame, and the next frame would be misread from there.
 struct FrameProgress<'a> {
-    socket: &'a AsyncTcpSocket,
+    socket: &'a AsyncSocket,
     len: usize,
     /// The bytes not yet written; `write_all_buf` advances it as it goes,
     /// cancelled or not.
@@ -197,7 +279,7 @@ where
 }
 
 #[async_trait]
-impl AsyncIo for AsyncTcpSocket {
+impl AsyncIo for AsyncSocket {
     async fn read_message(&self) -> Result<Vec<u8>, Error> {
         let mut reader = self.reader.lock().await;
         let reader = self.open_half(&mut reader)?;
@@ -243,14 +325,19 @@ impl AsyncIo for AsyncTcpSocket {
 }
 
 #[async_trait]
-impl AsyncReconnect for AsyncTcpSocket {
+impl AsyncReconnect for AsyncSocket {
     async fn reconnect(&self) -> Result<(), Error> {
         if self.is_closed() {
             return Err(Error::Shutdown);
         }
-        let stream = TcpStream::connect(&self.connection_url).await?;
-        stream.set_nodelay(self.tcp_no_delay)?;
-        let (new_reader, new_writer) = stream.into_split();
+        // A caller's connector has no OS connect timeout behind it: `close`
+        // must still end a connect that never resolves, or `disconnect` waits
+        // on the dispatcher forever.
+        let (new_reader, new_writer) = tokio::select! {
+            biased;
+            () = self.closed() => return Err(Error::Shutdown),
+            opened = self.connector.connect() => opened?,
+        };
         let (mut reader, mut writer) = self.lock_halves().await;
         if self.is_closed() {
             return Err(Error::Shutdown);
@@ -258,7 +345,7 @@ impl AsyncReconnect for AsyncTcpSocket {
         *reader = Some(new_reader);
         *writer = Some(new_writer);
         self.set_state(SocketState::Live);
-        // One capture file per TCP stream: splicing two of them would read back
+        // One capture file per stream: splicing two of them would read back
         // as a desync at the seam that never happened.
         self.tap.start_new_segment();
         Ok(())
@@ -275,7 +362,7 @@ impl AsyncReconnect for AsyncTcpSocket {
     }
 }
 
-impl AsyncStream for AsyncTcpSocket {}
+impl AsyncStream for AsyncSocket {}
 
 #[cfg(test)]
 #[path = "io_tests.rs"]
