@@ -90,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dropping or cancelling a `historical_data(..).subscribe_with_updates()` subscription (`keepUpToDate`) that TWS refused with error 321 ("Source price not supported with live updates", for `ADJUSTED_LAST` or `AGGTRADES`) no longer sends a cancel. TWS had ended the request: nothing followed the 321 for 65 s, and TWS answered the cancel with error 366 "No historical data query found". A 162 still sends the cancel (#1291).
 - Dropping or cancelling a `realtime_bars` subscription that TWS refused with error 420 ("Invalid Real-time Query": no market data permission, or `TRADES` on a forex pair) no longer sends a cancel. TWS had ended the request and answered the cancel with error 300 (#1291).
 - Dropping or cancelling a market data, realtime bars, tick-by-tick or market depth subscription that TWS already refused for missing permissions (354, 10168, 10189) no longer sends a cancel. TWS had ended the request, so it answered each cancel with error 300 or 310 (#1291).
 - `Client::resubscribing` (sync and async) ends after a market data snapshot's `TickTypes::SnapshotEnd`, as its docs said. Previously it kept waiting on a snapshot TWS had finished, and a later reconnect sent the snapshot request again. The same holds for `historical_data(..).subscribe()`, which it now accepts, after `End` (#1246).

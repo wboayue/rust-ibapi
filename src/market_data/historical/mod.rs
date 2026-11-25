@@ -25,7 +25,7 @@ use time::{Date, OffsetDateTime};
 use crate::builder::ValidationError;
 use crate::common::error_helpers;
 use crate::common::request_helpers::CancellableOneShot;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE, REQUEST_VALIDATION_CODE};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Error, ToField};
 
@@ -668,10 +668,13 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
 
     /// Without `keep_up_to_date`, any error: a one-shot query has nothing to
     /// continue after one. Verified live for 162, 200 and 10314, where TWS
-    /// answers a cancel with 366 (no query found). With it, only 200, after
-    /// which TWS answers the cancel with 366.
+    /// answers a cancel with 366 (no query found). With it, only 200 and 321
+    /// ("Source price not supported with live updates"): no frame followed
+    /// either for 65 s, and TWS answered the cancel with 366. 162 still
+    /// cancels: four of its texts behaved the same, but a pacing violation,
+    /// also a 162, could not be provoked to check.
     fn rejection_ends_request(notice: &Notice, context: &DecoderContext) -> bool {
-        !context.keep_up_to_date || notice.code == NO_SECURITY_DEFINITION_CODE
+        !context.keep_up_to_date || matches!(notice.code, NO_SECURITY_DEFINITION_CODE | REQUEST_VALIDATION_CODE)
     }
 }
 
