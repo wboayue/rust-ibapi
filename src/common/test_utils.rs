@@ -509,6 +509,20 @@ pub mod wire_enum {
         }
     }
 
+    /// `impl_wire_enum!(.., integer)`: the text form through `FromStr` / `ToField`, serde
+    /// as the bare code, and `unlisted` rejected by Deserialize.
+    pub fn check_integer_wire_enum<T>(table: &[(T, i32)], unlisted: i32)
+    where
+        T: std::fmt::Debug + PartialEq + std::str::FromStr<Err = crate::Error> + crate::ToField + serde::Serialize + serde::de::DeserializeOwned,
+    {
+        for (variant, code) in table {
+            assert_eq!(variant.to_field(), code.to_string(), "ToField for {variant:?}");
+            assert_eq!(&code.to_string().parse::<T>().unwrap(), variant, "FromStr({code})");
+            check_serde_form(variant, serde_json::json!(code));
+        }
+        assert!(serde_json::from_value::<T>(serde_json::json!(unlisted)).is_err(), "code {unlisted}");
+    }
+
     /// Assert `value` serializes as exactly `json` and deserializes back to itself.
     pub fn check_serde_form<T>(value: &T, json: serde_json::Value)
     where

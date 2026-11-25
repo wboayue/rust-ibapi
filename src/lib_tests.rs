@@ -26,6 +26,7 @@ fn utoipa_schemas_resolve() {
         ("ShortSaleSlot", json(orders::ShortSaleSlot::schema())),
         ("OcaType", json(orders::OcaType::schema())),
         ("TickType", json(contracts::tick_types::TickType::schema())),
+        ("FaDataType", json(accounts::FaDataType::schema())),
     ] {
         assert_eq!(schema["type"], "integer", "{name} schema: {schema}");
     }

@@ -21,29 +21,17 @@ fn ledger_prefix_split() {
     }
 }
 
-/// `impl_wire_enum!(.., integer)`: text form through `Display` / `FromStr` / `ToField`, serde as
-/// the bare code, and an unlisted code rejected.
-fn check_integer_wire_enum<T>(table: &[(T, i32)], unlisted: i32)
-where
-    T: std::fmt::Debug + PartialEq + std::str::FromStr<Err = Error> + crate::ToField + serde::Serialize + serde::de::DeserializeOwned,
-{
-    use crate::common::test_utils::wire_enum::check_serde_form;
-
-    for (variant, code) in table {
-        assert_eq!(variant.to_field(), code.to_string(), "ToField for {variant:?}");
-        assert_eq!(&code.to_string().parse::<T>().unwrap(), variant, "FromStr({code})");
-        check_serde_form(variant, serde_json::json!(code));
-    }
-    assert!(serde_json::from_value::<T>(serde_json::json!(unlisted)).is_err(), "code {unlisted}");
-}
-
 #[test]
 fn fa_data_type_round_trip() {
+    use crate::common::test_utils::wire_enum::check_integer_wire_enum;
+
     check_integer_wire_enum(&[(FaDataType::Groups, 1), (FaDataType::AccountAliases, 3)], 2);
 }
 
 #[test]
 fn server_log_level_round_trip() {
+    use crate::common::test_utils::wire_enum::check_integer_wire_enum;
+
     check_integer_wire_enum(
         &[
             (ServerLogLevel::System, 1),

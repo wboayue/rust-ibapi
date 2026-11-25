@@ -1133,7 +1133,8 @@ plain `string` or `integer`, where they listed the variant names.
 | `FundAssetType`, `FundDistributionPolicyIndicator` | `"MoneyMarket"`, `"IncomeFund"` | `"001"`, `"Y"` |
 | `market_data::historical::WhatToShow` | `"BidAsk"` | `"BID_ASK"` |
 | `FaDataType`, `ServerLogLevel` | `"Groups"`, `"Info"` | `1`, `4` |
-| `ComboLegOpenClose`, `OcaType`, `OrderOrigin`, `VolatilityType`, `ReferencePriceType`, `WhatIfType`, `ArticleType` | `"Open"`, `{"Unknown":7}` | `1`, `7` |
+| `OcaType`, `OrderOrigin`, `VolatilityType`, `ReferencePriceType`, `WhatIfType` | `"CancelWithBlock"`, `{"Unknown":7}` | `1`, `7` |
+| `ComboLegOpenClose`, `ArticleType` | `"Open"`, `"Unknown"`, `"Text"` | `1`, `3`, `0` |
 | `TriggerMethod` on its own | `"Last"` | `2` |
 | `DepthOperation`, `DepthSide`, `BulletinType`, `AdjustableTrailingUnit` | number (as an `i32` field) | number, unchanged from 5.x |
 
@@ -1142,11 +1143,11 @@ this way, and `PriceCondition::trigger_method` was already a number. `TickType`,
 `MarketDataType`, `Liquidity` and `OptionExerciseType` gain `Serialize` / `Deserialize`, as the
 wire code.
 
-The compiler catches none of this. JSON written by 5.x for the enums in the first eleven rows does
+The compiler catches none of this. JSON written by 5.x for the enums in the first twelve rows does
 not round-trip: a closed enum (`Action`, `OptionRight`, `LegAction`, the execution sides,
 `WhatToShow`, `FaDataType`, `ServerLogLevel`) rejects a variant name, and every integer-coded
 enum rejects a name or a tagged object. An open string enum (`SecurityType`, `SecurityIdType`,
-`Rule80A`, `OrderOpenClose`, the fund enums) does *not* reject one: it reads `"Individual"` as
-`Unknown("Individual")`, so an `Order` loaded from 5.x JSON and placed sends that text to TWS,
-which rejects the order. Convert stored JSON before loading it, by mapping each variant name to
+`Rule80A`, `OrderOpenClose`, the fund enums) does *not* reject one: it keeps the name as an
+unrecognized code. A `Contract` stored by 5.x with `"security_type":"Stock"` loads as
+`SecurityType::Other("Stock")`, and a request built from it sends `Stock` to TWS. Convert stored JSON before loading it, by mapping each variant name to
 its code (`as_str()` lists the codes for the string enums, `i32::from` for the integer ones).

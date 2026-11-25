@@ -152,6 +152,9 @@ fn wire_enum_serde_reads_5x_variant_names_as_documented() {
         serde_json::from_str::<Rule80A>("\"Individual\"").unwrap(),
         Rule80A::Unknown("Individual".into())
     );
+    let stock: crate::contracts::SecurityType = serde_json::from_str("\"Stock\"").unwrap();
+    assert_eq!(stock, crate::contracts::SecurityType::Other("Stock".into()));
+    assert_eq!(stock.as_str(), "Stock", "sent to TWS as the stored name");
     // Integer-coded: the 5.x tagged unknown and variant name both fail.
     assert!(serde_json::from_str::<OcaType>("{\"Unknown\":7}").is_err());
     assert!(serde_json::from_str::<OcaType>("\"ReduceWithBlock\"").is_err());

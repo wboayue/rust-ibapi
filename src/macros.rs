@@ -69,8 +69,7 @@ macro_rules! impl_str_partial_eq {
 /// integer code but whose `as_str` table spells it as text (`FaDataType`,
 /// `ServerLogLevel`): serde and the utoipa schema use the integer, read back
 /// through the same `from_wire` table, so a code it does not list is an
-/// error. Serialize casts the discriminant, so each variant must carry its
-/// code (`Groups = 1`).
+/// error. Both directions read that one table.
 macro_rules! impl_wire_enum {
     ($name:ident) => {
         impl_wire_enum!(@closed $name);
@@ -81,7 +80,8 @@ macro_rules! impl_wire_enum {
 
         impl ::serde::Serialize for $name {
             fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error> {
-                serializer.serialize_i32(*self as i32)
+                let code = self.as_str().parse::<i32>().map_err(::serde::ser::Error::custom)?;
+                serializer.serialize_i32(code)
             }
         }
 
@@ -144,8 +144,8 @@ macro_rules! impl_wire_enum {
 /// Serde and utoipa impls for a wire-string enum: Serialize writes `Display`,
 /// Deserialize goes through `FromStr`, and the utoipa schema is a string.
 /// `impl_wire_enum!` invokes it for every string-form enum it builds; an enum with
-/// hand-written `Display` / `FromStr` (`BarSize`, `WhatToShow`) invokes it
-/// directly.
+/// hand-written `Display` / `FromStr` that round-trip the wire string
+/// (`WhatToShow`) invokes it directly.
 macro_rules! impl_wire_string_serde {
     ($name:ident) => {
         impl ::serde::Serialize for $name {
