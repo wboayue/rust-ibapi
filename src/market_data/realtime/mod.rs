@@ -221,7 +221,7 @@ impl WhatToShow {
     }
 }
 
-impl_wire_enum!(WhatToShow {
+impl_wire_enum!(WhatToShow as "RealtimeWhatToShow" {
     Trades,
     MidPoint,
     Bid,

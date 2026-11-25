@@ -116,12 +116,15 @@ fn connect_handshakes_against_real_socket() {
 /// `MessageRecorder` discards and the one a framing desync corrupts — see
 /// #891.
 ///
-/// Serial: `temp_env` mutates the process environment, so a parallel test that
-/// opened a connection would write into this directory too.
+/// Serial against the other `#[serial]` env-var tests only: `temp_env` mutates the
+/// process environment, so a non-serial test that connects meanwhile still writes
+/// its own segment into this directory, and the assertion looks for this one's.
 #[test]
 #[serial]
 fn raw_capture_env_var_records_framed_wire_bytes() {
-    let frames = default_handshake_frames();
+    // A next valid id no other test's listener sends, so the segment found below is this
+    // connection's rather than one a concurrent test's client wrote.
+    let frames = handshake_frames(SERVER_VERSION, "EST", TEST_ORDER_ID_SEED + 137);
     let (addr, _h) = spawn_handshake_listener(frames.clone());
     let dir = tempfile::TempDir::new().unwrap();
 
@@ -130,7 +133,7 @@ fn raw_capture_env_var_records_framed_wire_bytes() {
         assert_eq!(client.server_version(), SERVER_VERSION);
 
         // The env var is process-wide, so a client another test connects meanwhile can add its own
-        // segment; look for this connection's. The handshake response is the first thing off the
+        // segment; look for this connection's, the one carrying its distinct next valid id. The handshake response is the first thing off the
         // socket, prefix and all. Anything after it races the dispatcher, so this asserts a prefix
         // of the segment rather than the whole of it.
         let segments = test_support::segment_frames(dir.path());

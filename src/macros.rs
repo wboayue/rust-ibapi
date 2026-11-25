@@ -65,7 +65,7 @@ macro_rules! impl_str_partial_eq {
 /// with this macro must not derive `Serialize`, `Deserialize` or `ToSchema`;
 /// the impls would conflict.
 ///
-/// The `$name, integer` form is for a closed enum whose wire value is an
+/// The `$name, integer { .. }` form is for a closed enum whose wire value is an
 /// integer code but whose `as_str` table spells it as text (`FaDataType`,
 /// `ServerLogLevel`): serde and the utoipa schema use the integer, read back
 /// through the same `from_wire` table, so a code it does not list is an
@@ -73,12 +73,18 @@ macro_rules! impl_str_partial_eq {
 ///
 /// A closed form lists every variant (`impl_wire_enum!(Action { Buy, Sell, .. })`),
 /// and its schema enumerates their serialized values; see
-/// `impl_wire_string_serde!`'s `@closed_schema` arm. An open enum's schema
-/// stays unconstrained, since it accepts values it does not list.
+/// `impl_wire_string_serde!`'s `@closed_schema` arm. The schema describes the
+/// serialized form only, so an alias `FromStr` also accepts is not in it. An
+/// open enum's schema stays unconstrained, since it accepts values it does not
+/// list.
 macro_rules! impl_wire_enum {
     ($name:ident { $($v:ident),+ $(,)? }) => {
         impl_wire_enum!(@closed $name);
         impl_wire_string_serde!($name { $($v),+ });
+    };
+    ($name:ident as $schema:literal { $($v:ident),+ $(,)? }) => {
+        impl_wire_enum!(@closed $name);
+        impl_wire_string_serde!($name as $schema { $($v),+ });
     };
     ($name:ident, integer { $($v:ident),+ $(,)? }) => {
         impl_wire_enum!(@closed $name);
@@ -97,7 +103,7 @@ macro_rules! impl_wire_enum {
             }
         }
 
-        impl_wire_string_serde!(@closed_schema $name, i32, [$($v),+]);
+        impl_wire_string_serde!(@closed_schema $name, i32, stringify!($name), [$($v),+]);
     };
     (@closed $name:ident) => {
         impl_wire_enum!(@common $name);
@@ -147,7 +153,10 @@ macro_rules! impl_wire_enum {
 /// `$name` alone is the open form: the schema is any string. `$name { .. }`
 /// is the closed form, listing every variant: the schema's `enum` holds each
 /// one's serialized value. The list is checked by an exhaustive `match`, so a
-/// variant missing from it fails to compile.
+/// variant missing from it fails to compile. The schema's OpenAPI component
+/// name is the type name; `$name as "Name" { .. }` overrides it, for two types
+/// that share a name (`WhatToShow`) but not a code list. The override form
+/// exists on `impl_wire_enum!` too.
 macro_rules! impl_wire_string_serde {
     ($name:ident) => {
         impl_wire_string_serde!(@serde $name);
@@ -164,7 +173,11 @@ macro_rules! impl_wire_string_serde {
     };
     ($name:ident { $($v:ident),+ $(,)? }) => {
         impl_wire_string_serde!(@serde $name);
-        impl_wire_string_serde!(@closed_schema $name, String, [$($v),+]);
+        impl_wire_string_serde!(@closed_schema $name, String, stringify!($name), [$($v),+]);
+    };
+    ($name:ident as $schema:literal { $($v:ident),+ $(,)? }) => {
+        impl_wire_string_serde!(@serde $name);
+        impl_wire_string_serde!(@closed_schema $name, String, $schema, [$($v),+]);
     };
     (@serde $name:ident) => {
         impl ::serde::Serialize for $name {
@@ -183,7 +196,8 @@ macro_rules! impl_wire_string_serde {
     };
     // `$base`'s schema (`String` or `i32`) with `enum` set to every listed
     // variant's serialized value, so the schema cannot disagree with serde.
-    (@closed_schema $name:ident, $base:ty, [$($v:ident),+]) => {
+    // `$schema` is the OpenAPI component name.
+    (@closed_schema $name:ident, $base:ty, $schema:expr, [$($v:ident),+]) => {
         const _: () = {
             // Never called: fails to compile when the list misses a variant.
             #[allow(dead_code)]
@@ -209,7 +223,11 @@ macro_rules! impl_wire_string_serde {
         }
 
         #[cfg(feature = "utoipa")]
-        impl ::utoipa::ToSchema for $name {}
+        impl ::utoipa::ToSchema for $name {
+            fn name() -> ::std::borrow::Cow<'static, str> {
+                ::std::borrow::Cow::Borrowed($schema)
+            }
+        }
     };
 }
 

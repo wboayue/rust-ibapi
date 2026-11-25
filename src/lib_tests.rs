@@ -70,9 +70,18 @@ fn utoipa_schemas_resolve() {
         ("FaDataType", to_json(accounts::FaDataType::schema()), json!([1, 3])),
         ("ServerLogLevel", to_json(accounts::ServerLogLevel::schema()), json!([1, 2, 3, 4, 5])),
     ] {
-        assert_eq!(schema["type"], "integer", "closed {name} schema: {schema}");
-        assert_eq!(schema["enum"], codes, "closed {name} schema: {schema}");
+        assert_eq!(
+            schema,
+            json!({ "type": "integer", "format": "int32", "enum": codes }),
+            "closed {name} schema"
+        );
     }
+
+    // The two `WhatToShow`s list different codes, so they register as distinct components.
+    use utoipa::ToSchema;
+    assert_eq!(market_data::historical::WhatToShow::name(), "HistoricalWhatToShow");
+    assert_eq!(market_data::realtime::WhatToShow::name(), "RealtimeWhatToShow");
+    assert_eq!(orders::Action::name(), "Action");
 
     for (name, schema) in [
         ("ShortSaleSlot", to_json(orders::ShortSaleSlot::schema())),

@@ -846,7 +846,7 @@ impl ToField for WhatToShow {
     }
 }
 
-impl_wire_string_serde!(WhatToShow {
+impl_wire_string_serde!(WhatToShow as "HistoricalWhatToShow" {
     Trades,
     MidPoint,
     Bid,

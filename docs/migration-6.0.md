@@ -1119,10 +1119,12 @@ way: it serialized as the variant name (`"Broker"`, `{"Unknown":7}`) and is now 
 5.x serialized most wire enums by their Rust variant name (`"Buy"`), with an unrecognized value in
 the tagged form (`{"Unknown":3}`). Every one of them now serializes as the value TWS sends: a
 string code as a string, an integer code as a bare number, and an unrecognized value as itself,
-untagged. Renaming a variant no longer moves the JSON. The `utoipa` schemas change to match, where
-they listed the variant names: a `string` or `integer` whose `enum` lists the codes for a closed
-enum (`Action`: `["BUY", "SELL", "SSHORT", "SLONG"]`), and any `string` or `integer` for an open
-one, which accepts codes it doesn't list.
+untagged. Renaming a variant no longer moves the JSON. The `utoipa` schemas, which listed the
+variant names, change to match: a closed enum's `string` or `integer` lists its codes as `enum`
+(`Action`: `["BUY", "SELL", "SSHORT", "SLONG"]`); an open enum's accepts any value, since it keeps
+codes it doesn't list. The schemas describe the serialized form, so a service that validates
+against them rejects the 5.x names `BarSize` still parses. The two `WhatToShow` schemas are the
+components `HistoricalWhatToShow` and `RealtimeWhatToShow`.
 
 | Enum | 5.x | 6.0 |
 |---|---|---|

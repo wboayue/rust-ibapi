@@ -509,7 +509,7 @@ pub mod wire_enum {
         }
     }
 
-    /// `impl_wire_enum!(.., integer)`: the text form through `FromStr` / `ToField`, serde
+    /// `impl_wire_enum!(.., integer { .. })`: the text form through `FromStr` / `ToField`, serde
     /// as the bare code, and `unlisted` rejected by Deserialize.
     pub fn check_integer_wire_enum<T>(table: &[(T, i32)], unlisted: i32)
     where
