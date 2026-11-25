@@ -450,7 +450,7 @@ pub mod async_impl {
         /// `open` opens one byte stream to TWS or IB Gateway: a TLS or SSH
         /// tunnel, a proxy, or a socket on a target without tokio's `net`, such
         /// as WASI. The client calls it to connect and again on every
-        /// reconnect. It speaks the TWS wire protocol over the stream as it
+        /// reconnect. The client speaks the TWS wire protocol over the stream as it
         /// does over its own TCP socket: framing, handshake, routing, frame
         /// validation and `IBAPI_RAW_CAPTURE_DIR` capture all apply.
         /// [`tcp_no_delay`](Self::tcp_no_delay) does not: set socket options in

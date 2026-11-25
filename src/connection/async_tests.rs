@@ -767,3 +767,45 @@ async fn reconnect_gives_up_with_client_id_in_use() {
     let err = connection.reconnect().await.expect_err("every attempt met a held id");
     assert!(matches!(err, Error::ClientIdInUse { client_id: CLIENT_ID }), "got {err:?}");
 }
+
+/// A dropped client only requests shutdown; it does not close the socket. That
+/// request must still end a reconnect parked in a caller's connector that
+/// never resolves, or the dispatcher holding the bus never exits.
+#[tokio::test(start_paused = true)]
+async fn shutdown_ends_a_reconnect_stuck_in_the_connector() {
+    use crate::transport::r#async::{AsyncSocket, Connector};
+
+    let first = Arc::new(AtomicBool::new(true));
+    let stuck = Arc::new(tokio::sync::Notify::new());
+    let connector = Connector::from_stream({
+        let stuck = Arc::clone(&stuck);
+        move || {
+            let reconnecting = !first.swap(false, Ordering::SeqCst);
+            let stuck = Arc::clone(&stuck);
+            async move {
+                if reconnecting {
+                    stuck.notify_one();
+                    std::future::pending::<()>().await;
+                }
+                Ok(tokio::io::duplex(1024).0)
+            }
+        }
+    });
+    let connection = Arc::new(AsyncConnection::stubbed(AsyncSocket::connect(connector).await.unwrap(), CLIENT_ID));
+
+    let reconnecting = tokio::spawn({
+        let connection = Arc::clone(&connection);
+        async move { connection.reconnect().await }
+    });
+    // Paused time: the backoff sleep advances once the runtime idles here.
+    tokio::time::timeout(Duration::from_secs(60), stuck.notified())
+        .await
+        .expect("reconnect never called the connector");
+    connection.shutdown_signal().request();
+
+    let reconnected = tokio::time::timeout(Duration::from_secs(1), reconnecting)
+        .await
+        .expect("reconnect still stuck after shutdown")
+        .unwrap();
+    assert!(matches!(reconnected, Err(Error::Shutdown)), "got {reconnected:?}");
+}
