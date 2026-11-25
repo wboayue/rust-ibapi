@@ -247,8 +247,7 @@ pub struct Reroute {
 }
 
 /// How a [`MarketDepth`] / [`MarketDepthL2`] row changes the book.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DepthOperation {
     /// Insert a new row at `position`. Wire code `0`. Also the value when TWS omits the field.
     #[default]
@@ -268,8 +267,7 @@ impl_wire_code!(DepthOperation {
 });
 
 /// Which side of the book a [`MarketDepth`] / [`MarketDepthL2`] row belongs to.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DepthSide {
     /// Ask side. Wire code `0`. Also the value when TWS omits the field.
     #[default]

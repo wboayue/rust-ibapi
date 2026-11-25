@@ -742,8 +742,9 @@ pub struct Session {
 }
 
 /// Enumerates the data payload returned when requesting historical data.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
+///
+/// Serde and utoipa use the wire string (`"BID_ASK"`).
+#[derive(Clone, Debug, Copy, PartialEq)]
 pub enum WhatToShow {
     /// Trade data including OHLC and volume.
     Trades,
@@ -816,6 +817,8 @@ impl ToField for WhatToShow {
         self.to_string()
     }
 }
+
+impl_wire_string_serde!(WhatToShow);
 
 // Re-export non-function items
 #[cfg(feature = "async")]

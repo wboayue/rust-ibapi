@@ -7,9 +7,9 @@ triggers:
   - about to write a macro_rules!
   - N near-identical trait impls or test functions across types
   - reviewing a PR that adds a macro
-symbols: [macro_rules, macro_use, macro_export, impl_str_partial_eq, impl_wire_enum, impl_wire_code]
+symbols: [macro_rules, macro_use, macro_export, impl_str_partial_eq, impl_wire_enum, impl_wire_string_serde, impl_wire_code]
 related: [param-budget, fixture-builders]
-precedents: ["#548", "#554", "#1180", "#1222"]
+precedents: ["#548", "#554", "#1180", "#1222", "#1245"]
 ---
 
 Before writing a `macro_rules!`, ask whether a generic function with a trait bound, a
@@ -42,8 +42,9 @@ The macros in `src/` today (`grep -rn 'macro_rules!' src --include=*.rs`):
 | Macro | Home | Why not a function |
 |---|---|---|
 | `impl_str_partial_eq!` | `macros.rs` | Case 1: `impl PartialEq<Symbol> for str` cannot be blanket. 3 newtypes × 4 directions |
-| `impl_wire_enum!` | `macros.rs` | Case 1: `Display` / `FromStr` / `ToField` (and, with `serde`, `Serialize` / `Deserialize` / `PartialSchema`) are foreign traits. The `as_str` / `from_wire` tables stay in plain Rust; only the plumbing expands |
-| `impl_wire_code!` | `macros.rs` | Case 1: `From<T> for i32` cannot be blanket (orphan rule). 14 integer enums (12 two-way pairs + 2 one-way); one `Variant = code` table writes both directions, which hand-written pairs kept twice |
+| `impl_wire_enum!` | `macros.rs` | Case 1: `Display` / `FromStr` / `ToField` / `Serialize` / `Deserialize` / `PartialSchema` are foreign traits. The `as_str` / `from_wire` tables stay in plain Rust; only the plumbing expands |
+| `impl_wire_string_serde!` | `macros.rs` | Case 1: wire-string serde + `PartialSchema` from `Display` / `FromStr`; `impl_wire_enum!` calls it, and `WhatToShow` directly |
+| `impl_wire_code!` | `macros.rs` | Case 1: `From<T> for i32` and serde cannot be blanket (orphan rule). 16 integer enums, plus `TickType` through `@serde` (`grep -rn 'impl_wire_code!(' src --include=*.rs \| grep -v _tests`); one `Variant = code` table writes both directions, which hand-written pairs kept twice |
 | `string_newtype_surface!` | `contracts/types_tests.rs` | Case 2: calls inherent `<$t>::new` and `.as_str()` |
 | `single_req_id_request_builder!`, `request_id_response_builder!`, `empty_request_builder!` | `testdata/builders/mod.rs` | Case 3: a new named struct per fixture |
 | `encode_cancel_by_id!`, `encode_empty_proto!` | `proto/encoders.rs` | Case 3: a distinct `proto::` struct literal per call; no trait covers "prost message with a `req_id` field" |
@@ -76,3 +77,6 @@ there; a `pub(crate) use name;` re-export adds nothing and trips `unused_imports
 - #1222 — `impl_wire_enum!` gained a `serde` arm, replacing hand-written wire-string serde + utoipa
   impls on `OrderStatusKind`, `TimeInForce` and `OrderType` (third copy tripped it). Folded into
   the existing macro rather than a new one.
+- #1245 — serde became unconditional on both wire macros, dropping the `serde` arms. The
+  wire-string half moved to `impl_wire_string_serde!` because `WhatToShow` needs it without the
+  rest of `impl_wire_enum!` (its `FromStr` error type differs).

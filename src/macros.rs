@@ -38,7 +38,7 @@ macro_rules! impl_str_partial_eq {
 /// macro. Orphan rule blocks a blanket `impl<T: WireEnum> Display`, so a
 /// macro is the only viable shape.
 ///
-/// Both forms distinguish the two ways a wire value can be unusable: empty
+/// Every form distinguishes the two ways a wire value can be unusable: empty
 /// input is `"empty $name"` (no value at all) and an unrecognized non-empty
 /// value is `"unknown $name"`. `parse_required` reaches the first only when a
 /// caller parses directly — it intercepts empty with its own `"missing
@@ -53,17 +53,56 @@ macro_rules! impl_str_partial_eq {
 /// preserved. `as_str` then borrows from `self`, so such enums implement
 /// `as_str(&self) -> &str`.
 ///
-/// The `fallback $variant, serde` form also generates serde and utoipa impls
-/// that use the wire string in both directions, so `Unknown("X")` round-trips
-/// as `"X"` rather than the externally tagged `{"Unknown":"X"}` a derive gives
-/// the one payload variant, and JSON stays stable against Rust-side renames.
-/// Deserialize goes through `FromStr`, so it rejects `""`; serde is not on the
-/// wire path (decoding goes through `parse_required` / `parse_optional`). The
+/// The `$name` and `fallback $variant` forms also generate serde and utoipa impls that use the wire string
+/// in both directions, so JSON matches what TWS sends and stays stable against
+/// Rust-side renames, and an open enum's `Unknown("X")` round-trips as `"X"`
+/// rather than the externally tagged `{"Unknown":"X"}` a derive gives the one
+/// payload variant. Deserialize goes through `FromStr`, so it rejects `""`, and
+/// a closed enum rejects a string it does not list; serde is not on the wire
+/// path (decoding goes through `parse_required` / `parse_optional`). The
 /// utoipa schema is exactly a string, because the derive would mirror serde's
-/// default representation, which is not what these impls emit. A closed enum
-/// has no `Unknown` payload, so it keeps the serde derives instead.
+/// default representation, which is not what these impls emit. An enum built
+/// with this macro must not derive `Serialize`, `Deserialize` or `ToSchema`;
+/// the impls would conflict.
+///
+/// The `$name, integer` form is for a closed enum whose wire value is an
+/// integer code but whose `as_str` table spells it as text (`FaDataType`,
+/// `ServerLogLevel`): serde and the utoipa schema use the integer, read back
+/// through the same `from_wire` table, so a code it does not list is an
+/// error. Serialize casts the discriminant, so each variant must carry its
+/// code (`Groups = 1`).
 macro_rules! impl_wire_enum {
     ($name:ident) => {
+        impl_wire_enum!(@closed $name);
+        impl_wire_string_serde!($name);
+    };
+    ($name:ident, integer) => {
+        impl_wire_enum!(@closed $name);
+
+        impl ::serde::Serialize for $name {
+            fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error> {
+                serializer.serialize_i32(*self as i32)
+            }
+        }
+
+        impl<'de> ::serde::Deserialize<'de> for $name {
+            fn deserialize<D: ::serde::Deserializer<'de>>(deserializer: D) -> ::std::result::Result<Self, D::Error> {
+                let code = <i32 as ::serde::Deserialize>::deserialize(deserializer)?;
+                code.to_string().parse().map_err(::serde::de::Error::custom)
+            }
+        }
+
+        #[cfg(feature = "utoipa")]
+        impl ::utoipa::PartialSchema for $name {
+            fn schema() -> ::utoipa::openapi::RefOr<::utoipa::openapi::schema::Schema> {
+                <i32 as ::utoipa::PartialSchema>::schema()
+            }
+        }
+
+        #[cfg(feature = "utoipa")]
+        impl ::utoipa::ToSchema for $name {}
+    };
+    (@closed $name:ident) => {
         impl_wire_enum!(@common $name);
         impl ::std::str::FromStr for $name {
             type Err = $crate::Error;
@@ -86,13 +125,32 @@ macro_rules! impl_wire_enum {
                 Ok(Self::from_wire(s).unwrap_or_else(|| $name::$variant(s.to_string())))
             }
         }
+        impl_wire_string_serde!($name);
     };
-    ($name:ident, fallback $variant:ident, serde) => {
-        impl_wire_enum!($name, fallback $variant);
+    (@common $name:ident) => {
+        impl ::std::fmt::Display for $name {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+        impl $crate::ToField for $name {
+            fn to_field(&self) -> String {
+                self.to_string()
+            }
+        }
+    };
+}
 
+/// Serde and utoipa impls for a wire-string enum: Serialize writes `Display`,
+/// Deserialize goes through `FromStr`, and the utoipa schema is a string.
+/// `impl_wire_enum!` invokes it for every string-form enum it builds; an enum with
+/// hand-written `Display` / `FromStr` (`BarSize`, `WhatToShow`) invokes it
+/// directly.
+macro_rules! impl_wire_string_serde {
+    ($name:ident) => {
         impl ::serde::Serialize for $name {
             fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error> {
-                serializer.serialize_str(self.as_str())
+                serializer.collect_str(self)
             }
         }
 
@@ -114,18 +172,6 @@ macro_rules! impl_wire_enum {
         #[cfg(feature = "utoipa")]
         impl ::utoipa::ToSchema for $name {}
     };
-    (@common $name:ident) => {
-        impl ::std::fmt::Display for $name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                f.write_str(self.as_str())
-            }
-        }
-        impl $crate::ToField for $name {
-            fn to_field(&self) -> String {
-                self.to_string()
-            }
-        }
-    };
 }
 
 /// Generates both `From<i32> for $name` and `From<$name> for i32` for an
@@ -138,16 +184,36 @@ macro_rules! impl_wire_enum {
 /// non-exhaustive-match error, and a duplicated code an unreachable-pattern
 /// warning. See `docs/rules/wire/enum-typing.md`.
 ///
-/// The `$name, serde { .. }` form also generates serde and utoipa impls that
-/// use the wire code, so the enum serializes as a bare integer (`2`, and
-/// `Unknown(7)` as `7`) instead of the derived variant name or the tagged
-/// `{"Unknown":7}`, and a field typed from an `i32` keeps its JSON form.
-/// Deserialize is total, like `From<i32>`. The utoipa schema is exactly an
-/// integer, for the reason given on `impl_wire_enum!`'s serde form.
+/// It also generates serde and utoipa impls that use the wire code, so the
+/// enum serializes as a bare integer (`2`, and `Unknown(7)` as `7`) instead of
+/// the derived variant name or the tagged `{"Unknown":7}`, and a field typed
+/// from an `i32` keeps its JSON form. Deserialize is total, like `From<i32>`.
+/// The utoipa schema is exactly an integer, for the reason given on
+/// `impl_wire_enum!`. `TickType`, whose table lives in its own macro, takes
+/// the serde half through the `@serde $name` form.
 macro_rules! impl_wire_code {
-    ($name:ident, serde { $($variant:ident = $code:literal),+ $(,)? }) => {
-        impl_wire_code!($name { $($variant = $code),+ });
+    ($name:ident { $($variant:ident = $code:literal),+ $(,)? }) => {
+        impl From<$name> for i32 {
+            fn from(value: $name) -> i32 {
+                match value {
+                    $($name::$variant => $code,)+
+                    $name::Unknown(code) => code,
+                }
+            }
+        }
 
+        impl From<i32> for $name {
+            fn from(value: i32) -> Self {
+                match value {
+                    $($code => $name::$variant,)+
+                    code => $name::Unknown(code),
+                }
+            }
+        }
+
+        impl_wire_code!(@serde $name);
+    };
+    (@serde $name:ident) => {
         impl ::serde::Serialize for $name {
             fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error> {
                 serializer.serialize_i32(i32::from(*self))
@@ -169,25 +235,6 @@ macro_rules! impl_wire_code {
 
         #[cfg(feature = "utoipa")]
         impl ::utoipa::ToSchema for $name {}
-    };
-    ($name:ident { $($variant:ident = $code:literal),+ $(,)? }) => {
-        impl From<$name> for i32 {
-            fn from(value: $name) -> i32 {
-                match value {
-                    $($name::$variant => $code,)+
-                    $name::Unknown(code) => code,
-                }
-            }
-        }
-
-        impl From<i32> for $name {
-            fn from(value: i32) -> Self {
-                match value {
-                    $($code => $name::$variant,)+
-                    code => $name::Unknown(code),
-                }
-            }
-        }
     };
 }
 

@@ -501,8 +501,9 @@ pub enum LedgerOnly {
 }
 
 /// Financial Advisor configuration data type.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Serde and utoipa use the wire code, a bare integer (`1`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaDataType {
     /// Account groups configuration.
     Groups = 1,
@@ -535,7 +536,7 @@ impl FaDataType {
     }
 }
 
-impl_wire_enum!(FaDataType);
+impl_wire_enum!(FaDataType, integer);
 
 /// Financial Advisor configuration data returned by `Client::request_fa`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -556,8 +557,9 @@ pub struct ReplaceFaResult {
 }
 
 /// Server-side log verbosity level for TWS API diagnostics.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Serde and utoipa use the wire code, a bare integer (`4`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerLogLevel {
     /// System-level messages.
     System = 1,
@@ -594,7 +596,7 @@ impl ServerLogLevel {
     }
 }
 
-impl_wire_enum!(ServerLogLevel);
+impl_wire_enum!(ServerLogLevel, integer);
 
 /// API verification data returned by `Client::verify_request`.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

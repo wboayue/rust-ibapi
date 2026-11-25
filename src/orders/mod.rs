@@ -762,8 +762,7 @@ impl Order {
 /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
 /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
 /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, Default, PartialEq, Eq, Copy, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Copy)]
 pub enum Action {
     #[default]
     /// Buy-side order.
@@ -914,7 +913,7 @@ impl OrderStatusKind {
 }
 
 // Serde and utoipa use the wire string; see `impl_wire_enum!`.
-impl_wire_enum!(OrderStatusKind, fallback Unknown, serde);
+impl_wire_enum!(OrderStatusKind, fallback Unknown);
 
 /// Time in force specifies how long an order remains active.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -987,7 +986,7 @@ impl TimeInForce {
 }
 
 // Serde and utoipa use the wire string; see `impl_wire_enum!`.
-impl_wire_enum!(TimeInForce, fallback Unknown, serde);
+impl_wire_enum!(TimeInForce, fallback Unknown);
 
 impl From<String> for TimeInForce {
     fn from(value: String) -> Self {
@@ -1006,8 +1005,7 @@ impl From<&str> for TimeInForce {
 }
 
 /// Tells how to handle remaining orders in an OCA group when one order or part of an order executes.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum OcaType {
     /// Not part of OCA group. Wire code `0`.
     #[default]
@@ -1036,8 +1034,7 @@ impl_wire_code!(OcaType {
 ///
 /// IB's `Order` reference gives `1` for a percentage; TWS rejects `1` with error 201 and takes
 /// `100` (live 2026-10-04, paper; `docs/wire-facts/orders.md#adjustable_trailing_unit`).
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum AdjustableTrailingUnit {
     /// A price amount. Wire code `0`. The encoder sends no code for it; TWS accepted such an
     /// order and echoed `0`.
@@ -1055,8 +1052,7 @@ impl_wire_code!(AdjustableTrailingUnit {
 });
 
 /// The order's origin. Identifies the type of customer from which the order originated.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum OrderOrigin {
     /// Customer order. Wire code `0`.
     #[default]
@@ -1088,15 +1084,14 @@ pub enum ShortSaleSlot {
     Unknown(i32),
 }
 
-impl_wire_code!(ShortSaleSlot, serde {
+impl_wire_code!(ShortSaleSlot {
     None = 0,
     Broker = 1,
     ThirdParty = 2,
 });
 
 /// Volatility type for VOL orders.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VolatilityType {
     /// Daily volatility. Wire code `1`.
     Daily,
@@ -1112,8 +1107,7 @@ impl_wire_code!(VolatilityType {
 });
 
 /// Reference price type for VOL orders.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReferencePriceType {
     /// Average of National Best Bid/Offer. Wire code `1`.
     AverageOfNBBO,
@@ -1129,8 +1123,7 @@ impl_wire_code!(ReferencePriceType {
 });
 
 /// What a what-if order checks ([`Order::what_if_type`]).
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WhatIfType {
     /// Full order check. Wire code `0`.
     FullOrderCheck,
@@ -1147,8 +1140,7 @@ impl_wire_code!(WhatIfType {
 });
 
 /// NYSE Rule 80A designations for institutional trading.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Rule80A {
     /// Individual customer.
     Individual,
@@ -1388,8 +1380,7 @@ pub struct OrderAllocation {
 /// Available for institutional clients to determine if this order is to open or close a position.
 /// When Action = "BUY" and OpenClose = "O" this will open a new position.
 /// When Action = "BUY" and OpenClose = "C" this will close and existing short position.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OrderOpenClose {
     /// Open a new position.
     Open,
@@ -1485,7 +1476,6 @@ pub struct CommissionAndFeesReport {
 }
 
 /// Liquidity types for executions.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Liquidity {
     /// No liquidity information. Wire code `0`.
@@ -1512,7 +1502,6 @@ impl_wire_code!(Liquidity {
 ///
 /// Variant names and codes follow the IBKR reference client, which does not define them
 /// further.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum OptionExerciseType {
     /// No exercise or lapse type. Wire code `-1`; also used when TWS omits the field.
@@ -1814,8 +1803,7 @@ pub enum AutoBind {
 ///
 /// No `Default` — [`ExecutionFilter::side`] carries the no-filter state via
 /// `None`. Exhaustive: TWS filters executions by `BUY` or `SELL` only.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExecutionFilterSide {
     /// Filter to buy fills only.
     Buy,
@@ -1860,8 +1848,7 @@ impl_wire_enum!(ExecutionFilterSide);
 /// placeholder [`Execution::default()`] instances built when an upstream
 /// `ExecutionDetails` proto omits its inner `execution` field. Real
 /// fills always set the variant from the wire.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ExecutionSide {
     /// Buy fill — IBKR wire value `"BOT"`.
     #[default]

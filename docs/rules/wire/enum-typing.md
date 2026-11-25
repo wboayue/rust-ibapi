@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233", "#1238", "#1253", "#1254", "#1258", "#1261"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233", "#1238", "#1245", "#1253", "#1254", "#1258", "#1261"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -44,11 +44,15 @@ Outbound-only enums stay closed: the caller picks the value, so there is nothing
 keep. A one-shot field is open too: a hard error fails the call and discards the rest of the
 frame (#1233).
 
-Serde: if an open enum serializes as the wire string (`OrderStatusKind`, `TimeInForce`,
-`OrderType`), use `impl_wire_enum!(Name, fallback Unknown, serde)`, which generates serde and the
-`utoipa` schema (`PartialSchema` delegating to `String`); a derive would emit
-`{"Unknown":"..."}`. If it serializes as the derived variant name (`Rule80A`, `OrderOpenClose`),
-keep the derives; `Unknown` takes the tagged form.
+**Serde is the wire form, never a derive** (#1245). `impl_wire_enum!` generates `Serialize`,
+`Deserialize` and the `utoipa` schema (`PartialSchema` delegating to `String`) on every arm, so the
+JSON is the wire string and an open enum's `Unknown("X")` is `"X"`, not the derived
+`{"Unknown":"X"}`. `impl_wire_code!` does the same with a bare integer. An enum built with either
+macro must not derive them; the impls conflict, so a stray derive fails to compile. A closed enum
+whose `as_str` spells an integer code (`FaDataType`, `ServerLogLevel`) takes
+`impl_wire_enum!(Name, integer)`, which serializes the number. An enum with hand-written
+`Display` / `FromStr` that round-trip the wire string (`WhatToShow`) invokes
+`impl_wire_string_serde!(Name)` directly.
 
 ## Why
 
@@ -75,7 +79,7 @@ missing/empty half; the proto default is a real code. **`From<i32>` never coerce
 code to a known variant**: add an `Unknown(i32)` variant and make `From<i32>` total, returning
 `Unknown(code)` outside the table. Each also implements `From<T> for i32`, since `value as i32`
 no longer compiles with a payload variant. `impl_wire_code!` (`src/macros.rs`) generates both from
-one table (#1180). `Unknown(i32)` keeps `Copy` and derived serde. There is no closed
+one table (#1180), plus serde as the bare code. `Unknown(i32)` keeps `Copy`. There is no closed
 `TryFrom<i32>` form for streaming paths.
 
 **One-shot fields take the same shape.** `ArticleType` (`news_article`) used to decode closed,
@@ -157,6 +161,11 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
   `"None"` to `None` before `FromStr`, which keeps the bare `"None"` as `Unknown("None")`.
 - #1222 — wire-string serde for open enums moved from hand-written impls to
   `impl_wire_enum!(Name, fallback Unknown, serde)`.
+- #1245 — one serde convention: every `impl_wire_enum!` / `impl_wire_code!` enum serializes in its
+  wire form, the `serde` opt-in arms are gone, and `TickType` (`impl_wire_code!(@serde ..)`),
+  `MarketDataType`, `Liquidity` and `OptionExerciseType` gained serde. Fields retyped from `i32`
+  (`DepthOperation`, `BulletinType`, `AdjustableTrailingUnit`) got their 5.x numeric JSON back.
+  `BarSize` stayed out (#1302): its `FromStr` parses variant names, not the `Display` wire text.
 - #1233 — counter-example to #1070: `ArticleType` reopened with `Unknown(i32)` on
   `impl_wire_code!`. Decoding closed on a one-shot failed `news_article` and discarded the body;
   the one-shot exception to the open shape is retired.

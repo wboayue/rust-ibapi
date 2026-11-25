@@ -251,7 +251,7 @@ impl OrderType {
 // Serde and utoipa use the wire string (see `impl_wire_enum!`), so `Order` JSON keeps
 // `"order_type":"LMT"`. The `Order` fields go through `deserialize_optional_order_type`,
 // which reads `null`, `""` and `"None"` as `None`.
-impl_wire_enum!(OrderType, fallback Unknown, serde);
+impl_wire_enum!(OrderType, fallback Unknown);
 
 /// Whether an order-type string means "no order type": empty, or `None` in any case. The
 /// Gateway echoes an unset `adjusted_order_type` / `delta_neutral_order_type` as `"None"`
