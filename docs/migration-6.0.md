@@ -1029,7 +1029,31 @@ or `"EventContract"` where it wrote `{"Other":"IOPT"}`, and JSON written by 5.x 
 deserializes as `Other`, which compares unequal to the new variant; re-parse with
 `t.as_str().parse()` to normalize.
 
-### 44. `completed_orders`, `auto_open_orders` and `news_bulletins` take an enum, not a `bool`
+### 44. `ExecutionFilter::time` is `Option<time::OffsetDateTime>`
+
+`time` was a `String` passed to TWS as written. TWS rejected every zone suffix tried except
+`UTC` and `Europe/London`, including the instrument's own zone (the form IB's error text gives
+as its example), with error 10314 and no fills. The zone-less form drew a deprecation
+warning (2174). The field now holds an instant, and the client sends it in UTC as
+`yyyymmdd hh:mm:ss UTC`, dropping sub-seconds. `None` sends no time filter, as an empty
+string did.
+
+```rust,ignore
+// 5.x
+let filter = ExecutionFilter { time: "20261115-15:52:00".to_string(), ..Default::default() };
+
+// 6.0
+use time::macros::datetime;
+let filter = ExecutionFilter { time: Some(datetime!(2026-11-15 15:52 UTC)), ..Default::default() };
+```
+
+The compiler finds every site that sets the field. A dashed `yyyymmdd-hh:mm:ss` string was
+UTC, so it parses with
+`time::PrimitiveDateTime::parse(text, time::macros::format_description!("[year][month][day]-[hour]:[minute]:[second]"))?.assume_utc()`.
+As before, `time` filters within the days the filter covers and never extends them
+([wire facts](wire-facts/orders.md#executiontime-rendering)).
+
+### 45. `completed_orders`, `auto_open_orders` and `news_bulletins` take an enum, not a `bool`
 
 The last three `bool` flags on `Client` methods are two-variant enums, as `LedgerOnly` (§16),
 `SmartDepth` and `IgnoreSize` already are, so the call site says what the flag selects:
@@ -1057,7 +1081,7 @@ let bulletins = client.news_bulletins(true)?;
 // 6.0
 let completed = client.completed_orders(ApiOnly::Yes)?;   // only orders placed through the API
 let orders = client.auto_open_orders(AutoBind::No)?;      // new TWS orders are not bound to this client
-let bulletins = client.news_bulletins(AllMessages::Yes)?; // the day's existing bulletins, then new ones
+let bulletins = client.news_bulletins(AllMessages::Yes)?; // all the existing bulletins for the current day
 ```
 
 The compiler reports every call. Nothing changes on the wire or at runtime.

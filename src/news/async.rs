@@ -45,7 +45,7 @@ impl Client {
     ///
     /// # Arguments
     ///
-    /// * `all_messages` - [`AllMessages::Yes`] returns all the existing bulletins for the current day, then new ones; [`AllMessages::No`] only the new bulletins.
+    /// * `all_messages` - [`AllMessages::Yes`] returns all the existing bulletins for the current day; [`AllMessages::No`] only the new bulletins.
     ///
     /// # Examples
     ///

@@ -56,7 +56,7 @@ pub struct NewsBulletin {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AllMessages {
-    /// The existing bulletins for the current day, then new bulletins.
+    /// All the existing bulletins for the current day.
     Yes,
     /// Only new bulletins.
     No,
