@@ -1778,3 +1778,29 @@ for update in subscription.iter_data() {
 
 A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
 Check `notice.code` to tell them apart.
+
+### 62. `Quote` reads `None` for a side with no quote
+
+TWS reports a side with no quote as a price tick with size `0` and a placeholder price: `-1` for
+options and indices, `-1` times the price magnifier (`-100`) for a magnified contract, and `0`
+for combos. `Quote::apply` stored it, so `quote.bid` read `Some(-1.0)` although the field's
+`Option` says "no bid" with `None`. A bid or ask price tick with size `0` and a price of `0` or
+below now sets the side's price and size to `None`. A price above `0` with size `0`, never seen on
+the wire, is still stored as sent. The placeholder can't be filtered by price alone, since a
+calendar spread's real bid can be `-71` (with a size).
+
+```rust,ignore
+// 5.x
+let bid = quote.bid.filter(|_| quote.bid_size > Some(0.0));
+
+// 6.0
+let bid = quote.bid;               // None while TWS reports no bid
+let side = quote.bid_side();       // price and size, None whenever the size is 0
+```
+
+The compiler catches none of this. Code that read the placeholder from `Quote` to detect an empty
+side sees `None` instead. The `TickPrice` and `TickPriceSize` ticks still carry the placeholder.
+
+`last` and `last_size` keep the values TWS sends. A last-price placeholder can appear as
+`Some(-1.0)` or `Some(-100.0)` with `last_size` set to `Some(0.0)`. EUR.USD can also report
+a real positive last price with the same size, so size alone cannot identify a placeholder.

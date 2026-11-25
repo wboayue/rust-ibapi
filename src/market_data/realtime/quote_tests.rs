@@ -7,6 +7,7 @@ fn price_size(price_tick_type: TickType, price: f64, size: f64) -> TickTypes {
         TickType::Ask => TickType::AskSize,
         TickType::DelayedBid => TickType::DelayedBidSize,
         TickType::DelayedAsk => TickType::DelayedAskSize,
+        TickType::Last => TickType::LastSize,
         other => panic!("no size tick for {other:?}"),
     };
     TickTypes::PriceSize(TickPriceSize {
@@ -190,9 +191,35 @@ fn empty_sides_have_no_side() {
     ];
     for (label, tick_type, placeholder) in cases {
         let quote = Quote::from_ticks(&[price_size(tick_type, placeholder, 0.0)]);
-        assert_eq!((quote.bid, quote.bid_size), (Some(placeholder), Some(0.0)), "{label}");
+        assert_eq!((quote.bid, quote.bid_size), (None, None), "{label}");
         assert_eq!(quote.bid_side(), None, "{label}");
     }
+}
+
+/// A side that loses its quote reads `None` in its fields, not the placeholder; the other
+/// side and `last`, which EUR.USD sends with size `0`, keep what TWS sent.
+#[test]
+fn no_quote_tick_clears_only_its_side() {
+    let quote = Quote::from_ticks(&[
+        price_size(TickType::Bid, 5.0, 3.0),
+        price_size(TickType::Ask, 5.5, 4.0),
+        price_size(TickType::Last, 1.0906, 0.0),
+        price_size(TickType::Bid, -1.0, 0.0),
+    ]);
+
+    assert_eq!((quote.bid, quote.bid_size), (None, None));
+    assert_eq!((quote.ask, quote.ask_size), (Some(5.5), Some(4.0)));
+    assert_eq!((quote.last, quote.last_size), (Some(1.0906), Some(0.0)));
+}
+
+/// Only a placeholder price (`0` or below) with size `0` clears a side. A price above `0` with
+/// size `0`, never seen on the wire, is stored as sent; the side accessor still reports no quote.
+#[test]
+fn positive_price_with_size_zero_is_kept() {
+    let quote = Quote::from_ticks(&[price_size(TickType::Bid, 1.0906, 0.0)]);
+
+    assert_eq!((quote.bid, quote.bid_size), (Some(1.0906), Some(0.0)));
+    assert_eq!(quote.bid_side(), None);
 }
 
 #[test]
