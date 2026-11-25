@@ -177,7 +177,9 @@ impl StreamDecoder<TickLast> for TickLast {
 
 /// Specifies the type of data to show for real-time bars.
 ///
-/// Serde and utoipa use the wire string (`"MIDPOINT"`).
+/// Serde and utoipa use the wire string (`"MIDPOINT"`). `FromStr` matches it exactly and fails
+/// with [`Error::Parse`]; the historical
+/// [`WhatToShow`](crate::market_data::historical::WhatToShow) ignores case.
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum WhatToShow {
     /// Trade data.

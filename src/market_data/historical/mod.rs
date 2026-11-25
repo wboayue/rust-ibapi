@@ -211,7 +211,7 @@ impl Default for Bar {
 ///
 /// `Display` and serde use the wire text (`"5 mins"`). `FromStr` accepts it, and also the
 /// variant name in any case (`"MIN5"`, `"Min5"`), so JSON written by 5.x still loads.
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum BarSize {
     /// One-second bars.
     Sec,
@@ -749,7 +749,7 @@ pub struct Session {
 /// Enumerates the data payload returned when requesting historical data.
 ///
 /// Serde and utoipa use the wire string (`"BID_ASK"`).
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum WhatToShow {
     /// Trade data including OHLC and volume.
     Trades,

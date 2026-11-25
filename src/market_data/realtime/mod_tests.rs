@@ -39,7 +39,8 @@ fn what_to_show_round_trip() {
         (WhatToShow::Ask, "ASK"),
         (WhatToShow::AggTrades, "AGGTRADES"),
     ]);
-    // Historical-only codes and the variant name are not realtime wire values.
+    // Historical-only codes and the variant name are not realtime wire values, and matching is
+    // case-sensitive (the historical `WhatToShow` is not).
     check_wire_enum_rejects_unknown::<WhatToShow>(&["", "BID_ASK", "MidPoint", "trades"]);
 }
 

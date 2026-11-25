@@ -1148,7 +1148,7 @@ case (`"MIN5"`), so its 5.x JSON loads.
 
 The compiler catches none of this. JSON written by 5.x for the enums in the first twelve rows does
 not round-trip: a closed enum (`Action`, `OptionRight`, `LegAction`, the execution sides,
-`WhatToShow`, `FaDataType`, `ServerLogLevel`) rejects a variant name, and every integer-coded
+historical `WhatToShow`, `FaDataType`, `ServerLogLevel`) rejects a variant name, and every integer-coded
 enum rejects a name or a tagged object. An open string enum (`SecurityType`, `SecurityIdType`,
 `Rule80A`, `OrderOpenClose`, the fund enums) does *not* reject one: it keeps the name as an
 unrecognized code. A `Contract` stored by 5.x with `"security_type":"Stock"` loads as
