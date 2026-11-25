@@ -51,7 +51,7 @@ Both mapped any code they did not model to a unit `Unknown`, losing the value. `
 - **The variants no longer have explicit discriminants**, so `value as i32` no longer compiles. Use `i32::from(value)`.
 - **`switch_market_data_type(MarketDataType::Unknown(n))` sends `n`.** It always sent `0` before.
 - **`ToField for ComboLegOpenClose` is removed**: a leftover from the text wire format with no remaining caller.
-- **Serde:** `ComboLegOpenClose::Unknown` serializes in the derived tagged form, `{"Unknown":3}`, where it was `"Unknown"`. The other variants are unchanged.
+- **Serde:** both serialize as the wire code; see §47.
 
 ```rust,ignore
 // 5.x
@@ -177,8 +177,8 @@ if let TickType::Unknown(id) = tick.tick_type { /* ... */ }
 - **An unrecognized value is `Unknown(String)`**, carrying the raw wire string.
 - **`From<&str>` is replaced by `FromStr`** (`"004".parse::<FundAssetType>()`), which rejects
   only an empty string. `as_str()` and `Display` return the wire value (`"004"`, `"Y"`).
-- **Serde:** `Unknown` serializes in the derived tagged form, `{"Unknown":"008"}`. An unset
-  field is `null`, so JSON saved by 5.x with `"None"` for either field no longer deserializes.
+- **Serde:** both serialize as the wire string, `Unknown` included (§47). An unset field is
+  `null`, so JSON saved by 5.x with `"None"` for either field no longer deserializes.
 
 ```rust,ignore
 // 5.x
@@ -244,7 +244,7 @@ let code = i32::from(row.operation); // where the wire code is needed
 
 Match on the variants, or call `i32::from(..)` where the wire code is needed. The compiler finds every comparison with an integer.
 
-The compiler does not catch the serialized form. `MarketDepth` and `MarketDepthL2` derive `Serialize` / `Deserialize`, and `operation` and `side` now serialize in the enums' derived externally tagged form: `"Insert"`, `"Update"`, `"Delete"`, `"Ask"`, `"Bid"`, or `{"Unknown":9}`, where they were numbers. Stored or transmitted rows written by 5.x carry the numbers and no longer deserialize; the `utoipa` schemas change the same way.
+Serialized, `operation` and `side` are the wire code (§47), the number 5.x wrote, so `MarketDepth` and `MarketDepthL2` JSON written by 5.x still deserializes. The `utoipa` schemas are integers, as before.
 
 ### 10. `NewsBulletin::message_type` is a `BulletinType`
 
@@ -271,7 +271,7 @@ let code = i32::from(bulletin.message_type); // where the wire code is needed
 
 Match on the variants, or call `i32::from(..)` where the wire code is needed. The compiler finds every comparison with an integer.
 
-The compiler does not catch the serialized form. `NewsBulletin` derives `Serialize` / `Deserialize`, and `message_type` now serializes in the enum's derived externally tagged form: `"Regular"`, `"ExchangeUnavailable"`, `"ExchangeAvailable"`, or `{"Unknown":7}`, where it was the number. Stored or transmitted bulletins written by 5.x carry the number and no longer deserialize; the `utoipa` schema changes the same way.
+Serialized, `message_type` is the wire code (§47), the number 5.x wrote, so `NewsBulletin` JSON written by 5.x still deserializes. The `utoipa` schema is an integer, as before.
 
 ### 11. `Missing` moves to `ibapi::builder`
 
@@ -846,10 +846,9 @@ order.adjustable_trailing_unit = AdjustableTrailingUnit::Percent;
 ```
 
 `attach_adjustable_stop` sets the field from its `TrailBy` as before. `i32::from(unit)` gives the
-code. The compiler finds every assignment and comparison that uses an integer. It does not
-catch the serialized form: `Order` derives `Serialize` / `Deserialize`, and the field now
-serializes as the variant name (`"Percent"`) where it was a number, so `Order` JSON written by
-5.x no longer deserializes. The `utoipa` schema changes to match.
+code. The compiler finds every assignment and comparison that uses an integer. Serialized, the
+field is the wire code (§47), the number 5.x wrote, so `Order` JSON written by 5.x still
+deserializes it.
 
 ### 38. Realtime `Bar::volume` and `wap` are `Option<f64>`
 
@@ -990,9 +989,9 @@ let code = details.under_security_type.as_ref().map_or("", SecurityType::as_str)
 ```
 
 The compiler finds every use as a `String`. It doesn't catch the serialized form:
-`ContractDetails` derives `Serialize` / `Deserialize`, and the field now serializes like
-`Contract::security_type` (the variant name, `"Stock"`) or as `null`, where it was the wire code
-(`"STK"`) or `""`. JSON written by 5.x doesn't deserialize into the new field.
+`ContractDetails` derives `Serialize` / `Deserialize`, and an unset field now serializes as
+`null` where it was `""`. A set field is the wire code (`"STK"`, §47) as in 5.x, so 5.x JSON with
+a code still deserializes; one with `""` doesn't.
 
 ### 42. `ContractDescription::derivative_security_types` is `Vec<SecurityType>`
 
@@ -1024,10 +1023,8 @@ and `SecurityType::EventContract`, and they encode back to the same codes.
 
 The compiler finds an exhaustive `match` on `SecurityType` that lacks the new arms. It doesn't
 catch a comparison or match against `Other("IOPT")` or `Other("EC")`: that code still compiles
-and no longer matches. A serialized `Contract` with one of these types writes `"StructuredProduct"`
-or `"EventContract"` where it wrote `{"Other":"IOPT"}`, and JSON written by 5.x for them still
-deserializes as `Other`, which compares unequal to the new variant; re-parse with
-`t.as_str().parse()` to normalize.
+and no longer matches. Serialized, `SecurityType` is the wire code (§47), so a `Contract` with
+one of these types writes `"IOPT"` or `"EC"` and reads back as the new variant.
 
 ### 44. `ExecutionFilter::time` is `Option<time::OffsetDateTime>`
 
@@ -1111,8 +1108,46 @@ let code = i32::from(leg.short_sale_slot); // where the number is wanted
 ```
 
 The compiler finds every assignment and comparison; `ComboLeg { .., ..Default::default() }`
-literals compile unchanged. Serialized, `ShortSaleSlot` is its wire code, so the two fields keep
+literals compile unchanged. Serialized, `ShortSaleSlot` is its wire code (§47), so the two fields keep
 their 5.x form (`2`, or the bare number for an unmodeled code) and `ComboLeg` JSON written by 5.x
 still deserializes. The compiler doesn't catch that `Order::short_sale_slot` changes the other
 way: it serialized as the variant name (`"Broker"`, `{"Unknown":7}`) and is now the number. The
 `utoipa` schema for all three fields is an integer.
+
+### 47. Wire enums serialize in their wire form
+
+5.x serialized most wire enums by their Rust variant name (`"Buy"`), with an unrecognized value in
+the tagged form (`{"Unknown":3}`). Every one of them now serializes as the value TWS sends: a
+string code as a string, an integer code as a bare number, and an unrecognized value as itself,
+untagged. Renaming a variant no longer moves the JSON. The `utoipa` schemas change to match: a
+plain `string` or `integer`, where they listed the variant names.
+
+| Enum | 5.x | 6.0 |
+|---|---|---|
+| `Action`, `LegAction`, `ExecutionFilterSide` | `"Buy"`, `"SellShort"` | `"BUY"`, `"SSHORT"` |
+| `ExecutionSide` | `"Bought"` | `"BOT"` |
+| `OptionRight` | `"Call"` | `"C"` |
+| `SecurityType` | `"Stock"`, `{"Other":"X"}` | `"STK"`, `"X"` |
+| `SecurityIdType` | `"Cusip"`, `{"Unknown":"X"}` | `"CUSIP"`, `"X"` |
+| `Rule80A`, `OrderOpenClose` | `"Individual"`, `"Open"` | `"I"`, `"O"` |
+| `FundAssetType`, `FundDistributionPolicyIndicator` | `"MoneyMarket"`, `"IncomeFund"` | `"001"`, `"Y"` |
+| `market_data::historical::WhatToShow` | `"BidAsk"` | `"BID_ASK"` |
+| `FaDataType`, `ServerLogLevel` | `"Groups"`, `"Info"` | `1`, `4` |
+| `OcaType`, `OrderOrigin`, `VolatilityType`, `ReferencePriceType`, `WhatIfType` | `"CancelWithBlock"`, `{"Unknown":7}` | `1`, `7` |
+| `ComboLegOpenClose`, `ArticleType` | `"Open"`, `"Unknown"`, `"Text"` | `1`, `3`, `0` |
+| `TriggerMethod` on its own | `"Last"` | `2` |
+| `DepthOperation`, `DepthSide`, `BulletinType`, `AdjustableTrailingUnit` | number (as an `i32` field) | number, unchanged from 5.x |
+
+`OrderType`, `TimeInForce`, `OrderStatusKind`, `ShortSaleSlot` and `Expiry` already serialized
+this way, and `PriceCondition::trigger_method` was already a number. `TickType`,
+`MarketDataType`, `Liquidity` and `OptionExerciseType` gain `Serialize` / `Deserialize`, as the
+wire code.
+
+The compiler catches none of this. JSON written by 5.x for the enums in the first twelve rows does
+not round-trip: a closed enum (`Action`, `OptionRight`, `LegAction`, the execution sides,
+`WhatToShow`, `FaDataType`, `ServerLogLevel`) rejects a variant name, and every integer-coded
+enum rejects a name or a tagged object. An open string enum (`SecurityType`, `SecurityIdType`,
+`Rule80A`, `OrderOpenClose`, the fund enums) does *not* reject one: it keeps the name as an
+unrecognized code. A `Contract` stored by 5.x with `"security_type":"Stock"` loads as
+`SecurityType::Other("Stock")`, and a request built from it sends `Stock` to TWS. Convert stored JSON before loading it, by mapping each variant name to
+its code (`as_str()` lists the codes for the string enums, `i32::from` for the integer ones).

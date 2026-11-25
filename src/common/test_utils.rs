@@ -486,19 +486,50 @@ pub mod helpers {
 #[cfg(test)]
 #[allow(dead_code)] // Consumers grow as the typed-status sweep lands.
 pub mod wire_enum {
-    /// Assert `Display`, `FromStr`, and `ToField` agree on a hand-written
+    /// Assert `Display`, `FromStr`, `ToField` and serde agree on a hand-written
     /// `(variant, wire)` table. One helper covers every trait impl generated
     /// by `impl_wire_enum!` — independent verification (the table is not
     /// derived from `as_str()`, so a typo in either direction surfaces).
+    /// Serde is the bare wire string both ways.
     pub fn check_wire_enum_round_trip<T>(table: &[(T, &'static str)])
     where
-        T: std::fmt::Display + std::fmt::Debug + PartialEq + std::str::FromStr<Err = crate::Error> + crate::ToField,
+        T: std::fmt::Display
+            + std::fmt::Debug
+            + PartialEq
+            + std::str::FromStr<Err = crate::Error>
+            + crate::ToField
+            + serde::Serialize
+            + serde::de::DeserializeOwned,
     {
         for (variant, wire) in table {
             assert_eq!(variant.to_string(), *wire, "Display for {variant:?}");
             assert_eq!(&T::from_str(wire).unwrap(), variant, "FromStr({wire})");
             assert_eq!(variant.to_field(), *wire, "ToField for {variant:?}");
+            check_serde_form(variant, serde_json::json!(wire));
         }
+    }
+
+    /// `impl_wire_enum!(.., integer)`: the text form through `FromStr` / `ToField`, serde
+    /// as the bare code, and `unlisted` rejected by Deserialize.
+    pub fn check_integer_wire_enum<T>(table: &[(T, i32)], unlisted: i32)
+    where
+        T: std::fmt::Debug + PartialEq + std::str::FromStr<Err = crate::Error> + crate::ToField + serde::Serialize + serde::de::DeserializeOwned,
+    {
+        for (variant, code) in table {
+            assert_eq!(variant.to_field(), code.to_string(), "ToField for {variant:?}");
+            assert_eq!(&code.to_string().parse::<T>().unwrap(), variant, "FromStr({code})");
+            check_serde_form(variant, serde_json::json!(code));
+        }
+        assert!(serde_json::from_value::<T>(serde_json::json!(unlisted)).is_err(), "code {unlisted}");
+    }
+
+    /// Assert `value` serializes as exactly `json` and deserializes back to itself.
+    pub fn check_serde_form<T>(value: &T, json: serde_json::Value)
+    where
+        T: std::fmt::Debug + PartialEq + serde::Serialize + serde::de::DeserializeOwned,
+    {
+        assert_eq!(serde_json::to_value(value).unwrap(), json, "serialize {value:?}");
+        assert_eq!(&serde_json::from_value::<T>(json.clone()).unwrap(), value, "deserialize {json}");
     }
 
     /// Assert every input string in `unknowns` produces `Err(Error::Parse(..))`.
@@ -537,13 +568,16 @@ pub mod wire_enum {
     /// Listing `Unknown(code)` rows in the table is still useful — only those
     /// exercise `Into<i32>` on the payload variant — and costs
     /// nothing: a listed code is skipped by the probe that would re-derive it.
+    ///
+    /// Serde is the bare code both ways, for every table row.
     pub fn check_wire_code_round_trip<T>(table: &[(T, i32)], unknown: fn(i32) -> T)
     where
-        T: From<i32> + Into<i32> + Copy + PartialEq + std::fmt::Debug,
+        T: From<i32> + Into<i32> + Copy + PartialEq + std::fmt::Debug + serde::Serialize + serde::de::DeserializeOwned,
     {
         for &(variant, code) in table {
             assert_eq!(T::from(code), variant, "From({code})");
             assert_eq!(variant.into(), code, "i32::from({variant:?})");
+            check_serde_form(&variant, serde_json::json!(code));
         }
 
         for code in PROBE_CODES {

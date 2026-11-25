@@ -83,6 +83,16 @@ fn what_to_show_parse() {
 }
 
 #[test]
+fn what_to_show_serde_is_the_wire_string() {
+    use crate::common::test_utils::wire_enum::check_serde_form;
+
+    check_serde_form(&WhatToShow::BidAsk, serde_json::json!("BID_ASK"));
+    check_serde_form(&WhatToShow::AdjustedLast, serde_json::json!("ADJUSTED_LAST"));
+    // The 5.x variant name is not a wire string.
+    assert!(serde_json::from_str::<WhatToShow>("\"BidAsk\"").is_err());
+}
+
+#[test]
 fn duration() {
     assert_eq!(Duration::SECOND.to_field(), "1 S");
     assert_eq!(Duration::DAY.to_field(), "1 D");

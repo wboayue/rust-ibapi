@@ -20,3 +20,26 @@ fn ledger_prefix_split() {
         assert_eq!(value.base_key(), base, "{key}");
     }
 }
+
+#[test]
+fn fa_data_type_round_trip() {
+    use crate::common::test_utils::wire_enum::check_integer_wire_enum;
+
+    check_integer_wire_enum(&[(FaDataType::Groups, 1), (FaDataType::AccountAliases, 3)], 2);
+}
+
+#[test]
+fn server_log_level_round_trip() {
+    use crate::common::test_utils::wire_enum::check_integer_wire_enum;
+
+    check_integer_wire_enum(
+        &[
+            (ServerLogLevel::System, 1),
+            (ServerLogLevel::Error, 2),
+            (ServerLogLevel::Warning, 3),
+            (ServerLogLevel::Info, 4),
+            (ServerLogLevel::Detail, 5),
+        ],
+        0,
+    );
+}

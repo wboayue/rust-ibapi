@@ -63,8 +63,7 @@ pub enum AllMessages {
 }
 
 /// The type of a [`NewsBulletin`].
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BulletinType {
     /// Regular news bulletin. Wire code `1`.
     Regular,
@@ -125,8 +124,7 @@ pub(crate) enum HistoricalNewsFrame {
 }
 
 /// The type of a news article's body: text, binary, or a code this version doesn't model.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ArticleType {
     /// Plain text or HTML. Wire code `0`. Also the value when TWS omits the field.
     #[default]

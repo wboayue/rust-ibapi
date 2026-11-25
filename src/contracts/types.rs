@@ -183,8 +183,7 @@ impl_str_partial_eq!(Currency);
 ///
 /// No `Default` — `Contract.right: Option<OptionRight>` carries the no-right
 /// state via `None`.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OptionRight {
     /// Call option right.
     Call,
@@ -216,8 +215,7 @@ impl_wire_enum!(OptionRight);
 ///
 /// No `Default` — `Contract.security_id_type: Option<SecurityIdType>` carries
 /// the no-identifier state via `None`.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SecurityIdType {
     /// CUSIP — North American security identifier.
     Cusip,
@@ -967,8 +965,7 @@ pub enum BondIdentifier {
 /// `BUY` / `SELL` / `SSHORT`. `SLONG` is not accepted on combo legs — only the
 /// SSHORT short-sale form is gated (`SSHORT_COMBO_LEGS = 35`, well below our
 /// floor of 210), so all three variants are unconditionally valid.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum LegAction {
     /// Buy the leg.
     #[default]

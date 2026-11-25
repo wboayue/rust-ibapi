@@ -12,8 +12,7 @@ use serde::{Deserialize, Serialize};
 /// Determines which price feed to use when evaluating price conditions.
 /// The codes are IB's, listed at
 /// <https://www.interactivebrokers.com/docs/tws-api/doc/orders/trigger-methods>.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TriggerMethod {
     /// Default method (last for most securities, double bid/ask for OTC and options). Wire code `0`.
     #[default]
@@ -84,7 +83,6 @@ pub struct PriceCondition {
     /// Trigger price threshold.
     pub price: f64,
     /// Method for price evaluation.
-    #[serde(serialize_with = "serialize_trigger_method", deserialize_with = "deserialize_trigger_method")]
     pub trigger_method: TriggerMethod,
     /// True to trigger when price goes above threshold, false for below.
     pub is_more: bool,
@@ -103,22 +101,6 @@ impl Default for PriceCondition {
             is_conjunction: true,
         }
     }
-}
-
-// Serde helpers for TriggerMethod
-fn serialize_trigger_method<S>(method: &TriggerMethod, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    serializer.serialize_i32((*method).into())
-}
-
-fn deserialize_trigger_method<'de, D>(deserializer: D) -> Result<TriggerMethod, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = i32::deserialize(deserializer)?;
-    Ok(value.into())
 }
 
 /// Time-based condition that activates an order at a specific date and time.

@@ -144,6 +144,23 @@ fn action_round_trip() {
 }
 
 #[test]
+fn wire_enum_serde_reads_5x_variant_names_as_documented() {
+    // 5.x derived serde wrote variant names. A closed enum rejects them; an open one keeps the
+    // name as an unrecognized code, as #1220 accepted for `OrderType` (migration-6.0).
+    assert!(serde_json::from_str::<Action>("\"Buy\"").is_err());
+    assert_eq!(
+        serde_json::from_str::<Rule80A>("\"Individual\"").unwrap(),
+        Rule80A::Unknown("Individual".into())
+    );
+    let stock: crate::contracts::SecurityType = serde_json::from_str("\"Stock\"").unwrap();
+    assert_eq!(stock, crate::contracts::SecurityType::Other("Stock".into()));
+    assert_eq!(stock.as_str(), "Stock", "sent to TWS as the stored name");
+    // Integer-coded: the 5.x tagged unknown and variant name both fail.
+    assert!(serde_json::from_str::<OcaType>("{\"Unknown\":7}").is_err());
+    assert!(serde_json::from_str::<OcaType>("\"ReduceWithBlock\"").is_err());
+}
+
+#[test]
 fn wire_enum_distinguishes_empty_from_unknown() {
     // Both macro arms report the two failures apart: no value at all vs. a
     // value this crate does not model. `parse_required` reaches the first only
@@ -258,19 +275,6 @@ fn short_sale_slot_round_trips_every_wire_code() {
         ],
         ShortSaleSlot::Unknown,
     );
-}
-
-#[test]
-fn short_sale_slot_serializes_as_wire_code() {
-    for (slot, json) in [
-        (ShortSaleSlot::None, "0"),
-        (ShortSaleSlot::Broker, "1"),
-        (ShortSaleSlot::ThirdParty, "2"),
-        (ShortSaleSlot::Unknown(7), "7"),
-    ] {
-        assert_eq!(serde_json::to_string(&slot).unwrap(), json, "{slot:?} serializes");
-        assert_eq!(serde_json::from_str::<ShortSaleSlot>(json).unwrap(), slot, "{json} deserializes");
-    }
 }
 
 #[test]

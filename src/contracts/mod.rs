@@ -52,8 +52,7 @@ pub mod tick_types;
 
 // Models
 
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 /// SecurityType enumerates available security types
 ///
 /// `Other` preserves a wire value this crate does not model; `Display` writes
@@ -574,8 +573,7 @@ pub struct ComboLeg {
     pub exempt_code: i32,
 }
 
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 /// OpenClose specifies whether an order is an open or closing order.
 pub enum ComboLegOpenClose {
     /// Same as the parent security. This is the only option for retail customers. Wire code `0`.
@@ -887,8 +885,7 @@ fn parse_sessions(entries: &[String]) -> Result<Vec<TradingSession>, Error> {
 ///
 /// No `Default`: [`ContractDetails::fund_distribution_policy_indicator`] is
 /// `None` when TWS sends no value.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FundDistributionPolicyIndicator {
     /// Accumulation fund. Wire value `N`.
     AccumulationFund,
@@ -925,8 +922,7 @@ impl_wire_enum!(FundDistributionPolicyIndicator, fallback Unknown);
 ///
 /// No `Default`: [`ContractDetails::fund_asset_type`] is `None` when TWS sends
 /// no value.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FundAssetType {
     /// Other asset types. Wire value `000`.
     Others,

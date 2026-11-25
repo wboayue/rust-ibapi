@@ -10,7 +10,8 @@ macro_rules! tick_types {
         /// These represent different types of market data that can be requested
         /// and received from Interactive Brokers. Each tick type corresponds to
         /// a specific piece of market information like bid, ask, last trade, volume, etc.
-        #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+        ///
+        /// Serde and utoipa use the wire code, a bare integer (`Unknown(7)` as `7`).
         #[derive(Debug, Clone, Copy, PartialEq)]
         pub enum TickType {
             $(
@@ -40,6 +41,8 @@ macro_rules! tick_types {
                 }
             }
         }
+
+        impl_wire_code!(@serde TickType);
 
         impl TickType {
             /// Looks up a tick type by its TWS API field name, as the reference client's
