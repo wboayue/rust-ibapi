@@ -563,8 +563,9 @@ pub struct ComboLeg {
     /// For institutional customers to determine if this order is to open or close a position.
     pub open_close: ComboLegOpenClose,
     /// For stock legs when doing short selling: [`ShortSaleSlot::Broker`] or
-    /// [`ShortSaleSlot::ThirdParty`], the enum [`Order::short_sale_slot`](crate::orders::Order::short_sale_slot)
-    /// holds. [`ShortSaleSlot::None`] is sent as no value, and an absent value decodes to it.
+    /// [`ShortSaleSlot::ThirdParty`] (same type as
+    /// [`Order::short_sale_slot`](crate::orders::Order::short_sale_slot)).
+    /// [`ShortSaleSlot::None`] is sent as no value, and an absent value decodes to it.
     pub short_sale_slot: ShortSaleSlot,
     /// When `short_sale_slot` is [`ShortSaleSlot::ThirdParty`], this field shall contain the designated location.
     pub designated_location: String,

@@ -137,7 +137,39 @@ macro_rules! impl_wire_enum {
 /// directions cannot disagree; a variant missing from it is a
 /// non-exhaustive-match error, and a duplicated code an unreachable-pattern
 /// warning. See `docs/rules/wire/enum-typing.md`.
+///
+/// The `$name, serde { .. }` form also generates serde and utoipa impls that
+/// use the wire code, so the enum serializes as a bare integer (`2`, and
+/// `Unknown(7)` as `7`) instead of the derived variant name or the tagged
+/// `{"Unknown":7}`, and a field typed from an `i32` keeps its JSON form.
+/// Deserialize is total, like `From<i32>`. The utoipa schema is exactly an
+/// integer, for the reason given on `impl_wire_enum!`'s serde form.
 macro_rules! impl_wire_code {
+    ($name:ident, serde { $($variant:ident = $code:literal),+ $(,)? }) => {
+        impl_wire_code!($name { $($variant = $code),+ });
+
+        impl ::serde::Serialize for $name {
+            fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error> {
+                serializer.serialize_i32(i32::from(*self))
+            }
+        }
+
+        impl<'de> ::serde::Deserialize<'de> for $name {
+            fn deserialize<D: ::serde::Deserializer<'de>>(deserializer: D) -> ::std::result::Result<Self, D::Error> {
+                <i32 as ::serde::Deserialize>::deserialize(deserializer).map($name::from)
+            }
+        }
+
+        #[cfg(feature = "utoipa")]
+        impl ::utoipa::PartialSchema for $name {
+            fn schema() -> ::utoipa::openapi::RefOr<::utoipa::openapi::schema::Schema> {
+                <i32 as ::utoipa::PartialSchema>::schema()
+            }
+        }
+
+        #[cfg(feature = "utoipa")]
+        impl ::utoipa::ToSchema for $name {}
+    };
     ($name:ident { $($variant:ident = $code:literal),+ $(,)? }) => {
         impl From<$name> for i32 {
             fn from(value: $name) -> i32 {
