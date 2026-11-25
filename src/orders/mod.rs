@@ -811,7 +811,12 @@ impl Action {
 // growing vocabulary, and `Unknown(String)` would cost `Copy` on a type the
 // builder and validation paths pass by value. An unrecognized side on an
 // inbound order fails that decode with `Error::Parse`.
-impl_wire_enum!(Action);
+impl_wire_enum!(Action {
+    Buy,
+    Sell,
+    SellShort,
+    SellLong
+});
 
 /// The lifecycle state of an order, as reported by TWS.
 ///
@@ -1829,7 +1834,7 @@ impl ExecutionFilterSide {
     }
 }
 
-impl_wire_enum!(ExecutionFilterSide);
+impl_wire_enum!(ExecutionFilterSide { Buy, Sell });
 
 /// Side of an [`Execution`] report — direction of a filled order.
 ///
@@ -1875,7 +1880,7 @@ impl ExecutionSide {
     }
 }
 
-impl_wire_enum!(ExecutionSide);
+impl_wire_enum!(ExecutionSide { Bought, Sold });
 
 /// Optional attributes sent with an order cancel.
 ///

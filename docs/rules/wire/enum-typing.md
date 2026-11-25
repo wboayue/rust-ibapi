@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233", "#1238", "#1245", "#1253", "#1254", "#1258", "#1261", "#1302"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233", "#1238", "#1245", "#1253", "#1254", "#1258", "#1261", "#1302", "#1303"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -50,9 +50,12 @@ JSON is the wire string and an open enum's `Unknown("X")` is `"X"`, not the deri
 `{"Unknown":"X"}`. `impl_wire_code!` does the same with a bare integer. An enum built with either
 macro must not derive them; the impls conflict, so a stray derive fails to compile. A closed enum
 whose `as_str` spells an integer code (`FaDataType`, `ServerLogLevel`) takes
-`impl_wire_enum!(Name, integer)`, which serializes the number. An enum with hand-written
+`impl_wire_enum!(Name, integer { .. })`, which serializes the number. An enum with hand-written
 `Display` / `FromStr` that round-trip the wire string (historical `WhatToShow`, `BarSize`) invokes
-`impl_wire_string_serde!(Name)` directly.
+`impl_wire_string_serde!` directly. **A closed enum lists every variant in the invocation**
+(`impl_wire_enum!(Action { Buy, Sell, SellShort, SellLong })`): its schema's `enum` is each
+variant's serialized value, and an exhaustive `match` over the list fails to compile when a variant
+is missing (#1303). An open enum's schema lists nothing, since it accepts codes it doesn't model.
 
 ## Why
 
@@ -169,6 +172,9 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
 - #1302 — `BarSize::from_str` gained the wire text (`"5 mins"`) beside the variant names, so it
   round-trips `Display` and took `impl_wire_string_serde!`; keeping the names as aliases kept
   5.x JSON loading. Realtime `WhatToShow` moved onto `impl_wire_enum!`.
+- #1303 — closed-enum schemas list their codes. The variant list lives in the macro invocation,
+  checked by a generated exhaustive `match`, rather than a `const ALL` the issue suggested: a
+  hand-kept array compiles with a variant missing.
 - #1233 — counter-example to #1070: `ArticleType` reopened with `Unknown(i32)` on
   `impl_wire_code!`. Decoding closed on a one-shot failed `news_article` and discarded the body;
   the one-shot exception to the open shape is retired.

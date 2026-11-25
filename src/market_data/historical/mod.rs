@@ -327,7 +327,30 @@ impl ToField for BarSize {
     }
 }
 
-impl_wire_string_serde!(BarSize);
+impl_wire_string_serde!(BarSize {
+    Sec,
+    Sec5,
+    Sec10,
+    Sec15,
+    Sec30,
+    Min,
+    Min2,
+    Min3,
+    Min4,
+    Min5,
+    Min10,
+    Min15,
+    Min20,
+    Min30,
+    Hour,
+    Hour2,
+    Hour3,
+    Hour4,
+    Hour8,
+    Day,
+    Week,
+    Month
+});
 
 /// Duration specifier used in historical data requests (e.g. `1 D`).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -823,7 +846,19 @@ impl ToField for WhatToShow {
     }
 }
 
-impl_wire_string_serde!(WhatToShow);
+impl_wire_string_serde!(WhatToShow {
+    Trades,
+    MidPoint,
+    Bid,
+    Ask,
+    BidAsk,
+    AggTrades,
+    HistoricalVolatility,
+    OptionImpliedVolatility,
+    FeeRate,
+    Schedule,
+    AdjustedLast
+});
 
 // Re-export non-function items
 #[cfg(feature = "async")]

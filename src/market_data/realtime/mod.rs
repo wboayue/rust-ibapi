@@ -221,7 +221,13 @@ impl WhatToShow {
     }
 }
 
-impl_wire_enum!(WhatToShow);
+impl_wire_enum!(WhatToShow {
+    Trades,
+    MidPoint,
+    Bid,
+    Ask,
+    AggTrades
+});
 
 /// Market depth data types.
 ///
