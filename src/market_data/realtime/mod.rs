@@ -176,8 +176,9 @@ impl StreamDecoder<TickLast> for TickLast {
 }
 
 /// Specifies the type of data to show for real-time bars.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, Copy)]
+///
+/// Serde and utoipa use the wire string (`"MIDPOINT"`).
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum WhatToShow {
     /// Trade data.
     Trades,
@@ -195,17 +196,30 @@ pub enum WhatToShow {
     AggTrades,
 }
 
-impl std::fmt::Display for WhatToShow {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl WhatToShow {
+    fn as_str(&self) -> &'static str {
         match self {
-            Self::Trades => write!(f, "TRADES"),
-            Self::MidPoint => write!(f, "MIDPOINT"),
-            Self::Bid => write!(f, "BID"),
-            Self::Ask => write!(f, "ASK"),
-            Self::AggTrades => write!(f, "AGGTRADES"),
+            Self::Trades => "TRADES",
+            Self::MidPoint => "MIDPOINT",
+            Self::Bid => "BID",
+            Self::Ask => "ASK",
+            Self::AggTrades => "AGGTRADES",
+        }
+    }
+
+    fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "TRADES" => Some(Self::Trades),
+            "MIDPOINT" => Some(Self::MidPoint),
+            "BID" => Some(Self::Bid),
+            "ASK" => Some(Self::Ask),
+            "AGGTRADES" => Some(Self::AggTrades),
+            _ => None,
         }
     }
 }
+
+impl_wire_enum!(WhatToShow);
 
 /// Market depth data types.
 ///

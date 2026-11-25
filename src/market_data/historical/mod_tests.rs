@@ -82,6 +82,53 @@ fn what_to_show_parse() {
     assert_eq!("ADJUSTED_LAST".parse::<WhatToShow>(), Ok(WhatToShow::AdjustedLast));
 }
 
+/// Every variant with its wire text, written independently of the `Display` match.
+const BAR_SIZES: [(BarSize, &str); 22] = [
+    (BarSize::Sec, "1 secs"),
+    (BarSize::Sec5, "5 secs"),
+    (BarSize::Sec10, "10 secs"),
+    (BarSize::Sec15, "15 secs"),
+    (BarSize::Sec30, "30 secs"),
+    (BarSize::Min, "1 min"),
+    (BarSize::Min2, "2 mins"),
+    (BarSize::Min3, "3 mins"),
+    (BarSize::Min4, "4 mins"),
+    (BarSize::Min5, "5 mins"),
+    (BarSize::Min10, "10 mins"),
+    (BarSize::Min15, "15 mins"),
+    (BarSize::Min20, "20 mins"),
+    (BarSize::Min30, "30 mins"),
+    (BarSize::Hour, "1 hour"),
+    (BarSize::Hour2, "2 hours"),
+    (BarSize::Hour3, "3 hours"),
+    (BarSize::Hour4, "4 hours"),
+    (BarSize::Hour8, "8 hours"),
+    (BarSize::Day, "1 day"),
+    (BarSize::Week, "1 week"),
+    (BarSize::Month, "1 month"),
+];
+
+#[test]
+fn bar_size_parses_its_wire_text_and_serializes_as_it() {
+    use crate::common::test_utils::wire_enum::check_serde_form;
+
+    for (bar_size, wire) in BAR_SIZES {
+        assert_eq!(wire.parse::<BarSize>(), Ok(bar_size), "FromStr({wire})");
+        assert_eq!(wire.to_uppercase().parse::<BarSize>(), Ok(bar_size), "FromStr is case-insensitive");
+        check_serde_form(&bar_size, serde_json::json!(wire));
+    }
+    assert!("5 minutes".parse::<BarSize>().is_err());
+    assert!(serde_json::from_str::<BarSize>("\"\"").is_err());
+}
+
+#[test]
+fn bar_size_reads_5x_variant_name_json() {
+    // 5.x derived serde wrote the variant name; FromStr still accepts it.
+    for (json, bar_size) in [("\"Min5\"", BarSize::Min5), ("\"Sec\"", BarSize::Sec), ("\"Hour8\"", BarSize::Hour8)] {
+        assert_eq!(serde_json::from_str::<BarSize>(json).unwrap(), bar_size, "{json}");
+    }
+}
+
 #[test]
 fn what_to_show_serde_is_the_wire_string() {
     use crate::common::test_utils::wire_enum::check_serde_form;

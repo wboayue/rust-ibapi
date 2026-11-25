@@ -207,9 +207,11 @@ impl Default for Bar {
     }
 }
 
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 /// Request granularity for historical bars.
+///
+/// `Display` and serde use the wire text (`"5 mins"`). `FromStr` accepts it, and also the
+/// variant name in any case (`"MIN5"`, `"Min5"`), so JSON written by 5.x still loads.
+#[derive(Clone, Debug, Copy, PartialEq)]
 pub enum BarSize {
     /// One-second bars.
     Sec,
@@ -289,30 +291,31 @@ impl Display for BarSize {
 impl FromStr for BarSize {
     type Err = HistoricalParseError;
 
+    /// Case-insensitive: the wire text (`"5 mins"`) or the variant name (`"MIN5"`).
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
-            "SEC" => Ok(Self::Sec),
-            "SEC5" => Ok(Self::Sec5),
-            "SEC10" => Ok(Self::Sec10),
-            "SEC15" => Ok(Self::Sec15),
-            "SEC30" => Ok(Self::Sec30),
-            "MIN" => Ok(Self::Min),
-            "MIN2" => Ok(Self::Min2),
-            "MIN3" => Ok(Self::Min3),
-            "MIN4" => Ok(Self::Min4),
-            "MIN5" => Ok(Self::Min5),
-            "MIN10" => Ok(Self::Min10),
-            "MIN15" => Ok(Self::Min15),
-            "MIN20" => Ok(Self::Min20),
-            "MIN30" => Ok(Self::Min30),
-            "HOUR" => Ok(Self::Hour),
-            "HOUR2" => Ok(Self::Hour2),
-            "HOUR3" => Ok(Self::Hour3),
-            "HOUR4" => Ok(Self::Hour4),
-            "HOUR8" => Ok(Self::Hour8),
-            "DAY" => Ok(Self::Day),
-            "WEEK" => Ok(Self::Week),
-            "MONTH" => Ok(Self::Month),
+            "1 SECS" | "SEC" => Ok(Self::Sec),
+            "5 SECS" | "SEC5" => Ok(Self::Sec5),
+            "10 SECS" | "SEC10" => Ok(Self::Sec10),
+            "15 SECS" | "SEC15" => Ok(Self::Sec15),
+            "30 SECS" | "SEC30" => Ok(Self::Sec30),
+            "1 MIN" | "MIN" => Ok(Self::Min),
+            "2 MINS" | "MIN2" => Ok(Self::Min2),
+            "3 MINS" | "MIN3" => Ok(Self::Min3),
+            "4 MINS" | "MIN4" => Ok(Self::Min4),
+            "5 MINS" | "MIN5" => Ok(Self::Min5),
+            "10 MINS" | "MIN10" => Ok(Self::Min10),
+            "15 MINS" | "MIN15" => Ok(Self::Min15),
+            "20 MINS" | "MIN20" => Ok(Self::Min20),
+            "30 MINS" | "MIN30" => Ok(Self::Min30),
+            "1 HOUR" | "HOUR" => Ok(Self::Hour),
+            "2 HOURS" | "HOUR2" => Ok(Self::Hour2),
+            "3 HOURS" | "HOUR3" => Ok(Self::Hour3),
+            "4 HOURS" | "HOUR4" => Ok(Self::Hour4),
+            "8 HOURS" | "HOUR8" => Ok(Self::Hour8),
+            "1 DAY" | "DAY" => Ok(Self::Day),
+            "1 WEEK" | "WEEK" => Ok(Self::Week),
+            "1 MONTH" | "MONTH" => Ok(Self::Month),
             _ => Err(HistoricalParseError::BarSize(s.to_string())),
         }
     }
@@ -323,6 +326,8 @@ impl ToField for BarSize {
         self.to_string()
     }
 }
+
+impl_wire_string_serde!(BarSize);
 
 /// Duration specifier used in historical data requests (e.g. `1 D`).
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

@@ -1137,11 +1137,14 @@ plain `string` or `integer`, where they listed the variant names.
 | `ComboLegOpenClose`, `ArticleType` | `"Open"`, `"Unknown"`, `"Text"` | `1`, `3`, `0` |
 | `TriggerMethod` on its own | `"Last"` | `2` |
 | `DepthOperation`, `DepthSide`, `BulletinType`, `AdjustableTrailingUnit` | number (as an `i32` field) | number, unchanged from 5.x |
+| `BarSize` | `"Min5"` | `"5 mins"`; `"Min5"` still loads |
 
 `OrderType`, `TimeInForce`, `OrderStatusKind`, `ShortSaleSlot` and `Expiry` already serialized
 this way, and `PriceCondition::trigger_method` was already a number. `TickType`,
 `MarketDataType`, `Liquidity` and `OptionExerciseType` gain `Serialize` / `Deserialize`, as the
-wire code.
+wire code, and `market_data::realtime::WhatToShow` as the wire string (`"MIDPOINT"`). `BarSize`
+also parses its wire text now (`"5 mins".parse()`), and still parses the variant name in any
+case (`"MIN5"`), so its 5.x JSON loads.
 
 The compiler catches none of this. JSON written by 5.x for the enums in the first twelve rows does
 not round-trip: a closed enum (`Action`, `OptionRight`, `LegAction`, the execution sides,

@@ -43,7 +43,7 @@ The macros in `src/` today (`grep -rn 'macro_rules!' src --include=*.rs`):
 |---|---|---|
 | `impl_str_partial_eq!` | `macros.rs` | Case 1: `impl PartialEq<Symbol> for str` cannot be blanket. 3 newtypes × 4 directions |
 | `impl_wire_enum!` | `macros.rs` | Case 1: `Display` / `FromStr` / `ToField` / `Serialize` / `Deserialize` / `PartialSchema` are foreign traits. The `as_str` / `from_wire` tables stay in plain Rust; only the plumbing expands |
-| `impl_wire_string_serde!` | `macros.rs` | Case 1: wire-string serde + `PartialSchema` from `Display` / `FromStr`; `impl_wire_enum!` calls it, and `WhatToShow` directly |
+| `impl_wire_string_serde!` | `macros.rs` | Case 1: wire-string serde + `PartialSchema` from `Display` / `FromStr`; `impl_wire_enum!` calls it, and `BarSize` and historical `WhatToShow` directly |
 | `impl_wire_code!` | `macros.rs` | Case 1: `From<T> for i32` and serde cannot be blanket (orphan rule). 16 integer enums (`grep -rn 'impl_wire_code!([A-Z]' src --include=*.rs \| grep -v _tests`), plus `TickType` through `@serde`; one `Variant = code` table writes both directions, which hand-written pairs kept twice |
 | `string_newtype_surface!` | `contracts/types_tests.rs` | Case 2: calls inherent `<$t>::new` and `.as_str()` |
 | `single_req_id_request_builder!`, `request_id_response_builder!`, `empty_request_builder!` | `testdata/builders/mod.rs` | Case 3: a new named struct per fixture |

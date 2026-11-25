@@ -29,12 +29,18 @@ fn depth_side_round_trips_every_wire_code() {
 }
 
 #[test]
-fn what_to_show_display() {
-    assert_eq!(WhatToShow::Trades.to_string(), "TRADES");
-    assert_eq!(WhatToShow::MidPoint.to_string(), "MIDPOINT");
-    assert_eq!(WhatToShow::Bid.to_string(), "BID");
-    assert_eq!(WhatToShow::Ask.to_string(), "ASK");
-    assert_eq!(WhatToShow::AggTrades.to_string(), "AGGTRADES");
+fn what_to_show_round_trip() {
+    use crate::common::test_utils::wire_enum::{check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
+
+    check_wire_enum_round_trip(&[
+        (WhatToShow::Trades, "TRADES"),
+        (WhatToShow::MidPoint, "MIDPOINT"),
+        (WhatToShow::Bid, "BID"),
+        (WhatToShow::Ask, "ASK"),
+        (WhatToShow::AggTrades, "AGGTRADES"),
+    ]);
+    // Historical-only codes and the variant name are not realtime wire values.
+    check_wire_enum_rejects_unknown::<WhatToShow>(&["", "BID_ASK", "MidPoint", "trades"]);
 }
 
 /// Only 317 becomes `Reset`; other notices on a depth stream, including the
