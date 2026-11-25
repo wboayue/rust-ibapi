@@ -211,8 +211,16 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
     /// `send_shared_request` for `RequestAccountData`, refused with
-    /// `Error::AccountUpdatesInUse` while another account is live.
-    async fn send_account_updates_request(&self, account: &AccountId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
+    /// `Error::AccountUpdatesInUse` while another account is live. While
+    /// `account` is live already, writes `unsubscribe` ahead of `message`:
+    /// TWS answers a repeated subscribe with nothing, but an unsubscribe and
+    /// subscribe with the full initial dump, which reaches every subscription.
+    async fn send_account_updates_request(
+        &self,
+        account: &AccountId,
+        message: Vec<u8>,
+        unsubscribe: Vec<u8>,
+    ) -> Result<AsyncInternalSubscription, Error>;
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error>;
 
@@ -1141,18 +1149,30 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     // Registers a subscription of `message_type` and writes its request;
     // `account` for account updates (see `SharedCounts`).
+    /// `unsubscribe` goes out ahead of `message` when `account`'s updates are
+    /// live already; see `AsyncMessageBus::send_account_updates_request`.
     async fn send_shared(
         &self,
         message_type: OutgoingMessages,
         account: Option<&AccountId>,
         message: Vec<u8>,
+        unsubscribe: Option<Vec<u8>>,
     ) -> Result<AsyncInternalSubscription, Error> {
         // See `open_route`.
         let session = self.session_generation();
         self.ensure_connected()?;
+        if let Some(unsubscribe) = &unsubscribe {
+            self.throttle(unsubscribe).await;
+        }
         self.throttle(&message).await;
 
-        let (receiver, ticket) = self.shared_channels.subscribe(message_type, account, || self.write_now(&message)).await?;
+        let write = |live: bool| async move {
+            if let Some(unsubscribe) = unsubscribe.filter(|_| live) {
+                self.write_now(&unsubscribe).await?;
+            }
+            self.write_now(&message).await
+        };
+        let (receiver, ticket) = self.shared_channels.subscribe(message_type, account, write).await?;
 
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .shared(ticket)
@@ -1184,11 +1204,17 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.send_shared(message_type, None, message).await
+        self.send_shared(message_type, None, message, None).await
     }
 
-    async fn send_account_updates_request(&self, account: &AccountId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.send_shared(OutgoingMessages::RequestAccountData, Some(account), message).await
+    async fn send_account_updates_request(
+        &self,
+        account: &AccountId,
+        message: Vec<u8>,
+        unsubscribe: Vec<u8>,
+    ) -> Result<AsyncInternalSubscription, Error> {
+        self.send_shared(OutgoingMessages::RequestAccountData, Some(account), message, Some(unsubscribe))
+            .await
     }
 
     async fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<Vec<u8>>) -> Result<(), Error> {

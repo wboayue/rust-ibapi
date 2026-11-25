@@ -83,6 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A second `account_updates` subscription (sync and async) for an account already subscribed on the same connection gets the initial values and `AccountUpdate::End`. TWS answers a repeated subscribe with nothing, so the caller waited for values that only came with the next change. The second request is now sent as an unsubscribe then a subscribe, which TWS answers with the full dump; earlier subscriptions of the account receive it as well (#PR).
 - `Client::resubscribing` (sync and async) ends after a market data snapshot's `TickTypes::SnapshotEnd`, as its docs said. Previously it kept waiting on a snapshot TWS had finished, and a later reconnect sent the snapshot request again. The same holds for `historical_data(..).subscribe()`, which it now accepts, after `End` (#1246).
 - Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning` on any order. TWS goes on with the order after it. It arrives on every `exercise_options` request, where it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading (#1210).
 

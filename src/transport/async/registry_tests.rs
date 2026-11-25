@@ -172,7 +172,7 @@ fn prune_dead_drops_only_dead_routes() {
 }
 
 async fn subscribe(channels: &SharedChannels, request: OutgoingMessages) -> broadcast::Receiver<RoutedItem> {
-    channels.subscribe(request, None, || async { Ok(()) }).await.unwrap().0
+    channels.subscribe(request, None, |_| async { Ok(()) }).await.unwrap().0
 }
 
 #[tokio::test]
@@ -191,7 +191,7 @@ async fn fail_one_shot_channels_spares_streaming_channels() {
 async fn subscribe_counts_only_a_written_request() {
     let channels = SharedChannels::new(|_| 8);
     let failed = channels
-        .subscribe(OutgoingMessages::RequestPositions, None, || async { Err(Error::ConnectionReset) })
+        .subscribe(OutgoingMessages::RequestPositions, None, |_| async { Err(Error::ConnectionReset) })
         .await;
     assert!(matches!(failed, Err(Error::ConnectionReset)));
     assert_eq!(channels.live(OutgoingMessages::RequestPositions).await, 0);
@@ -209,7 +209,7 @@ async fn close_fails_then_ends_every_channel() {
 
     assert!(matches!(positions.try_recv(), Ok(RoutedItem::Error(Error::Shutdown))));
     assert!(matches!(positions.try_recv(), Err(broadcast::error::TryRecvError::Closed)));
-    let refused = channels.subscribe(OutgoingMessages::RequestPositions, None, || async { Ok(()) }).await;
+    let refused = channels.subscribe(OutgoingMessages::RequestPositions, None, |_| async { Ok(()) }).await;
     assert!(matches!(refused, Err(Error::InvalidArgument(_))));
 }
 

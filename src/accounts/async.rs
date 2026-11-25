@@ -294,6 +294,15 @@ impl Client {
     /// after the drop can still be refused. To stream several accounts at once, use
     /// [`account_updates_multi`](Client::account_updates_multi).
     ///
+    /// TWS answers a repeated subscribe for the same account with nothing, so a
+    /// second subscription is sent as an unsubscribe then a subscribe, which
+    /// TWS answers with the full initial values and [`AccountUpdate::End`]
+    /// again. Every live subscription of the account receives that dump: an
+    /// earlier caller reads the current values and `End` a second time, and
+    /// the notice stream gets TWS's 2100 "API client has been unsubscribed
+    /// from account data". A subscription made while an earlier dump is still
+    /// arriving reads that dump's remainder and its `End` before its own.
+    ///
     /// # Arguments
     /// * `account` - The account id (i.e. U1234567) for which the information is requested.
     ///
@@ -331,7 +340,8 @@ impl Client {
     pub async fn account_updates(&self, account: impl Into<AccountId>) -> Result<Subscription<AccountUpdate>, Error> {
         let account = &account.into();
         let request = encoders::encode_request_account_updates(true, account)?;
-        let subscription = self.message_bus.send_account_updates_request(account, request).await?;
+        let unsubscribe = encoders::encode_request_account_updates(false, account)?;
+        let subscription = self.message_bus.send_account_updates_request(account, request, unsubscribe).await?;
         Ok(Subscription::new_from_internal(
             subscription,
             self.message_bus.clone(),

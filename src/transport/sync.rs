@@ -152,16 +152,17 @@ impl SharedChannels {
 
     // Runs `write` for a new subscription of `message_type` and counts it on
     // success. The lock spans the write so the count and the wire agree.
-    // `account` is the account-updates account, checked before the write.
+    // `account` is the account-updates account, checked before the write;
+    // `write` is told whether that account's updates are live already.
     fn subscribe(
         &self,
         message_type: OutgoingMessages,
         account: Option<&AccountId>,
-        write: impl FnOnce() -> Result<(), Error>,
+        write: impl FnOnce(bool) -> Result<(), Error>,
     ) -> Result<SharedTicket, Error> {
         let mut counts = lock(&self.counts);
         counts.check_account_updates(account)?;
-        write()?;
+        write(account.is_some_and(|account| counts.is_account_updates_live(account)))?;
         Ok(counts.subscribe(message_type, account))
     }
 
@@ -933,7 +934,15 @@ impl<S: Stream> TcpMessageBus<S> {
 
     // Registers a subscription of `message_type` and writes its request;
     // `account` for account updates (see `SharedCounts`).
-    fn send_shared(&self, message_type: OutgoingMessages, account: Option<&AccountId>, message: &[u8]) -> Result<InternalSubscription, Error> {
+    // `unsubscribe` goes out ahead of `message` when `account`'s updates are
+    // live already; see `MessageBus::send_account_updates_request`.
+    fn send_shared(
+        &self,
+        message_type: OutgoingMessages,
+        account: Option<&AccountId>,
+        message: &[u8],
+        unsubscribe: Option<&[u8]>,
+    ) -> Result<InternalSubscription, Error> {
         // See `open_request`.
         let session = self.session_generation();
         self.ensure_connected()?;
@@ -945,8 +954,17 @@ impl<S: Stream> TcpMessageBus<S> {
         let lease = Lease::new();
         let lease_ref = lease.downgrade();
         self.shared_channels.add(message_type, sender.clone(), lease_ref.clone());
+        if let Some(unsubscribe) = unsubscribe {
+            self.throttle(unsubscribe);
+        }
         self.throttle(message);
-        let ticket = match self.shared_channels.subscribe(message_type, account, || self.write_now(message)) {
+        let write = |live: bool| {
+            if let Some(unsubscribe) = unsubscribe.filter(|_| live) {
+                self.write_now(unsubscribe)?;
+            }
+            self.write_now(message)
+        };
+        let ticket = match self.shared_channels.subscribe(message_type, account, write) {
             Ok(ticket) => ticket,
             Err(e) => {
                 self.shared_channels.remove(&lease_ref);
@@ -1045,11 +1063,11 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
-        self.send_shared(message_type, None, message)
+        self.send_shared(message_type, None, message, None)
     }
 
-    fn send_account_updates_request(&self, account: &AccountId, message: &[u8]) -> Result<InternalSubscription, Error> {
-        self.send_shared(OutgoingMessages::RequestAccountData, Some(account), message)
+    fn send_account_updates_request(&self, account: &AccountId, message: &[u8], unsubscribe: &[u8]) -> Result<InternalSubscription, Error> {
+        self.send_shared(OutgoingMessages::RequestAccountData, Some(account), message, Some(unsubscribe))
     }
 
     fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<&[u8]>) -> Result<(), Error> {

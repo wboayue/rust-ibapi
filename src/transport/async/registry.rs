@@ -313,12 +313,13 @@ impl SharedChannels {
     /// Runs `write` for a new subscription of `message_type` and counts it on
     /// success; returns the receiver and the ticket. The count lock spans the
     /// write so the count and the wire agree. `account` is the account-updates
-    /// account, checked before the write.
+    /// account, checked before the write; `write` is told whether that
+    /// account's updates are live already.
     pub(super) async fn subscribe<F: Future<Output = Result<(), Error>>>(
         &self,
         message_type: OutgoingMessages,
         account: Option<&AccountId>,
-        write: impl FnOnce() -> F,
+        write: impl FnOnce(bool) -> F,
     ) -> Result<(broadcast::Receiver<RoutedItem>, SharedTicket), Error> {
         let receiver = self
             .channels()
@@ -328,7 +329,7 @@ impl SharedChannels {
 
         let mut counts = self.counts.lock().await;
         counts.check_account_updates(account)?;
-        write().await?;
+        write(account.is_some_and(|account| counts.is_account_updates_live(account))).await?;
         Ok((receiver, counts.subscribe(message_type, account)))
     }
 

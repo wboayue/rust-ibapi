@@ -202,6 +202,11 @@ impl SharedCounts {
         }
     }
 
+    /// `true` while subscriptions to `account`'s updates are live.
+    pub(crate) fn is_account_updates_live(&self, account: &AccountId) -> bool {
+        self.account_updates.as_ref() == Some(account)
+    }
+
     /// Uncounts `ticket`'s subscription. `true` when the cancel should be
     /// written: the ticket is from this session and no other subscription of
     /// the type is live. A ticket with no counted subscription (one
@@ -259,8 +264,11 @@ pub(crate) trait MessageBus: Send + Sync {
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
     /// `send_shared_request` for `RequestAccountData`, refused with
-    /// `Error::AccountUpdatesInUse` while another account is live.
-    fn send_account_updates_request(&self, account: &AccountId, packet: &[u8]) -> Result<InternalSubscription, Error>;
+    /// `Error::AccountUpdatesInUse` while another account is live. While
+    /// `account` is live already, writes `unsubscribe` ahead of `packet`:
+    /// TWS answers a repeated subscribe with nothing, but an unsubscribe and
+    /// subscribe with the full initial dump, which reaches every subscription.
+    fn send_account_updates_request(&self, account: &AccountId, packet: &[u8], unsubscribe: &[u8]) -> Result<InternalSubscription, Error>;
 
     /// Ends one subscription of `message_id`. `packet` is the cancel to write
     /// for the last one; `None` for a stream TWS never cancels, which still

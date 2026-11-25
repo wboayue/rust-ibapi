@@ -363,7 +363,7 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, MockRoute::Shared(message_type), message))
     }
 
-    fn send_account_updates_request(&self, _account: &AccountId, message: &[u8]) -> Result<InternalSubscription, Error> {
+    fn send_account_updates_request(&self, _account: &AccountId, message: &[u8], _unsubscribe: &[u8]) -> Result<InternalSubscription, Error> {
         MessageBus::send_shared_request(self, OutgoingMessages::RequestAccountData, message)
     }
 
@@ -467,7 +467,12 @@ impl AsyncMessageBus for MessageBusStub {
         Ok(self.seeded_subscription(message))
     }
 
-    async fn send_account_updates_request(&self, _account: &AccountId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+    async fn send_account_updates_request(
+        &self,
+        _account: &AccountId,
+        message: Vec<u8>,
+        _unsubscribe: Vec<u8>,
+    ) -> Result<AsyncInternalSubscription, Error> {
         AsyncMessageBus::send_shared_request(self, OutgoingMessages::RequestAccountData, message).await
     }
 

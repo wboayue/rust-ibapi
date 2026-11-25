@@ -785,15 +785,20 @@ async fn make_order_subscription(order_id: OrderId) -> (MemoryStream, Arc<AsyncT
 
 /// Number of length-prefixed frames in `captured` whose payload is `payload`.
 fn count_frames(captured: &[u8], payload: &[u8]) -> usize {
+    frame_payloads(captured).into_iter().filter(|frame| *frame == payload).count()
+}
+
+/// The payloads of the length-prefixed frames in `captured`, in write order.
+fn frame_payloads(captured: &[u8]) -> Vec<&[u8]> {
     let mut rest = captured;
-    let mut count = 0;
+    let mut frames = Vec::new();
     while rest.len() >= 4 {
         let len = u32::from_be_bytes([rest[0], rest[1], rest[2], rest[3]]) as usize;
         let (frame, tail) = rest[4..].split_at(len);
-        count += usize::from(frame == payload);
+        frames.push(frame);
         rest = tail;
     }
-    count
+    frames
 }
 
 /// Wait until `captured` holds `expected` frames equal to `payload`, or the
@@ -1034,8 +1039,14 @@ fn account_updates_request(name: &str) -> Vec<u8> {
     format!("account-updates {name}").into_bytes()
 }
 
+fn account_updates_unsubscribe(name: &str) -> Vec<u8> {
+    format!("account-updates off {name}").into_bytes()
+}
+
 async fn account_updates_subscription(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>, name: &str) -> Result<AccountUpdatesSubscription, Error> {
-    let internal = bus.send_account_updates_request(&account(name), account_updates_request(name)).await?;
+    let internal = bus
+        .send_account_updates_request(&account(name), account_updates_request(name), account_updates_unsubscribe(name))
+        .await?;
     Ok(Subscription::new_from_internal(
         internal,
         bus.clone(),
@@ -1053,8 +1064,10 @@ async fn account_updates_slot(bus: &AsyncTcpMessageBus<MemoryStream>) -> Option<
     bus.shared_channels.account_updates().await
 }
 
-/// The same account again shares the one TWS stream: both requests go out,
-/// and only the last cancel frees the slot.
+/// The same account again shares the one TWS stream, and only the last
+/// cancel frees the slot. TWS answers a repeated subscribe with nothing, so
+/// the second goes out as unsubscribe then subscribe, which TWS answers with
+/// the full dump.
 #[tokio::test]
 async fn account_updates_same_account_shares() {
     let (stream, bus) = make_bus();
@@ -1062,7 +1075,8 @@ async fn account_updates_same_account_shares() {
 
     let first = account_updates_subscription(&bus, "DU1").await.unwrap();
     let second = account_updates_subscription(&bus, "DU1").await.unwrap();
-    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 2);
+    let (on, off) = (account_updates_request("DU1"), account_updates_unsubscribe("DU1"));
+    assert_eq!(frame_payloads(&stream.captured()), [&on[..], &off[..], &on[..]]);
     assert_eq!(bus.shared_channels.live(OutgoingMessages::RequestAccountData).await, 2);
 
     first.cancel().await;
@@ -1076,6 +1090,45 @@ async fn account_updates_same_account_shares() {
     second.cancel().await;
     assert_eq!(count_frames(&stream.captured(), &cancel), 1);
     assert_eq!(account_updates_slot(&bus).await, None);
+}
+
+/// The dump TWS sends after the second subscription's resubscribe reaches
+/// both subscriptions, so the second caller gets the initial values and the
+/// end marker too.
+#[tokio::test]
+async fn account_updates_second_subscription_reads_the_dump() {
+    use crate::accounts::AccountUpdate;
+
+    let (stream, bus) = make_bus();
+    let mut first = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let mut second = account_updates_subscription(&bus, "DU1").await.unwrap();
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::AccountValue as i32,
+        &crate::proto::AccountValue {
+            key: Some("NetLiquidation".to_string()),
+            value: Some("100000".to_string()),
+            currency: Some("USD".to_string()),
+            account_name: Some("DU1".to_string()),
+        },
+    ));
+    stream.push_inbound(binary_proto(
+        crate::messages::IncomingMessages::AccountDownloadEnd as i32,
+        &crate::proto::AccountDataEnd {
+            account_name: Some("DU1".to_string()),
+        },
+    ));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    for (name, subscription) in [("first", &mut first), ("second", &mut second)] {
+        let value = next_item(subscription).await.expect("no account value").unwrap();
+        assert!(
+            matches!(&value, SubscriptionItem::Data(AccountUpdate::AccountValue(v)) if v.key == "NetLiquidation" && v.value == "100000"),
+            "{name}: {value:?}"
+        );
+        let end = next_item(subscription).await.expect("no end marker").unwrap();
+        assert!(matches!(end, SubscriptionItem::Data(AccountUpdate::End)), "{name}: {end:?}");
+    }
 }
 
 /// TWS has one account-updates slot: a second account would switch the live
