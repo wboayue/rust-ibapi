@@ -79,7 +79,7 @@ impl Client {
     /// cases, rebuild state from snapshots:
     ///
     /// 1. [`Self::all_open_orders`]: every open order and its status.
-    /// 2. [`Self::completed_orders`]`(false)`: orders that filled or were
+    /// 2. [`Self::completed_orders`]`(ApiOnly::No)`: orders that filled or were
     ///    cancelled during the gap.
     /// 3. [`Self::executions`] with a default [`ExecutionFilter`]: fills and
     ///    their commissions. The default covers the current day only; set
@@ -486,6 +486,9 @@ impl Client {
     /// A completed order's `total_quantity` is the quantity left unfilled, not the size
     /// ordered: `0` for a filled order. The size ordered is `total_quantity + filled_quantity`.
     ///
+    /// # Arguments
+    /// * `api_only` - [`ApiOnly::Yes`] for only orders placed through the API, [`ApiOnly::No`] for orders submitted from TWS as well.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -494,14 +497,14 @@ impl Client {
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let subscription = client.completed_orders(true).await.expect("completed_orders failed");
+    ///     let subscription = client.completed_orders(ApiOnly::Yes).await.expect("completed_orders failed");
     ///     let mut orders = subscription.filter_data();
     ///     while let Some(order) = orders.next().await {
     ///         println!("{order:?}");
     ///     }
     /// }
     /// ```
-    pub async fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
+    pub async fn completed_orders(&self, api_only: ApiOnly) -> Result<Subscription<Orders>, Error> {
         let request = encoders::encode_completed_orders(api_only)?;
 
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
@@ -571,7 +574,7 @@ impl Client {
     /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
     ///
     /// # Arguments
-    /// * `auto_bind` - if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
+    /// * `auto_bind` - [`AutoBind::Yes`] assigns newly created orders an API order ID and implicitly associates them with this client; with [`AutoBind::No`] future orders are not bound.
     ///
     /// # Examples
     ///
@@ -581,14 +584,14 @@ impl Client {
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 0).await.expect("connection failed");
-    ///     let subscription = client.auto_open_orders(true).await.expect("auto_open_orders failed");
+    ///     let subscription = client.auto_open_orders(AutoBind::Yes).await.expect("auto_open_orders failed");
     ///     let mut orders = subscription.filter_data();
     ///     while let Some(order) = orders.next().await {
     ///         println!("{order:?}");
     ///     }
     /// }
     /// ```
-    pub async fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
+    pub async fn auto_open_orders(&self, auto_bind: AutoBind) -> Result<Subscription<Orders>, Error> {
         let request = encoders::encode_auto_open_orders(auto_bind)?;
 
         let internal_subscription = self.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
@@ -812,7 +815,7 @@ impl Client {
         if lists_order(&open, order_id) {
             return Ok(None);
         }
-        let Ok(completed) = read(self.completed_orders(false).await?, deadline).await else {
+        let Ok(completed) = read(self.completed_orders(ApiOnly::No).await?, deadline).await else {
             return Ok(None);
         };
         Ok(completed_status(&completed, self.client_id(), order_id))

@@ -4562,7 +4562,7 @@ fn wait_for_fill_lookup_ends_do_not_end_next_requests() {
 
     let outcome = client.wait_for_fill(7, Duration::ZERO).unwrap();
     assert_eq!(outcome, crate::orders::OrderOutcome::TimedOut(None));
-    let orders = client.completed_orders(false).unwrap();
+    let orders = client.completed_orders(crate::orders::ApiOnly::No).unwrap();
     let first = orders.next_timeout(Duration::from_secs(1));
     assert!(
         matches!(&first, Some(Ok(SubscriptionItem::Data(Orders::OrderData(d)))) if d.order.order_id == 9),

@@ -43,22 +43,27 @@ impl Client {
 
     /// Subscribes to IB's News Bulletins.
     ///
+    /// # Arguments
+    ///
+    /// * `all_messages` - [`AllMessages::Yes`] returns all the existing bulletins for the current day; [`AllMessages::No`] only the new bulletins.
+    ///
     /// # Examples
     ///
     /// ```no_run
+    /// use ibapi::news::AllMessages;
     /// use ibapi::prelude::*;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let subscription = client.news_bulletins(true).await.expect("news_bulletins failed");
+    ///     let subscription = client.news_bulletins(AllMessages::Yes).await.expect("news_bulletins failed");
     ///     let mut bulletins = subscription.filter_data();
     ///     while let Some(bulletin) = bulletins.next().await {
     ///         println!("{bulletin:?}");
     ///     }
     /// }
     /// ```
-    pub async fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
+    pub async fn news_bulletins(&self, all_messages: AllMessages) -> Result<Subscription<NewsBulletin>, Error> {
         let request = encoders::encode_request_news_bulletins(all_messages)?;
         self.subscription().send_shared(OutgoingMessages::RequestNewsBulletins, request).await
     }

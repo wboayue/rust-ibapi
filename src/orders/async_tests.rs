@@ -323,7 +323,7 @@ async fn completed_orders() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::COMPLETED_ORDERS);
 
-    let mut subscription = client.completed_orders(true).await.expect("failed to get completed orders");
+    let mut subscription = client.completed_orders(ApiOnly::Yes).await.expect("failed to get completed orders");
 
     let next = subscription.next().await;
     assert!(
