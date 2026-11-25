@@ -218,7 +218,8 @@ impl BarCompletion {
     /// forming for good: for ES at 11:23 UTC, the 21:59 UTC bar of the day before
     /// (2026-11-24, server 223). The same holds at a session break: after a batch ending with
     /// the 21:59 UTC EUR.USD bar, TWS sent nothing until the next session's first bar at 22:15.
-    /// Whether TWS sends a final update for the last bar before a break is not probed.
+    /// At the SEHK close TWS did send the last bar's final update, 1.2 s after the bar ended, so
+    /// [`apply`](Self::apply) completed it without `expire` (live: 2026-11-25).
     ///
     /// The bar is completed with the last values received, which are final only if TWS sent
     /// its last update for the bar. TWS sent that update 0.3 to 2.6 s after a 1-minute bar ended,

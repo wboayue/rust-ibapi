@@ -226,9 +226,16 @@ paper TWS, server 223; 1-minute bars.*
   batch, no update and no error, while `reqMktData` and realtime bars on the same connections
   kept working. A stream gives no sign of this: it looks like a session break.
   Contract-detail and completed-order requests went unanswered in the same stall.
-- **Not probed:** whether TWS sends a final update for the last bar before a break (the farm
-  disconnect ended the EUR.USD stream at 21:56, before the 22:00 break, and the historical
-  service was silent across the SEHK and HKFE lunch break); SEHK and HKFE closes.
+- **SEHK close, 700 TRADES** (*2026-11-25 07:45-08:11 UTC*; continuous trading ends 08:00,
+  closing auction to 08:10): the 07:59 bar got its last update at 08:00:01.2 and
+  `BarCompletion::apply` completed it then. Bars for 08:00 to 08:09 followed through the auction,
+  updated every 5 seconds at volume 0 and the last price; the auction print came in the 08:08
+  bar's first update (08:08:06, volume 1,521,600, `barCount` 1, 337.4). The 08:09 bar's last
+  update at 08:10:01.2 was the last frame: nothing followed to 08:11. Realtime 5-second bars on
+  the same contract showed the same, ending with the 08:09:55 bar at 08:10:01.2.
+- **Not probed:** the last bar before the FX daily break (the farm disconnect ended that stream
+  first) and before the SEHK and HKFE lunch break (historical service silent); RTH-only
+  requests at a close.
 
 ### Historical bars for a continuous future take no end date
 
