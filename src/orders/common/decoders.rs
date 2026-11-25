@@ -205,7 +205,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.delta_neutral_con_id = proto.delta_neutral_con_id.unwrap_or_default();
     order.delta_neutral_open_close = s(&proto.delta_neutral_open_close);
     order.delta_neutral_short_sale = proto.delta_neutral_short_sale.unwrap_or_default();
-    order.delta_neutral_short_sale_slot = proto.delta_neutral_short_sale_slot.unwrap_or_default();
+    order.delta_neutral_short_sale_slot = ShortSaleSlot::from(proto.delta_neutral_short_sale_slot.unwrap_or_default());
     order.delta_neutral_designated_location = s(&proto.delta_neutral_designated_location);
 
     // scale orders

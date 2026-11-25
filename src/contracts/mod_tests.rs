@@ -552,3 +552,16 @@ fn contract_details_json_without_event_contract_fields_deserializes() {
     let details: ContractDetails = serde_json::from_value(json).unwrap();
     assert_eq!(details, ContractDetails::default());
 }
+
+/// `short_sale_slot` keeps the number 5.x wrote, so a 5.x leg still deserializes.
+#[test]
+fn combo_leg_json_short_sale_slot_is_wire_code() {
+    let leg = ComboLeg {
+        short_sale_slot: ShortSaleSlot::ThirdParty,
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&leg).unwrap();
+    assert_eq!(json["short_sale_slot"], 2, "serialized: {json}");
+
+    assert_eq!(serde_json::from_value::<ComboLeg>(json).unwrap(), leg);
+}

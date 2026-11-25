@@ -1,6 +1,6 @@
 use super::*;
 use crate::orders::common::decoders::decode_order;
-use crate::orders::{self, Action, OrderType, TimeInForce, WhatIfType};
+use crate::orders::{self, Action, OrderType, ShortSaleSlot, TimeInForce, WhatIfType};
 use crate::testdata::builders::orders::{auto_open_orders_request, completed_orders_request};
 use crate::testdata::builders::RequestEncoder;
 
@@ -48,6 +48,28 @@ fn encode_order_deactivate() {
     let proto = encode_order(&order);
 
     assert_eq!(proto.deactivate, Some(true));
+}
+
+#[test]
+fn encode_order_short_sale_slots() {
+    let cases = [
+        (ShortSaleSlot::None, None),
+        (ShortSaleSlot::Broker, Some(1)),
+        (ShortSaleSlot::ThirdParty, Some(2)),
+        (ShortSaleSlot::Unknown(7), Some(7)),
+    ];
+    for (slot, expected) in cases {
+        let order = Order {
+            short_sale_slot: slot,
+            delta_neutral_short_sale_slot: slot,
+            ..Default::default()
+        };
+
+        let proto = encode_order(&order);
+
+        assert_eq!(proto.short_sale_slot, expected, "short_sale_slot {slot:?}");
+        assert_eq!(proto.delta_neutral_short_sale_slot, expected, "delta_neutral_short_sale_slot {slot:?}");
+    }
 }
 
 /// The tri-state flags: unset is absent, explicit off is 0, on is 1.

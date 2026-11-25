@@ -261,6 +261,19 @@ fn short_sale_slot_round_trips_every_wire_code() {
 }
 
 #[test]
+fn short_sale_slot_serializes_as_wire_code() {
+    for (slot, json) in [
+        (ShortSaleSlot::None, "0"),
+        (ShortSaleSlot::Broker, "1"),
+        (ShortSaleSlot::ThirdParty, "2"),
+        (ShortSaleSlot::Unknown(7), "7"),
+    ] {
+        assert_eq!(serde_json::to_string(&slot).unwrap(), json, "{slot:?} serializes");
+        assert_eq!(serde_json::from_str::<ShortSaleSlot>(json).unwrap(), slot, "{json} deserializes");
+    }
+}
+
+#[test]
 fn volatility_type_round_trips_every_wire_code() {
     check_wire_code_round_trip(
         &[

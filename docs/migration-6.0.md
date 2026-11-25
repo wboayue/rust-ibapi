@@ -1085,3 +1085,34 @@ let bulletins = client.news_bulletins(AllMessages::Yes)?; // all the existing bu
 ```
 
 The compiler reports every call. Nothing changes on the wire or at runtime.
+
+### 46. `ComboLeg::short_sale_slot` and `Order::delta_neutral_short_sale_slot` are `ShortSaleSlot`
+
+Both were `i32` codes (`1` clearing broker, `2` third party) beside `Order::short_sale_slot`,
+which is an `orders::ShortSaleSlot`. All three now hold the enum. A code the crate doesn't
+model is `ShortSaleSlot::Unknown(code)` and is sent back unchanged. `ShortSaleSlot::None`
+(code `0`) is still sent as no value; neither field is an `Option`.
+
+```rust,ignore
+use ibapi::orders::ShortSaleSlot;
+
+// leg: ibapi::contracts::ComboLeg, order: ibapi::orders::Order
+
+// 5.x
+leg.short_sale_slot = 2;
+order.delta_neutral_short_sale_slot = 1;
+if leg.short_sale_slot == 0 { /* not a short sale */ }
+
+// 6.0
+leg.short_sale_slot = ShortSaleSlot::ThirdParty;
+order.delta_neutral_short_sale_slot = ShortSaleSlot::Broker;
+if leg.short_sale_slot == ShortSaleSlot::None { /* not a short sale */ }
+let code = i32::from(leg.short_sale_slot); // where the number is wanted
+```
+
+The compiler finds every assignment and comparison; `ComboLeg { .., ..Default::default() }`
+literals compile unchanged. Serialized, `ShortSaleSlot` is its wire code, so the two fields keep
+their 5.x form (`2`, or the bare number for an unmodeled code) and `ComboLeg` JSON written by 5.x
+still deserializes. The compiler doesn't catch that `Order::short_sale_slot` changes the other
+way: it serialized as the variant name (`"Broker"`, `{"Unknown":7}`) and is now the number. The
+`utoipa` schema for all three fields is an integer.

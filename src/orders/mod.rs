@@ -314,9 +314,12 @@ pub struct Order {
     pub delta_neutral_open_close: String,
     /// Used when the hedge involves a stock and indicates whether or not it is sold short.
     pub delta_neutral_short_sale: bool,
-    /// Indicates a short sale Delta Neutral order. Has a value of 1 (the clearing broker holds shares) or 2 (delivered from a third party). If you use 2, then you must specify a deltaNeutralDesignatedLocation.
-    pub delta_neutral_short_sale_slot: i32,
-    /// Identifies third party order origin. Used only when deltaNeutralShortSaleSlot = 2.
+    /// Indicates a short sale Delta Neutral order: [`ShortSaleSlot::Broker`] (the clearing broker
+    /// holds shares) or [`ShortSaleSlot::ThirdParty`] (delivered from a third party), which also
+    /// needs [`delta_neutral_designated_location`](Self::delta_neutral_designated_location).
+    /// [`ShortSaleSlot::None`] is sent as no value, and an absent value decodes to it.
+    pub delta_neutral_short_sale_slot: ShortSaleSlot,
+    /// Identifies third party order origin. Used only when `delta_neutral_short_sale_slot` is [`ShortSaleSlot::ThirdParty`].
     pub delta_neutral_designated_location: String,
     /// Defines the size of the first, or initial, order component. For Scale orders only.
     pub scale_init_level_size: Option<i32>,
@@ -649,7 +652,7 @@ impl Default for Order {
             delta_neutral_clearing_intent: "".to_owned(),
             delta_neutral_open_close: "".to_owned(),
             delta_neutral_short_sale: false,
-            delta_neutral_short_sale_slot: 0,
+            delta_neutral_short_sale_slot: ShortSaleSlot::None,
             delta_neutral_designated_location: "".to_owned(),
             scale_init_level_size: None,
             scale_subs_level_size: None,
@@ -1070,8 +1073,9 @@ impl_wire_code!(OrderOrigin {
 });
 
 /// Specifies the short sale slot (for institutional short sales).
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Serde and utoipa use the wire code, a bare integer; see `impl_wire_code!`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ShortSaleSlot {
     /// Not a short sale. Wire code `0`.
     #[default]
@@ -1084,7 +1088,7 @@ pub enum ShortSaleSlot {
     Unknown(i32),
 }
 
-impl_wire_code!(ShortSaleSlot {
+impl_wire_code!(ShortSaleSlot, serde {
     None = 0,
     Broker = 1,
     ThirdParty = 2,

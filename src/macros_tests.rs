@@ -9,7 +9,11 @@ fn wire_code_tables(contents: &str) -> Vec<(String, Vec<(String, String)>)> {
         let Some(rest) = line.trim().strip_prefix("impl_wire_code!(") else {
             continue;
         };
-        let name = rest.trim_end_matches('{').trim().to_string();
+        // `Name {` or `Name, serde {`; a `$name` row is the macro's own recursion.
+        let name = rest.trim_end_matches('{').split(',').next().unwrap_or_default().trim().to_string();
+        if name.starts_with('$') {
+            continue;
+        }
         let rows = lines
             .by_ref()
             .map(str::trim)
