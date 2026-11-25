@@ -42,13 +42,13 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # Default async client
-ibapi = "5.7"
+ibapi = "5.8"
 
 # Sync-only (disable defaults)
-ibapi = { version = "5.7", default-features = false, features = ["sync"] }
+ibapi = { version = "5.8", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { version = "5.7", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "5.8", default-features = false, features = ["sync", "async"] }
 ```
 
 ### For Development

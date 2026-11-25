@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `ClientBuilder::connector` (async): connect over a stream you open, any tokio `AsyncRead + AsyncWrite`, in place of `address`, such as a TLS or SSH tunnel or a proxy. The client calls it to connect and on every reconnect. Framing, frame validation, raw capture and reconnect work as they do over TCP (#1304).
-- The async client builds for `wasm32-wasip2` (`--no-default-features --features async`). It has no built-in TCP socket there, so `connector` is the way to connect; see `examples/wasi` (#1304).
 - `ExpirationDate` and `ContractMonth` implement `Copy` (#1260).
 - `ContractDetails::event_contract_topic`, `event_contract_description` and `event_contract_question`: a ForecastEx event contract's topic (`"US Fed Funds Target Rate"`), description (strike, expiry and right, `"FF Jan28'27 3.125"`) and full question. TWS sent them, and the client dropped them. Empty for other contracts. A struct literal or pattern naming every field must add them; see `docs/migration-6.0.md` §35 (#1251).
 - Historical and realtime `Bar`, and `TickLast`, `TickBidAsk`, `TickMidpoint`, `TickAttributeLast` and `TickAttributeBidAsk`, implement `Default`: zero values, empty strings and a Unix-epoch timestamp, with `count` `-1` on a historical `Bar` (what TWS sends for non-TRADES bars) and no `volume` or `wap` on a realtime `Bar` (#1232, #1244).
@@ -85,13 +83,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning` on any order. TWS goes on with the order after it. It arrives on every `exercise_options` request, where it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading (#1210).
+
+## [5.8.0] - 2026-11-24
+
+### Added
+
+- `ClientBuilder::connector` (async): connect over a stream you open, any tokio `AsyncRead + AsyncWrite`, in place of `address`, such as a TLS or SSH tunnel or a proxy. The client calls it to connect and on every reconnect. Framing, frame validation, raw capture and reconnect work as they do over TCP (#1304).
+- The async client builds for `wasm32-wasip2` (`--no-default-features --features async`). It has no built-in TCP socket there, so `connector` is the way to connect; see `examples/wasi` (#1304).
+
+### Fixed
+
+- `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
 - `historical_data(..).between(start, end)` works for a continuous future (`SecurityType::ContinuousFuture`). TWS rejects any end date for one with error 10339, and `between` always sent `end`, so every such request failed. For a continuous future it now sends no end date and a duration covering `[start, now)`, then drops the bars after `end` as before; a `start` that is not before now is `Error::InvalidArgument`. `.ending()` on a continuous future, for `historical_data` and `historical_schedules`, is `Error::InvalidArgument` too, with nothing sent, rather than TWS's 10339 (#1252).
 - Orders TWS sends back (open and completed) fill `Order::order_combo_legs` from the per-leg prices TWS sends on the contract's combo legs, one entry per leg. The list was always empty, so modifying an open combo order by re-sending what `open_orders()` returned dropped its per-leg prices (#1243).
 - `Order::ref_futures_con_id` is `None` when TWS sends no reference future, as for a stock order. It decoded as `Some(0)`, a con id no contract has. `Order::default()` has `None` too, so an order no longer sends `refFuturesConId` 0; the C# client never sends it (#1241).
 - Code 165 ("Historical Market Data Service query message") is a `NoticeCategory::Warning` in every form, logged at info. A bond scan sends "10 out of 18957 items retrieved" before its rows, and that text ended the scanner subscription with `Err` and dropped the rows. A scanner's "no items retrieved" notice is now informational too (`is_informational()` is true) (#1237).
 - `place_order` and `submit_order` (sync and async) move the client's order-ID generator past the order ID they send and every ID the order carries (preset attached orders, parent), and `next_valid_order_id` moves it past the ID it returns. The generator ignored them, so an ID the client allocated afterwards (`next_order_id`, the order builder's `submit`, `exercise_options`) could repeat one already sent, and TWS treated the later order as a modification of the earlier one: the documented `next_valid_order_id()` then `submit_order(id, ..)` flow did this on the next builder `submit`. A caller who numbers orders from its own range and also uses client-allocated IDs now gets those from past its highest ID (#1231).
-- Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning` on any order. TWS goes on with the order after it. It arrives on every `exercise_options` request, where it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading (#1210).
-- `Subscription::cancel_and_drain` returns `Drained::Ended` as soon as a snapshot's end (such as a market-data `snapshot()`'s `SnapshotEnd`) arrives during the drain. It discarded the end and waited out the whole deadline, then returned `Unconfirmed` (sync and async) (#1186).
 - Async `connect` fails with `Error::Io` of kind `TimedOut` when TWS accepts the TCP connection but a startup frame (the handshake acknowledgement or an account-info frame) does not arrive within 30 seconds, the limit the blocking client already applied. Previously it waited forever, and so did an automatic reconnect that reached such a gateway, so `max_reconnect_attempts` never ran out (#1224).
 
 ## [5.7.0] - 2026-11-05
@@ -593,6 +601,7 @@ Versions up to and including [3.0.1] predate this changelog; see the
 [GitHub Releases page](https://github.com/wboayue/rust-ibapi/releases) for their notes.
 
 [Unreleased]: https://github.com/wboayue/rust-ibapi/compare/v5.6.0...HEAD
+[5.8.0]: https://github.com/wboayue/rust-ibapi/compare/v5.7.0...v5.8.0
 [5.7.0]: https://github.com/wboayue/rust-ibapi/compare/v5.6.0...v5.7.0
 [5.6.0]: https://github.com/wboayue/rust-ibapi/compare/v5.5.0...v5.6.0
 [5.5.0]: https://github.com/wboayue/rust-ibapi/compare/v5.4.0...v5.5.0
