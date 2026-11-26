@@ -142,11 +142,11 @@ impl<K: CancellableOneShot> StreamDecoder<OneShot<K>> for OneShot<K> {
         K::cancel(error_helpers::require_request_id_for(request_id, "cancel one-shot request")?)
     }
 
-    fn is_snapshot_end(&self) -> bool {
+    fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
         true
     }
 
-    fn rejection_ends_request(_notice: &Notice) -> bool {
+    fn rejection_ends_request(_notice: &Notice, _context: &DecoderContext) -> bool {
         true
     }
 }

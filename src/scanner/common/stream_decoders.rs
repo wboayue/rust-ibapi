@@ -23,7 +23,7 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     /// Live: after 162 TWS answers the cancel with 365 (no scanner subscription).
     /// Verified for "scanner type … is disabled"; the other 162s seen on
     /// scanners (subscription cancelled, pacing) are believed to end it too.
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == HMDS_ERROR_CODE
     }
 }

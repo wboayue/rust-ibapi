@@ -27,7 +27,7 @@ impl StreamDecoder<IntItem> for IntItem {
         Ok(IntItem(msg.peek_int(1)?))
     }
 
-    fn is_snapshot_end(&self) -> bool {
+    fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
         self.0 == -1
     }
 
@@ -101,7 +101,7 @@ impl StreamDecoder<CancellableSnapshotItem> for CancellableSnapshotItem {
         Ok(CancellableSnapshotItem(msg.peek_int(1)?))
     }
 
-    fn is_snapshot_end(&self) -> bool {
+    fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
         self.0 == -1
     }
 

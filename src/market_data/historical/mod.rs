@@ -586,7 +586,7 @@ impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
     }
 
     /// Live: after 200 TWS answers the cancel with 366 (no query found).
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
     }
 }
@@ -681,14 +681,14 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
         cancel_historical_data(request_id)
     }
 
-    fn is_snapshot_end(&self) -> bool {
+    fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
         matches!(self, Self::End { .. })
     }
 
     /// Any error, not a code list: a one-shot query has nothing to continue
     /// after one. Verified live for 162, 200 and 10314, where TWS answers a
     /// cancel with 366 (no query found).
-    fn rejection_ends_request(_notice: &Notice) -> bool {
+    fn rejection_ends_request(_notice: &Notice, _context: &DecoderContext) -> bool {
         true
     }
 }

@@ -48,7 +48,7 @@ impl StreamDecoder<PnL> for PnL {
     }
 
     /// Live: after 321 TWS answers the cancel with 10185 (not subscribed).
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == REQUEST_VALIDATION_CODE
     }
 }
@@ -69,7 +69,7 @@ impl StreamDecoder<PnLSingle> for PnLSingle {
     }
 
     /// Live: after 321 TWS answers the cancel with 10186 (not subscribed).
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == REQUEST_VALIDATION_CODE
     }
 }
