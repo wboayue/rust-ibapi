@@ -1500,3 +1500,31 @@ match item {
 The compiler catches none of this. Code that stopped or re-requested on `Err` for 10197 sees a
 notice instead; `iter_data` and `filter_data` drop it. A snapshot reads on after 10197 too, and
 no run showed whether TWS still sends its `SnapshotEnd` then; `snapshot_once` bounds the wait.
+
+### 62. `resubscribing` reopens a stream after 1101
+
+TWS sends 1101 ("connectivity restored, data lost") when its link to IB returns and it no longer
+serves the requests opened before the loss. 5.x `Client::resubscribing` did nothing on 1101:
+market data, tick-by-tick, realtime bar and depth streams stayed open with no data and no error.
+
+The wrapper now yields the 1101 as `SubscriptionItem::Notice`, writes the old request's cancel,
+and calls `open` again. 1102 ("data maintained") changes nothing.
+
+```rust,ignore
+// 5.x: watch the notice stream and re-request on 1101
+for notice in client.notice_stream().iter() {
+    if notice.code == 1101 { /* drop the subscription, open it again */ }
+}
+
+// 6.0: the wrapped stream reopens; mark the gap on its notice
+match item {
+    Ok(SubscriptionItem::Notice(n)) if n.code == 1101 => { /* gap: reset book or bar state */ }
+    // ...
+}
+```
+
+The compiler catches none of this. A caller that re-requests a wrapped stream on 1101 itself now
+opens a second request; remove that handling. Streams not wrapped in `resubscribing` still need it.
+
+No 1101 arrived in the outage runs behind these changes, so the reopen follows IB's documentation
+rather than a capture.

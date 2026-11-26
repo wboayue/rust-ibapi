@@ -1,5 +1,6 @@
 //! Historical-data farm state from the global notices, for the wait in
-//! `Client::resubscribing` after a 10182 ended a keep-up-to-date bar request.
+//! `Client::resubscribing` after a 10182 ended a keep-up-to-date bar request,
+//! and the 1101s after which it reopens a live stream.
 //!
 //! Each bus's notice broadcaster owns one and feeds it every notice before
 //! fanning it out, so the state is current before any caller sees the notice
@@ -15,6 +16,7 @@ use crate::messages::{ConnectivityStatus, DataFarmKind, Notice, CONNECTIVITY_RES
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct FarmMark {
     restorations: u64,
+    data_lost: u64,
     sessions: u64,
     /// Breaks seen, and whether a historical-data farm was down (broken or
     /// inactive) at the mark.
@@ -57,6 +59,9 @@ struct FarmState {
     restorations: u64,
     /// Historical-data farms that reported broken while not broken before.
     breaks: u64,
+    /// 1101 notices seen, and the last one.
+    data_lost: u64,
+    last_data_lost: Option<Notice>,
     /// Transport resets seen.
     sessions: u64,
     closed: bool,
@@ -65,6 +70,10 @@ struct FarmState {
 impl FarmState {
     /// Record `notice`; `true` when it changed the state.
     fn observe(&mut self, notice: &Notice) -> bool {
+        if notice.code == CONNECTIVITY_RESTORED_DATA_LOST_CODE {
+            self.data_lost += 1;
+            self.last_data_lost = Some(notice.clone());
+        }
         if matches!(
             notice.code,
             CONNECTIVITY_RESTORED_DATA_LOST_CODE | CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE
@@ -97,10 +106,16 @@ impl FarmState {
     fn mark(&self) -> FarmMark {
         FarmMark {
             restorations: self.restorations,
+            data_lost: self.data_lost,
             sessions: self.sessions,
             breaks: self.breaks,
             down: !self.broken.is_empty() || !self.inactive.is_empty(),
         }
+    }
+
+    /// The last 1101, if one arrived after `mark`.
+    fn data_lost_since(&self, mark: FarmMark) -> Option<&Notice> {
+        self.last_data_lost.as_ref().filter(|_| self.data_lost != mark.data_lost)
     }
 
     /// Whether a historical-data farm was down at `mark` or broke after it.
@@ -154,7 +169,8 @@ pub(crate) mod sync_impl {
     }
 
     /// Receives `()` after each change, coalesced while unread. A wake-up
-    /// only: [`FarmWatch::confirmed`] says what changed.
+    /// only: [`FarmWatch::data_lost_since`] and [`FarmWatch::confirmed`] say
+    /// what changed.
     #[derive(Debug)]
     pub(crate) struct FarmSignal {
         receiver: Receiver<()>,
@@ -191,6 +207,11 @@ pub(crate) mod sync_impl {
             signals.retain(|signal| signal.strong_count() > 0);
             signals.push(Arc::downgrade(&sender));
             FarmSignal { receiver, _sender: sender }
+        }
+
+        /// The last 1101, if one arrived after `mark`.
+        pub(crate) fn data_lost_since(&self, mark: FarmMark) -> Option<Notice> {
+            lock(&self.state).data_lost_since(mark).cloned()
         }
 
         /// Whether TWS has confirmed the historical-data farms back since `mark`.
@@ -267,6 +288,20 @@ pub(crate) mod async_impl {
 
         pub(crate) fn mark(&self) -> FarmMark {
             self.sender.borrow().mark()
+        }
+
+        /// Resolve with the first 1101 after `mark`; pending forever if none comes.
+        pub(crate) async fn data_lost(&self, mark: FarmMark) -> Notice {
+            let mut receiver = self.sender.subscribe();
+            // The sender lives as long as `self`, so `wait_for` cannot fail.
+            let notice = match receiver.wait_for(|state| state.data_lost_since(mark).is_some()).await {
+                Ok(state) => state.data_lost_since(mark).cloned(),
+                Err(_) => None,
+            };
+            match notice {
+                Some(notice) => notice,
+                None => std::future::pending().await,
+            }
         }
 
         /// Resolve once TWS has confirmed the historical-data farms back

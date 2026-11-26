@@ -418,7 +418,9 @@ pub(crate) fn order_lag_notice(skipped: u64) -> Notice {
 /// connection-status notices (1100 lost, 1101/1102 restored) it derives
 /// durable conclusions from, so a silent skip is not survivable: losing a
 /// 1101 voids every market-data request server-side yet leaves the client's
-/// subscriptions looking healthy forever, and losing a restoration notice
+/// subscriptions looking healthy forever (only streams wrapped in
+/// `Client::resubscribing` reopen on 1101, since the client sees it before
+/// the fan-out), and losing a restoration notice
 /// after a recorded 1100 holds every pending reopen forever. On receiving
 /// this notice the stream's conclusions are unknown — any of them may rest
 /// on notices that were dropped — so the consumer must resynchronize rather
