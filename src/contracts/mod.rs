@@ -193,7 +193,12 @@ pub struct Contract {
     pub exchange: Exchange,
     /// The underlying's currency.
     pub currency: Currency,
-    /// The contract's symbol within its primary exchange For options, this will be the OCC symbol.
+    /// The contract's symbol within its primary exchange. For US options, this is the OCC symbol.
+    ///
+    /// Other exchanges use their own layouts: `HSI25600L6` on HKFE (class, strike, month and right
+    /// letter, one-digit year), `K200992L6.KS` on KSE, `TCH DEC26 640 C` for a SEHK stock option,
+    /// a 9-digit exchange code on OSE.JPN. Read the strike, right and expiry from their fields
+    /// rather than parsing this (live: 2026-11-24, server 223; `docs/wire-facts/contracts.md#local-symbols-of-hkfe-ose-and-kse-options`).
     pub local_symbol: String,
     /// The contract's primary exchange.
     /// For smart routed contracts, used to define contract in case of ambiguity.
@@ -620,6 +625,12 @@ pub struct ContractDetails {
     /// The market name for this product.
     pub market_name: String,
     /// The minimum allowed price variation. Note that many securities vary their minimum tick size according to their price. This value will only show the smallest of the different minimum tick sizes regardless of the product's price. Full information about the minimum increment price structure can be obtained with the reqMarketRule function or the IB Contract and Security Search site.
+    ///
+    /// It is the increment of the market rule's first band, whatever the price: CTXR (rule 557:
+    /// 0.0001 below 1 USD, 0.01 from 1 USD) reports 0.0001, and ES options (rule 235: 0.05 below 5,
+    /// up to 0.5 from 100) report 0.05. To check a price, use the band for that price in the rule
+    /// from [`market_rule_id`](Self::market_rule_id) (live: 2026-11-25, server 223;
+    /// `docs/wire-facts/contracts.md#market-rule-ids-align-with-valid-exchanges`).
     pub min_tick: f64,
     /// How many market-data price units make one currency unit: `100` for a contract quoted in
     /// a sub-unit, such as CBOT corn in cents or an LSE stock in pence, otherwise `1`. TWS sent
@@ -741,6 +752,11 @@ pub struct ContractDetails {
     pub notes: String,
     /// Order's minimal size.
     ///
+    /// For TSE and SEHK stocks this is the board lot (7203 on TSEJ: 100; 5 on SEHK: 400), and
+    /// [`size_increment`](Self::size_increment) equals it. TWS rejects a smaller order with 388 and
+    /// one that is not a multiple of it with 461
+    /// (live: 2026-11-24, server 223; `docs/wire-facts/contracts.md#board-lots-min_size-and-size_increment`).
+    ///
     /// `None` when TWS reports no size rules for the contract (field absent,
     /// empty, or an "unset" sentinel); `Some(0.0)` is a real zero.
     pub min_size: Option<f64>,
@@ -811,6 +827,11 @@ pub struct ContractDetails {
 impl ContractDetails {
     /// The market rule id for `exchange`, one of [`valid_exchanges`](Self::valid_exchanges);
     /// pass it to `market_rule` for that exchange's price increments.
+    ///
+    /// Pass the exchange the order is sent to. TWS checks an order's price against that
+    /// exchange's rule, and SMART can have its own: 7203 LMT 2000.1 was accepted on SMART (rule
+    /// 3407, 0.1 below 10,000 JPY) and refused with 110 on TSEJ (rule 1460, 0.5 above 1,000) (live:
+    /// 2026-11-25, server 223; `docs/wire-facts/contracts.md#market-rule-ids-align-with-valid-exchanges`).
     ///
     /// `None` when `exchange` is not a valid exchange, or when the two lists
     /// differ in length, so the ids can't be matched to exchanges (TWS sends

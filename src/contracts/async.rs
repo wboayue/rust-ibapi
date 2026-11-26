@@ -136,6 +136,12 @@ impl Client {
     ///
     /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
     ///
+    /// The band edges and increments are in the contract's currency. For a contract whose
+    /// [`price_magnifier`](crate::contracts::ContractDetails::price_magnifier) is above 1, such as
+    /// an LSE stock quoted and ordered in pence, multiply them by the magnifier before comparing
+    /// them with an order or market data price (live: 2026-11-24, server 223;
+    /// `docs/wire-facts/contracts.md#tick-size-bands-of-tse-sehk-and-lse-stocks`).
+    ///
     /// # Arguments
     /// * `market_rule_id` - The market rule ID to query
     ///

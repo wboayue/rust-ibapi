@@ -60,20 +60,28 @@ Contract details and option chains. Format: [README](README.md).
 
 ### Bond contract details on a paper account
 
-*Live 2026-11-14 weekend, paper Gateway, server 226; #1214.*
+*Live 2026-11-25 19:16 UTC (US RTH), paper TWS, server 223; raw capture of `ContractData`. First
+seen 2026-11-14 on paper Gateway, server 226; #1214.*
 
-- `Contract::bond_cusip("912810TW8")` (UST 4¾ 11/15/43) → one contract (conid 667573987) with
-  tag 4, symbol, currency, exchange, `maturity` and `coupon` all empty. Only `contract_month`
-  `204311`, `desc_append` `T 4 3/4 11/15/43`, the CUSIP/ISIN, trading class `US-T` and
-  `time_zone_id` `US/Eastern` were filled. It looks permission-stripped.
+- `Contract::bond_cusip("912810TM0")` (UST 4 11/15/42) returns one contract (conid 598796519). Its
+  contract message carries only the conid, `BOND`, strike 0, exchange `SMART`, local symbol
+  `IBCID598796519` and trading class `US-T`. The details carry `minTick` 0.00001, order types,
+  `validExchanges` `SMART`, `priceMagnifier` 1, `contractMonth` `204211`, time zone `US/Eastern`,
+  trading and liquid hours, the CUSIP and ISIN in `secIdList`, `aggGroup` 7, `cusip` and
+  `descAppend` `T 4 11/15/42`.
+- TWS sends no symbol, currency, tag 4, coupon, maturity or issue date, so these fields are empty
+  because TWS leaves them out, not because the decoder drops them. `912810TW8` (UST 4 3/4
+  11/15/43) on 2026-11-14 had the same gaps. It looks permission-stripped.
 - Re-querying by conid resolves. With conid 0 the query draws 200, even with the fields as
-  returned.
-- `UKT`/GBP bonds → 190 contracts, all with tag 4 empty.
+  returned. A `SecurityType::Bond` query by CUSIP without exchange and currency also draws 200;
+  `bond_cusip` sets `SMART` and `USD`.
+- `UKT`/GBP bonds: 190 contracts, all with tag 4 empty.
 - So the zoned bond form (`"20430504 16:00 Europe/London"`, from C#'s `isBond` split) was not
   seen here, and whether a bond sent back with the date alone resolves is unanswered. The
   decoder leaves a bond's tag 4 as sent (`Expiry::Unknown` when zoned), as C# does, so nothing
   depends on the answer.
-- **Not probed:** an account with bond permissions.
+- **Not probed:** an account with bond permissions; the text protocol (the handshake requires
+  server 213, where contract details are protobuf only).
 
 ### `tradingHours` and `liquidHours` sessions
 
@@ -221,16 +229,38 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
 
 ### Market rule ids align with valid exchanges
 
-*Live 2026-11-10 RTH, paper Gateway, server 226; #1198.*
+*Live 2026-11-25 19:13-19:16 UTC (US RTH; TSE, SEHK and LSE closed), paper TWS, server 223;
+`contract_details`, `market_rule` and orders. First seen 2026-11-10 on paper Gateway, server
+226; #1198.*
 
 - `contract_details` for STK (AAPL SMART and any exchange, SAP@IBIS, 7203@TSEJ), FUT (ES,
-  GC), OPT (SPY 20261120), FOP (ES 202612), CASH, CRYPTO, IND, CFD, CMDTY and FUND: 5,834
-  rows, 16,598 `marketRuleIds` tokens. Every token is a plain integer: no whitespace, no
-  empty entries.
-- In every row the id count equals the `validExchanges` count: id *i* is the rule for
-  exchange *i*, as IB's `ContractDetails` doc says. Usually all ids are equal (AAPL: 4563
-  ×27); some contracts mix them (SAP@IBIS: 1874, 1943, 3055; 7203@TSEJ: 3407, 1460).
-- **Not probed:** bonds, warrants, structured products; contracts with no market rule.
+  GC), OPT (SPY 20261120), FOP (ES 202612), CASH, CRYPTO, IND, CFD, CMDTY and FUND on
+  2026-11-10: 5,834 rows, 16,598 `marketRuleIds` tokens. Every token is a plain integer: no
+  whitespace, no empty entries.
+- In every row the id count equals the `validExchanges` count: id *i* is the rule for exchange
+  *i*, as IB's `ContractDetails` doc says. The 2026-11-25 run matched in all 1,084 rows of the
+  contracts below. Usually all ids are equal (AAPL: 4563 ×27); some contracts mix them (SAP@IBIS:
+  1874, 1943, 3055; 7203: 3407 on SMART and JPNNEXT, 1460 on TSEJ; LSE stocks: 1918, with 3060 on
+  EUIBSI).
+- TWS checks an order's price against the rule of the exchange the order is sent to, and SMART
+  has its own rule. 7203 BUY 100 LMT 2000.1 on SMART was accepted (`PreSubmitted`, with a 399
+  "will not be placed at the exchange until 2026-11-26 09:00:00 Japan"); the same order on TSEJ
+  drew 110 "The price does not conform to the minimum price variation for this contract." Rule
+  3407 has a 0.1 increment below 10,000 JPY; rule 1460 has 0.5 above 1,000.
+- `minTick` equals the increment of the first band of the contract's rules in every row: AAPL
+  0.01, CTXR 0.0001, 7203 0.1, DGE and VOD 0.000001, 700 and 5 0.001, ES 0.25, ZC 0.0025, CL
+  0.01, NG 0.001, GC 0.1, and 718 ES options 0.05. It is not the increment at the contract's
+  price.
+
+| Rule | Contracts | Bands (low edge: increment) |
+| ---- | --------- | --------------------------- |
+| 4563 | AAPL | 0: 0.01 |
+| 557 | CTXR (US stock below 1 USD) | 0: 0.0001, 1: 0.01 |
+| 67, 151, 32, 98, 65 | ES, ZC, CL, NG, GC futures | one band: 0.25, 0.0025, 0.01, 0.001, 0.1 |
+| 235 | ES options (FOP, 718 rows for 202612) | 0: 0.05, 5: 0.1, 20: 0.25, 100: 0.5 |
+
+- **Not probed:** bonds, warrants, structured products; contracts with no market rule; an order
+  on JPNNEXT.
 
 ### Event-contract, `minAlgoSize` and precision fields
 
@@ -252,3 +282,130 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
 - **Not probed:** equity and index options, bonds, funds, non-US stocks; a contract with a non-zero
   `minAlgoSize`; what the AAPL step governs (sub-penny prices and fractional shares are both
   smaller than its `minTick` 0.01 and `minSize` 0.0001).
+
+### Local symbols of HKFE, OSE and KSE options
+
+*Live 2026-11-24 21:47-21:51 UTC (HKFE, OSE and KSE closed) and 2026-11-25 06:21 UTC (SEHK
+options), paper TWS, server 223; contract details of every listed contract.*
+
+| Query | Rows | `localSymbol` | `tradingClass` |
+| ----- | ---- | ------------- | -------------- |
+| OPT HSI HKFE | 2,572 | `HSI25600L6`, `HSI25600X6`, `HSI19200L6W04` | `HSI` |
+| OPT MHI HKFE | 866 | `MHI12800L6`, `MHI12800X6` | `MHI` |
+| FOP HSI HKFE | 1,942 | `PHS25600L6`, `PHS25600X6` | `PHS` |
+| OPT N225 OSE.JPN 202612 | 706 | `131126218` (16250 P), `141127718` (17750 C) | `225` |
+| OPT K200 KSE 202612 | 1,134 | `K200270L6.KS`, `K200992L6.KS` (992.5 C), `K200220X6.KS` | `01` |
+| OPT 700 SEHK 202612 C | 139 | `TCH DEC26 640 C` | `TCH` |
+
+- HKFE and KSE: trading class (`K200` for KSE), strike, one letter for month and right, last digit
+  of the expiry year, then `.KS` on KSE. Calls take `A` (January) to `L` (December), puts `M` to
+  `X`. All 5,380 HKFE rows matched the contract's own strike, right and expiry month and year.
+  KSE drops a strike's decimals: `K200992L6.KS` is the 992.5 call.
+- The year is one digit: `HSI19200L6` expires in 2026 and `HSI19200L0` in 2030, so the symbol
+  alone does not give the decade.
+- The one HSI weekly series listed, expiring 2026-12-04, carried `W04` after the year
+  (`HSI19200L6W04`). Whether the digits are the expiry day or a week number is not settled by a
+  single series.
+- FOP HSI (class `PHS`) is an option on the HSI future: `underSymbol` `HSIZ6`, expiring
+  2026-12-18, where OPT HSI (class `HSI`) is on the index and expires 2026-12-30. FOP MHI and OPT
+  700 on HKFE drew 200.
+- OSE.JPN local symbols are 9-digit exchange codes. Seen: the second digit is `3` or `8` for
+  puts and `4` or `9` for calls; the last two are `18` (also on the N225 future, `161120018`;
+  the N225 mini future ends in `19`). The middle digits change with the strike range. Read the
+  strike, right and expiry from the contract fields; the code does not spell them.
+- SEHK stock options list under the stock's symbol on `SEHK` (OPT 700 on HKFE drew 200), with a
+  short class (`TCH` for 700), a spelled-out local symbol `TCH DEC26 640 C` and multiplier 100.
+- **Not probed:** KSE weekly options, OSE weekly options and other OSE products.
+
+### Board lots: `min_size` and `size_increment`
+
+*Live 2026-11-24 21:47-22:23 UTC (TSE, SEHK and LSE closed), paper TWS, server 223.*
+
+| Contract | `minSize` | `sizeIncrement` | `suggestedSizeIncrement` |
+| -------- | --------- | --------------- | ------------------------ |
+| 7203 TSEJ (Toyota) | 100 | 100 | 100 |
+| 700 SEHK (Tencent) | 100 | 100 | 100 |
+| 5 SEHK (HSBC) | 400 | 400 | 400 |
+| VOD LSE | 0.0001 | 0.0001 | 1 |
+| HSI, N225, N225M, K200 futures; HSI, K200, N225 options | 1 | 1 | 1 |
+
+- The board lot is `minSize`, and `sizeIncrement` equals it on TSE and SEHK. It differs per
+  stock on SEHK (100 for 700, 400 for 5).
+- An order below it is rejected before TWS creates it: 700 BUY 50, 7203 BUY 50 and 5 BUY 100 drew
+  388 "Order size 50 is smaller than the minimum required size of 100." (400 for 5).
+- A size above the lot but not a multiple of it is discarded with 461: 700 BUY 150 and 7203
+  (SMART) BUY 150 drew "Order size 150 is not correct; it should be a multiple of 100".
+- **Not probed:** SEHK and TSE odd-lot order types; a modify to an odd size.
+
+### Tick-size bands of TSE, SEHK and LSE stocks
+
+*Live 2026-11-24 21:47 and 22:03-22:10 UTC (all three closed), paper TWS, server 223;
+`market_rule`, orders and what-if orders. LSE units and bars: 2026-11-25 19:16 UTC (LSE closed),
+historical ticks and bars.*
+
+| Contract (exchanges) | Rule | Bands (low edge: increment) |
+| -------------------- | ---- | --------------------------- |
+| 7203 (TSEJ) | 1460 | 0: 0.1, 1,000: 0.5, 3,000: 1, 10,000: 5, 30,000: 10, ... 30,000,000: 10,000 |
+| 7203 (SMART, JPNNEXT) | 3407 | 0: 0.1, 10,000: 0.5, 30,000: 1, 100,000: 5, 300,000: 10, 1,000,000: 100 |
+| 700, 5 (SEHK) | 1910, 1852 | 0: 0.001, 0.25: 0.005, 10: 0.01, 20: 0.02, 50: 0.05, 100: 0.1, ... 5,000: 5 |
+| VOD (LSE and 5 others; EUIBSI 3060) | 1918 | 0: 0.000001, ... 1: 0.0005, 2: 0.001, ... 500: 0.2 |
+| HSI future and options; N225 future; N225M future; K200 future | 68, 197, 380, 11 | one band: 1, 10, 5, 0.05 |
+
+- `minTick` is the first band's increment (7203: 0.1, SEHK: 0.001), not the increment at the
+  stock's price. One stock can carry different rules per venue: 7203's TSEJ rule moves to 0.5 at
+  1,000 JPY, its SMART rule at 10,000.
+- Off-tick prices drew 110 "The price does not conform to the minimum price variation": 700 LMT
+  320.01 (HKD band 0.2 above 200), 7203 TSEJ LMT 2000.1 (band 0.5 above 1,000).
+- LSE rules are in pounds while LSE stocks are quoted and ordered in pence (`priceMagnifier` 100,
+  currency `GBP`; IB sends no `GBX`). Multiply a band's edges and increment by `priceMagnifier`
+  before comparing them with an order or market-data price.
+- Diageo (DGE, rule 1918) settles the unit: on 2026-11-25 (LSE closed, historical data), 9,066
+  historical bid/ask ticks on LSE, from nine 1,000-tick windows over the session, quoted 18,132
+  prices in [1921, 1946.5] pence. Every one sits on a 0.5 pence grid, which is rule 1918 read in
+  pounds (GBP 19.21 is in the 10: 0.005 band). Read in pence, the rule gives 0.2 pence (the 500:
+  0.2 band), and 9,453 half-pence prices such as 1921.5 are off that grid.
+- VOD cannot tell the readings apart: at about 100 pence both give 0.05 pence (bands 1: 0.0005 and
+  100: 0.05). A what-if VOD BUY 100 LMT 100 cost commission 3.5 (stamp duty on GBP 100 plus the
+  GBP 3 minimum); LMT 1.0 cost 3.005 (GBP 1). LMT 100.05 was accepted and LMT 100.01 and 100.001
+  drew 110.
+- Historical bars are not book prices: half of DGE's 1-minute bar prices that day were off the
+  0.5 pence grid (TRADES 1,012 of 2,040 open, high, low and close values, BID 1,082, ASK 1,027;
+  for example BID 1941.4).
+- **Not probed:** an LSE order or fill (what-if only); real-time quotes (no TSE permission: 162
+  "No market data permissions for TSEJ STK").
+
+### Local symbols of TSE, KRX and EUREX contracts
+
+*Live 2026-11-25 19:15-19:23 UTC (TSE, KRX and EUREX closed), paper TWS, server 223;
+`contract_details` and `matching_symbols`.*
+
+| Contract | Query | `localSymbol` | Notes |
+| -------- | ----- | ------------- | ----- |
+| Toyota 7203 | STK on TSEJ or SMART | `7203.T` | primary `TSEJ` |
+| Toyota 7203 | STK on JPNNEXT | `7203` | same conid 13905804 |
+| Samsung Electronics 005930 (KOSPI) | by conid | `005930.KS` | primary `KRX`, exchange `SMART` |
+| Ecopro BM 247540 (KOSDAQ) | by conid | `247540.KQ` | primary `KRX` |
+| DAX future, December 2026 | FUT `DAX` on EUREX | `FDAX 20261218 M` | class `FDAX`; the mini is `FDXM 20261218 M` |
+| Euro Stoxx 50 index | IND `ESTX50` on EUREX | `SX5E` | IND `SX5E` draws 200 |
+
+- A TSE stock's local symbol depends on the exchange in the query: `7203.T` on TSEJ and SMART,
+  `7203` on JPNNEXT.
+- Korean stocks list under primary exchange `KRX`, with `.KS` for KOSPI and `.KQ` for KOSDAQ
+  (also `005935.KS`, `068270.KS`, `068760.KQ`, `086520.KQ`). A query on `KSE` with the stock code
+  and `KRW` draws 200: `KSE` lists the derivatives.
+- EUREX futures local symbols are the trading class, the last trading day and `M`. A query by
+  trading class `FDAX` and contract month 202612 resolves with symbol `FDAX` or `DAX`; with no
+  symbol it draws 321 "The symbol or the local-symbol or the security id must be entered".
+- IB's symbol for the Euro Stoxx 50 index is `ESTX50`; its local symbol is `SX5E`.
+- **Not probed:** other EUREX products; Korean preferred shares beyond `005935`.
+
+### KSE contracts report the `Japan` time zone
+
+*Live 2026-11-24 21:47 and 22:08 UTC, paper TWS, server 223.*
+
+- `contract_details` for the K200 future and K200 options on KSE: `timeZoneId` `Japan`, trading
+  hours `20261124:1800-20261125:0600;20261125:0845-20261125:1545`. Korea and Japan share UTC+9, so
+  the hours are right in either zone, but a caller mapping `timeZoneId` to a market calendar gets
+  Japan's.
+- A historical K200 request echoed its window in `+09:00`.
+- **Not probed:** KSE stocks (005930 on KSE drew 200).
