@@ -299,7 +299,8 @@ pub(crate) trait StreamDecoder<T> {
     /// one-shot query with nothing to continue (`HistoricalDataFrame`) may
     /// accept any error.
     ///
-    /// `context` is the request's, for a type whose request modes differ here.
+    /// `context` is the subscription's request context, so a type serving more
+    /// than one request mode can answer per request.
     fn rejection_ends_request(_notice: &Notice, _context: &DecoderContext) -> bool {
         false
     }
@@ -318,8 +319,9 @@ pub(crate) trait StreamDecoder<T> {
     }
 
     /// Returns true if this decoded value represents the end of a snapshot subscription
-    /// (no cancel on drop; `collect` stops). `context` is the request's, for a
-    /// type whose request modes differ here.
+    /// (no cancel on drop; `collect` stops). `context` is the subscription's
+    /// request context, so a type serving more than one request mode can answer
+    /// per request.
     fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
         false
     }
