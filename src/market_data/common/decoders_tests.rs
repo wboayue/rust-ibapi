@@ -85,7 +85,7 @@ fn bar_trade_fields_by_value() {
         Option<i32>,
         (Option<f64>, Option<f64>, Option<i32>),
     );
-    let cases: [Case; 7] = [
+    let cases: [Case; 8] = [
         ("TRADES", Some("1500"), Some("185.7"), Some(42), (Some(1500.0), Some(185.7), Some(42))),
         ("TRADES, quiet bar", Some("0"), Some("185.7"), Some(0), (Some(0.0), Some(185.7), Some(0))),
         ("historical non-TRADES: -1 sentinel", Some("-1"), Some("-1"), Some(-1), (None, None, None)),
@@ -93,6 +93,7 @@ fn bar_trade_fields_by_value() {
         ("volatility bar", Some("1"), Some("0.23"), Some(0), (Some(1.0), Some(0.23), Some(0))),
         ("WAP tied to volume", Some("-1"), Some("185.7"), Some(-1), (None, None, None)),
         ("count absent", Some("10"), Some("185.7"), None, (Some(10.0), Some(185.7), None)),
+        ("WAP absent, volume present", Some("10"), None, Some(5), (Some(10.0), None, Some(5))),
     ];
     for (label, volume, wap, count, (want_volume, want_wap, want_count)) in cases {
         let fields = decode_bar_trade_fields(volume, wap, count).expect(label);

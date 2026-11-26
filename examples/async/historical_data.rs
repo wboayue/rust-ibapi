@@ -255,14 +255,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Now streaming updates...");
             }
             Ok(HistoricalDataFrame::Update(bar)) => {
+                // MIDPOINT (Forex) bars carry no volume; print it only when present.
+                let volume = bar.volume.map(|v| format!(", V: {v:.0}")).unwrap_or_default();
                 println!(
-                    "UPDATE: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}",
+                    "UPDATE: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}{}",
                     format_time(&bar.date),
                     bar.open,
                     bar.high,
                     bar.low,
                     bar.close,
-                    bar.volume.unwrap_or(0.0)
+                    volume
                 );
             }
             Ok(HistoricalDataFrame::End { start, end }) => {

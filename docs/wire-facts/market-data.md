@@ -76,7 +76,7 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
 - **Not probed:** delayed market data (type 3/4) on a CFD; snapshot requests; FX or
   commodity CFDs; a window longer than 15s; the async client.
 
-### Bar volume and WAP on non-TRADES bars
+### Bar trade fields (volume, WAP, count)
 
 *Live 2026-11-15 Sun 22:25 ET (FX and CME Globex open, US equities overnight), paper, server
 226; raw capture.*
@@ -89,7 +89,7 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
 - Settles that the two bar types differ: realtime leaves the fields out, historical sends a
   `-1` sentinel. C# reads an absent realtime value as unset (`decimal.MaxValue`).
 
-*Live 2026-11-16, paper Gateway, server 226; raw capture; #1247.*
+*Live 2026-11-16, paper, server 226; raw capture; #1247.*
 
 - A TRADES bar in which nothing traded sends volume `"0"`, count `0` and WAP as a price, not
   the `-1` sentinel: 428 of 541 historical 5-second AAPL premarket bars, 6 of 597 ES, 3 of 3
@@ -102,6 +102,8 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
   OPTION_IMPLIED_VOLATILITY (AAPL) send volume `"1"`, count `0` and a WAP.
 - Keep-up-to-date TRADES on BTC/PAXOS, 8 minutes: 97 update bars, all with `bar_count` (81
   with trades, 16 quiet). TWS answered 10299 ("use AGGTRADES") and streamed anyway.
+- Settles that `-1` and absence both mean no trade data, while a quiet TRADES bar is a real
+  zero.
 - **Not probed:** AAPL realtime bars (no data overnight); a keep-up-to-date TRADES update bar
   without `bar_count` (#1057), for which stocks and futures need up-to-the-second data (2188 on
   the probing account).

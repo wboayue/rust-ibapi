@@ -892,6 +892,7 @@ if bar.count != -1 { /* TRADES bar */ }
 if let (Some(volume), Some(wap), Some(count)) = (bar.volume, bar.wap, bar.count) {
     println!("volume {volume} vwap {wap:.2} trades {count}");
 }
+if bar.count.is_some() { /* bar with trade data */ }
 let volume = bar.volume.unwrap_or(0.0); // where a plain number is wanted
 ```
 

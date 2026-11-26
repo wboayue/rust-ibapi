@@ -188,6 +188,8 @@ pub struct Bar {
     pub wap: Option<f64>,
     /// The number of trades during the bar's timespan. `None` when TWS sends none or `-1`,
     /// which it does on a bar type without trade data; a quiet TRADES bar reports `Some(0)`.
+    /// [`WhatToShow::HistoricalVolatility`] and [`WhatToShow::OptionImpliedVolatility`] bars
+    /// report `Some(0)`, which is not a trade count.
     pub count: Option<i32>,
 }
 

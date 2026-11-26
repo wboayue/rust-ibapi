@@ -509,32 +509,15 @@ fn decode_historical_data_proto_preserves_fractional_volume() {
 }
 
 /// TWS sends `-1` for volume, WAP and count on a bar type without trade data (MIDPOINT, BID,
-/// ASK, BID_ASK), and real zeros on a TRADES bar in which nothing traded (live, server 226).
+/// ASK, BID_ASK; live, server 226). The value matrix is pinned on `decode_bar_trade_fields`.
 #[test]
-fn decode_historical_data_proto_trade_fields() {
-    let bar = |volume, wap, count| {
-        historical_data_daily_bar("20230101")
-            .ohlc(100.0, 101.0, 99.0, 100.5)
-            .volume(volume)
-            .wap(wap)
-            .count(count)
-    };
+fn decode_historical_data_proto_sentinel_is_none() {
     let p = historical_data_response()
-        .bar(bar(1500.0, 100.25, 42))
-        .bar(bar(0.0, 100.5, 0))
-        .bar(bar(-1.0, -1.0, -1))
+        .bar(historical_data_daily_bar("20230101").volume(-1.0).wap(-1.0).count(-1))
         .to_proto();
 
     let bars = super::decode_historical_data_proto(p).unwrap();
-    let fields: Vec<_> = bars.iter().map(|b| (b.volume, b.wap, b.count)).collect();
-    assert_eq!(
-        fields,
-        [
-            (Some(1500.0), Some(100.25), Some(42)),
-            (Some(0.0), Some(100.5), Some(0)),
-            (None, None, None)
-        ]
-    );
+    assert_eq!((bars[0].volume, bars[0].wap, bars[0].count), (None, None, None));
 }
 
 #[test]

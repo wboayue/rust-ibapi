@@ -42,31 +42,13 @@ mod realtime_bar_tests {
         assert_eq!(bar.count, Some(1));
     }
 
-    /// TWS omits volume and WAP on every non-TRADES bar and sends `count` as `-1`
-    /// (live, server 226). Neither must read as "nothing traded".
+    /// TWS omits volume and WAP on every non-TRADES bar and sends `count` as `-1` (live,
+    /// server 226). The value matrix is pinned on `decode_bar_trade_fields`.
     #[test]
-    fn decode_realtime_bar_trade_fields() {
-        let cases = [
-            (
-                "TRADES, quiet bar",
-                fixture().volume(0.0).wap(4028.5).count(0),
-                Some(0.0),
-                Some(4028.5),
-                Some(0),
-            ),
-            ("TRADES", fixture(), Some(2.0), Some(4026.75), Some(1)),
-            (
-                "MIDPOINT, fields absent",
-                realtime_bar_tick().time(1678323335).count(-1),
-                None,
-                None,
-                None,
-            ),
-        ];
-        for (label, response, volume, wap, count) in cases {
-            let bar = decode_realtime_bar_proto(response.to_proto()).expect("decode failed");
-            assert_eq!((bar.volume, bar.wap, bar.count), (volume, wap, count), "{label}");
-        }
+    fn decode_realtime_bar_without_trade_data_is_none() {
+        let response = realtime_bar_tick().time(1678323335).count(-1);
+        let bar = decode_realtime_bar_proto(response.to_proto()).expect("decode failed");
+        assert_eq!((bar.volume, bar.wap, bar.count), (None, None, None));
     }
 
     #[test]

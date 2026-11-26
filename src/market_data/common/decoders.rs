@@ -42,7 +42,8 @@ pub(in crate::market_data) fn decode_tick_midpoint(t: proto::HistoricalTick) -> 
 }
 
 /// A bar's trade fields: volume, WAP and trade count, each `None` when the bar has no trade data.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub(in crate::market_data) struct BarTradeFields {
     pub(in crate::market_data) volume: Option<f64>,
     pub(in crate::market_data) wap: Option<f64>,
@@ -61,6 +62,7 @@ const NO_TRADE_DATA: i32 = -1;
 /// `-1`; it is `None` whenever volume is. A TRADES bar in which nothing traded keeps
 /// `Some(0.0)` / `Some(0)`.
 pub(in crate::market_data) fn decode_bar_trade_fields(volume: Option<&str>, wap: Option<&str>, count: Option<i32>) -> Result<BarTradeFields, Error> {
+    // Exact compare: TWS sends the literal `"-1"`, which parses to exactly -1.0.
     let volume = parse_optional_decimal(volume)?.filter(|&v| v != f64::from(NO_TRADE_DATA));
     let wap = match volume {
         Some(_) => parse_optional_decimal(wap)?,
