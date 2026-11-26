@@ -281,10 +281,9 @@ server 223.*
 *Live 2026-11-24 Tue 09:16-09:59 UTC (FX and Xetra open; US equities overnight), paper, server
 223; nautechsystems/nautilus_trader#5395.*
 
-- `reqMktDepth` EUR.USD (IDEALPRO), 10 rows, 26 minutes each with `isSmartDepth` false and true
-  at once: both sides updated every minute, 2,400 to 9,200 rows per side per minute; the longest
-  silence was 5.4 s, on both sides at the same moment. Neither side went silent while the other
-  updated. Totals per run: about 218,000 updates, 8,900 inserts and 9,000 deletes.
+- `reqMktDepth` EUR.USD (IDEALPRO), 10 rows, two concurrent 26-minute subscriptions, one with
+  `isSmartDepth` false and one true: both sides updated every minute, 2,400 to 9,200 updates per
+  side per minute; the longest silence was 5.4 s, on both sides at the same moment. Totals per run: about 218,000 updates, 8,900 inserts and 9,000 deletes.
 - `isSmartDepth` false sends `MarketDepth` rows; true sends `MarketDepthL2` rows with market
   maker `IDEALPRO` and `isSmartDepth` true, after a 2152 notice "Exchanges - Depth: IDEALPRO;".
 - Rows: 50 requested on EUR.USD gives positions 0-9 (10 rows); 5 requested gives 0-4, built with
