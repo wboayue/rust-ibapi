@@ -219,8 +219,8 @@ impl Client {
     /// [`ExecutionFilter::last_n_days`] or [`ExecutionFilter::specific_dates`]
     /// to reach earlier days.
     /// Along with the [`crate::orders::ExecutionData`], the [`crate::orders::CommissionAndFeesReport`] will also be returned.
-    /// Join a commission to its execution by `execution_id` (see the
-    /// [`CommissionAndFeesReport`](crate::orders::CommissionAndFeesReport) docs) — the commission follows its execution.
+    /// To join each commission to its execution, read the reply with
+    /// `collect_to_end_within` and pass it to [`FillMatcher::pair_executions`](crate::orders::FillMatcher::pair_executions).
     /// When requesting executions, a filter can be specified to receive only a subset of them
     ///
     /// # Arguments
@@ -641,10 +641,10 @@ impl Client {
     /// This stream provides updates for all orders, not just a specific order.
     /// To track a specific order, filter the updates by order ID.
     ///
-    /// To pair a [`CommissionAndFeesReport`](crate::orders::CommissionAndFeesReport) with the
-    /// [`ExecutionData`](crate::orders::ExecutionData) it belongs to, join on
-    /// `execution_id` — the commission follows its execution and shares that key. See
-    /// the [`CommissionAndFeesReport`](crate::orders::CommissionAndFeesReport) docs for the idiom.
+    /// To pair each [`CommissionAndFeesReport`](crate::orders::CommissionAndFeesReport) with the
+    /// [`ExecutionData`](crate::orders::ExecutionData) it belongs to, feed both to a
+    /// [`FillMatcher`](crate::orders::FillMatcher): they share `execution_id`, and the
+    /// matcher joins them in either arrival order.
     ///
     /// # Gaps and recovery
     ///
