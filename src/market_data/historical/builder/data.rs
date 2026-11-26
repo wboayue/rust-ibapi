@@ -299,6 +299,12 @@ impl<'a, D: DateSpec> HistoricalDataBuilder<'a, crate::client::sync::Client, D> 
     /// - [`Error::Timeout`] if the end marker hasn't arrived within the client's
     ///   [`one_shot_timeout`](crate::client::blocking::ClientBuilder::one_shot_timeout).
     ///
+    /// After error 10299 TWS goes on with the series the error names, and this returns that
+    /// series' bars with nothing to show the substitution: AGGTRADES bars for crypto `TRADES`,
+    /// TRADES bars for `AGGTRADES` on a stock or future (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`). Request
+    /// [`WhatToShow::AggTrades`] for crypto and [`WhatToShow::Trades`] otherwise to get the
+    /// series you name.
+    ///
     /// Without a `one_shot_timeout`, waits without a time limit. Any error
     /// before the end marker cancels the request at TWS.
     ///
@@ -361,12 +367,19 @@ impl<'a, D: DateSpec> HistoricalDataBuilder<'a, crate::client::sync::Client, D> 
     /// window and call [`trim_to`](HistoricalData::trim_to).
     ///
     /// Dropping the subscription before `End` sends `cancelHistoricalData`. To
-    /// know when TWS is done with the request, use `cancel_and_drain`. Any TWS
-    /// error ends a historical request, so after one it returns `Rejected`
+    /// know when TWS is done with the request, use `cancel_and_drain`. Every TWS
+    /// error but 10299 ends a historical request, so after one it returns `Rejected`
     /// without writing a cancel. Observed live (server 226), TWS answers a
     /// cancel of a request still running with error 162 ("API historical data
     /// query cancelled"), so `cancel_and_drain` returns `Rejected` with code
     /// 162: the request is over at TWS.
+    ///
+    /// Error 10299, TWS substituting AGGTRADES for crypto `TRADES` or TRADES for `AGGTRADES` on a
+    /// stock or future, does not end the request: the subscription yields it as a
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice), then the
+    /// substituted series' bars (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`). The notice still classifies as an error
+    /// ([`Notice::is_error`](crate::Notice::is_error) is `true`), so match code 10299 before
+    /// stopping on an error notice, or the bars that follow are never read.
     ///
     /// # Errors
     /// [`Error::InvalidArgument`], with nothing sent, for a range the client rejects before sending (see
@@ -463,6 +476,16 @@ impl HistoricalDataBuilder<'_, crate::client::sync::Client, DurationOnly> {
     /// [`Error::InvalidArgument`], with nothing sent, for a `buffer_limit` outside
     /// `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
     ///
+    /// For crypto, stream `TRADES`. TWS answers it with error 10299 and streams the AGGTRADES
+    /// series anyway; the subscription yields the 10299 as a
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice), then the bars
+    /// and updates. The notice still classifies as an error
+    /// ([`Notice::is_error`](crate::Notice::is_error) is `true`), so match code 10299 before
+    /// stopping on an error notice, or the bars that follow are never read. `AGGTRADES` with live
+    /// updates draws 321 ("Source price not supported with live updates"), which ends the
+    /// subscription: on crypto with no 10299 first, and on a stock, future or forex pair after a
+    /// 10299 (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`).
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -506,6 +529,12 @@ impl<'a, D: DateSpec> HistoricalDataBuilder<'a, crate::client::r#async::Client, 
     /// - [`Error::UnexpectedResponse`] if the bars and the end marker arrive out of order.
     /// - [`Error::Timeout`] if the end marker hasn't arrived within the client's
     ///   [`one_shot_timeout`](crate::ClientBuilder::one_shot_timeout).
+    ///
+    /// After error 10299 TWS goes on with the series the error names, and this returns that
+    /// series' bars with nothing to show the substitution: AGGTRADES bars for crypto `TRADES`,
+    /// TRADES bars for `AGGTRADES` on a stock or future (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`). Request
+    /// [`WhatToShow::AggTrades`] for crypto and [`WhatToShow::Trades`] otherwise to get the
+    /// series you name.
     ///
     /// Without a `one_shot_timeout`, waits without a time limit; to bound one
     /// call, wrap the future in `tokio::time::timeout`. Dropping it, or any
@@ -573,12 +602,19 @@ impl<'a, D: DateSpec> HistoricalDataBuilder<'a, crate::client::r#async::Client, 
     /// window and call [`trim_to`](HistoricalData::trim_to).
     ///
     /// Dropping the subscription before `End` sends `cancelHistoricalData`. To
-    /// know when TWS is done with the request, use `cancel_and_drain`. Any TWS
-    /// error ends a historical request, so after one it returns `Rejected`
+    /// know when TWS is done with the request, use `cancel_and_drain`. Every TWS
+    /// error but 10299 ends a historical request, so after one it returns `Rejected`
     /// without writing a cancel. Observed live (server 226), TWS answers a
     /// cancel of a request still running with error 162 ("API historical data
     /// query cancelled"), so `cancel_and_drain` returns `Rejected` with code
     /// 162: the request is over at TWS.
+    ///
+    /// Error 10299, TWS substituting AGGTRADES for crypto `TRADES` or TRADES for `AGGTRADES` on a
+    /// stock or future, does not end the request: the subscription yields it as a
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice), then the
+    /// substituted series' bars (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`). The notice still classifies as an error
+    /// ([`Notice::is_error`](crate::Notice::is_error) is `true`), so match code 10299 before
+    /// stopping on an error notice, or the bars that follow are never read.
     ///
     /// # Errors
     /// [`Error::InvalidArgument`], with nothing sent, for a range the client rejects before sending (see
@@ -675,6 +711,16 @@ impl HistoricalDataBuilder<'_, crate::client::r#async::Client, DurationOnly> {
     /// # Errors
     /// [`Error::InvalidArgument`], with nothing sent, for a `buffer_limit` outside
     /// `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
+    ///
+    /// For crypto, stream `TRADES`. TWS answers it with error 10299 and streams the AGGTRADES
+    /// series anyway; the subscription yields the 10299 as a
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice), then the bars
+    /// and updates. The notice still classifies as an error
+    /// ([`Notice::is_error`](crate::Notice::is_error) is `true`), so match code 10299 before
+    /// stopping on an error notice, or the bars that follow are never read. `AGGTRADES` with live
+    /// updates draws 321 ("Source price not supported with live updates"), which ends the
+    /// subscription: on crypto with no 10299 first, and on a stock, future or forex pair after a
+    /// 10299 (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`).
     ///
     /// # Examples
     ///

@@ -301,3 +301,30 @@ server 223.*
   drops size-only updates here too.
 - ES and EUR.USD tick-by-tick sizes, all sent: [Size fields are always sent](#size-fields-are-always-sent).
 - **Not probed:** live stock ticks during RTH, live accounts, TWS rather than the Gateway.
+
+### 10299 `whatToShow` substitution
+
+*Live 2026-11-24 10:20-10:35 UTC, paper TWS, server 223; #1286.*
+
+10299 names the `whatToShow` TWS expects: "Expected what to show is AGGTRADES, please use that
+instead of TRADES" on crypto, "Expected what to show is TRADES ..." on others. What follows it:
+
+| Request | Contract, `whatToShow` | After 10299 |
+| --- | --- | --- |
+| Historical bars (`fetch`, `subscribe`) | BTC, ETH (PAXOS) `TRADES` | the bars and `HistoricalDataEnd`; bars identical to an `AGGTRADES` request |
+| Historical bars | AAPL, ES `AGGTRADES` | the `TRADES` bars and `HistoricalDataEnd` |
+| Historical bars | EUR.USD `AGGTRADES` | 162 "No historical market data" |
+| `keepUpToDate` bars (`subscribe_with_updates`) | BTC, ETH `TRADES` | the bars, `HistoricalDataEnd`, then updates every few seconds; a cancel draws 162 (cancelled) |
+| `keepUpToDate` bars | AAPL, EUR.USD, ES `AGGTRADES` | 321 "Source price not supported with live updates" at once (AAPL, again 2026-11-26: same millisecond, then nothing for 65 s); a cancel draws 366 |
+| Historical ticks | BTC, ETH `TRADES` | nothing for 20 s; a cancel draws no reply |
+
+- Without 10299: crypto `AGGTRADES` bars come with no notice; crypto `AGGTRADES` with
+  `keepUpToDate` draws 321 and nothing else, so `TRADES` is the only way to stream crypto bars.
+- `head_timestamp` with crypto `TRADES` or `AGGTRADES` answers with no 10299 (2019-03-13 for
+  BTC). With `AGGTRADES` on AAPL, EUR.USD and ES it draws 162. `histogram_data` takes no
+  `whatToShow` and answers for BTC and ETH.
+- A cancel sent within ~1 ms of the 10299 on a crypto `TRADES` `keepUpToDate` request (earlier
+  run) drew 366 while the updates kept coming: TWS had not yet set up the substituted query.
+  One sent seconds later drew 162 and stopped them.
+- **Not probed:** other crypto venues (ZEROHASH), RTH equities, bar sizes other than 1 hour
+  and 1 minute.

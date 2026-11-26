@@ -306,3 +306,16 @@ fn cancel_frame_covers_each_cancel_outcome() {
     // The type has no cancel (the `StreamDecoder` default).
     assert!(cancel_frame::<OptionChain>(&context, Some(9000)).is_none());
 }
+
+/// Only the historical bar decoders read on after 10299: TWS sends their series anyway. Another
+/// terminal code still ends them, and other decoders still end on 10299.
+#[test]
+fn error_continues_request_only_for_10299_on_historical_bars() {
+    use crate::market_data::historical::HistoricalDataFrame;
+    use crate::market_data::realtime::TickTypes;
+
+    let continues = |hook: fn(&Notice, &DecoderContext) -> bool, code| hook(&Notice::synthesized(code, String::new()), &DecoderContext::default());
+    assert!(continues(HistoricalDataFrame::error_continues_request, 10299));
+    assert!(!continues(HistoricalDataFrame::error_continues_request, 162));
+    assert!(!continues(TickTypes::error_continues_request, 10299));
+}
