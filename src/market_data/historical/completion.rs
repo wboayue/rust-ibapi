@@ -50,11 +50,12 @@ pub enum StreamedBar {
 /// Bars with volume 0 are TWS's own: they come in historical replies too, and some carry a new
 /// price. They are classified like any other bar.
 ///
-/// The rule reads the local clock, so it holds only while that clock is within about a second
-/// of TWS's. A local clock ahead of TWS's by `d` seconds completes a bar on an update TWS sent
-/// up to `d` seconds before the bar ended: with `d` of 5 seconds or more, that is the update
-/// before the last one, and the last update, which can still change the bar, is then dropped
-/// as late. A local clock behind TWS's completes the bar only on the next bar's first update,
+/// The rule reads the local clock when [`apply`](Self::apply) is called, so it holds only while
+/// that clock is within about a second of TWS's and updates are applied as they arrive;
+/// [`apply_at`](Self::apply_at) takes the receive time instead. A local clock ahead of TWS's by
+/// `d` seconds completes a bar on an update TWS sent up to `d` seconds before the bar ended:
+/// with `d` of 5 seconds or more, that is the update before the last one, and the last update,
+/// which can still change the bar, is then dropped as late. A local clock behind TWS's completes the bar only on the next bar's first update,
 /// about 5 seconds later, with the right values.
 ///
 /// Updates for a bar already completed are dropped. Reuse one `BarCompletion` across a
@@ -182,7 +183,29 @@ impl BarCompletion {
         self.apply_at(update, OffsetDateTime::now_utc())
     }
 
-    fn apply_at(&mut self, update: HistoricalDataFrame, now: OffsetDateTime) -> Vec<StreamedBar> {
+    /// [`apply`](Self::apply) with the time `update` was received in place of the local clock
+    /// when it is applied.
+    ///
+    /// For a consumer that applies updates after a delay, or replays recorded ones: `apply` reads
+    /// the clock when it is called, so an update applied 5 seconds late can complete its bar on a
+    /// value TWS still revises. Pass the time each update arrived, from the same clock rules as
+    /// for `apply`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::market_data::historical::{Bar, BarCompletion, BarSize, BarTimestamp, HistoricalDataFrame, StreamedBar};
+    /// use time::macros::datetime;
+    ///
+    /// let bar = |close| Bar { date: BarTimestamp::DateTime(datetime!(2026-04-14 9:31 UTC)), close, ..Bar::default() };
+    /// let mut completion = BarCompletion::new(BarSize::Min);
+    /// completion.apply_at(HistoricalDataFrame::Bars(vec![bar(1.0)]), datetime!(2026-04-14 9:31:20 UTC));
+    ///
+    /// // Received at 9:31:55, before the bar's end: still forming, whenever it is replayed.
+    /// let items = completion.apply_at(HistoricalDataFrame::Update(bar(2.0)), datetime!(2026-04-14 9:31:55 UTC));
+    /// assert_eq!(items, vec![StreamedBar::Forming(bar(2.0))]);
+    /// ```
+    pub fn apply_at(&mut self, update: HistoricalDataFrame, received_at: OffsetDateTime) -> Vec<StreamedBar> {
         let mut items = Vec::new();
         match update {
             HistoricalDataFrame::Bars(bars) => {
@@ -204,7 +227,7 @@ impl BarCompletion {
                 if let Some(forming) = self.forming.take_if(|forming| forming.date < bar.date) {
                     self.complete(forming, &mut items);
                 }
-                if self.has_ended(&bar, now) {
+                if self.has_ended(&bar, received_at) {
                     self.forming = None;
                     self.complete(bar, &mut items);
                 } else {
