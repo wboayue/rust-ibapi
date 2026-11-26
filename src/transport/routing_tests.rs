@@ -737,8 +737,31 @@ fn order_routing_strategy_for_own_and_foreign_frames() {
         (M::OpenOrderEnd, S::SharedOnly, S::SharedOnly),
     ];
     for (message_type, own, foreign) in cases {
-        assert_eq!(order_routing_strategy(message_type, false), own, "{message_type:?} own");
-        assert_eq!(order_routing_strategy(message_type, true), foreign, "{message_type:?} foreign");
+        assert_eq!(order_routing_strategy(message_type, false, false), own, "{message_type:?} own");
+        assert_eq!(order_routing_strategy(message_type, true, false), foreign, "{message_type:?} foreign");
+    }
+}
+
+/// An execution carrying a request-range request id answers an `executions`
+/// request, whoever's it is; only this client's live one (-1) takes the order
+/// route. Other types ignore the request id.
+#[test]
+fn order_routing_strategy_for_requested_executions() {
+    use IncomingMessages as M;
+    use OrderRoutingStrategy as S;
+    let cases = [
+        (M::ExecutionData, false, S::ByRequestId),
+        (M::ExecutionData, true, S::ByRequestId),
+        (M::ExecutionDataEnd, false, S::ExecutionDataEnd),
+        (M::CommissionsAndFeesReport, false, S::ByExecutionId),
+        (M::OrderStatus, false, S::OrderAndShared),
+    ];
+    for (message_type, foreign, expected) in cases {
+        assert_eq!(
+            order_routing_strategy(message_type, foreign, true),
+            expected,
+            "{message_type:?} foreign={foreign}"
+        );
     }
 }
 

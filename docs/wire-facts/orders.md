@@ -283,6 +283,31 @@ and sold at market; MSFT orders of 500 shares filled in 7 to 9 parts.*
 - **Not probed:** futures; a later corrected report; a raw capture of `realized_pnl`; the
   Gateway.
 
+### Executions: request id on replies and live fills
+
+*Live 2026-11-23 23:56Z off-hours, paper TWS, server 223; EUR.USD BUY 20,000 MKT, then
+`executions(ExecutionFilter::default())`.*
+
+- The live `ExecutionData` frame carried request id -1; the same execution in the
+  `executions` reply carried the request's id (`1500000000`). The request id alone tells a
+  reply from a live fill.
+- The reply carried a commission report for each execution, other clients' executions
+  included. A commission report carries no request id or client id, so only the execution id
+  links it to its execution.
+
+*Live 2026-11-24 00:26Z–00:32Z off-hours, paper TWS, server 223; raw captures; EUR.USD BUY
+20,000 MKT with `executions()` sent on the live execution (5 runs), before the fill (2 runs),
+and every 10 ms across the fill (5 runs, 40 requests each).*
+
+- TWS sends one commission report for the live fill and one more inside each reply that lists
+  the fill, before that reply's end marker.
+- In 5 runs a reply landed between the live execution and its commission report. Each time that
+  reply listed the execution without a report, its end marker followed, and then the live
+  report arrived on its own. The fill's reports matched the replies that listed it one for one
+  (38 replies, 38 reports in one run): the live one stood in for the racing reply's.
+- A reply sent before the fill does not list it, and the fill's live report follows as usual.
+- **Not probed:** a live report arriving inside a reply, before its end marker.
+
 ### `Execution.time` rendering
 
 *Live 2026-11-11 overnight (02:17Z to 03:09Z), paper Gateway, server 226; #1225.*

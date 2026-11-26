@@ -85,15 +85,22 @@ sequenceDiagram
 
 1. **Requests with IDs**: MessageBus creates dedicated channels for responses
 2. **Requests without IDs**: MessageBus uses shared channels for responses
-3. **Order-based requests**: Routed by order id. Every subscription opened on an order id
-   (`place_order`, a modify, `cancel_order`) receives each of that order's frames once and yields
-   the types its decoder declares, so a cancel or modify takes nothing from the subscription
-   that placed the order. A TWS error on the order id ends the subscription for the
+3. **Order-based requests**: Routed by order id, with copies to the order update stream.
+   Every subscription opened on an order id (`place_order`, a modify, `cancel_order`) receives
+   each of that order's frames once and yields the types its decoder declares, so a cancel or
+   modify takes nothing from the subscription that placed the order. A TWS error on the order id ends the subscription for the
    most recently written request. During a write, the transport holds the direct subscription's
    frames for that order until it knows the result. If the queue fills, it reports a buffer
    limit error on the affected subscriptions. Earlier subscriptions read subsequent TWS errors
    as notices and keep receiving order updates. A modify sent with `submit_order` opens no subscription,
    so a refusal still ends a sole `place_order` subscription.
+   - A live execution carries request id -1. It reaches its order's subscriptions and the
+     order update stream. Those streams also receive distinct commission reports for this
+     client's known live executions.
+   - An execution row in an `executions` reply carries its request's id. Until the reply
+     ends, its subscription receives distinct commission reports for the executions it
+     lists. Overlapping replies can share a report because commission frames carry only
+     the execution id.
 
 ## Module Structure
 

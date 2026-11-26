@@ -18,7 +18,7 @@ use tokio::sync::{broadcast, Mutex};
 
 use crate::accounts::types::AccountId;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
-use crate::transport::common::{read_lock, write_lock, LeaseRef};
+use crate::transport::common::{read_lock, record_commission, write_lock, LeaseRef};
 use crate::transport::{Admit, BoundState, BufferBound, RoutedItem, SharedCounts, SharedTicket};
 use crate::Error;
 
@@ -31,6 +31,7 @@ pub(super) struct Route {
     pub(super) sender: BroadcastSender,
     pub(super) lease: LeaseRef,
     bound: Option<RouteBound>,
+    commission: Option<Vec<u8>>,
     /// Another route was registered under this route's key after it and its
     /// request was written, so an error frame on the key may answer that later
     /// request: it reaches this route as
@@ -62,6 +63,7 @@ impl Route {
             sender,
             lease,
             bound: None,
+            commission: None,
             superseded: false,
         }
     }
@@ -80,6 +82,7 @@ impl Route {
             sender,
             lease,
             bound: Some(bound),
+            commission: None,
             superseded: false,
         }
     }
@@ -153,6 +156,14 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         registered.push(route);
     }
 
+    fn insert_alias(&self, id: K, source: &Route) {
+        let mut routes = self.write();
+        let registered = routes.entry(id).or_default();
+        if !registered.iter().any(|route| route.lease.is(&source.lease)) {
+            registered.push(source.alias());
+        }
+    }
+
     /// Mark the routes registered under `id` before the one holding `lease`
     /// as superseded, once that route's request is written. Until then they
     /// already receive [`RoutedItem::for_earlier_subscription`] as earlier
@@ -216,9 +227,32 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     ) -> Result<(), RoutedItem> {
         self.deliver_then(id, item, |route| {
             if let Some(alias) = alias {
-                aliases.insert(alias.clone(), route.alias());
+                aliases.insert_alias(alias.clone(), route);
             }
         })
+    }
+
+    pub(super) fn deliver_commission(&self, id: &K, payload: &[u8], message: &ResponseMessage) -> bool {
+        let mut routes = self.write();
+        let Some(routes) = routes.get_mut(id) else {
+            return false;
+        };
+        let mut eligible = false;
+        for route in routes.iter_mut().filter(|route| route.lease.is_live()) {
+            eligible = true;
+            if record_commission(&mut route.commission, payload) {
+                route.deliver(id, message.clone().into());
+            }
+        }
+        eligible
+    }
+
+    pub(super) fn end_commission_aliases<A: Hash + Eq + Display + Debug>(&self, id: &K, aliases: &SenderHash<A>) {
+        if let Some(routes) = self.read().get(id) {
+            for route in routes {
+                aliases.remove_all_same(&route.lease);
+            }
+        }
     }
 
     /// Deliver `item` to each of `id`'s routes and run `then` on each, all
@@ -266,6 +300,13 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     /// the same id survives.
     pub(super) fn remove_if_same(&self, id: K, lease: &LeaseRef) {
         self.remove_if(id, |route| route.lease.is(lease));
+    }
+
+    pub(super) fn remove_all_same(&self, lease: &LeaseRef) {
+        self.write().retain(|_, routes| {
+            routes.retain(|route| !route.lease.is(lease));
+            !routes.is_empty()
+        });
     }
 
     /// Remove `id`'s route that holds `lease`, only if that lease is

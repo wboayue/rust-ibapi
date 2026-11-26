@@ -37,7 +37,7 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{is_cancel_frame, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
-use super::common::{lock, log_orphan, report_unroutable_frame, Lease, LeaseRef, OrderFrame, OrderWrites, ORDER_CAPACITY};
+use super::common::{lock, log_orphan, report_unroutable_frame, Lease, LeaseRef, LiveExecutions, OrderFrame, OrderWrites, ORDER_CAPACITY};
 use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::routing::{
@@ -486,10 +486,17 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncSocket> {
     connection: Arc<AsyncConnection<S>>,
     requests: Arc<SenderHash<RequestId>>,
     orders: Arc<SenderHash<OrderId>>,
-    /// Execution-id aliases of request and order routes, for the commission
-    /// reports that follow an execution. Pruned when the owning request or
-    /// order subscription is cleaned up.
+    /// Execution-id aliases of order routes, for the commission report that
+    /// follows a live execution. Pruned when the owning order subscription is
+    /// cleaned up.
     executions: Arc<SenderHash<String>>,
+    /// Execution-id aliases of `executions` request routes, for the
+    /// commission reports in a reply. Kept apart from [`Self::executions`]
+    /// because a reply's commission report goes to the request alone, not to
+    /// the order update stream. Pruned when the request is cleaned up.
+    executions_requested: Arc<SenderHash<String>>,
+    /// This client's live fills still waiting for their commission report.
+    live_executions: LiveExecutions,
     shared_channels: SharedChannels,
     /// The order-update stream and the per-order status streams. A std lock
     /// inside, like the registries', so shutdown can close it from `Drop`.
@@ -567,6 +574,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             requests: Arc::new(SenderHash::new()),
             orders: Arc::new(SenderHash::new()),
             executions: Arc::new(SenderHash::new()),
+            executions_requested: Arc::new(SenderHash::new()),
+            live_executions: LiveExecutions::default(),
             shared_channels: SharedChannels::new(|request| ChannelClass::of_shared(request).capacity(channel_capacity)),
             order_taps,
             channel_capacity,
@@ -589,6 +598,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let requests = message_bus.requests.clone();
         let orders = message_bus.orders.clone();
         let executions = message_bus.executions.clone();
+        let executions_requested = message_bus.executions_requested.clone();
         let order_taps = message_bus.order_taps.clone();
         #[cfg(test)]
         let cleanup_gate = message_bus.cleanup_gate.clone();
@@ -606,7 +616,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 match signal {
                     CleanupSignal::Request(request_id, lease) => {
                         requests.release(request_id, &lease, "request");
-                        executions.prune_dead();
+                        executions_requested.prune_dead();
                     }
                     CleanupSignal::Order(order_id, lease) => {
                         orders.release(order_id, &lease, "order");
@@ -883,6 +893,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.orders.fail_all(|| Error::ConnectionReset.into());
         // Aliases of the routes just failed.
         self.executions.clear();
+        self.executions_requested.clear();
+        self.live_executions.clear();
         // Shared channels too, mirroring sync's `fail_all`: an in-flight
         // open_orders/positions subscription awaits an end marker only the
         // pre-reconnect request could produce, so it would hang forever.
@@ -919,6 +931,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.orders.fail_all(|| Error::Shutdown.into());
         // Execution aliases hold sender clones; clear them or the channels stay open.
         self.executions.clear();
+        self.executions_requested.clear();
         self.shared_channels.close(|| Error::Shutdown.into());
         self.order_taps.close();
 
@@ -985,15 +998,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     fn dispatch_order_frame(&self, order_id: OrderId, frame: OrderFrame) -> Result<(), RoutedItem> {
-        self.order_writes.deliver(
-            order_id,
-            frame,
-            || self.orders.leases(&order_id).iter().any(LeaseRef::is_live),
-            |frame, try_order| self.deliver_order_frame(order_id, frame, try_order),
-        )
+        self.order_writes
+            .deliver(order_id, frame, |frame| self.deliver_order_frame(order_id, frame))
     }
 
-    fn deliver_order_frame(&self, order_id: OrderId, frame: OrderFrame, try_order: bool) -> Result<(), RoutedItem> {
+    fn deliver_order_frame(&self, order_id: OrderId, frame: OrderFrame) -> Result<(), RoutedItem> {
         match frame {
             OrderFrame::Direct(item) => self.orders.deliver(&order_id, item),
             OrderFrame::Execution {
@@ -1001,16 +1010,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 execution_id,
                 request_id,
             } => {
-                let delivery = if try_order {
-                    self.orders.deliver_aliased(&order_id, item, execution_id.as_ref(), &self.executions)
-                } else {
-                    Err(item)
-                };
-                if let Some(request_id) = request_id {
-                    delivery.or_else(|item| self.requests.deliver_aliased(&request_id, item, execution_id.as_ref(), &self.executions))
-                } else {
-                    delivery
-                }
+                debug_assert!(request_id.is_none());
+                self.orders.deliver_aliased(&order_id, item, execution_id.as_ref(), &self.executions)
             }
             OrderFrame::Commission { item, execution_id } => {
                 let leases = self.orders.leases(&order_id);
@@ -1041,7 +1042,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 OrderFrame::Direct(item) if uncertain => OrderFrame::Direct(item.for_earlier_subscription()),
                 frame => frame,
             };
-            let _ = self.deliver_order_frame(order_id, frame, true);
+            let _ = self.deliver_order_frame(order_id, frame);
         }
     }
 
@@ -1058,10 +1059,17 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// Route message to order-specific channel
     async fn route_to_order_channel(&self, order_id: i32, message: ResponseMessage) -> Result<(), Error> {
         let foreign = is_foreign(&message, self.connection.client_id);
-        let routed = !foreign && self.send_order_update(&message);
-        let strategy = order_routing_strategy(message.message_type(), foreign);
         let message_order_id = message.order_id().map(OrderId::from);
         let message_request_id = message.request_id().and_then(RequestId::from_raw);
+        let strategy = order_routing_strategy(message.message_type(), foreign, message_request_id.is_some());
+        // An execution reply, its end marker and its commission reports stay
+        // off the update stream; the commission arm decides for itself.
+        let routed = !foreign
+            && !matches!(
+                strategy,
+                OrderRoutingStrategy::ByRequestId | OrderRoutingStrategy::ExecutionDataEnd | OrderRoutingStrategy::ByExecutionId
+            )
+            && self.send_order_update(&message);
 
         if !foreign {
             self.order_taps.publish_status(&message);
@@ -1071,14 +1079,31 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             OrderRoutingStrategy::OrderUpdateOnly => {}
             OrderRoutingStrategy::ExecutionData => {
                 let execution_id = message.execution_id();
-                if let Err(item) = self.deliver_to_order_or_request(message_order_id, message_request_id, message.into(), execution_id.as_ref()) {
+                if let Some(execution_id) = &execution_id {
+                    self.live_executions.insert(execution_id);
+                }
+                let unrouted = match message_order_id {
+                    Some(id) => self.dispatch_order_frame(
+                        id,
+                        OrderFrame::Execution {
+                            item: message.into(),
+                            execution_id,
+                            request_id: None,
+                        },
+                    ),
+                    None => Err(message.into()),
+                };
+                if let Err(item) = unrouted {
                     if !routed {
                         warn!("could not route ExecutionData message {item:?}");
                     }
                 }
             }
             OrderRoutingStrategy::ExecutionDataEnd => {
-                if let Err(item) = self.deliver_to_order_or_request(message_order_id, message_request_id, message.into(), None) {
+                if let Some(id) = message_request_id {
+                    self.requests.end_commission_aliases(&id, &self.executions_requested);
+                }
+                if let Err(item) = self.deliver_to_order_or_request(message_order_id, message_request_id, message.into()) {
                     warn!("could not route ExecutionDataEnd message {item:?}");
                 }
             }
@@ -1094,17 +1119,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                     }
                 }
             }
-            OrderRoutingStrategy::ByExecutionId => {
-                let unrouted = match message.execution_id() {
-                    Some(execution_id) => self.deliver_order_commission(execution_id, message.into()),
-                    None => Err(message.into()),
-                };
-                if let Err(item) = unrouted {
-                    if !routed {
-                        warn!("could not route commission report {item:?}");
-                    }
-                }
-            }
+            OrderRoutingStrategy::ByExecutionId => self.route_commission(message),
             OrderRoutingStrategy::SharedOnly => {
                 if !self.shared_channels.send_message(message.message_type(), &message) && !routed {
                     warn!("could not route message {:?}", message);
@@ -1112,8 +1127,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
             OrderRoutingStrategy::ByRequestId => {
                 let execution_id = message.execution_id();
-                if let Err(item) = self.deliver_to_order_or_request(None, message_request_id, message.into(), execution_id.as_ref()) {
-                    debug!("another client's execution answers no request: {item:?}");
+                let unrouted = match message_request_id {
+                    Some(id) => self
+                        .requests
+                        .deliver_aliased(&id, message.into(), execution_id.as_ref(), &self.executions_requested),
+                    None => Err(message.into()),
+                };
+                if let Err(item) = unrouted {
+                    debug!("execution answers no live request: {item:?}");
                 }
             }
             OrderRoutingStrategy::Ignore => {}
@@ -1134,31 +1155,34 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         Ok(())
     }
 
-    /// Deliver to `order_id`'s route, else `request_id`'s, aliasing the route
-    /// under `execution_id` for the commission report that follows. Hands
-    /// the item back when neither is registered.
-    fn deliver_to_order_or_request(
-        &self,
-        order_id: Option<OrderId>,
-        request_id: Option<RequestId>,
-        item: RoutedItem,
-        execution_id: Option<&String>,
-    ) -> Result<(), RoutedItem> {
-        if let Some(id) = order_id {
-            return self.dispatch_order_frame(
-                id,
-                OrderFrame::Execution {
-                    item,
-                    execution_id: execution_id.cloned(),
-                    request_id,
-                },
-            );
-        }
+    fn route_commission(&self, message: ResponseMessage) {
+        let Some((id, payload)) = super::common::commission_version(&message) else {
+            self.live_executions.warn_unmapped();
+            return;
+        };
 
-        match request_id {
-            Some(id) => self.requests.deliver_aliased(&id, item, execution_id, &self.executions),
+        let requested = self.executions_requested.deliver_commission(&id, &payload, &message);
+        match self.live_executions.record_commission(&id, &payload) {
+            Some(true) => {
+                self.send_order_update(&message);
+                let _ = self.deliver_order_commission(id, message.into());
+            }
+            None if !requested => self.live_executions.warn_unmapped(),
+            _ => {}
+        }
+    }
+
+    /// Deliver to `order_id`'s route, else `request_id`'s. Hands the item
+    /// back when neither is registered.
+    fn deliver_to_order_or_request(&self, order_id: Option<OrderId>, request_id: Option<RequestId>, item: RoutedItem) -> Result<(), RoutedItem> {
+        match order_id {
+            Some(id) => self.deliver_order(id, item),
             None => Err(item),
         }
+        .or_else(|item| match request_id {
+            Some(id) => self.requests.deliver(&id, item),
+            None => Err(item),
+        })
     }
 
     /// Register a channel of `class` under `id` in `routes`, optionally with

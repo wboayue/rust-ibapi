@@ -1,9 +1,10 @@
 //! Common utilities shared between sync and async transport implementations
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 use std::time::Duration;
 
-use log::info;
+use log::{info, warn};
 
 use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::errors::Error;
@@ -118,20 +119,15 @@ impl OrderWrites {
         &self,
         id: OrderId,
         frame: OrderFrame,
-        has_order_recipient: impl FnOnce() -> bool,
-        deliver: impl FnOnce(OrderFrame, bool) -> Result<(), RoutedItem>,
+        deliver: impl FnOnce(OrderFrame) -> Result<(), RoutedItem>,
     ) -> Result<(), RoutedItem> {
         let mut writes = lock(&self.pending);
-        let Some(pending) = writes.as_mut().filter(|pending| pending.id == id) else {
-            return deliver(frame, true);
-        };
-
-        // A pending write cannot claim a snapshot row ahead of its commission and end marker
-        if matches!(frame, OrderFrame::Execution { request_id: Some(_), .. }) && !has_order_recipient() {
-            return deliver(frame, false);
+        if let Some(pending) = writes.as_mut().filter(|pending| pending.id == id) {
+            pending.push(frame);
+            Ok(())
+        } else {
+            deliver(frame)
         }
-        pending.push(frame);
-        Ok(())
     }
 
     pub(crate) fn deliver_commission(
@@ -379,6 +375,86 @@ impl FibonacciBackoff {
             self.current = next;
         }
         Duration::from_secs(self.current)
+    }
+}
+
+pub(crate) fn commission_version(message: &ResponseMessage) -> Option<(String, Vec<u8>)> {
+    let mut report = message.proto::<crate::proto::CommissionAndFeesReport>().ok()?;
+    let id = report.exec_id.take().filter(|id| !id.is_empty())?;
+    Some((id, prost::Message::encode_to_vec(&report)))
+}
+
+pub(crate) fn record_commission(previous: &mut Option<Vec<u8>>, payload: &[u8]) -> bool {
+    if previous.as_deref() == Some(payload) {
+        return false;
+    }
+    *previous = Some(payload.to_vec());
+    true
+}
+
+/// How many live executions can retain commission routing. Past it the
+/// oldest execution is dropped.
+pub(crate) const LIVE_EXECUTIONS_CAPACITY: usize = 10_000;
+
+/// Commission routing for execution ids observed on this client's live stream.
+///
+/// A report carries an execution id but no request or client id. An overlapping
+/// snapshot can repeat or update a commission for a known live fill.
+#[derive(Debug, Default)]
+pub(crate) struct LiveExecutions {
+    state: Mutex<LiveExecutionsState>,
+}
+
+#[derive(Debug, Default)]
+struct LiveExecutionsState {
+    ids: HashMap<String, Option<Vec<u8>>>,
+    /// `ids` in arrival order, oldest first, for eviction.
+    order: VecDeque<String>,
+    warned_unmapped: bool,
+}
+
+impl LiveExecutions {
+    /// Record an execution that can receive live commission updates.
+    pub(crate) fn insert(&self, execution_id: &str) {
+        let mut state = lock(&self.state);
+        if state.ids.contains_key(execution_id) {
+            return;
+        }
+        state.ids.insert(execution_id.to_owned(), None);
+        state.order.push_back(execution_id.to_owned());
+        if state.order.len() > LIVE_EXECUTIONS_CAPACITY {
+            let oldest = state.order.pop_front().expect("oldest execution");
+            state.ids.remove(&oldest);
+        }
+    }
+
+    pub(crate) fn record_commission(&self, execution_id: &str, payload: &[u8]) -> Option<bool> {
+        lock(&self.state)
+            .ids
+            .get_mut(execution_id)
+            .map(|previous| record_commission(previous, payload))
+    }
+
+    pub(crate) fn warn_unmapped(&self) {
+        let mut state = lock(&self.state);
+        if !state.warned_unmapped {
+            state.warned_unmapped = true;
+            warn!("commission report could not be matched to an execution; reconcile with executions()");
+        }
+    }
+
+    pub(crate) fn clear(&self) {
+        *lock(&self.state) = LiveExecutionsState::default();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn warned_unmapped(&self) -> bool {
+        lock(&self.state).warned_unmapped
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        lock(&self.state).ids.len()
     }
 }
 

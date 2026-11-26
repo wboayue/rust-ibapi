@@ -10,7 +10,7 @@ triggers:
   - adding an Order field that carries another order's id
 symbols: [REQUEST_ID_FLOOR, RequestId, OrderId, WireId, WireId::classify, OrderId::checked, verify_and_reserve_order_ids, prepare_place_order, prepare_place_orders, carried_order_ids, Client::mint_request_id]
 related: [proto-aware-accessors, id-parameters]
-precedents: ["#789", "#1069", "#1231", "#1335"]
+precedents: ["#789", "#1069", "#1231", "#1335", "#1283"]
 ---
 
 An error frame carries one integer for both requests and orders, so the two id domains must
@@ -71,3 +71,6 @@ only on user demand. The general form, for every id newtype, is [id parameters](
   check failing on a later order left the earlier ones live. `prepare_place_order` (check, reserve
   and encode) is now the shared entry point, and `prepare_place_orders` prepares a whole batch
   before any of it is sent.
+- #1283 — an `ExecutionData` reply to `executions()` went to the order route whenever one was open
+  for its order id, so the order-id field outranked the request-id field. The request-id field
+  now decides: a request-range id routes to that request only, -1 to the order route.

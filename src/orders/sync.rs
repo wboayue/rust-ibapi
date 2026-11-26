@@ -230,6 +230,11 @@ impl Client {
     /// Along with the [`crate::orders::ExecutionData`], the [`crate::orders::CommissionAndFeesReport`] will also be returned.
     /// Join a commission to its execution by `execution_id` (see the
     /// [`CommissionAndFeesReport`](crate::orders::CommissionAndFeesReport) docs) — the commission follows its execution.
+    /// Each execution row reaches the subscription for its request. Commission reports
+    /// contain an execution id and no request id. Until this reply ends, it receives
+    /// reports for every execution it lists, including reports shared with an
+    /// overlapping reply or the live stream. Repeated copies of the current report
+    /// are suppressed. Use `execution_id` to apply a changed report to the same execution.
     /// When requesting executions, a filter can be specified to receive only a subset of them
     ///
     /// # Arguments
@@ -696,6 +701,15 @@ impl Client {
     /// [`ExecutionData`](crate::orders::ExecutionData) it belongs to, join on
     /// `execution_id` — the commission follows its execution and shares that key. See
     /// the [`CommissionAndFeesReport`](crate::orders::CommissionAndFeesReport) docs for the idiom.
+    ///
+    /// The stream carries live executions and commission reports for this client's
+    /// known live execution ids. A changed commission can arrive during an
+    /// [`executions`](Self::executions) reply. TWS provides the execution id but no
+    /// request id on a commission report, so its source is ambiguous when replies overlap.
+    ///
+    /// The client drops reports without a known execution id and logs the first
+    /// unmatched report per connection. Use [`executions`](Self::executions) to
+    /// reconcile missing commissions after a warning or a reconnect.
     ///
     /// # Gaps and recovery
     ///
