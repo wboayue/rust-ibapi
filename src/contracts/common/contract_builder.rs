@@ -1,5 +1,4 @@
 use super::super::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, Expiry, OptionRight, SecurityIdType, SecurityType, Strike, Symbol};
-use crate::builder::ValidationError;
 use crate::Error;
 
 /// Builder for creating and validating [Contract] instances
@@ -170,7 +169,7 @@ impl ContractBuilder {
     /// - Format YYYYMMDD for specific expiration date (e.g., "20241220")
     ///
     /// [`build`](Self::build) parses the string and returns [`Error::Validation`]
-    /// with [`ValidationError::InvalidDate`] if it is neither. An empty string clears the
+    /// with [`ValidationError::InvalidDate`](crate::builder::ValidationError::InvalidDate) if it is neither. An empty string clears the
     /// field, as in 5.x, so an option or future then fails the required check.
     /// For a typed value use [`expiry`](Self::expiry).
     pub fn last_trade_date_or_contract_month<S: Into<String>>(mut self, date: S) -> Self {
@@ -478,10 +477,12 @@ impl ContractBuilder {
     /// - Futures contracts are missing contract month
     ///
     /// [`Error::Validation`] if:
-    /// - An option's strike is not positive and finite ([`ValidationError::InvalidPrice`]),
-    ///   as [`OptionBuilder::build`](crate::contracts::OptionBuilder::build) checks
+    /// - An option's strike is not positive and finite ([`ValidationError::InvalidPrice`](crate::builder::ValidationError::InvalidPrice)),
+    ///   as [`OptionBuilder::build`](crate::contracts::OptionBuilder::build) checks. A
+    ///   strike of `0.0` passes when a `contract_id` or `local_symbol` identifies the
+    ///   contract: TWS reads it as unset
     /// - The [`last_trade_date_or_contract_month`](Self::last_trade_date_or_contract_month)
-    ///   text is neither `YYYYMMDD` nor `YYYYMM` ([`ValidationError::InvalidDate`])
+    ///   text is neither `YYYYMMDD` nor `YYYYMM` ([`ValidationError::InvalidDate`](crate::builder::ValidationError::InvalidDate))
     pub fn build(self) -> Result<Contract, Error> {
         // Symbol is required unless local_symbol or contract_id is provided
         if self.symbol.is_none() && self.local_symbol.is_none() && self.contract_id.is_none() {
@@ -492,12 +493,14 @@ impl ContractBuilder {
 
         // Validate option-specific requirements
         if security_type == SecurityType::Option || security_type == SecurityType::FuturesOption {
-            if self.strike.is_none() {
-                return Err(Error::InvalidArgument("Strike price is required for options".into()));
-            }
-
-            if let Some(strike) = self.strike {
-                Strike::new(strike)?;
+            match self.strike {
+                None => return Err(Error::InvalidArgument("Strike price is required for options".into())),
+                // Strike 0 is TWS's "unset": with a contract id or local symbol TWS resolves the
+                // contract from those (docs/wire-facts/contracts.md, ZC futures option).
+                Some(strike) if strike == 0.0 && (self.contract_id.is_some() || self.local_symbol.is_some()) => {}
+                Some(strike) => {
+                    Strike::new(strike)?;
+                }
             }
 
             if self.right.is_none() {
@@ -520,10 +523,7 @@ impl ContractBuilder {
         let expiry = match self.last_trade_date_or_contract_month {
             None => None,
             Some(ExpiryInput::Typed(expiry)) => Some(expiry),
-            Some(ExpiryInput::Text(text)) => Some(text.parse::<Expiry>().map_err(|_| ValidationError::InvalidDate {
-                value: text.clone(),
-                expected: "YYYYMMDD (last trading day) or YYYYMM (contract month)",
-            })?),
+            Some(ExpiryInput::Text(text)) => Some(text.parse::<Expiry>()?),
         };
 
         Ok(Contract {

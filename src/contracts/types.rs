@@ -369,7 +369,7 @@ impl ExpirationDate {
     pub(crate) fn validated(self) -> Result<Self, ValidationError> {
         let invalid = || ValidationError::InvalidDate {
             value: format!("{:04}-{:02}-{:02}", self.year, self.month, self.day),
-            expected: "a calendar date with a year of at most 9999",
+            expected: "a real calendar date, year 0-9999",
         };
         if self.year > 9999 {
             return Err(invalid());
@@ -485,7 +485,7 @@ impl ContractMonth {
         if year > 9999 || !(1..=12).contains(&month) {
             return Err(ValidationError::InvalidDate {
                 value: format!("{year:04}-{month:02}"),
-                expected: "a month 1-12 with a year of at most 9999",
+                expected: "month 1-12, year 0-9999",
             });
         }
         Ok(ContractMonth { year, month })

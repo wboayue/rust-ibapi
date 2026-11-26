@@ -76,6 +76,8 @@ pub enum ValidationError {
     InvalidField {
         /// The field, as `Type::field`.
         field: &'static str,
+        /// The rejected value.
+        value: String,
         /// What TWS accepts.
         reason: String,
     },
@@ -83,7 +85,7 @@ pub enum ValidationError {
     InvalidDate {
         /// The rejected input: the text parsed, or the components as `YYYY-MM-DD` / `YYYY-MM`.
         value: String,
-        /// The form expected, such as `"YYYYMMDD"`.
+        /// The form or constraint expected, such as `"YYYYMMDD"`.
         expected: &'static str,
     },
 }
@@ -105,7 +107,7 @@ impl fmt::Display for ValidationError {
             Self::InvalidPercentage { field, value, min, max } => {
                 write!(f, "Invalid {}: {} (must be between {} and {})", field, value, min, max)
             }
-            Self::InvalidField { field, reason } => write!(f, "Invalid {field}: {reason}"),
+            Self::InvalidField { field, value, reason } => write!(f, "Invalid {field} {value:?}: {reason}"),
             Self::InvalidDate { value, expected } => write!(f, "Invalid date {value:?}: expected {expected}"),
         }
     }

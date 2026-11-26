@@ -107,7 +107,9 @@ fn option_build_rejects_invalid_strike() {
         for builder in [Contract::call("AAPL"), Contract::put("AAPL")] {
             let result = builder.strike(strike).expires_on(2024, 12, 20).build();
             match result {
-                Err(Error::Validation(ValidationError::InvalidPrice(price))) => assert!(price == strike || price.is_nan(), "{label}: {price}"),
+                Err(Error::Validation(ValidationError::InvalidPrice(price))) => {
+                    assert!(price == strike || (price.is_nan() && strike.is_nan()), "{label}: {price}")
+                }
                 other => panic!("{label}: expected InvalidPrice, got {other:?}"),
             }
         }

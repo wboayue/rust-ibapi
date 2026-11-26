@@ -423,11 +423,13 @@ correct at runtime (a strike, a date) is an `ibapi::builder::ValidationError`, w
 is `Error::InvalidArgument`:
 
 ```rust
-use ibapi::contracts::{Contract, Strike};
+use ibapi::builder::ValidationError;
+use ibapi::contracts::{Contract, ContractMonth, Strike};
+use ibapi::Error;
 
 // Strike price validation
 let result = Strike::new(-10.0);
-assert!(result.is_err());  // Negative strikes are invalid
+assert_eq!(result, Err(ValidationError::InvalidPrice(-10.0)));  // Negative strikes are invalid
 
 // Spread validation
 let empty_spread = Contract::spread("AAPL").build();
@@ -435,7 +437,7 @@ assert!(empty_spread.is_err());  // Spreads need at least one leg
 
 // Option strike validation happens in build()
 let bad_strike = Contract::call("AAPL").strike(-10.0).expires_on(2024, 12, 20).build();
-assert!(bad_strike.is_err());  // Strikes must be positive and finite
+assert!(matches!(bad_strike, Err(Error::Validation(ValidationError::InvalidPrice(_)))));  // Strikes must be positive and finite
 
 // So does the expires_on date; ExpirationDate::new and ContractMonth::new check theirs
 let bad_date = Contract::call("AAPL").strike(150.0).expires_on(2024, 2, 30).build();

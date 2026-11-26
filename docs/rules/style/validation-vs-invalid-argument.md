@@ -17,9 +17,15 @@ user or file input, a field on a caller-built `Order`) fails with a typed
 `ibapi::builder::ValidationError` variant: returned bare from a constructor or `FromStr`
 (`Result<Self, ValidationError>`), wrapped as `Error::Validation` by anything returning
 `ibapi::Error`. A caller bug no one recovers from at runtime (a builder missing a required field,
-a nonsense duration, bad client config, `buffer_limit(0)`) is `Error::InvalidArgument(String)`.
+conflicting `historical_data` settings, bad client config, `buffer_limit(0)`) is
+`Error::InvalidArgument(String)`.
 Add a `ValidationError` variant rather than formatting a value into a string. If the type
 already carries type parameters, prefer typestate to either error.
+
+Not yet aligned, tracked in #1328: the order builders still return
+`ValidationError::MissingRequiredField` for a missing field, and the wire-vocabulary parsers
+(`Duration`, `BarSize`, `WhatToShow`, `impl_wire_enum!` types) return `Error::Parse`, the error
+decoding uses. Don't copy either pattern into new code.
 
 ## Why
 
@@ -48,4 +54,6 @@ type parameters.
   parsing, `Strike::new`, and option / `ContractBuilder` strike and expiry checks moved to it.
   Required-field checks, `Contract::spread`, `historical_data` ranges and `ClientBuilder`
   stayed `InvalidArgument`. `ContractBuilder` now runs `Strike::new` too, so it rejects the
-  zero / NaN strikes it used to pass.
+  zero / NaN strikes it used to pass. Review caught that zero was over-reach: TWS reads
+  strike 0 as unset and resolves the contract from its id (`docs/wire-facts/contracts.md`),
+  so zero still passes with a `contract_id` or `local_symbol`.

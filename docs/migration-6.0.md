@@ -405,7 +405,7 @@ The compiler finds every use of the three fields. It does not catch the serializ
 A failure is now one of two shapes, by who can fix it:
 
 - **`Error::Validation(ValidationError)`**: a runtime value a caller may correct, such as a quantity, a price or strike, a date from user or file input, or a field on a caller-built `Order`. Match the variant.
-- **`Error::InvalidArgument(String)`**: a caller bug, such as a builder missing a required field (`Contract::spread` without legs, `ContractBuilder` without a symbol or option strike), an invalid `historical_data` duration or range, or a bad `ClientBuilder` setting. Fix the code; nothing to match.
+- **`Error::InvalidArgument(String)`**: a caller bug, such as a builder missing a required field (`Contract::spread` without legs, `ContractBuilder` without a symbol or option strike), conflicting `historical_data` settings, or a bad `ClientBuilder` setting. Fix the code; nothing to match. The order builders still report a missing field as `ValidationError::MissingRequiredField`, listed below.
 
 `ValidationError` moves from `ibapi::orders::builder` to `ibapi::builder`, beside `Missing` (§11). No other path is kept:
 
@@ -417,13 +417,13 @@ use ibapi::orders::builder::ValidationError;
 use ibapi::builder::ValidationError;
 ```
 
-It gains two variants: `InvalidField { field, reason }` and `InvalidDate { value, expected }`. Code that matches it exhaustively adds arms for them.
+It gains two variants: `InvalidField { field, value, reason }` and `InvalidDate { value, expected }`. Code that matches it exhaustively adds arms for them.
 
 These now return `Error::Validation` where they returned `Error::InvalidArgument` with the message text:
 
 - `OrderBuilder::submit`, `analyze` and `build_order`, the bracket and attached-order submits and `ExerciseOptionsBuilder::submit`, with the `ValidationError` that `OrderBuilder::build` already returned: `InvalidQuantity`, `InvalidPrice`, `MissingRequiredField`, `InvalidCombination`, `InvalidStopPrice`, `InvalidLimitPrice`, `InvalidBracketOrder` or `InvalidPercentage`.
 - `place_order`, `submit_order`, `cancel_order_with` and `global_cancel_with` (sync and async), for an `ext_operator` TWS would reject: `InvalidField { field: "Order::ext_operator" | "OrderCancel::ext_operator", .. }`.
-- Option `build()` and `ContractBuilder::build()` for a bad strike (`InvalidPrice`) or expiry (`InvalidDate`); see §13, §30 and §34. `ContractBuilder::build()` rejected only a negative strike; it now also rejects zero, NaN and infinite ones for an option, as `OptionBuilder::build()` does.
+- Option `build()` and `ContractBuilder::build()` for a bad strike (`InvalidPrice`) or expiry (`InvalidDate`); see §13, §30 and §34. `ContractBuilder::build()` rejected only a negative strike; it now also rejects NaN and infinite ones for an option, and zero unless a `contract_id` or `local_symbol` identifies the contract (TWS reads strike 0 as unset).
 
 `?` on a `ValidationError` in a function returning `Result<_, ibapi::Error>` gives `Error::Validation`.
 

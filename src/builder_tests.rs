@@ -36,9 +36,10 @@ fn validation_error_display() {
         (
             ValidationError::InvalidField {
                 field: "Order::ext_operator",
-                reason: "1-16 ASCII letters or digits".to_string(),
+                value: "probe-op".to_string(),
+                reason: "TWS accepts 1-16 ASCII letters or digits".to_string(),
             },
-            "Invalid Order::ext_operator: 1-16 ASCII letters or digits",
+            "Invalid Order::ext_operator \"probe-op\": TWS accepts 1-16 ASCII letters or digits",
         ),
         (
             ValidationError::InvalidDate {

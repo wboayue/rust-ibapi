@@ -149,9 +149,9 @@ fn verify_ext_operator_matches_probed_set() {
     ];
     for value in rejected {
         match verify_ext_operator("Order::ext_operator", value) {
-            Err(Error::Validation(ValidationError::InvalidField { field, reason })) => {
+            Err(Error::Validation(ValidationError::InvalidField { field, value: rejected, .. })) => {
                 assert_eq!(field, "Order::ext_operator");
-                assert!(reason.contains(&format!("{value:?}")), "{reason}");
+                assert_eq!(rejected, value);
             }
             other => panic!("{value:?}: expected InvalidField, got {other:?}"),
         }

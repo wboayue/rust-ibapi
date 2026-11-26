@@ -53,21 +53,24 @@ pub enum Error {
 
     /// The call itself is wrong, a caller bug no one recovers from at runtime:
     /// a builder missing a required field (`Contract::spread` without legs,
-    /// `ContractBuilder` without a symbol), an invalid `historical_data`
-    /// duration or range, a bad `ClientBuilder` setting, `buffer_limit(0)`.
-    /// Fix the code; the message says what to change.
+    /// `ContractBuilder` without a symbol), conflicting `historical_data`
+    /// settings (`.between()` mixed with `.duration()`, an end before the start),
+    /// a bad `ClientBuilder` setting, `buffer_limit(0)`. Fix the code; the
+    /// message says what to change.
     ///
     /// A bad *value* a caller may correct at runtime is [`Error::Validation`].
+    /// One exception remains: the order builders report a missing field as
+    /// [`ValidationError::MissingRequiredField`] (#1328).
     #[error("InvalidArgument: {0}")]
     InvalidArgument(String),
 
     /// A runtime value was rejected before anything was sent: data a caller may
     /// correct, such as a quantity or price, a strike, a date parsed from user or
     /// file input, or a field on a caller-built `Order` / `OrderCancel`
-    /// (`ext_operator`). Returned by the order builders' `submit`, `place_order`,
-    /// `submit_order`, `cancel_order_with`, `global_cancel_with` and contract
-    /// `build()`, or by `?` on a [`ValidationError`]. Match its variants instead
-    /// of parsing a message.
+    /// (`ext_operator`). Returned by the order builders' `submit`, by `place_order`,
+    /// `submit_order`, `cancel_order_with` and `global_cancel_with`, by option
+    /// `build()` and `ContractBuilder::build()` for a bad strike or expiry, and by
+    /// `?` on a [`ValidationError`]. Match its variants instead of parsing a message.
     ///
     /// A caller bug (wrong call, missing required builder field) is
     /// [`Error::InvalidArgument`].

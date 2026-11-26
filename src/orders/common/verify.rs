@@ -139,7 +139,8 @@ fn verify_ext_operator(field: &'static str, value: &str) -> Result<(), Error> {
     }
     Err(ValidationError::InvalidField {
         field,
-        reason: format!("{value:?}: TWS accepts 1-{EXT_OPERATOR_MAX_LEN} ASCII letters or digits"),
+        value: value.to_owned(),
+        reason: format!("TWS accepts 1-{EXT_OPERATOR_MAX_LEN} ASCII letters or digits"),
     }
     .into())
 }
