@@ -954,6 +954,11 @@ pub enum TimeInForce {
     Auction,
     /// Good until Crossing (GTX).
     GoodTillCrossing,
+    /// Minutes: the order is cancelled after a few minutes if it has not filled. IB uses it for
+    /// cryptocurrency limit orders on PAXOS, which it cancels after 5 minutes; a crypto BUY order
+    /// must be `Minutes` or [`ImmediateOrCancel`](Self::ImmediateOrCancel). The wire text is
+    /// `Minutes`.
+    Minutes,
     /// Time-in-force string not modeled by this version of the API. Carries the
     /// raw wire value so callers can log, store, or act on it, rather than
     /// having an unrecognized value silently decode as [`Day`](Self::Day).
@@ -978,6 +983,7 @@ impl TimeInForce {
             TimeInForce::DayTillCanceled => "DTC",
             TimeInForce::Auction => "AUC",
             TimeInForce::GoodTillCrossing => "GTX",
+            TimeInForce::Minutes => "Minutes",
             TimeInForce::Unknown(raw) => raw,
         }
     }
@@ -993,6 +999,7 @@ impl TimeInForce {
             "DTC" => Some(TimeInForce::DayTillCanceled),
             "AUC" => Some(TimeInForce::Auction),
             "GTX" => Some(TimeInForce::GoodTillCrossing),
+            "Minutes" => Some(TimeInForce::Minutes),
             _ => None,
         }
     }

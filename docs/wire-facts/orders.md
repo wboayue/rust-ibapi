@@ -599,3 +599,13 @@ connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
 - **Not probed:** a futures or EFP order, where `refFuturesConId` would be set; a filled or
   partially filled order.
 
+
+### `Minutes` time in force on a crypto order
+
+*Live 2026-11-25 11:01 UTC, paper TWS, server 223; the account has no crypto trading permission.*
+
+- BTC.USD (`CRYPTO`, PAXOS) BUY 0.01 LMT 1000, `tif` `Minutes`: TWS took the time in force and
+  echoed `Minutes` on the open order, then sent Inactive and 201 for the missing permission. The
+  same order with `tif` DAY drew 201 "The crypto buy order must be Minutes or IOC." instead.
+- `completed_orders` lists the rejected order with `tif` `Minutes`.
+- **Not probed:** the 5-minute cancel of an unfilled `Minutes` order (needs crypto permission).

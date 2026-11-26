@@ -880,6 +880,16 @@ fn decode_order_maps_known_tif() {
     assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::GoodTillCrossing);
 }
 
+// TWS echoes a crypto order's time in force as `Minutes`
+#[test]
+fn decode_order_maps_minutes_tif() {
+    let proto_order = proto::Order {
+        tif: Some("Minutes".to_string()),
+        ..proto_order()
+    };
+    assert_eq!(decode_order(&proto_order).unwrap().tif, TimeInForce::Minutes);
+}
+
 #[test]
 fn decode_order_tif_absent_or_empty_is_day() {
     // Upstream omits an empty Tif rather than sending one, so neither form is

@@ -25,6 +25,7 @@ const ALL_TIFS: &[(TimeInForce, &str)] = &[
     (TimeInForce::DayTillCanceled, "DTC"),
     (TimeInForce::Auction, "AUC"),
     (TimeInForce::GoodTillCrossing, "GTX"),
+    (TimeInForce::Minutes, "Minutes"),
 ];
 
 #[test]
@@ -375,6 +376,7 @@ fn all_tifs_covers_every_variant() {
             TimeInForce::DayTillCanceled => Some(6),
             TimeInForce::Auction => Some(7),
             TimeInForce::GoodTillCrossing => Some(8),
+            TimeInForce::Minutes => Some(9),
             // Unknown carries a raw string, so it has no place in a table of
             // modeled wire values; `time_in_force_preserves_unknown_wire_value`
             // covers it.
@@ -382,7 +384,7 @@ fn all_tifs_covers_every_variant() {
         }
     }
 
-    let mut seen = [false; 9];
+    let mut seen = [false; 10];
     for (variant, _) in ALL_TIFS {
         if let Some(index) = modeled_index(variant) {
             seen[index] = true;

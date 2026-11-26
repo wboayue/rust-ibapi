@@ -818,6 +818,26 @@ impl<T, S, O> OrderBuilder<T, S, O> {
         self
     }
 
+    /// Order cancelled after a few minutes if unfilled: [`TimeInForce::Minutes`], as IB uses for
+    /// cryptocurrency limit orders on PAXOS
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::crypto("BTC").build();
+    /// let order_id = client.order(&contract).buy(0.001).limit(50_000.0).minutes().submit().await?;
+    /// println!("order {order_id} is cancelled after 5 minutes unless filled");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn minutes(self) -> Self {
+        self.time_in_force(TimeInForce::Minutes)
+    }
+
     // Trading hours
 
     /// Allow order execution outside regular trading hours
