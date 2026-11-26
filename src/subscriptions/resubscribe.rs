@@ -1,7 +1,7 @@
 //! Resubscribe a stream across transport reconnects: the packaged form of the
 //! `is_connection_lost` → `wait_connected` → resubscribe loop. Also reopens a
 //! keep-up-to-date bar request that 10182 ended once the historical-data farms
-//! are back.
+//! are back, and any stream after a 1101 (connectivity restored, data lost).
 //!
 //! Entry points are `Client::resubscribing` (sync and async). Only types marked
 //! [`Resubscribable`] are accepted, so the helper can't re-send a request that
@@ -90,9 +90,9 @@ enum State<S> {
         gap: bool,
         unconfirmed: bool,
     },
-    /// Reading `S`, whose request went out after `FarmMark`. While the flag is
-    /// set, no bar has arrived on a request sent before TWS confirmed the farms
-    /// back, and a confirmation after `FarmMark` reopens it.
+    /// Reading `S`, whose request went out after `FarmMark`: a 1101 since voids
+    /// it. While the flag is set, no bar has arrived on a request sent before
+    /// TWS confirmed the farms back, and a confirmation since reopens it.
     Reading(S, FarmMark, bool),
     /// A 10182 ended the request: waiting for the historical-data farms from `mark`.
     Waiting(FarmMark),
@@ -189,7 +189,7 @@ mod sync_impl {
                 match std::mem::replace(&mut self.state, State::Done) {
                     State::Done => return None,
                     State::Opening { gap, unconfirmed } => {
-                        // Before the request goes out, so a confirmation while it does counts.
+                        // Before the request goes out, so a 1101 while it does counts.
                         let mark = farms.mark();
                         match Opened::from((self.open)()) {
                             Opened::Subscribed(subscription) => {
@@ -208,8 +208,16 @@ mod sync_impl {
                         }
                     }
                     State::Reading(subscription, mark, unconfirmed) => {
-                        if unconfirmed && farms.confirmed(mark) {
+                        if let Some(notice) = farms.data_lost_since(mark) {
                             // Written on this thread, so before the reopen's request.
+                            subscription.cancel();
+                            self.state = State::Opening {
+                                gap: false,
+                                unconfirmed: false,
+                            };
+                            return Some(Ok(SubscriptionItem::Notice(notice)));
+                        }
+                        if unconfirmed && farms.confirmed(mark) {
                             subscription.cancel();
                             self.state = State::Opening {
                                 gap: false,
@@ -332,7 +340,7 @@ mod async_impl {
                     match state {
                         State::Done => return None,
                         State::Opening { gap, unconfirmed } => {
-                            // Before the request goes out, so a confirmation while it does counts.
+                            // Before the request goes out, so a 1101 while it does counts.
                             let mark = farms.mark();
                             match Opened::from(open().await) {
                                 Opened::Subscribed(subscription) => {
@@ -352,19 +360,27 @@ mod async_impl {
                         }
                         State::Reading(mut subscription, mark, unconfirmed) => {
                             let next = tokio::select! {
+                                // A 1101 first: the old request's queued items are void with it.
                                 biased;
-                                () = farms.confirmed(mark), if unconfirmed => None,
-                                item = subscription.next() => Some(item),
+                                notice = farms.data_lost(mark) => Err(Some(notice)),
+                                () = farms.confirmed(mark), if unconfirmed => Err(None),
+                                item = subscription.next() => Ok(item),
                             };
-                            let Some(next) = next else {
-                                // Awaited: a dropped subscription's cancel is spawned, and
-                                // could reach TWS after the reopen's request.
-                                subscription.cancel().await;
-                                state = State::Opening {
-                                    gap: false,
-                                    unconfirmed: false,
-                                };
-                                continue;
+                            let next = match next {
+                                Ok(next) => next,
+                                Err(notice) => {
+                                    // Awaited: a dropped subscription's cancel is spawned, and
+                                    // could reach TWS after the reopen's request.
+                                    subscription.cancel().await;
+                                    state = State::Opening {
+                                        gap: false,
+                                        unconfirmed: false,
+                                    };
+                                    match notice {
+                                        Some(notice) => return Some((Ok(SubscriptionItem::Notice(notice)), (state, open))),
+                                        None => continue,
+                                    }
+                                }
                             };
                             match next {
                                 Some(Err(e)) if e.is_connection_lost() => {

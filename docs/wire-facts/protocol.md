@@ -264,6 +264,7 @@ four API clients connected; #1300.*
 - Earlier, 2026-11-25: streaming requests sent during the outage got no frame and no error, for
   up to 354 s.
 - `Client::resubscribing` waits for the HMDS OKs after a 10182 (`src/transport/farm_watch.rs`).
+- `Client::resubscribing` reopens a stream on 1101, cancel first, on IB's documented rule alone.
 - **Not probed:** 1101 (not seen in 20 minutes), so also whether TWS answers a cancel for a
   request opened before a 1101 (with 300, or at all) and whether such a request resumes on its
   own; an outage that drops the API socket; IB Gateway. A TWS restart is in

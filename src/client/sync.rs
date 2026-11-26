@@ -336,6 +336,19 @@ impl Client {
     /// as the signal to stop until the reopened stream's first bars arrive; a bar completed
     /// during the wait rests on bars from before the outage.
     ///
+    /// TWS sends 1101 ("connectivity restored, data lost") when its own link to IB comes back
+    /// and it no longer serves the requests open before the loss. On a 1101 while the stream is
+    /// open, the wrapper yields the 1101 as a `SubscriptionItem::Notice`, the gap marker, writes
+    /// the old request's cancel, then calls `open` again. The cancel always goes out before the
+    /// new request, because TWS may still count the old request against a limit such as market
+    /// depth lines. An error TWS sends for the old request cannot end the new stream. Each 1101
+    /// reopens once; 1101s that arrive before the wrapper next runs reopen once together. A 1101
+    /// that ends a wait after 10182 reopens once, without a second notice. 1102 ("data
+    /// maintained") reopens nothing, except the second reopen after an unconfirmed wait
+    /// described above. A caller that re-requests on 1101 itself must stop, or it
+    /// opens a second request. No 1101 arrived in the outage runs: this reopen follows IB's
+    /// documentation, not a capture.
+    ///
     /// It ends after yielding any other error, the error `wait_connected` returns when the
     /// reconnect gave up, or when the subscription itself ends (a snapshot that finished).
     ///
@@ -354,6 +367,7 @@ impl Client {
     /// | historical bars, `subscribe_with_updates`, after a 10182 notice | the initial bars again once the HMDS farm is back |
     /// | account, position, PnL, account summary | the initial snapshot again |
     /// | scanner | a fresh scan |
+    /// | any of the above, after a 1101 notice | the same as after a reconnect |
     ///
     /// # Examples
     ///
@@ -368,7 +382,7 @@ impl Client {
     /// for item in client.resubscribing(|| client.realtime_bars(&contract).subscribe()) {
     ///     match item {
     ///         Ok(SubscriptionItem::Data(bar)) => println!("{bar:?}"),
-    ///         Ok(SubscriptionItem::Notice(n)) if matches!(n.code, TRANSPORT_RECONNECT_CODE | SUBSCRIPTION_DISCONNECTED_CODE) => {
+    ///         Ok(SubscriptionItem::Notice(n)) if matches!(n.code, TRANSPORT_RECONNECT_CODE | SUBSCRIPTION_DISCONNECTED_CODE | 1101) => {
     ///             println!("gap: {n}")
     ///         }
     ///         Ok(SubscriptionItem::Notice(n)) => println!("notice: {n}"),

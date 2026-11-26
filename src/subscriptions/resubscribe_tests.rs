@@ -10,7 +10,9 @@ use crate::messages::{outgoing_message_type, IncomingMessages, OutgoingMessages,
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
-use crate::testdata::builders::market_data::{historical_data_bar, realtime_bar_tick, HistoricalDataResponse};
+use crate::testdata::builders::market_data::{
+    historical_data_bar, market_depth_response, realtime_bar_tick, tick_price, HistoricalDataResponse, TickPriceResponse,
+};
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::Error;
 
@@ -783,8 +785,8 @@ fn resubscribing_across_farm_outage_sync() {
                         assert_eq!(opens.load(Ordering::SeqCst), expected, "{name}: open calls");
                     }
                     Step::Wire(expected) => {
-                        wait_for("the writes", || historical_wire(&stream.captured()).len() >= expected.len());
-                        assert_eq!(historical_wire(&stream.captured()), expected, "{name}: requests and cancels");
+                        wait_for("the writes", || wire(&stream.captured(), &KEEP_UP_TO_DATE).len() >= expected.len());
+                        assert_eq!(wire(&stream.captured(), &KEEP_UP_TO_DATE), expected, "{name}: requests and cancels");
                     }
                 }
             }
@@ -855,10 +857,10 @@ async fn resubscribing_across_farm_outage_async() {
                 }
                 Step::Wire(expected) => {
                     let deadline = tokio::time::Instant::now() + STEP_TIMEOUT;
-                    while historical_wire(&stream.captured()).len() < expected.len() && tokio::time::Instant::now() < deadline {
+                    while wire(&stream.captured(), &KEEP_UP_TO_DATE).len() < expected.len() && tokio::time::Instant::now() < deadline {
                         tokio::time::sleep(Duration::from_millis(5)).await;
                     }
-                    assert_eq!(historical_wire(&stream.captured()), expected, "{name}: requests and cancels");
+                    assert_eq!(wire(&stream.captured(), &KEEP_UP_TO_DATE), expected, "{name}: requests and cancels");
                 }
             }
         }
@@ -909,8 +911,218 @@ async fn resubscribing_dropped_during_farm_wait_async() {
     assert_eq!(opens.load(Ordering::SeqCst), 1);
 }
 
-/// The historical bar requests (`R`) and cancels (`C`) among the frames in `captured`.
-fn historical_wire(captured: &[u8]) -> String {
+// 1101 on a live stream, on a real bus over a `MemoryStream`. 1101 was never
+// observed live; the sequences follow the 1102 runs with 1101 in its place.
+
+const DATA_LOST: (i32, &str) = (1101, "Connectivity between IBKR and Trader Workstation has been restored - data lost.");
+const DATA_LOST_ITEM: &str = "notice [1101] Connectivity between IBKR and Trader Workstation has been restored - data lost.";
+
+/// One step of a 1101 script. The consumer reads only when told to, so a
+/// script controls what the wrapper has seen when it next runs.
+enum Live {
+    /// TWS sends this frame.
+    Push(Vec<u8>),
+    /// The transport drops and the bus reconnects, with nobody reading.
+    TransportLost,
+    /// The consumer asks for the next item.
+    Pull,
+    /// The pulled item has this label.
+    Expect(&'static str),
+    /// `open` has been called exactly this often, also a moment later.
+    Opens(usize),
+    /// The stream's requests (`R`) and cancels (`C`) written so far, in order.
+    Wire(&'static str),
+}
+
+/// What a script needs from the wrapped stream.
+struct LiveKind {
+    name: &'static str,
+    request: OutgoingMessages,
+    cancel: OutgoingMessages,
+    /// One data frame for the request `open` sent on call `call`.
+    data: fn(i32) -> Live,
+}
+
+fn tick(call: i32) -> Live {
+    let tick = TickPriceResponse {
+        request_id: RequestId::nth(call).raw(),
+        ..tick_price().tick_type(1).price(1.1595)
+    };
+    Live::Push(binary_proto(IncomingMessages::TickPrice as i32, &tick.to_proto()))
+}
+
+fn depth_row(call: i32) -> Live {
+    let row = market_depth_response().request_id(RequestId::nth(call).raw()).price(1.1595).size(100.0);
+    Live::Push(binary_proto(IncomingMessages::MarketDepth as i32, &row.to_proto()))
+}
+
+fn bars_live(call: i32) -> Live {
+    match bars(call) {
+        Step::Push(frame) => Live::Push(frame),
+        _ => unreachable!("bars pushes a frame"),
+    }
+}
+
+fn live_notice(&(code, message): &(i32, &str)) -> Live {
+    Live::Push(error_frame(-1, code, message))
+}
+
+const MARKET_DATA: LiveKind = LiveKind {
+    name: "market data",
+    request: OutgoingMessages::RequestMarketData,
+    cancel: OutgoingMessages::CancelMarketData,
+    data: tick,
+};
+
+const DEPTH: LiveKind = LiveKind {
+    name: "depth",
+    request: OutgoingMessages::RequestMarketDepth,
+    cancel: OutgoingMessages::CancelMarketDepth,
+    data: depth_row,
+};
+
+const KEEP_UP_TO_DATE: LiveKind = LiveKind {
+    name: "keep-up-to-date bars",
+    request: OutgoingMessages::RequestHistoricalData,
+    cancel: OutgoingMessages::CancelHistoricalData,
+    data: bars_live,
+};
+
+/// The request is open and has delivered data.
+fn live_opened(kind: &LiveKind) -> Vec<Live> {
+    vec![Live::Pull, Live::Opens(1), (kind.data)(0), Live::Expect("data"), Live::Wire("R")]
+}
+
+/// 1100 then 1101: the notice, the old request's cancel, then one new request
+/// whose data follows. An error answering the cancel does not end the new
+/// stream, and a second 1101 reopens again.
+fn data_lost_reopens(kind: &LiveKind) -> Vec<Live> {
+    let mut steps = live_opened(kind);
+    steps.extend([
+        Live::Pull,
+        live_notice(&LOST),
+        live_notice(&DATA_LOST),
+        Live::Expect(DATA_LOST_ITEM),
+        // Read on at once: a cancel not yet written by now would follow the request.
+        Live::Pull,
+        Live::Opens(2),
+        Live::Wire("RCR"),
+        Live::Push(error_frame(RequestId::nth(0).raw(), 300, "Can't find EId with tickerId:9000")),
+        (kind.data)(1),
+        Live::Expect("data"),
+        Live::Pull,
+        live_notice(&DATA_LOST),
+        Live::Expect(DATA_LOST_ITEM),
+        Live::Opens(2),
+        Live::Wire("RCRC"),
+        Live::Pull,
+        Live::Opens(3),
+        Live::Wire("RCRCR"),
+        (kind.data)(2),
+        Live::Expect("data"),
+    ]);
+    steps
+}
+
+/// 1100 then 1102: the same request goes on; nothing is cancelled or sent.
+fn data_maintained_keeps_request(kind: &LiveKind) -> Vec<Live> {
+    let mut steps = live_opened(kind);
+    steps.extend([
+        Live::Pull,
+        live_notice(&LOST),
+        live_notice(&RESTORED),
+        (kind.data)(0),
+        Live::Expect("data"),
+        Live::Pull,
+        (kind.data)(0),
+        Live::Expect("data"),
+        Live::Opens(1),
+        Live::Wire("R"),
+    ]);
+    steps
+}
+
+/// A 1101 during the wait after a 10182 ends the wait and reopens once; it
+/// does not reopen the reopened request again. A later 1101 does.
+fn data_lost_during_farm_wait_reopens_once(kind: &LiveKind) -> Vec<Live> {
+    let mut steps = live_opened(kind);
+    steps.extend([
+        Live::Pull,
+        live_notice(&CASHHMDS_BROKEN),
+        Live::Push(error_frame(
+            RequestId::nth(0).raw(),
+            10182,
+            "Failed to request live updates (disconnected).",
+        )),
+        Live::Expect("notice [10182] Failed to request live updates (disconnected)."),
+        Live::Wire("R"),
+        Live::Pull,
+        live_notice(&LOST),
+        live_notice(&DATA_LOST),
+        Live::Opens(2),
+        Live::Wire("RR"),
+        (kind.data)(1),
+        Live::Expect("data"),
+        Live::Pull,
+        (kind.data)(1),
+        Live::Expect("data"),
+        Live::Opens(2),
+        Live::Wire("RR"),
+        Live::Pull,
+        live_notice(&DATA_LOST),
+        Live::Expect(DATA_LOST_ITEM),
+        Live::Pull,
+        Live::Opens(3),
+        Live::Wire("RRCR"),
+        (kind.data)(2),
+        Live::Expect("data"),
+    ]);
+    steps
+}
+
+/// A 1101 and then a transport drop, both before the wrapper reads again:
+/// one reopen, on the new session, behind the 1101 notice. The old request
+/// died with its session, so no cancel is written.
+fn data_lost_then_transport_lost_reopens_once(kind: &LiveKind) -> Vec<Live> {
+    let mut steps = live_opened(kind);
+    steps.extend([
+        live_notice(&DATA_LOST),
+        Live::TransportLost,
+        Live::Pull,
+        Live::Expect(DATA_LOST_ITEM),
+        Live::Opens(1),
+        Live::Wire("R"),
+        Live::Pull,
+        Live::Opens(2),
+        Live::Wire("RR"),
+        (kind.data)(1),
+        Live::Expect("data"),
+        Live::Opens(2),
+    ]);
+    steps
+}
+
+type LiveScript = fn(&LiveKind) -> Vec<Live>;
+
+const LIVE_SCRIPTS: &[(&str, &LiveKind, LiveScript)] = &[
+    ("1101 reopens", &MARKET_DATA, data_lost_reopens),
+    ("1101 reopens", &DEPTH, data_lost_reopens),
+    ("1102 keeps the request", &MARKET_DATA, data_maintained_keeps_request),
+    ("1102 keeps the request", &DEPTH, data_maintained_keeps_request),
+    (
+        "1101 during the 10182 wait reopens once",
+        &KEEP_UP_TO_DATE,
+        data_lost_during_farm_wait_reopens_once,
+    ),
+    (
+        "1101 then a transport drop reopens once",
+        &MARKET_DATA,
+        data_lost_then_transport_lost_reopens_once,
+    ),
+];
+
+/// The requests (`R`) and cancels (`C`) of `kind` among the frames in `captured`.
+fn wire(captured: &[u8], kind: &LiveKind) -> String {
     const HANDSHAKE_PREFIX: &[u8] = b"API\0";
     let mut rest = captured;
     let mut written = String::new();
@@ -922,11 +1134,212 @@ fn historical_wire(captured: &[u8]) -> String {
         let len = u32::from_be_bytes([rest[0], rest[1], rest[2], rest[3]]) as usize;
         let (frame, tail) = rest[4..].split_at(len);
         match outgoing_message_type(frame) {
-            Some(OutgoingMessages::RequestHistoricalData) => written.push('R'),
-            Some(OutgoingMessages::CancelHistoricalData) => written.push('C'),
+            Some(message) if message == kind.request => written.push('R'),
+            Some(message) if message == kind.cancel => written.push('C'),
             _ => {}
         }
         rest = tail;
     }
     written
+}
+
+#[cfg(feature = "sync")]
+#[test]
+fn resubscribing_after_data_lost_sync() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc;
+
+    use crate::client::sync::Client;
+    use crate::common::test_utils::helpers::wait_for;
+    use crate::connection::sync::Connection;
+    use crate::subscriptions::sync::Subscription;
+    use crate::subscriptions::Resubscribable;
+    use crate::transport::sync::{MemoryStream, TcpMessageBus};
+    use crate::transport::MessageBus;
+
+    fn run<T: Resubscribable>(name: &str, kind: &LiveKind, script: LiveScript, open: fn(&Client, &Contract) -> Result<Subscription<T>, Error>) {
+        let name = format!("{name} ({})", kind.name);
+        let stream = MemoryStream::default();
+        let connection = Connection::stubbed(stream.clone(), 28);
+        connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+        let bus = Arc::new(TcpMessageBus::new(connection));
+        bus.process_messages().unwrap();
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+        let contract = Contract::forex("EUR", "USD").build();
+        let opens = AtomicUsize::new(0);
+
+        let (pull, pulls) = mpsc::channel::<()>();
+        let (items_send, items) = mpsc::channel();
+        std::thread::scope(|scope| {
+            let (client, contract, opens) = (&client, &contract, &opens);
+            scope.spawn(move || {
+                let mut wrapper = client.resubscribing(|| {
+                    opens.fetch_add(1, Ordering::SeqCst);
+                    open(client, contract)
+                });
+                for () in pulls {
+                    let item = wrapper.next().map_or_else(|| "end".to_string(), label);
+                    if items_send.send(item).is_err() {
+                        break;
+                    }
+                }
+            });
+
+            // Ends a pending read, also when a step panics, so the scope can join it.
+            let _disconnect = Disconnect(client);
+            for step in script(kind) {
+                match step {
+                    Live::Push(frame) => stream.push_inbound(frame),
+                    Live::TransportLost => {
+                        stream.push_hang_up();
+                        for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+                            stream.push_inbound(frame);
+                        }
+                        wait_for("the reconnect", || bus.session_generation() == 1);
+                        client.wait_connected().unwrap();
+                    }
+                    Live::Pull => pull.send(()).unwrap(),
+                    Live::Expect(expected) => {
+                        let item = items
+                            .recv_timeout(STEP_TIMEOUT)
+                            .unwrap_or_else(|_| panic!("{name}: no item, expected {expected}"));
+                        assert_eq!(item, expected, "{name}");
+                    }
+                    Live::Opens(expected) => {
+                        wait_for("open calls", || opens.load(Ordering::SeqCst) >= expected);
+                        std::thread::sleep(SETTLE);
+                        assert_eq!(opens.load(Ordering::SeqCst), expected, "{name}: open calls");
+                    }
+                    Live::Wire(expected) => {
+                        wait_for("the writes", || wire(&stream.captured(), kind).len() >= expected.len());
+                        assert_eq!(wire(&stream.captured(), kind), expected, "{name}: requests and cancels");
+                    }
+                }
+            }
+            drop(pull);
+        });
+    }
+
+    for (name, kind, script) in LIVE_SCRIPTS {
+        match kind.request {
+            OutgoingMessages::RequestMarketData => run(name, kind, *script, |client, contract| client.market_data(contract).subscribe()),
+            OutgoingMessages::RequestMarketDepth => run(name, kind, *script, |client, contract| client.market_depth(contract, 5).subscribe()),
+            _ => run(name, kind, *script, |client, contract| {
+                client.historical_data(contract, BarSize::Min).duration(1.days()).subscribe_with_updates()
+            }),
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn resubscribing_after_data_lost_async() {
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use futures::StreamExt;
+
+    use crate::client::r#async::Client;
+    use crate::connection::r#async::AsyncConnection;
+    use crate::subscriptions::r#async::Subscription;
+    use crate::subscriptions::Resubscribable;
+    use crate::transport::r#async::{AsyncMessageBus, AsyncTcpMessageBus, MemoryStream};
+
+    type Opened<'a, T> = Pin<Box<dyn Future<Output = Result<Subscription<T>, Error>> + 'a>>;
+
+    async fn run<T: Resubscribable + Send + 'static>(
+        name: &str,
+        kind: &LiveKind,
+        script: LiveScript,
+        open: for<'a> fn(&'a Client, &'a Contract) -> Opened<'a, T>,
+    ) {
+        let name = format!("{name} ({})", kind.name);
+        let stream = MemoryStream::default();
+        let connection = AsyncConnection::stubbed(stream.clone(), 28);
+        connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+        let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+        bus.clone().process_messages().unwrap();
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+        let contract = Contract::forex("EUR", "USD").build();
+        let opens = AtomicUsize::new(0);
+
+        let mut items = std::pin::pin!(client.resubscribing(|| {
+            opens.fetch_add(1, Ordering::SeqCst);
+            open(&client, &contract)
+        }));
+        // A pull is outstanding: the wrapper may run when polled.
+        let mut pulled = false;
+
+        for step in script(kind) {
+            match step {
+                Live::Push(frame) => stream.push_inbound(frame),
+                Live::TransportLost => {
+                    stream.push_hang_up();
+                    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+                        stream.push_inbound(frame);
+                    }
+                    let deadline = tokio::time::Instant::now() + STEP_TIMEOUT;
+                    while bus.session_generation() != 1 {
+                        assert!(tokio::time::Instant::now() < deadline, "{name}: no reconnect");
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                    client.wait_connected().await.unwrap();
+                }
+                Live::Pull => pulled = true,
+                Live::Expect(expected) => {
+                    assert!(pulled, "{name}: expect without a pull");
+                    pulled = false;
+                    let item = tokio::time::timeout(STEP_TIMEOUT, items.next())
+                        .await
+                        .unwrap_or_else(|_| panic!("{name}: no item, expected {expected}"))
+                        .map_or_else(|| "end".to_string(), label);
+                    assert_eq!(item, expected, "{name}");
+                }
+                Live::Opens(expected) => {
+                    if pulled {
+                        // Polls the wrapper meanwhile, so it can call `open`.
+                        let deadline = tokio::time::Instant::now() + STEP_TIMEOUT;
+                        while opens.load(Ordering::SeqCst) < expected {
+                            assert!(tokio::time::Instant::now() < deadline, "{name}: timed out waiting for open calls");
+                            if let Ok(item) = tokio::time::timeout(Duration::from_millis(5), items.next()).await {
+                                panic!("{name}: unexpected item while waiting for open: {:?}", item.map(label));
+                            }
+                        }
+                        if let Ok(item) = tokio::time::timeout(SETTLE, items.next()).await {
+                            panic!("{name}: unexpected item: {:?}", item.map(label));
+                        }
+                    }
+                    assert_eq!(opens.load(Ordering::SeqCst), expected, "{name}: open calls");
+                }
+                Live::Wire(expected) => {
+                    let deadline = tokio::time::Instant::now() + STEP_TIMEOUT;
+                    while wire(&stream.captured(), kind).len() < expected.len() && tokio::time::Instant::now() < deadline {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                    assert_eq!(wire(&stream.captured(), kind), expected, "{name}: requests and cancels");
+                }
+            }
+        }
+    }
+
+    for (name, kind, script) in LIVE_SCRIPTS {
+        match kind.request {
+            OutgoingMessages::RequestMarketData => {
+                run(name, kind, *script, |client, contract| Box::pin(client.market_data(contract).subscribe())).await
+            }
+            OutgoingMessages::RequestMarketDepth => {
+                run(name, kind, *script, |client, contract| {
+                    Box::pin(client.market_depth(contract, 5).subscribe())
+                })
+                .await
+            }
+            _ => {
+                run(name, kind, *script, |client, contract| {
+                    Box::pin(client.historical_data(contract, BarSize::Min).duration(1.days()).subscribe_with_updates())
+                })
+                .await
+            }
+        }
+    }
 }

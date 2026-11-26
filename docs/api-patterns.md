@@ -521,15 +521,16 @@ for result in subscription {
 `open` again, and yields a `TRANSPORT_RECONNECT_CODE` notice before the new subscription's first
 item. Data from the outage is missing; depth books, `keep_up_to_date` bars and account snapshots
 start over. A `keep_up_to_date` bar stream that TWS ends with 10182 during an internet outage is
-reopened too, behind that 10182 notice (`SUBSCRIPTION_DISCONNECTED_CODE`) instead, so match both
-codes as the gap. Order streams are rejected at compile time. `filter_data` drops the gap notice,
+reopened too, behind that 10182 notice (`SUBSCRIPTION_DISCONNECTED_CODE`) instead, and any
+wrapped stream is reopened after a 1101 ("connectivity restored, data lost") behind the 1101, so
+match all three codes as the gap. Order streams are rejected at compile time. `filter_data` drops the gap notice,
 so match the items to see it.
 
 ```rust
 for item in client.resubscribing(|| client.realtime_bars(&contract).subscribe()) {
     match item {
         Ok(SubscriptionItem::Data(bar)) => process(bar),
-        Ok(SubscriptionItem::Notice(n)) if matches!(n.code, TRANSPORT_RECONNECT_CODE | SUBSCRIPTION_DISCONNECTED_CODE) => mark_gap(),
+        Ok(SubscriptionItem::Notice(n)) if matches!(n.code, TRANSPORT_RECONNECT_CODE | SUBSCRIPTION_DISCONNECTED_CODE | 1101) => mark_gap(),
         Ok(SubscriptionItem::Notice(n)) => log::info!("{n}"),
         // Any other error, or the reconnect gave up
         Err(e) => return Err(e),
