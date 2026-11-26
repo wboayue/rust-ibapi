@@ -9,7 +9,7 @@ behind a decoder, encoder, or rustdoc decision.
 | [protocol.md](protocol.md) | Connection, request ids, cancels, end markers |
 | [orders.md](orders.md) | Order placement, echoes, status, executions, completed orders |
 | [contracts.md](contracts.md) | Contract details, option chains |
-| [market-data.md](market-data.md) | Generic ticks, option computations, tick types, bar volume, size presence |
+| [market-data.md](market-data.md) | Generic ticks, option computations, tick types, bar volume, historical bars, size presence |
 | [accounts.md](accounts.md) | Positions, PnL, account updates by model |
 | [news.md](news.md) | Historical news, articles |
 | [scanner.md](scanner.md) | Scanner subscription rows and notices |

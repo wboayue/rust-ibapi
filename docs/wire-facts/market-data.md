@@ -1,6 +1,6 @@
 # Market data wire facts
 
-Generic ticks, option computations and tick types. Format: [README](README.md).
+Generic ticks, option computations, tick types and historical bars. Format: [README](README.md).
 
 ### ETF NAV generic ticks
 
@@ -108,6 +108,50 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
   without `bar_count` (#1057), for which stocks and futures need up-to-the-second data (2188 on
   the probing account).
 
+### One-second bars reach back at most 2000 S
+
+*Live 2026-11-23 21:21-21:32Z (after the US close; the ES runs during the 21:15-21:30Z CME halt
+and after it), paper TWS, server 223. TRADES, regular hours.*
+
+- AAPL, ending 2026-11-23 21:00 UTC: 1-second bars over 1800 S return 1800 bars and over 2000 S
+  2000 bars (20:26:40 to 20:59:59 UTC). 2001, 2100, 2200, 2300, 2399, 2400 and 3600 S each draw
+  162 "Historical Market Data Service error message:invalid step: 1", about 0.2 s after the
+  request.
+- 5-second bars: 3600 S returns 720 bars (0.4 s), 14400 S 2880 (0.6 s), 28800 S 5760 (11.4 s).
+  Durations count trading seconds: the 28800 S request starts at 2026-11-20 19:30 UTC, the
+  Friday session, while its reported window start (08:00 ET on the 23rd) is wall clock.
+- ESZ6 (CME, no end date), halted and open alike: 1-second bars over 1800 and 2000 S succeed,
+  2400 and 3600 S draw the same 162; 5-second bars succeed at 3600, 14400 and 28800 S. Bar
+  counts fall short of the duration (1192 bars over 1800 S with CME open); the probe did not
+  establish why. 28800 S took 54 s on both runs, and its reported window ends about 11 s
+  after the previous request finished, so it was sent late or re-sent; not diagnosed.
+- Settles the boundary: 2000 S passes and 2001 S fails for 1-second bars (bisected on AAPL;
+  ESZ6 agrees at 2000 and 2400 S). Inferred: the limit is on the step count (duration over
+  bar size), not on bars returned. ESZ6 returns fewer bars than steps (1192 over 1800 S), so
+  its 2400 S request would hold about 1600 bars, yet it failed. Nor is it a bar cap shared by
+  every bar size: 5760 five-second bars passed.
+- **Not probed:** 5-second bars above 28800 S; other bar sizes' limits; ES in the
+  22:00-23:00Z closure; the Gateway.
+
+### Weekly and monthly bars are dated at the end of the period
+
+*Live 2026-11-23 21:20Z (Monday, after the US close), paper TWS, server 223; AAPL TRADES, 3 M
+ending now, regular hours; wire dates read from a recording.*
+
+- Each bar carries a plain `YYYYMMDD` (decoded as `BarTimestamp::Date`).
+- Weekly (14 bars): `20260828`, `20260904`, ... `20261120`, every complete week dated its
+  Friday, then `20261123` for the current week.
+- Monthly (4 bars): `20260831` (Mon), `20260930` (Wed), `20261030` (Fri; 31 Oct 2026 is a
+  Saturday), then `20261123` for the current month.
+- The current, incomplete week and month are dated today, the last trading day so far. The
+  first weekly bar is cut by the window start (Sun 23 Aug) and still dated its end, 28 Aug.
+- Intraday bars are stamped with their start (1-second bars over 20:30:00-21:00:00 UTC run
+  from 20:30:00 to 20:59:59; [above](#one-second-bars-reach-back-at-most-2000-s)), and the
+  `between` rustdoc says bars are stamped with their start time. Weekly and monthly bars are
+  stamped with the end of the period instead.
+- **Not probed:** daily bars in this run; a holiday on a period's last weekday, so the last
+  trading day is not separated from the last weekday; other instruments; the Gateway.
+
 ### Historical bars for a continuous future take no end date
 
 *Live 2026-11-16 Mon 02:20 ET (CME Globex open), paper, server 223.*
@@ -130,7 +174,8 @@ hours, TRADES.*
 - `reqHistoricalTicks`, 100 trade ticks: with an end date of 2026-11-13 20:00 UTC, 114 ticks
   ending 19:59:52; with a start date of 15:00 UTC, 128 ticks from 15:00:00. No 10339 either way.
 - Bars with no end date: the bar-size step limit still applies. 1-second bars over 1800 S
-  return 1800 bars; over 1 D they draw 162 "invalid step: 1".
+  return 1800 bars; over 1 D they draw 162 "invalid step: 1". The boundary is 2000 S
+  ([one-second bars](#one-second-bars-reach-back-at-most-2000-s)).
 - Longer durations are accepted but slow. 1 M of 30-second bars took 74 s (55433 bars), 1 M of
   1-minute bars 73 s (27720), 1 Y of hourly bars 41 s (5896), 5 Y of hourly bars 122 s
   (16063). 2 M of 30-second bars and 1 Y of 1-minute bars did not finish within 90 s.
@@ -141,6 +186,22 @@ hours, TRADES.*
   time rather than drawing an error.
 - **Not probed:** whether the 90 s timeouts end in data or an error; bid/ask and midpoint
   ticks; daily bars over 5 Y or less.
+
+### Continuous future 1-second bars: the 2000 S limit counts from now
+
+*Live 2026-11-23 21:22Z (CME halt) and 21:31Z (CME open), paper TWS, server 223; ES `CONTFUT`,
+1-second TRADES, `between`.*
+
+- `between` sends no end date for a continuous future and asks for `now - start`, rounded up
+  to a whole second ([no end date](#historical-bars-for-a-continuous-future-take-no-end-date)).
+- `[now - 3000 s, now - 2500 s)` draws 162 "invalid step: 1" on both runs, although the range
+  is 500 s.
+- `[now - 1500 s, now - 1000 s)` returns exactly 500 bars on both runs (21:06:07 to 21:14:26
+  UTC with CME open).
+- Settles that the [2000 S limit](#one-second-bars-reach-back-at-most-2000-s) applies to
+  `now - start`: a 1-second `between` on a continuous future must start no more than about
+  2000 s before now, however short the range.
+- **Not probed:** ranges starting between 2000 and 2500 s back; other bar sizes.
 
 ### Size fields are always sent
 
@@ -192,6 +253,28 @@ server 223.*
   established, since an index does not trade. Real-time on SPX and VIX: 354.
 - **Not probed:** real-time index data (no subscription); delayed ESTX50; an index before its
   first value of a day; snapshots.
+
+### Delayed volume is negative or wrong on the wire
+
+*Live 2026-11-24 01:00Z (Monday 20:00 ET, after hours), paper TWS, server 223; raw capture.*
+
+- `reqMktData` for US stocks under market data type 3 (delayed, streaming, generic tick 165)
+  and 4 (delayed frozen, snapshot). `TickSize` tick type 74 (`DelayedVolume`) carried
+  negative decimal strings for MSFT (`"-235087060"`, then `"-234537060"` 10 s later), NVDA,
+  INTC, F, SPY and QQQ, in both modes. The raw frame holds the text: field 3, length 10,
+  `2d 32 33 35 30 38 37 30 36 30` (`-235087060`). The decoder parses that string to the same
+  `f64`; nothing narrows it to 32 bits. An earlier run (snapshot, 23:49Z) saw MSFT
+  `-1232329840`.
+- The values also disagree with the day's volume where they are positive. Daily TRADES bars
+  for 2026-11-23, extended hours: AAPL 41,406,011 against `DelayedVolume` 48,288,217; AMD
+  42,241,724 against 2,119,449,190; IBKR 4,649,304 against 1,226,539,095. Neither the raw
+  value nor a 32-bit unwrap of it (adding 2^32, with or without a factor of 100) matches the
+  bar volumes, so a caller cannot repair the value or tell a bad positive one from a real one.
+- Other size ticks in the same runs were plausible and never negative: `AvgVolume` (21, e.g.
+  MSFT `"596315"`), `DelayedBidSize` (69) and `DelayedAskSize` (70).
+- TSLA drew 10089 and no ticks; SPY and QQQ answered with delayed data.
+- **Not probed:** real-time `Volume` (8) (no real-time US equity permission on this account);
+  delayed volume during regular hours; other markets.
 
 ### Tick-by-tick sizes and `IgnoreSize`
 
