@@ -1187,14 +1187,15 @@ its code (`as_str()` lists the codes for the string enums, `i32::from` for the i
 
 ### 48. Six `Error` variants are removed
 
-The crate never returned these to a caller, or returned them only as an internal signal:
+The crate never returned five of these to a caller (see the table). `Poison` reached one only
+after a panic poisoned a blocking-client lock.
 
 | Variant | What it was |
 |---|---|
 | `Simple(String)` | A generic message. Only the crate's test transports built it. |
 | `NotImplemented` | The default `cancel_message` for a stream type with no cancel. A subscription read it as "no cancel" and never passed it on. |
 | `EndOfStream` | The signal a decoder returned for an end marker (`ContractDataEnd`). A subscription read it as "stream over" and ended with `None`, as it still does. |
-| `Poison(String)` | A lock poisoned by a panic in another thread, from the blocking client's socket and connection locks. The client now recovers the lock, as its other locks already did. |
+| `Poison(String)` | Returned from the blocking client's socket and connection locks. The client now recovers the lock, as its other locks already did. |
 | `ParseInt(ParseIntError)`, `FromUtf8(FromUtf8Error)` | `From` conversions that no crate code used. |
 
 `Error` is `#[non_exhaustive]`, so a `match` already has a wildcard arm. Remove any arm naming one

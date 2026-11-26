@@ -315,41 +315,15 @@ async fn subscription_next_end_of_stream() {
 
 #[tokio::test]
 async fn subscription_no_retries_after_end_of_stream() {
-    use std::sync::atomic::AtomicUsize;
+    let (mut subscription, tx) = subscription::<IntItem>();
 
-    static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
+    tx.send(end_frame()).unwrap();
+    assert!(subscription.next().await.is_none());
 
-    /// Every frame is an end marker; any `decode` call is a stray.
-    #[derive(Debug)]
-    struct EndThenStray;
-
-    impl StreamDecoder<EndThenStray> for EndThenStray {
-        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
-        const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
-
-        fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<EndThenStray, Error> {
-            CALL_COUNT.fetch_add(1, Ordering::Relaxed);
-            Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
-        }
-    }
-
-    let (mut subscription, tx) = subscription::<EndThenStray>();
-
-    // The end marker ends the stream
-    tx.send(int_frame(1)).unwrap();
-    let result = subscription.next().await;
-    assert!(result.is_none());
-
-    // Send stray messages after stream ended
+    // Data that arrives after the end; the channel stays open, so only the
+    // `stream_ended` latch keeps it from being yielded.
     tx.send(int_frame(2)).unwrap();
-    tx.send(int_frame(3)).unwrap();
-
-    // Subsequent calls should return None immediately without invoking decoder
-    let result = subscription.next().await;
-    assert!(result.is_none());
-
-    // The end marker never reaches the decoder, nor do the strays behind it
-    assert_eq!(CALL_COUNT.load(Ordering::Relaxed), 0);
+    assert!(subscription.next().await.is_none(), "data yielded after the end marker");
 }
 
 #[tokio::test]

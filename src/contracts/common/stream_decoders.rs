@@ -7,7 +7,7 @@ use crate::common::error_helpers;
 use crate::common::request_helpers::CancellableOneShot;
 use crate::contracts::*;
 use crate::messages::{IncomingMessages, ResponseMessage};
-use crate::protocol::{check_version, Features};
+use crate::protocol::Features;
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -65,7 +65,7 @@ impl StreamDecoder<ContractDetails> for ContractDetails {
     /// Below server 215 TWS has no contract-details cancel, so dropping the
     /// subscription writes nothing.
     fn cancel_message(server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
-        if check_version(server_version, Features::CANCEL_CONTRACT_DATA).is_err() {
+        if !Features::CANCEL_CONTRACT_DATA.is_supported_by(server_version) {
             return Ok(None);
         }
         let request_id = error_helpers::require_request_id_for(request_id, "cancel contract details")?;

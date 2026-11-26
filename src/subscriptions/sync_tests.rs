@@ -155,23 +155,12 @@ fn routed_item_notice_surfaces_as_subscription_item() {
 
 #[test]
 fn no_retries_after_end_of_stream() {
-    let stub = MessageBusStub::with_ordered_responses(vec![
-        ResponseMessage::from("1\0data\0"),  // the end marker
-        ResponseMessage::from("1\0stray\0"), // stray message after stream ended
-    ]);
-    let message_bus = Arc::new(stub);
+    // The channel stays open (`keep_open`), so only the `stream_ended` latch
+    // keeps the data behind the end marker from being yielded.
+    let (sub, _keep) = collect_subscription(vec![end_frame(), data(2)], true);
 
-    let sub: Subscription<EndOfStreamItem> = {
-        let internal = message_bus.send_request(RequestId::nth(1), &[]).unwrap();
-        Subscription::new(message_bus.clone(), internal, DecoderContext::default())
-    };
-
-    // First call hits the end marker, returns None
     assert!(sub.next().is_none());
-
-    // Second call should return None immediately (stream_ended guard)
-    assert!(sub.next().is_none());
-    assert!(sub.stream_ended.load(Ordering::Relaxed));
+    assert!(sub.next().is_none(), "data yielded after the end marker");
 }
 
 // --- collect_for / collect_until ----------------------------------------
