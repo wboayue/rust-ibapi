@@ -40,3 +40,11 @@ fn check_version_rejects_below_minimum_with_canonical_display() {
         ),
     );
 }
+
+#[test]
+fn is_supported_by_is_inclusive_at_the_minimum() {
+    let feature = Features::CANCEL_CONTRACT_DATA;
+    assert!(!feature.is_supported_by(feature.min_version - 1));
+    assert!(feature.is_supported_by(feature.min_version));
+    assert!(feature.is_supported_by(feature.min_version + 1));
+}

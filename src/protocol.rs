@@ -3,7 +3,9 @@
 //! The handshake refuses servers below version 213 (`PROTOBUF_REST_MESSAGES_3`),
 //! so a feature at or below it is always supported and needs no gate. A feature
 //! above the floor gets a [`ProtocolFeature`] and a [`check_version`] call on
-//! the line before its request; a caller sees `Error::ServerVersion`.
+//! the line before its request; a caller sees `Error::ServerVersion`. A path
+//! with no caller to return that error to, such as a cancel written on drop,
+//! asks [`ProtocolFeature::is_supported_by`] instead.
 
 use crate::errors::Error;
 use crate::server_versions;
@@ -20,6 +22,11 @@ pub(crate) struct ProtocolFeature {
 impl ProtocolFeature {
     pub(crate) const fn new(name: &'static str, min_version: i32) -> Self {
         Self { name, min_version }
+    }
+
+    /// Whether a server at `server_version` supports this feature.
+    pub(crate) const fn is_supported_by(&self, server_version: i32) -> bool {
+        server_version >= self.min_version
     }
 }
 
@@ -39,7 +46,7 @@ impl Features {
 /// `Ok(())` if `server_version` supports `feature`, else
 /// `Error::ServerVersion(required, actual, name)`.
 pub(crate) fn check_version(server_version: i32, feature: ProtocolFeature) -> Result<(), Error> {
-    if server_version < feature.min_version {
+    if !feature.is_supported_by(server_version) {
         Err(Error::ServerVersion(feature.min_version, server_version, feature.name.to_string()))
     } else {
         Ok(())

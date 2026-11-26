@@ -1299,10 +1299,11 @@ struct CloseHandle {
 }
 
 /// The three locks are taken through `transport::common::lock`, which recovers
-/// a poisoned guard. Unlike the state that helper's header describes, a socket
-/// read or write cut short can leave the stream mid-frame. That is accepted
-/// because nothing run under these locks panics: a socket read or write, and
-/// the raw-capture tap, which logs its I/O errors instead.
+/// a poisoned guard. Unlike the state the poison-recovery note in
+/// `transport/common.rs` describes, a socket read or write cut short can leave
+/// the stream mid-frame. That is accepted because nothing under these locks can
+/// panic: the code there is socket I/O, plus the raw-capture tap, which logs its
+/// own I/O errors and disables itself.
 #[derive(Debug)]
 pub(crate) struct TcpSocket {
     reader: Mutex<TcpStream>,

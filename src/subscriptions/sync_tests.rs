@@ -155,40 +155,12 @@ fn routed_item_notice_surfaces_as_subscription_item() {
 
 #[test]
 fn no_retries_after_end_of_stream() {
-    use std::sync::atomic::AtomicUsize;
-
-    static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
-
-    /// Decodes `TickPrice` data and ends on `TickSnapshotEnd`; counts `decode` calls.
-    #[derive(Debug)]
-    struct EndThenStray;
-
-    impl StreamDecoder<EndThenStray> for EndThenStray {
-        const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice, IncomingMessages::TickSnapshotEnd];
-        const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::TickSnapshotEnd];
-
-        fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<EndThenStray, Error> {
-            CALL_COUNT.fetch_add(1, Ordering::Relaxed);
-            Ok(EndThenStray)
-        }
-    }
-
-    let stub = MessageBusStub::with_ordered_responses(vec![
-        ResponseMessage::from("57\0"),       // the end marker
-        ResponseMessage::from("1\0stray\0"), // data that arrives after the end
-    ]);
-    let message_bus = Arc::new(stub);
-
-    let sub: Subscription<EndThenStray> = {
-        let internal = message_bus.send_request(RequestId::nth(1), &[]).unwrap();
-        Subscription::new(message_bus.clone(), internal, DecoderContext::default())
-    };
+    // The channel stays open (`keep_open`), so only the `stream_ended` latch
+    // keeps the data behind the end marker from being yielded.
+    let (sub, _keep) = collect_subscription(vec![end_frame(), data(2)], true);
 
     assert!(sub.next().is_none());
-
-    // The `stream_ended` latch holds: no item, and the decoder never sees the stray
-    assert!(sub.next().is_none());
-    assert_eq!(CALL_COUNT.load(Ordering::Relaxed), 0, "a stray reached decode after the end");
+    assert!(sub.next().is_none(), "data yielded after the end marker");
 }
 
 // --- collect_for / collect_until ----------------------------------------

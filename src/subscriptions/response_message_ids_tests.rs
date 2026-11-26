@@ -293,8 +293,8 @@ fn check_decoder_reports_each_failure() {
         declared: &'static [IncomingMessages],
         end: &'static [IncomingMessages],
         handled: &'static [IncomingMessages],
-        /// `None`: no failure. `Some(text)`: exactly one failure, containing `text`.
-        expected: Option<&'static str>,
+        /// One fragment per expected failure, in report order; empty for none.
+        expected: &'static [&'static str],
     }
 
     let cases = [
@@ -303,42 +303,49 @@ fn check_decoder_reports_each_failure() {
             declared: &[TickPrice, TickSnapshotEnd],
             end: &[TickSnapshotEnd],
             handled: &[TickPrice],
-            expected: None,
+            expected: &[],
         },
         Case {
             name: "declares a dispatcher-intercepted type",
             declared: &[TickPrice, ErrorMessage],
             end: &[],
             handled: &[TickPrice],
-            expected: Some("which the dispatcher intercepts"),
+            expected: &["which the dispatcher intercepts"],
         },
         Case {
             name: "end marker not declared",
             declared: &[TickPrice],
             end: &[TickSnapshotEnd],
             handled: &[TickPrice],
-            expected: Some("in END_MESSAGES but not in RESPONSE_MESSAGE_IDS"),
+            expected: &["in END_MESSAGES but not in RESPONSE_MESSAGE_IDS"],
         },
         Case {
             name: "end marker has a decode arm",
             declared: &[TickPrice, TickSnapshotEnd],
             end: &[TickSnapshotEnd],
             handled: &[TickPrice, TickSnapshotEnd],
-            expected: Some("`decode` arm for end marker"),
+            expected: &["`decode` arm for end marker"],
+        },
+        Case {
+            name: "end marker undeclared and with a decode arm",
+            declared: &[TickPrice],
+            end: &[TickSnapshotEnd],
+            handled: &[TickPrice, TickSnapshotEnd],
+            expected: &["in END_MESSAGES but not in RESPONSE_MESSAGE_IDS", "`decode` arm for end marker"],
         },
         Case {
             name: "declared but unhandled",
             declared: &[TickPrice, TickSize],
             end: &[],
             handled: &[TickPrice],
-            expected: Some("but `decode` has no arm for it"),
+            expected: &["but `decode` has no arm for it"],
         },
         Case {
             name: "handled but undeclared",
             declared: &[TickPrice],
             end: &[],
             handled: &[TickPrice, TickSize],
-            expected: Some("but does not declare it"),
+            expected: &["but does not declare it"],
         },
     ];
 
@@ -350,13 +357,11 @@ fn check_decoder_reports_each_failure() {
                 Err(Error::unexpected_response(message))
             }
         });
-        match case.expected {
-            None => assert!(failures.is_empty(), "{}: unexpected failures {failures:?}", case.name),
-            Some(text) => assert!(
-                failures.len() == 1 && failures[0].contains(text),
-                "{}: expected one failure containing {text:?}, got {failures:?}",
-                case.name
-            ),
-        }
+        assert!(
+            failures.len() == case.expected.len() && failures.iter().zip(case.expected).all(|(failure, text)| failure.contains(text)),
+            "{}: expected failures containing {:?}, got {failures:?}",
+            case.name,
+            case.expected
+        );
     }
 }
