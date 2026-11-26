@@ -442,9 +442,11 @@ pub(crate) fn notice_stream_lag_notice(skipped: u64) -> Notice {
 /// set with `switch_market_data_type` needs no action: the reconnect re-sends
 /// it before this notice.
 ///
-/// `Client::resubscribing` also delivers it in-band, as a
-/// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice) before the first item
-/// of each subscription it reopens.
+/// Two streams also deliver it in-band, as a
+/// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice):
+/// `Client::resubscribing`, before the first item of each subscription it
+/// reopens, and `Client::order_update_stream`, once per reconnect, since that
+/// stream survives the reconnect but misses the updates TWS sent during it.
 ///
 /// Published once the reconnected session is live: the channel reset runs
 /// before the reconnect, so a consumer may resubscribe from inside its handler
@@ -468,6 +470,15 @@ pub(crate) fn resubscribed_notice() -> Notice {
     Notice::synthesized(
         TRANSPORT_RECONNECT_CODE,
         "resubscribed after a transport reconnect; data from the outage is missing and the new subscription may repeat its initial state".to_string(),
+    )
+}
+
+/// Build the in-band [`TRANSPORT_RECONNECT_CODE`] notice the order-update
+/// stream yields once the transport has reconnected.
+pub(crate) fn order_update_gap_notice() -> Notice {
+    Notice::synthesized(
+        TRANSPORT_RECONNECT_CODE,
+        "transport reconnected; order updates TWS sent during the outage are missing, so rebuild order state from open_orders, completed_orders and executions".to_string(),
     )
 }
 

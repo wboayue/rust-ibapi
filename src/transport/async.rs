@@ -734,6 +734,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                         // that resubscribes on it lands on the new session,
                                         // into maps the reset above can no longer wipe.
                                         message_bus.connection.notice_broadcaster.broadcast(transport_reconnect_notice());
+                                        message_bus.order_taps.reconnected();
                                     }
                                     // Shutdown was requested while reconnecting:
                                     // not a failure, and the flag is already

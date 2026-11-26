@@ -13,7 +13,7 @@ use log::warn;
 
 use super::common::{lock, Lease, LeaseRef};
 use crate::client::ids::{OrderId, WireId};
-use crate::messages::{IncomingMessages, Notice, ResponseMessage};
+use crate::messages::{order_update_gap_notice, IncomingMessages, Notice, ResponseMessage};
 use crate::orders::common::decode_order_status;
 use crate::transport::RoutedItem;
 use crate::Error;
@@ -215,6 +215,12 @@ impl<S: TapSender> OrderTaps<S> {
             warn!("order update stream closed before its cleanup");
         }
         sent
+    }
+
+    /// Tell the order-update stream the transport reconnected: it survives
+    /// the reconnect, but TWS does not replay what it sent during the outage.
+    pub(crate) fn reconnected(&self) {
+        self.send_update(RoutedItem::Notice(order_update_gap_notice()));
     }
 
     /// Remove the order-update stream if `lease` names it and it has gone.

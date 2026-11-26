@@ -244,6 +244,31 @@ fn reset_ends_status_streams_and_keeps_updates_and_final_latest() {
     assert!(updates.try_recv().is_ok(), "a reset keeps the update stream");
 }
 
+/// The order-update stream outlives a reconnect, so it gets the gap notice;
+/// status streams have already ended on the reset and get nothing.
+#[test]
+fn reconnected_sends_the_gap_notice_to_the_update_stream_only() {
+    let taps = taps();
+    let NewTap {
+        receiver: updates,
+        lease: _updates_lease,
+        ..
+    } = taps.subscribe_updates(0).unwrap();
+    let (status, _lease) = status_stream(&taps, 7);
+
+    taps.reconnected();
+
+    match updates.try_recv() {
+        Ok(RoutedItem::Notice(notice)) => {
+            assert_eq!(notice.code, crate::messages::TRANSPORT_RECONNECT_CODE);
+            assert_eq!(notice, crate::messages::order_update_gap_notice());
+        }
+        other => panic!("expected the gap notice, got {other:?}"),
+    }
+    assert!(updates.try_recv().is_err(), "one notice per reconnect");
+    assert!(status.try_recv().is_err(), "status streams get no notice");
+}
+
 /// TWS does not replay what happened while disconnected, so only statuses
 /// no later frame can change survive a reset (#1031).
 #[test]

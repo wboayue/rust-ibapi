@@ -626,6 +626,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 // so a consumer that resubscribes on it lands on the new session,
                 // into maps the reset above can no longer wipe.
                 self.connection.notice_broadcaster.broadcast(transport_reconnect_notice());
+                self.order_taps.reconnected();
                 Ok(())
             }
             Err(Error::Shutdown) => {

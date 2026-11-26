@@ -3244,6 +3244,32 @@ fn short_frame_body_reconnects() -> Result<(), Error> {
     Ok(())
 }
 
+/// The order-update stream survives a reconnect and yields the gap notice
+/// once the session is live, so its consumer knows to rebuild order state.
+#[test]
+fn reconnect_sends_gap_notice_to_order_update_stream() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let updates = bus.create_order_update_subscription()?;
+
+    stream.push_inbound(b"xx".to_vec());
+    for frame in helpers::handshake_frames(crate::server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+
+    bus.dispatch()?;
+
+    match updates.next_timeout_routed(TICK) {
+        Some(RoutedItem::Notice(notice)) => {
+            assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+            assert_eq!(notice, crate::messages::order_update_gap_notice());
+        }
+        other => panic!("expected the gap notice, got {other:?}"),
+    }
+    assert!(updates.next_timeout_routed(TICK).is_none(), "one notice per reconnect");
+    assert!(bus.is_connected());
+    Ok(())
+}
+
 /// A market data type sent through the bus is re-sent by the reconnect, on
 /// the wire before the reconnect notice: a consumer acting on the notice
 /// already sees the new session with the type applied.
