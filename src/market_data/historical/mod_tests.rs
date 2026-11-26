@@ -365,6 +365,21 @@ fn trim_to_daily_bars() {
     assert_eq!(bar_dates(&trimmed), vec![BarTimestamp::from(date!(2026 - 04 - 15))]);
 }
 
+/// A weekly bar is dated its period's Friday, so a `start` earlier that week keeps it, and a
+/// `start` after midnight UTC on that Friday drops it.
+#[test]
+fn trim_to_weekly_bar_dated_period_end() {
+    use time::macros::{date, datetime};
+    let fridays = [date!(2026 - 11 - 13), date!(2026 - 11 - 20)].map(BarTimestamp::from);
+    let end = datetime!(2026-11-23 0:00 UTC);
+
+    let from_wednesday = trim_data(&fridays).trim_to(datetime!(2026-11-18 0:00 UTC), end);
+    assert_eq!(bar_dates(&from_wednesday), vec![BarTimestamp::from(date!(2026 - 11 - 20))]);
+
+    let from_friday_noon = trim_data(&fridays).trim_to(datetime!(2026-11-20 12:00 UTC), end);
+    assert_eq!(bar_dates(&from_friday_noon), Vec::<BarTimestamp>::new());
+}
+
 // Destructures every field without `..`, so a new field fails to compile here until its
 // default is chosen.
 #[test]

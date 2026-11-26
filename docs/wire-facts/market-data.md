@@ -146,9 +146,9 @@ ending now, regular hours; wire dates read from a recording.*
 - The current, incomplete week and month are dated today, the last trading day so far. The
   first weekly bar is cut by the window start (Sun 23 Aug) and still dated its end, 28 Aug.
 - Intraday bars are stamped with their start (1-second bars over 20:30:00-21:00:00 UTC run
-  from 20:30:00 to 20:59:59; [above](#one-second-bars-reach-back-at-most-2000-s)), and the
-  `between` rustdoc says bars are stamped with their start time. Weekly and monthly bars are
-  stamped with the end of the period instead.
+  from 20:30:00 to 20:59:59; [above](#one-second-bars-reach-back-at-most-2000-s)). Weekly and
+  monthly bars are stamped with the end of the period instead; `HistoricalData::trim_to`
+  documents both rules (#1267).
 - **Not probed:** daily bars in this run; a holiday on a period's last weekday, so the last
   trading day is not separated from the last weekday; other instruments; the Gateway.
 
