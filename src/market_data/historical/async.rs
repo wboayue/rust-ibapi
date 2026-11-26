@@ -23,8 +23,8 @@ use crate::{Client, Error};
 use super::common::tick::{classify, TickAction};
 use super::common::{self, encoders};
 use super::{
-    BarRequest, BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalBarUpdate, HistoricalData, HistoricalDataFrame,
-    Schedule, ScheduleRequest, TickDecoder, WhatToShow,
+    BarRequest, BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalData, HistoricalDataFrame, Schedule,
+    ScheduleRequest, TickDecoder, WhatToShow,
 };
 use crate::market_data::TradingHours;
 
@@ -72,8 +72,9 @@ impl Client {
     /// (with optional [`HistoricalDataBuilder::ending`](super::HistoricalDataBuilder::ending)) or
     /// [`HistoricalDataBuilder::between`](super::HistoricalDataBuilder::between). Terminals:
     /// [`HistoricalDataBuilder::fetch`](super::HistoricalDataBuilder::fetch) for a one-shot
-    /// [`HistoricalData`] result; [`HistoricalDataBuilder::stream`](super::HistoricalDataBuilder::stream)
-    /// for a `Subscription<HistoricalBarUpdate>` that yields bars as they arrive.
+    /// [`HistoricalData`] result; [`HistoricalDataBuilder::subscribe`](super::HistoricalDataBuilder::subscribe)
+    /// and [`HistoricalDataBuilder::subscribe_with_updates`](super::HistoricalDataBuilder::subscribe_with_updates)
+    /// for a `Subscription<HistoricalDataFrame>` that yields frames as they arrive.
     ///
     /// # Arguments
     /// * `contract` - Contract object that is subject of query
@@ -314,14 +315,19 @@ pub(crate) async fn historical_data(client: &Client, request: BarRequest<'_>, re
 }
 
 /// `request.end_date` is `None`: IBKR requires it with `keep_up_to_date`.
-pub(crate) async fn historical_data_stream(
+/// The context flag keeps the mid-stream `End` from skipping drop's cancel.
+pub(crate) async fn historical_data_updates(
     client: &Client,
     request: BarRequest<'_>,
     request_id: RequestId,
     buffer_limit: Option<usize>,
-) -> Result<Subscription<HistoricalBarUpdate>, Error> {
+) -> Result<Subscription<HistoricalDataFrame>, Error> {
     let message = request.encode(request_id.raw(), true)?;
-    client.request_with_id(request_id).send_capped(message, buffer_limit).await
+    let context = client.decoder_context().with_keep_up_to_date(true);
+    client
+        .request_with_id(request_id)
+        .send_capped_with_context(message, buffer_limit, context)
+        .await
 }
 
 /// Sent once, never resent: the caller owns the request. Reached through

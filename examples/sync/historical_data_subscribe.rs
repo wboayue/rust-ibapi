@@ -60,6 +60,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("received {} bars", received.len());
                 bars = Some(received);
             }
+            // Only `subscribe_with_updates` yields updates.
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Update(_)))) => {}
             Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End {
                 start: served_start,
                 end: served_end,

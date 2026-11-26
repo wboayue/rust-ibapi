@@ -20,6 +20,7 @@ fn decoder_context_default() {
     assert_eq!(context.server_version, 0);
     assert!(context.request_type.is_none());
     assert!(!context.is_smart_depth);
+    assert!(!context.keep_up_to_date);
 }
 
 #[test]
@@ -28,17 +29,20 @@ fn decoder_context_new() {
     assert_eq!(context.server_version, 176);
     assert!(context.request_type.is_none());
     assert!(!context.is_smart_depth);
+    assert!(!context.keep_up_to_date);
 }
 
 #[test]
 fn decoder_context_builder() {
     let context = DecoderContext::new(176)
         .with_request_type(crate::messages::OutgoingMessages::RequestMarketData)
-        .with_smart_depth(true);
+        .with_smart_depth(true)
+        .with_keep_up_to_date(true);
 
     assert_eq!(context.server_version, 176);
     assert_eq!(context.request_type, Some(crate::messages::OutgoingMessages::RequestMarketData));
     assert!(context.is_smart_depth);
+    assert!(context.keep_up_to_date);
 }
 
 #[test]
@@ -46,6 +50,7 @@ fn decoder_context_clone() {
     let context = DecoderContext {
         server_version: 176,
         is_smart_depth: true,
+        keep_up_to_date: false,
         request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
     };
 
@@ -77,11 +82,13 @@ fn decoder_context_equality() {
             context1: DecoderContext {
                 server_version: 176,
                 is_smart_depth: true,
+                keep_up_to_date: false,
                 request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
             },
             context2: DecoderContext {
                 server_version: 176,
                 is_smart_depth: true,
+                keep_up_to_date: false,
                 request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
             },
             expected: true,
@@ -90,10 +97,12 @@ fn decoder_context_equality() {
             name: "different_smart_depth",
             context1: DecoderContext {
                 is_smart_depth: true,
+                keep_up_to_date: false,
                 ..Default::default()
             },
             context2: DecoderContext {
                 is_smart_depth: false,
+                keep_up_to_date: false,
                 ..Default::default()
             },
             expected: false,
@@ -134,6 +143,7 @@ fn decoder_context_debug_format() {
     let context = DecoderContext {
         server_version: 176,
         is_smart_depth: true,
+        keep_up_to_date: false,
         request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
     };
 
@@ -205,9 +215,15 @@ fn lag_as_error_fails_only_lag_notices() {
     assert!(matches!(lag_as_error::<i32>(Err(Error::ConnectionReset)), Err(Error::ConnectionReset)));
 }
 
-/// Whether `T` skips its cancel after a terminal error with `code`.
+/// Whether `T` skips its cancel after a terminal error with `code`, on a
+/// request sent with `context`.
+fn rejection_ends_with<T: StreamDecoder<T>>(code: i32, context: &DecoderContext) -> bool {
+    T::rejection_ends_request(&Notice::synthesized(code, String::new()), context)
+}
+
+/// [`rejection_ends_with`] on a request with the default context.
 fn rejection_ends<T: StreamDecoder<T>>(code: i32) -> bool {
-    T::rejection_ends_request(&Notice::synthesized(code, String::new()), &DecoderContext::new(0))
+    rejection_ends_with::<T>(code, &DecoderContext::default())
 }
 
 /// Each opt-in covers only the code verified live to end the request at TWS;
@@ -216,7 +232,7 @@ fn rejection_ends<T: StreamDecoder<T>>(code: i32) -> bool {
 fn rejection_ends_request_only_for_verified_codes() {
     use crate::accounts::{PnL, PnLSingle};
     use crate::contracts::ContractDetails;
-    use crate::market_data::historical::{HistoricalBarUpdate, HistoricalDataFrame};
+    use crate::market_data::historical::HistoricalDataFrame;
     use crate::market_data::realtime::{Bar, MarketDepths, TickBidAsk, TickLast, TickMidpoint, TickTypes};
     use crate::scanner::ScannerData;
 
@@ -244,7 +260,12 @@ fn rejection_ends_request_only_for_verified_codes() {
         case("TickBidAsk", rejection_ends::<TickBidAsk>, Some(200), 10197),
         case("TickMidpoint", rejection_ends::<TickMidpoint>, Some(200), 10197),
         case("MarketDepths", rejection_ends::<MarketDepths>, Some(200), 10197),
-        case("HistoricalBarUpdate", rejection_ends::<HistoricalBarUpdate>, Some(200), 162),
+        case(
+            "HistoricalDataFrame, keep_up_to_date",
+            |code| rejection_ends_with::<HistoricalDataFrame>(code, &DecoderContext::default().with_keep_up_to_date(true)),
+            Some(200),
+            162,
+        ),
         case("PnL", rejection_ends::<PnL>, Some(321), 200),
         case("PnLSingle", rejection_ends::<PnLSingle>, Some(321), 200),
         case("Vec<ScannerData>", rejection_ends::<Vec<ScannerData>>, Some(162), 309),
@@ -263,6 +284,8 @@ fn rejection_ends_request_only_for_verified_codes() {
         }
         assert!(!ends(other), "{decoder}: {other} must still cancel");
     }
-    // A one-shot query has nothing to continue after any error.
-    assert!(rejection_ends::<HistoricalDataFrame>(10197));
+    // A one-shot query (no keep_up_to_date) has nothing to continue after any error.
+    for code in [162, 200, 10197, 10314] {
+        assert!(rejection_ends::<HistoricalDataFrame>(code), "one-shot HistoricalDataFrame: {code}");
+    }
 }

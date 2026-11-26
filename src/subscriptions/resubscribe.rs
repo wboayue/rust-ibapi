@@ -14,7 +14,10 @@ use crate::subscriptions::{StreamDecoder, SubscriptionItem};
 /// Sealed. The accepted streams, and what each repeats after a resubscribe, are
 /// listed on `Client::resubscribing`. Order types are excluded (a resubscribe
 /// would place, cancel or exercise again), and so are requests that end on their
-/// own (contract details, option chains). Display groups are left out: their
+/// own (contract details, option chains). Historical bars are the exception:
+/// `subscribe` shares [`HistoricalDataFrame`](crate::market_data::historical::HistoricalDataFrame)
+/// with `subscribe_with_updates`, so a `subscribe` cut by a reconnect is sent
+/// again from the start. Display groups are left out: their
 /// `DisplayGroupSubscription` wrapper isn't a `Subscription`.
 #[allow(private_bounds)]
 pub trait Resubscribable: StreamDecoder<Self> + Sized {}
@@ -32,7 +35,7 @@ resubscribable!(
     crate::market_data::TickBidAsk,
     crate::market_data::TickMidpoint,
     crate::market_data::realtime::MarketDepths,
-    crate::market_data::historical::HistoricalBarUpdate,
+    crate::market_data::historical::HistoricalDataFrame,
     crate::accounts::AccountUpdate,
     crate::accounts::AccountUpdateMulti,
     crate::accounts::AccountSummaryResult,

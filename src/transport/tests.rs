@@ -46,7 +46,7 @@ fn reset_frees_the_account_updates_slot() {
 #[test]
 fn for_stream_validates_the_limit_and_takes_the_end_from_the_decoder() {
     use crate::contracts::{ContractDetails, OptionChain};
-    use crate::market_data::historical::HistoricalBarUpdate;
+    use crate::market_data::historical::HistoricalDataFrame;
     use crate::messages::IncomingMessages;
 
     assert!(BufferBound::for_stream::<ContractDetails>(None).unwrap().is_none());
@@ -64,7 +64,7 @@ fn for_stream_validates_the_limit_and_takes_the_end_from_the_decoder() {
     let bound = BufferBound::for_stream::<OptionChain>(Some(8)).unwrap().unwrap();
     assert_eq!(bound.end, &[IncomingMessages::SecurityDefinitionOptionParameterEnd]);
     // `HistoricalDataEnd` is a data item on this stream, not an end marker.
-    let bound = BufferBound::for_stream::<HistoricalBarUpdate>(Some(8)).unwrap().unwrap();
+    let bound = BufferBound::for_stream::<HistoricalDataFrame>(Some(8)).unwrap().unwrap();
     assert!(bound.end.is_empty());
 }
 

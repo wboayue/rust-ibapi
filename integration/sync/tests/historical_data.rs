@@ -1,7 +1,7 @@
 use std::time::Duration as StdDuration;
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{Bar, BarSize, BarTimestamp, Duration, HistoricalBarUpdate, WhatToShow};
+use ibapi::market_data::historical::{Bar, BarSize, BarTimestamp, Duration, HistoricalDataFrame, WhatToShow};
 use ibapi::market_data::IgnoreSize;
 use ibapi::market_data::TradingHours;
 use ibapi::subscriptions::SubscriptionItem;
@@ -282,7 +282,7 @@ fn historical_data_stream_buffer_limit_fails_a_stalled_reader() {
         .historical_data(&contract, BarSize::Min15)
         .duration(Duration::days(1))
         .buffer_limit(1)
-        .stream()
+        .subscribe_with_updates()
         .expect("stream failed");
     std::thread::sleep(StdDuration::from_secs(2)); // stall: the initial bars and End both arrive
 
@@ -302,14 +302,14 @@ fn historical_data_stream_buffer_limit_reader_keeps_up() {
         .historical_data(&contract, BarSize::Min15)
         .duration(Duration::days(1))
         .buffer_limit(4)
-        .stream()
+        .subscribe_with_updates()
         .expect("stream failed");
 
     let mut saw_bars = false;
     loop {
         match subscription.next_timeout(StdDuration::from_secs(30)) {
-            Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(bars)))) => saw_bars = !bars.is_empty(),
-            Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::End { .. }))) => break,
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(bars)))) => saw_bars = !bars.is_empty(),
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. }))) => break,
             Some(Ok(item)) => eprintln!("item: {item:?}"),
             other => panic!("expected the initial bars then End, got {other:?}"),
         }

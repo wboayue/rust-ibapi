@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{Bar, BarSize, BarTimestamp, Duration, HistoricalBarUpdate, WhatToShow};
+use ibapi::market_data::historical::{Bar, BarSize, BarTimestamp, Duration, HistoricalDataFrame, WhatToShow};
 use ibapi::market_data::IgnoreSize;
 use ibapi::market_data::TradingHours;
 use ibapi::subscriptions::SubscriptionItem;
@@ -237,7 +237,7 @@ async fn historical_data_streaming() {
     let mut subscription = client
         .historical_data(&contract, BarSize::Min15)
         .duration(Duration::days(1))
-        .stream()
+        .subscribe_with_updates()
         .await
         .expect("historical_data_streaming failed");
 
@@ -314,7 +314,7 @@ async fn historical_data_stream_buffer_limit_fails_a_stalled_reader() {
         .historical_data(&contract, BarSize::Min15)
         .duration(Duration::days(1))
         .buffer_limit(1)
-        .stream()
+        .subscribe_with_updates()
         .await
         .expect("stream failed");
     tokio::time::sleep(std::time::Duration::from_secs(2)).await; // stall: the initial bars and End both arrive
@@ -335,7 +335,7 @@ async fn historical_data_stream_buffer_limit_reader_keeps_up() {
         .historical_data(&contract, BarSize::Min15)
         .duration(Duration::days(1))
         .buffer_limit(4)
-        .stream()
+        .subscribe_with_updates()
         .await
         .expect("stream failed");
 
@@ -345,8 +345,8 @@ async fn historical_data_stream_buffer_limit_reader_keeps_up() {
             .await
             .expect("timed out")
         {
-            Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(bars)))) => saw_bars = !bars.is_empty(),
-            Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::End { .. }))) => break,
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(bars)))) => saw_bars = !bars.is_empty(),
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. }))) => break,
             Some(Ok(item)) => eprintln!("item: {item:?}"),
             other => panic!("expected the initial bars then End, got {other:?}"),
         }

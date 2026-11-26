@@ -158,7 +158,7 @@ fn check_all() -> Roster {
     use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
     use crate::contracts::{ContractDetails, OptionChain};
     use crate::display_groups::DisplayGroupUpdate;
-    use crate::market_data::historical::{HistoricalBarUpdate, HistoricalDataFrame};
+    use crate::market_data::historical::HistoricalDataFrame;
     use crate::market_data::realtime::{Bar, MarketDepths, TickTypes};
     use crate::market_data::{TickBidAsk, TickLast, TickMidpoint};
     use crate::news::{HistoricalNewsFrame, NewsArticle, NewsBulletin};
@@ -178,7 +178,6 @@ fn check_all() -> Roster {
     check_stream::<ContractDetails>(&mut roster);
     check_stream::<OptionChain>(&mut roster);
     check_stream::<DisplayGroupUpdate>(&mut roster);
-    check_stream::<HistoricalBarUpdate>(&mut roster);
     check_stream::<HistoricalDataFrame>(&mut roster);
     check_stream::<Bar>(&mut roster);
     check_stream::<TickBidAsk>(&mut roster);

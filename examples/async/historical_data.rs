@@ -23,7 +23,7 @@
 use std::sync::Arc;
 
 use clap::{Parser, ValueEnum};
-use ibapi::market_data::historical::{BarTimestamp, HistoricalBarUpdate};
+use ibapi::market_data::historical::{BarTimestamp, HistoricalDataFrame};
 use ibapi::prelude::*;
 use time::OffsetDateTime;
 
@@ -234,13 +234,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .what_to_show(what_to_show)
         .trading_hours(TradingHours::Extended)
         .duration(1.days())
-        .stream()
+        .subscribe_with_updates()
         .await?;
 
     let mut subscription = subscription.filter_data();
     while let Some(update) = subscription.next().await {
         match update {
-            Ok(HistoricalBarUpdate::Historical(bars)) => {
+            Ok(HistoricalDataFrame::Bars(bars)) => {
                 println!("Received {} initial historical bars", bars.len());
                 if let Some(bar) = bars.last() {
                     println!(
@@ -254,7 +254,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 println!("Now streaming updates...");
             }
-            Ok(HistoricalBarUpdate::Update(bar)) => {
+            Ok(HistoricalDataFrame::Update(bar)) => {
                 println!(
                     "UPDATE: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}",
                     format_time(&bar.date),
@@ -265,7 +265,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bar.volume
                 );
             }
-            Ok(HistoricalBarUpdate::End { start, end }) => {
+            Ok(HistoricalDataFrame::End { start, end }) => {
                 println!("Requested window {} - {}; updates follow", start, end);
             }
             Err(e) => {

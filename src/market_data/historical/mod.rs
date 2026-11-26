@@ -535,80 +535,34 @@ impl HistoricalData {
     }
 }
 
-/// Update from historical data streaming with keepUpToDate=true.
-///
-/// When requesting historical data with `keepUpToDate=true`, IBKR first sends
-/// the initial historical bars as a `Historical` variant, then an `End`
-/// variant with the requested window, then continues streaming real-time
-/// updates for the current bar as `Update` variants. The current bar is
-/// updated approximately every 4-6 seconds until a new bar begins. The
-/// subscription has no end marker; it runs until cancelled.
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum HistoricalBarUpdate {
-    /// Initial batch of historical bars. Always received first. The
-    /// requested window follows as [`End`](Self::End).
-    Historical(Vec<Bar>),
-    /// Real-time update of the current (incomplete) bar.
-    /// Multiple updates with the same timestamp will be sent as the bar builds.
-    Update(Bar),
-    /// The requested window. Follows `Historical`; the subscription stays
-    /// open and `Update` items come after it.
-    End {
-        /// Start of the requested window.
-        start: OffsetDateTime,
-        /// End of the requested window.
-        end: OffsetDateTime,
-    },
-}
-
-impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
-        IncomingMessages::HistoricalData,
-        IncomingMessages::HistoricalDataUpdate,
-        IncomingMessages::HistoricalDataEnd,
-    ];
-
-    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::HistoricalData => Ok(Self::Historical(common::decoders::decode_historical_data(message)?)),
-            IncomingMessages::HistoricalDataUpdate => Ok(Self::Update(common::decoders::decode_historical_data_update(message)?)),
-            IncomingMessages::HistoricalDataEnd => {
-                let (start, end) = common::decoders::decode_historical_data_end(message)?;
-                Ok(Self::End { start, end })
-            }
-            _ => Err(Error::unexpected_response(message)),
-        }
-    }
-
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        cancel_historical_data(request_id)
-    }
-
-    /// Live: after 200 TWS answers the cancel with 366 (no query found).
-    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
-        notice.code == NO_SECURITY_DEFINITION_CODE
-    }
-}
-
 /// The cancel for a historical bar request, one-shot or streaming.
 fn cancel_historical_data(request_id: Option<i32>) -> Result<Vec<u8>, Error> {
     let request_id = error_helpers::require_request_id_for(request_id, "encode cancel historical data")?;
     common::encoders::encode_cancel_historical_data(request_id)
 }
 
-/// The frames of a historical bar request that doesn't stream updates: the
-/// bars, then the window.
+/// The frames of a historical bar request: the bars, then the window, then
+/// (with updates) the forming bar.
 ///
-/// Yielded by [`HistoricalDataBuilder::subscribe`], in that order. `End` ends the
-/// request at TWS: a subscription that has read it sends no cancel when
-/// dropped, and one dropped before it does. Unlike [`HistoricalBarUpdate`],
-/// nothing follows `End`.
-#[derive(Clone, Debug, PartialEq)]
+/// Yielded by both streaming terminals of [`HistoricalDataBuilder`]:
+///
+/// - [`subscribe`](HistoricalDataBuilder::subscribe): `Bars`, then `End`, which
+///   ends the request at TWS. A subscription that has read `End` sends no
+///   cancel when dropped, and one dropped before it does. Never yields `Update`.
+/// - [`subscribe_with_updates`](HistoricalDataBuilder::subscribe_with_updates)
+///   (IBKR's `keepUpToDate`): `Bars`, then `End`, then `Update` items until
+///   cancelled. `End` is mid-stream here; dropping the subscription cancels.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum HistoricalDataFrame {
-    /// Every bar of the request, in one frame. The window comes in `End`.
+    /// Every bar of the initial request, in one frame. Always first. The
+    /// window comes in `End`.
     Bars(Vec<Bar>),
-    /// The window TWS served. The request is complete.
+    /// The current (incomplete) bar, from `subscribe_with_updates` only. TWS
+    /// resends it every few seconds as it builds, with the same timestamp,
+    /// until a new bar begins.
+    Update(Bar),
+    /// The window TWS served. Follows `Bars`.
     End {
         /// Start of the window.
         start: OffsetDateTime,
@@ -651,6 +605,7 @@ impl HistoricalDataFrame {
         match self {
             Self::Bars(bars) => Ok(bars),
             Self::End { .. } => Err(Error::UnexpectedResponse("historical data: window before bars".into())),
+            Self::Update(_) => Err(Error::UnexpectedResponse("historical data: update on a request without updates".into())),
         }
     }
 
@@ -659,16 +614,22 @@ impl HistoricalDataFrame {
         match self {
             Self::End { start, end } => Ok((start, end)),
             Self::Bars(_) => Err(Error::UnexpectedResponse("historical data: second batch of bars before window".into())),
+            Self::Update(_) => Err(Error::UnexpectedResponse("historical data: update on a request without updates".into())),
         }
     }
 }
 
 impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::HistoricalData, IncomingMessages::HistoricalDataEnd];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
+        IncomingMessages::HistoricalData,
+        IncomingMessages::HistoricalDataUpdate,
+        IncomingMessages::HistoricalDataEnd,
+    ];
 
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::HistoricalData => Ok(Self::Bars(common::decoders::decode_historical_data(message)?)),
+            IncomingMessages::HistoricalDataUpdate => Ok(Self::Update(common::decoders::decode_historical_data_update(message)?)),
             IncomingMessages::HistoricalDataEnd => {
                 let (start, end) = common::decoders::decode_historical_data_end(message)?;
                 Ok(Self::End { start, end })
@@ -681,15 +642,18 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
         cancel_historical_data(request_id)
     }
 
-    fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
-        matches!(self, Self::End { .. })
+    /// `End` ends the request only without `keep_up_to_date`; with it, updates
+    /// follow and drop must still cancel.
+    fn is_snapshot_end(&self, context: &DecoderContext) -> bool {
+        matches!(self, Self::End { .. }) && !context.keep_up_to_date
     }
 
-    /// Any error, not a code list: a one-shot query has nothing to continue
-    /// after one. Verified live for 162, 200 and 10314, where TWS answers a
-    /// cancel with 366 (no query found).
-    fn rejection_ends_request(_notice: &Notice, _context: &DecoderContext) -> bool {
-        true
+    /// Without `keep_up_to_date`, any error: a one-shot query has nothing to
+    /// continue after one. Verified live for 162, 200 and 10314, where TWS
+    /// answers a cancel with 366 (no query found). With it, only 200, after
+    /// which TWS answers the cancel with 366.
+    fn rejection_ends_request(notice: &Notice, context: &DecoderContext) -> bool {
+        !context.keep_up_to_date || notice.code == NO_SECURITY_DEFINITION_CODE
     }
 }
 

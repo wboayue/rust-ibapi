@@ -469,27 +469,43 @@ Integer literals and untyped bindings compile unchanged. Where the argument is a
 
 §26 replaces the signature with a builder; `total_results` is now `.limit(n)`.
 
-### 22. `HistoricalBarUpdate::Historical` carries `Vec<Bar>`
+### 22. `historical_data(..).stream()` is `subscribe_with_updates()`, yielding `HistoricalDataFrame`
 
-`historical_data(..).stream()` yields `HistoricalBarUpdate::Historical` first, with the initial bars. It held a `HistoricalData` whose `start` and `end` were always `OffsetDateTime::UNIX_EPOCH` placeholders: TWS sends the requested window in a separate frame, which the stream already yields as `HistoricalBarUpdate::End { start, end }`. The variant now holds the bars as `Vec<Bar>`. `historical_data(..).fetch()` and `HistoricalData` are unchanged.
+The keep-up-to-date terminal is renamed `subscribe_with_updates()`, beside `subscribe()`, and both yield one enum, `HistoricalDataFrame`. `HistoricalBarUpdate` is gone:
+
+| 5.x `HistoricalBarUpdate` | 6.0 `HistoricalDataFrame` |
+|---|---|
+| `Historical(HistoricalData)` | `Bars(Vec<Bar>)` |
+| `Update(Bar)` | `Update(Bar)` |
+| `End { start, end }` | `End { start, end }` |
+
+`Historical` held a `HistoricalData` whose `start` and `end` were always `OffsetDateTime::UNIX_EPOCH` placeholders: TWS sends the requested window in a separate frame, which the stream already yields as `End { start, end }`. `Bars` holds only the bars. `historical_data(..).fetch()` and `HistoricalData` are unchanged.
 
 ```rust,ignore
 // 5.x
-match update? {
-    HistoricalBarUpdate::Historical(data) => println!("{} bars", data.bars.len()),
-    HistoricalBarUpdate::Update(bar) => println!("{bar:?}"),
-    HistoricalBarUpdate::End { start, end } => println!("{start} - {end}"),
+let subscription = client.historical_data(&contract, BarSize::Min).duration(1.days()).stream()?;
+for update in subscription.iter_data() {
+    match update? {
+        HistoricalBarUpdate::Historical(data) => println!("{} bars", data.bars.len()),
+        HistoricalBarUpdate::Update(bar) => println!("{bar:?}"),
+        HistoricalBarUpdate::End { start, end } => println!("{start} - {end}"),
+    }
 }
 
 // 6.0
-match update? {
-    HistoricalBarUpdate::Historical(bars) => println!("{} bars", bars.len()),
-    HistoricalBarUpdate::Update(bar) => println!("{bar:?}"),
-    HistoricalBarUpdate::End { start, end } => println!("{start} - {end}"),
+let subscription = client.historical_data(&contract, BarSize::Min).duration(1.days()).subscribe_with_updates()?;
+for update in subscription.iter_data() {
+    match update? {
+        HistoricalDataFrame::Bars(bars) => println!("{} bars", bars.len()),
+        HistoricalDataFrame::Update(bar) => println!("{bar:?}"),
+        HistoricalDataFrame::End { start, end } => println!("{start} - {end}"),
+    }
 }
 ```
 
-Bind the `Vec<Bar>` in the `Historical` arm, and take the window from `End`. The compiler finds every arm that reads `data.bars`, `data.start` or `data.end`. It does not catch the serialized form: `HistoricalBarUpdate` derives `Serialize` / `Deserialize`, and the `Historical` payload is now an array of bars (`{"Historical":[..]}`) where it was a `{start, end, bars}` object, so JSON written by 5.x does not deserialize. The `utoipa` schema is updated the same way. `historical_data(..).subscribe()`, new in 6.0, yields `HistoricalDataFrame::Bars(Vec<Bar>)` the same way; to trim with `HistoricalData::trim_to`, build `HistoricalData { start, end, bars }` from its `Bars` and `End` frames, as the `historical_data_subscribe` examples do.
+Rename the terminal and the type, bind the `Vec<Bar>` in the `Bars` arm, and take the window from `End`. The compiler finds all of these. It does not catch the serialized form: `HistoricalDataFrame` derives `Serialize` / `Deserialize` as `HistoricalBarUpdate` did, and the first frame is now `{"Bars":[..]}` where it was `{"Historical":{start, end, bars}}`, so JSON written by 5.x does not deserialize. The `utoipa` schema is renamed and updated the same way.
+
+`subscribe()`, new in 6.0, never yields `Update`, but a `match` on its frames needs an arm for it. To trim with `HistoricalData::trim_to`, build `HistoricalData { start, end, bars }` from the `Bars` and `End` frames, as the `historical_data_subscribe` examples do.
 
 ### 23. `TickTypes` and `MarketDepths` gain `Reroute`
 

@@ -52,12 +52,8 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        let bound = BufferBound::for_stream::<T>(buffer_limit)?;
         let context = self.client.decoder_context();
-        let message_bus = self.client.message_bus.clone();
-        SubscriptionBuilder::<T>::new_with_components(context, message_bus)
-            .send_with_request_id_capped(self.request_id, message, bound)
-            .await
+        self.send_capped_with_context(message, buffer_limit, context).await
     }
 
     /// Send the request and create a subscription with context
@@ -65,9 +61,23 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
+        self.send_capped_with_context(message, None, context).await
+    }
+
+    /// [`send_capped`](Self::send_capped) with a request-specific `context`.
+    pub async fn send_capped_with_context<T>(
+        self,
+        message: Vec<u8>,
+        buffer_limit: Option<usize>,
+        context: DecoderContext,
+    ) -> Result<Subscription<T>, Error>
+    where
+        T: StreamDecoder<T> + Send + 'static,
+    {
+        let bound = BufferBound::for_stream::<T>(buffer_limit)?;
         let message_bus = self.client.message_bus.clone();
         SubscriptionBuilder::<T>::new_with_components(context, message_bus)
-            .send_with_request_id(self.request_id, message)
+            .send_with_request_id_capped(self.request_id, message, bound)
             .await
     }
 
@@ -115,16 +125,8 @@ where
         }
     }
 
-    /// Sends a request with a specific request ID and builds the subscription
-    pub async fn send_with_request_id(self, request_id: RequestId, message: Vec<u8>) -> Result<Subscription<T>, Error>
-    where
-        T: StreamDecoder<T>,
-    {
-        self.send_with_request_id_capped(request_id, message, None).await
-    }
-
-    /// [`send_with_request_id`](Self::send_with_request_id), capping unread
-    /// items when `bound` is set.
+    /// Sends a request with a specific request ID and builds the subscription,
+    /// capping unread items when `bound` is set.
     pub async fn send_with_request_id_capped(
         self,
         request_id: RequestId,
