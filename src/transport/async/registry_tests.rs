@@ -41,6 +41,8 @@ fn fail_all_skips_a_closed_bounded_route() {
     let bound = BufferBound {
         limit: 1,
         end: &[IncomingMessages::ContractDataEnd],
+        continues: |_, _| false,
+        context: crate::subscriptions::DecoderContext::default(),
     };
     let lease = Lease::new();
     let route = Route::bounded(sender, lease.downgrade(), bound, Arc::new(AtomicUsize::new(0)));

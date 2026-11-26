@@ -2570,6 +2570,8 @@ pub(super) fn bound(limit: usize) -> BufferBound {
     BufferBound {
         limit,
         end: &[IncomingMessages::ContractDataEnd],
+        continues: |_, _| false,
+        context: crate::subscriptions::DecoderContext::default(),
     }
 }
 
@@ -2665,6 +2667,62 @@ async fn reset_skips_overflowed_route() {
         try_next_routed(&mut at_limit).await,
         Some(RoutedItem::Error(Error::ConnectionReset))
     ));
+}
+
+/// What TWS sends for a crypto `TRADES` bar request (live 2026-11-24): 10299 naming
+/// `AGGTRADES`, then that series' bars and the end marker, all on the request's id.
+fn substituted_bar_frames(request_id: RequestId) -> Vec<Vec<u8>> {
+    use crate::testdata::builders::market_data::{historical_data_bar, historical_data_end_response, historical_data_response};
+
+    let mut bars = historical_data_response().bar(historical_data_bar(1_678_886_400).ohlc(185.5, 186.0, 185.25, 185.75));
+    bars.request_id = request_id.raw();
+    let mut end = historical_data_end_response();
+    end.request_id = request_id.raw();
+    vec![
+        error_frame(
+            request_id.raw(),
+            10299,
+            "Expected what to show is AGGTRADES, please use that instead of TRADES.",
+        ),
+        binary_proto(IncomingMessages::HistoricalData as i32, &bars.to_proto()),
+        binary_proto(IncomingMessages::HistoricalDataEnd as i32, &end.to_proto()),
+    ]
+}
+
+/// A `buffer_limit` route stays open after an error its decoder continues after: the
+/// subscription yields 10299 as a notice, then the bars TWS sends after it.
+#[tokio::test]
+async fn bounded_historical_route_delivers_the_bars_after_10299() {
+    use crate::market_data::historical::HistoricalDataFrame;
+
+    let request_id = RequestId::nth(0);
+    let context = DecoderContext::new(server_versions::PROTOBUF_HISTORICAL_DATA);
+    let (stream, bus) = make_bus();
+    let bound = BufferBound::for_stream::<HistoricalDataFrame>(Some(4), &context).unwrap();
+    let internal = bus.send_request_capped(request_id, vec![], bound).await.unwrap();
+    let mut subscription: Subscription<HistoricalDataFrame> =
+        Subscription::new_from_internal(internal, bus.clone(), Some(request_id.raw()), None, context);
+
+    for frame in substituted_bar_frames(request_id) {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+    let notice = next_item(&mut subscription).await;
+    let bars = next_item(&mut subscription).await;
+    let end = next_item(&mut subscription).await;
+
+    assert!(
+        matches!(&notice, Some(Ok(SubscriptionItem::Notice(n))) if n.code == 10299),
+        "got {notice:?}"
+    );
+    assert!(
+        matches!(&bars, Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(b)))) if b.len() == 1 && b[0].close == 185.75),
+        "got {bars:?}"
+    );
+    assert!(
+        matches!(&end, Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. })))),
+        "got {end:?}"
+    );
 }
 
 #[tokio::test]

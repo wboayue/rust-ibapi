@@ -486,6 +486,11 @@ impl HistoricalDataBuilder<'_, crate::client::sync::Client, DurationOnly> {
     /// subscription: on crypto with no 10299 first, and on a stock, future or forex pair after a
     /// 10299 (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`).
     ///
+    /// Dropping the subscription as soon as the 10299 arrives can leave the request running at
+    /// TWS. In a paper TWS capture, a cancel sent within about 1 ms of the crypto `TRADES`
+    /// notice drew 366 ("No historical data query found"), and updates still arrived.
+    /// A cancel sent seconds later drew 162 and stopped the updates.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -721,6 +726,11 @@ impl HistoricalDataBuilder<'_, crate::client::r#async::Client, DurationOnly> {
     /// updates draws 321 ("Source price not supported with live updates"), which ends the
     /// subscription: on crypto with no 10299 first, and on a stock, future or forex pair after a
     /// 10299 (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`).
+    ///
+    /// Dropping the subscription as soon as the 10299 arrives can leave the request running at
+    /// TWS. In a paper TWS capture, a cancel sent within about 1 ms of the crypto `TRADES`
+    /// notice drew 366 ("No historical data query found"), and updates still arrived.
+    /// A cancel sent seconds later drew 162 and stopped the updates.
     ///
     /// # Examples
     ///
