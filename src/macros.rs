@@ -41,8 +41,8 @@ macro_rules! impl_str_partial_eq {
 /// Every form distinguishes the two ways a wire value can be unusable: empty
 /// input is `"empty $name"` (no value at all) and an unrecognized non-empty
 /// value is `"unknown $name"`. `parse_required` reaches the first only when a
-/// caller parses directly — it intercepts empty with its own `"missing
-/// {label}"`, which names the field rather than the type.
+/// caller parses directly — it intercepts empty as `field: Some(label)`, reason
+/// `"missing"`, which names the field rather than the type.
 ///
 /// The `fallback $variant` form is for open enums on inbound stream paths,
 /// where an unrecognized value must not terminate the subscription: a
@@ -111,9 +111,9 @@ macro_rules! impl_wire_enum {
             type Err = $crate::Error;
             fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
                 if s.is_empty() {
-                    return Err($crate::Error::Parse(0, s.to_string(), concat!("empty ", stringify!($name)).into()));
+                    return Err($crate::Error::invalid_value(s, concat!("empty ", stringify!($name))));
                 }
-                Self::from_wire(s).ok_or_else(|| $crate::Error::Parse(0, s.to_string(), concat!("unknown ", stringify!($name)).into()))
+                Self::from_wire(s).ok_or_else(|| $crate::Error::invalid_value(s, concat!("unknown ", stringify!($name))))
             }
         }
     };
@@ -123,7 +123,7 @@ macro_rules! impl_wire_enum {
             type Err = $crate::Error;
             fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
                 if s.is_empty() {
-                    return Err($crate::Error::Parse(0, s.to_string(), concat!("empty ", stringify!($name)).into()));
+                    return Err($crate::Error::invalid_value(s, concat!("empty ", stringify!($name))));
                 }
                 Ok(Self::from_wire(s).unwrap_or_else(|| $name::$variant(s.to_string())))
             }

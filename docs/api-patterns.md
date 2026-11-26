@@ -366,7 +366,7 @@ For comprehensive conditional order documentation, see [Order Types - Conditiona
 The handshake refuses servers below version 213 (`PROTOBUF_REST_MESSAGES_3`), so
 a feature at or below it needs no check. Gate only a feature above the floor,
 with `check_version` on the line before the request. A caller sees
-`Error::ServerVersion(required, actual, name)`. `protocol` is crate-private:
+`Error::ServerVersion { required, actual, feature }`. `protocol` is crate-private:
 callers can't change the server version, so they get the error from the call
 itself rather than pre-checking.
 

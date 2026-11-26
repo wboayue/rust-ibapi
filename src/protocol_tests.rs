@@ -25,7 +25,11 @@ fn check_version_rejects_below_minimum_with_canonical_display() {
     let actual_version = feature.min_version - 1;
     let err = check_version(actual_version, feature).unwrap_err();
     match &err {
-        Error::ServerVersion(required, actual, name) => {
+        Error::ServerVersion {
+            required,
+            actual,
+            feature: name,
+        } => {
             assert_eq!(*required, feature.min_version);
             assert_eq!(*actual, actual_version);
             assert_eq!(name, feature.name);

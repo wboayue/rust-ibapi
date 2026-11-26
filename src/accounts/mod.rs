@@ -531,7 +531,7 @@ impl FaDataType {
         match v {
             1 => Ok(Self::Groups),
             3 => Ok(Self::AccountAliases),
-            _ => Err(Error::Parse(0, v.to_string(), "unknown FaDataType".into())),
+            _ => Err(Error::invalid_value(v.to_string(), "unknown FaDataType")),
         }
     }
 }

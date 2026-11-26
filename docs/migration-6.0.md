@@ -20,7 +20,7 @@ That check was never needed:
   always passed. They're removed.
 - **The three remaining gates (`CANCEL_CONTRACT_DATA`, `CONFIG`, `UPDATE_CONFIG`) are checked
   by the requests themselves.** A server too old for one returns
-  `Error::ServerVersion(required, actual, feature)` from that call.
+  `Error::ServerVersion { required, actual, feature }` from that call.
 - **`is_supported` and `include_if_supported` are removed.** Nothing in the crate called them.
 
 ```rust,ignore
@@ -33,7 +33,7 @@ let config = client.config()?;
 // 6.0: drop the check; the request reports an old server itself
 match client.config() {
     Ok(config) => { /* ... */ }
-    Err(Error::ServerVersion(required, actual, feature)) => {
+    Err(Error::ServerVersion { required, actual, feature }) => {
         eprintln!("{feature} needs server {required}, connected to {actual}");
     }
     Err(e) => return Err(e),
@@ -1204,3 +1204,53 @@ of these variants. A caller that built `Error::Simple(..)` for its own failures,
 type (or `Box<dyn std::error::Error>`): no crate API takes a caller's `ibapi::Error`. Code that
 used `?` to turn a `ParseIntError`, `FromUtf8Error` or `PoisonError` into an `ibapi::Error` needs
 its own conversion.
+
+### 49. `Error::Parse` and `Error::ServerVersion` have named fields; `HistoricalParseError` is removed
+
+`Error::Parse(usize, String, String)` held a text-protocol field index, which every
+protobuf-era site set to `0`, and a second slot that was the offending value at some sites and
+the field name at others. A caller matching `Error::Parse(_, value, _)` couldn't tell which it
+got. It is now:
+
+```rust,ignore
+Error::Parse {
+    field: Option<&'static str>, // the protobuf field ("action"), when the decoder names it
+    value: String,               // the text that failed; empty when the field was absent
+    reason: String,              // what was wrong ("unknown Action", "missing")
+}
+```
+
+`Error::ServerVersion(i32, i32, String)` is `Error::ServerVersion { required, actual, feature }`,
+in the same order.
+
+```rust,ignore
+// 5.x
+Err(Error::Parse(_, value, reason)) => { /* value might be a field name */ }
+Err(Error::ServerVersion(required, actual, feature)) => { /* ... */ }
+
+// 6.0
+Err(Error::Parse { field, value, reason }) => { /* ... */ }
+Err(Error::ServerVersion { required, actual, feature }) => { /* ... */ }
+```
+
+`market_data::historical::HistoricalParseError` and `Error::HistoricalParseError` are removed.
+`FromStr` for `BarSize`, `Duration` and historical `WhatToShow` returns `Error::Parse`, with the
+input in `value`, as the other wire enums' parsers do. A `?` on one of them in a function returning
+`ibapi::Error` still compiles. Replace any match on `HistoricalParseError::BarSize(..)`, `Duration`,
+`WhatToShow` or `ParseIntError` with `Error::Parse { value, reason, .. }`. `HistoricalParseError`
+derived `PartialEq` and `ibapi::Error` does not, so `assert_eq!(s.parse::<BarSize>(), Ok(..))` no
+longer compiles: compare `s.parse::<BarSize>().unwrap()`, or match on the error.
+
+The compiler finds every tuple pattern. It does not catch a changed `Display`, which a caller
+that matches on the text would see:
+
+| Error | 5.x | 6.0 |
+|---|---|---|
+| Unknown wire code in a reply | `parse error: 0 - XYZ - unknown Action` | `parse error: action "XYZ": unknown Action` |
+| Missing required enum field | `parse error: 0 -  - missing action` | `parse error: action: missing` |
+| Missing required submessage | `parse error: 0 - contract - missing in Position` | `parse error: contract: missing in Position` |
+| `"XYZ".parse::<Action>()` | `parse error: 0 - XYZ - unknown Action` | `parse error: "XYZ": unknown Action` |
+| `"bogus".parse::<BarSize>()` | `Invalid BarSize input 'bogus'` | `parse error: "bogus": unknown BarSize` |
+| `"1 X".parse::<Duration>()` | `Invalid Duration input '1 X' Unsupported unit` | `parse error: "1 X": Duration unit is not S, D, W, M or Y` |
+
+`ServerVersion`'s `Display` is unchanged.

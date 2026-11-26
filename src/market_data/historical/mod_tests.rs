@@ -17,17 +17,21 @@ fn what_to_show_to_string() {
 
 #[test]
 fn what_to_show_parse() {
-    assert_eq!("TRADES".parse::<WhatToShow>(), Ok(WhatToShow::Trades));
-    assert_eq!("MIDPOINT".parse::<WhatToShow>(), Ok(WhatToShow::MidPoint));
-    assert_eq!("BID".parse::<WhatToShow>(), Ok(WhatToShow::Bid));
-    assert_eq!("ASK".parse::<WhatToShow>(), Ok(WhatToShow::Ask));
-    assert_eq!("BID_ASK".parse::<WhatToShow>(), Ok(WhatToShow::BidAsk));
-    assert_eq!("AGGTRADES".parse::<WhatToShow>(), Ok(WhatToShow::AggTrades));
-    assert_eq!("HISTORICAL_VOLATILITY".parse::<WhatToShow>(), Ok(WhatToShow::HistoricalVolatility));
-    assert_eq!("OPTION_IMPLIED_VOLATILITY".parse::<WhatToShow>(), Ok(WhatToShow::OptionImpliedVolatility));
-    assert_eq!("FEE_RATE".parse::<WhatToShow>(), Ok(WhatToShow::FeeRate));
-    assert_eq!("SCHEDULE".parse::<WhatToShow>(), Ok(WhatToShow::Schedule));
-    assert_eq!("ADJUSTED_LAST".parse::<WhatToShow>(), Ok(WhatToShow::AdjustedLast));
+    for (text, expected) in [
+        ("TRADES", WhatToShow::Trades),
+        ("MIDPOINT", WhatToShow::MidPoint),
+        ("BID", WhatToShow::Bid),
+        ("ASK", WhatToShow::Ask),
+        ("BID_ASK", WhatToShow::BidAsk),
+        ("AGGTRADES", WhatToShow::AggTrades),
+        ("HISTORICAL_VOLATILITY", WhatToShow::HistoricalVolatility),
+        ("OPTION_IMPLIED_VOLATILITY", WhatToShow::OptionImpliedVolatility),
+        ("FEE_RATE", WhatToShow::FeeRate),
+        ("SCHEDULE", WhatToShow::Schedule),
+        ("ADJUSTED_LAST", WhatToShow::AdjustedLast),
+    ] {
+        assert_eq!(text.parse::<WhatToShow>().unwrap(), expected, "{text}");
+    }
 }
 
 /// `(variant, wire text, 5.x variant name)` for every variant, written independently of the
@@ -109,7 +113,7 @@ fn bar_size_round_trips_its_wire_text() {
             name.to_uppercase(),
             name.to_lowercase(),
         ] {
-            assert_eq!(input.parse::<BarSize>(), Ok(bar_size), "FromStr({input})");
+            assert_eq!(input.parse::<BarSize>().unwrap(), bar_size, "FromStr({input})");
         }
         assert_eq!(
             serde_json::from_value::<BarSize>(serde_json::json!(name)).unwrap(),
@@ -148,60 +152,44 @@ fn duration() {
 
 #[test]
 fn duration_parse() {
-    assert_eq!("1 S".parse(), Ok(Duration::seconds(1)));
-    assert_eq!("2 D".parse(), Ok(Duration::days(2)));
-    assert_eq!("3 W".parse(), Ok(Duration::weeks(3)));
-    assert_eq!("4 M".parse(), Ok(Duration::months(4)));
-    assert_eq!("5 Y".parse(), Ok(Duration::years(5)));
+    assert_eq!("1 S".parse::<Duration>().unwrap(), Duration::seconds(1));
+    assert_eq!("2 D".parse::<Duration>().unwrap(), Duration::days(2));
+    assert_eq!("3 W".parse::<Duration>().unwrap(), Duration::weeks(3));
+    assert_eq!("4 M".parse::<Duration>().unwrap(), Duration::months(4));
+    assert_eq!("5 Y".parse::<Duration>().unwrap(), Duration::years(5));
 
-    assert_eq!(
-        "".parse::<Duration>(),
-        Err(HistoricalParseError::Duration("".to_string(), "Empty string".to_string()))
-    );
-    assert_eq!(
-        "1S".parse::<Duration>(),
-        Err(HistoricalParseError::Duration("1S".to_string(), "Missing delimiter".to_string()))
-    );
-    assert_eq!(
-        "1 X".parse::<Duration>(),
-        Err(HistoricalParseError::Duration("1 X".to_string(), "Unsupported unit".to_string()))
-    );
-
-    let expected_int_error = "abc ".parse::<i32>().unwrap_err();
-    assert_eq!(
-        "abc ".parse::<Duration>(),
-        Err(HistoricalParseError::ParseIntError("ABC".to_string(), expected_int_error))
-    );
+    // Each rejection is an `Error::Parse` carrying the whole input.
+    for (input, reason) in [
+        ("", "empty Duration"),
+        ("1S", "Duration needs a space between count and unit"),
+        ("1 X", "Duration unit is not S, D, W, M or Y"),
+        ("abc S", "Duration count: invalid digit found in string"),
+    ] {
+        match input.parse::<Duration>() {
+            Err(Error::Parse {
+                field: None,
+                value,
+                reason: got,
+            }) => {
+                assert_eq!(value, input, "{input:?}");
+                assert_eq!(got, reason, "{input:?}");
+            }
+            other => panic!("{input:?}: expected Error::Parse, got {other:?}"),
+        }
+    }
 }
 
 #[test]
-fn historical_parse_error_display() {
-    let expected_int_error = "abc".parse::<i32>().unwrap_err();
-
-    let cases = vec![
+fn parameter_parse_errors_name_the_input() {
+    let cases = [
+        ("invalid".parse::<BarSize>().unwrap_err(), r#"parse error: "invalid": unknown BarSize"#),
         (
-            HistoricalParseError::BarSize("invalid".to_string()),
-            "Invalid BarSize input 'invalid'".to_string(),
+            "invalid".parse::<WhatToShow>().unwrap_err(),
+            r#"parse error: "invalid": unknown WhatToShow"#,
         ),
         (
-            HistoricalParseError::Duration("invalid".to_string(), "Empty string".to_string()),
-            "Invalid Duration input 'invalid' Empty string".to_string(),
-        ),
-        (
-            HistoricalParseError::Duration("1S".to_string(), "Missing delimiter".to_string()),
-            "Invalid Duration input '1S' Missing delimiter".to_string(),
-        ),
-        (
-            HistoricalParseError::Duration("1 X".to_string(), "Unsupported unit".to_string()),
-            "Invalid Duration input '1 X' Unsupported unit".to_string(),
-        ),
-        (
-            HistoricalParseError::ParseIntError("abc ".to_string(), expected_int_error),
-            "ParseIntError 'abc ' invalid digit found in string".to_string(),
-        ),
-        (
-            HistoricalParseError::WhatToShow("invalid".to_string()),
-            "Invalid WhatToShow input 'invalid'".to_string(),
+            "1 X".parse::<Duration>().unwrap_err(),
+            r#"parse error: "1 X": Duration unit is not S, D, W, M or Y"#,
         ),
     ];
     for (error, expected) in cases {

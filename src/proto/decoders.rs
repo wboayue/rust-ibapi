@@ -78,7 +78,7 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
     }
     let value = text
         .parse::<f64>()
-        .map_err(|e| Error::parse_field(text, format!("invalid decimal wire value: {e}")))?;
+        .map_err(|e| Error::invalid_value(text, format!("invalid decimal wire value: {e}")))?;
     // Spelling-independent half of the unset check: catches every rendering of
     // the f64::MAX sentinel ("1.7976931348623157E308", "…e308", "…E+308") and
     // absorbs inf/NaN, which f64::from_str accepts but no size can be.
@@ -120,7 +120,7 @@ pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
 /// field, including an explicit `"0"` (evidence: #1088, #1089). Otherwise use
 /// [`parse_decimal_or_zero`] or [`parse_optional_decimal`]: a decode error ends
 /// the stream it arrives on.
-pub(crate) fn required_decimal(opt: Option<&str>, field: &str, message: &str) -> Result<f64, Error> {
+pub(crate) fn required_decimal(opt: Option<&str>, field: &'static str, message: &str) -> Result<f64, Error> {
     required(parse_optional_decimal(opt)?, field, message)
 }
 
@@ -132,13 +132,13 @@ pub(crate) fn required_decimal(opt: Option<&str>, field: &str, message: &str) ->
 /// Accepts `Option<&str>` so proto callers can pass `proto.field.as_deref()`
 /// and text-protocol callers can pass `Some(text_str.as_str())` without
 /// allocating a wrapper.
-pub(crate) fn parse_required<T>(opt: Option<&str>, label: &str) -> Result<T, Error>
+pub(crate) fn parse_required<T>(opt: Option<&str>, label: &'static str) -> Result<T, Error>
 where
     T: std::str::FromStr<Err = Error>,
 {
     match opt {
-        Some(s) if !s.is_empty() => s.parse(),
-        _ => Err(Error::Parse(0, String::new(), format!("missing {label}"))),
+        Some(s) if !s.is_empty() => s.parse().map_err(|e: Error| e.in_field(label)),
+        _ => Err(Error::invalid_field(label, "missing")),
     }
 }
 
@@ -149,11 +149,13 @@ where
 /// Accepts `Option<&str>` so proto callers can pass `proto.field.as_deref()`
 /// and text-protocol callers can pass `Some(text_str.as_str())` without
 /// allocating a wrapper.
-pub(crate) fn parse_optional<T>(opt: Option<&str>) -> Result<Option<T>, Error>
+pub(crate) fn parse_optional<T>(opt: Option<&str>, field: &'static str) -> Result<Option<T>, Error>
 where
     T: std::str::FromStr<Err = Error>,
 {
-    opt.filter(|s| !s.is_empty()).map(|s| s.parse()).transpose()
+    opt.filter(|s| !s.is_empty())
+        .map(|s| s.parse().map_err(|e: Error| e.in_field(field)))
+        .transpose()
 }
 
 /// A proto submessage or scalar the frame is meaningless without.
@@ -166,8 +168,8 @@ where
 /// frame as `Error::Parse` instead. Defaulting is the one option neither client
 /// takes: it hands the caller data that reads as real, such as a phantom BUY
 /// order over an empty contract (docs/rules/wire/enum-typing.md).
-pub(crate) fn required<T>(field: Option<T>, name: &str, message: &str) -> Result<T, Error> {
-    field.ok_or_else(|| Error::parse_proto(name, format!("missing in {message}")))
+pub(crate) fn required<T>(field: Option<T>, name: &'static str, message: &str) -> Result<T, Error> {
+    field.ok_or_else(|| Error::invalid_field(name, format!("missing in {message}")))
 }
 
 pub(crate) fn ts(secs: i64) -> time::OffsetDateTime {
@@ -189,10 +191,10 @@ pub fn decode_contract(proto: &proto::Contract) -> Result<Contract, Error> {
     Ok(Contract {
         contract_id: proto.con_id.unwrap_or_default(),
         symbol: Symbol::from(s(&proto.symbol)),
-        security_type: parse_optional(proto.sec_type.as_deref())?.unwrap_or_else(|| SecurityType::Other(String::new())),
+        security_type: parse_optional(proto.sec_type.as_deref(), "sec_type")?.unwrap_or_else(|| SecurityType::Other(String::new())),
         last_trade_date_or_contract_month: proto.last_trade_date_or_contract_month.as_deref().and_then(Expiry::from_wire),
         strike: proto.strike.unwrap_or_default(),
-        right: parse_optional(proto.right.as_deref())?,
+        right: parse_optional(proto.right.as_deref(), "right")?,
         multiplier: proto.multiplier.map(|m| m.to_string()).unwrap_or_default(),
         exchange: Exchange::from(s(&proto.exchange)),
         primary_exchange: Exchange::from(s(&proto.primary_exch)),
@@ -200,7 +202,7 @@ pub fn decode_contract(proto: &proto::Contract) -> Result<Contract, Error> {
         local_symbol: s(&proto.local_symbol),
         trading_class: s(&proto.trading_class),
         include_expired: proto.include_expired.unwrap_or_default(),
-        security_id_type: parse_optional::<SecurityIdType>(proto.sec_id_type.as_deref())?,
+        security_id_type: parse_optional::<SecurityIdType>(proto.sec_id_type.as_deref(), "sec_id_type")?,
         security_id: s(&proto.sec_id),
         description: s(&proto.description),
         issuer_id: s(&proto.issuer_id),
@@ -229,7 +231,7 @@ pub fn decode_combo_leg(proto: &proto::ComboLeg) -> Result<ComboLeg, Error> {
     Ok(ComboLeg {
         contract_id: proto.con_id.unwrap_or_default(),
         ratio: proto.ratio.unwrap_or_default(),
-        action: parse_required::<LegAction>(proto.action.as_deref(), "LegAction")?,
+        action: parse_required::<LegAction>(proto.action.as_deref(), "action")?,
         exchange: s(&proto.exchange),
         open_close: ComboLegOpenClose::from(proto.open_close.unwrap_or_default()),
         short_sale_slot: ShortSaleSlot::from(proto.short_sales_slot.unwrap_or_default()),

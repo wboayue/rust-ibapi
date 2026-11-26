@@ -551,7 +551,7 @@ async fn cancel_contract_details_rejects_old_server_version() {
     let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA - 1);
 
     let result = client.cancel_contract_details(42).await;
-    assert!(matches!(result, Err(crate::Error::ServerVersion(..))));
+    assert!(matches!(result, Err(crate::Error::ServerVersion { .. })));
     assert_eq!(request_message_count(&message_bus), 0);
 }
 

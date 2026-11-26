@@ -20,7 +20,7 @@ pub(crate) fn decode_display_group_list_proto(p: crate::proto::DisplayGroupList)
         .unwrap_or_default()
         .split('|')
         .filter(|id| !id.is_empty())
-        .map(|id| id.parse().map_err(|e| Error::parse_field(id, format!("invalid display group id: {e}"))))
+        .map(|id| id.parse().map_err(|e| Error::invalid_value(id, format!("invalid display group id: {e}"))))
         .collect()
 }
 

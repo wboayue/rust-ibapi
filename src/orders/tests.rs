@@ -164,11 +164,12 @@ fn wire_enum_serde_reads_5x_variant_names_as_documented() {
 fn wire_enum_distinguishes_empty_from_unknown() {
     // Both macro arms report the two failures apart: no value at all vs. a
     // value this crate does not model. `parse_required` reaches the first only
-    // when a caller parses directly — it intercepts empty with "missing
-    // {label}", which names the field instead of the type.
+    // when a caller parses directly — it intercepts empty as
+    // `field: Some(label)`, reason "missing", which names the field instead of
+    // the type.
     for (input, reason) in [("", "empty Action"), ("NOTASIDE", "unknown Action")] {
         match input.parse::<Action>() {
-            Err(Error::Parse(_, raw, got)) => {
+            Err(Error::Parse { value: raw, reason: got, .. }) => {
                 assert_eq!(raw, input);
                 assert_eq!(got, reason);
             }
@@ -178,7 +179,7 @@ fn wire_enum_distinguishes_empty_from_unknown() {
 
     // The `fallback` arm only ever rejects empty; anything else is Unknown.
     match "".parse::<Rule80A>() {
-        Err(Error::Parse(_, _, reason)) => assert_eq!(reason, "empty Rule80A"),
+        Err(Error::Parse { reason, .. }) => assert_eq!(reason, "empty Rule80A"),
         other => panic!("expected Error::Parse for an empty Rule80A, got {other:?}"),
     }
 }

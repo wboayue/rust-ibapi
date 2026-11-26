@@ -6,64 +6,79 @@ use crate::orders::{ExecutionSide, OrderStatusKind, ShortSaleSlot};
 
 #[test]
 fn parse_required_none_errors_with_label() {
-    let err = parse_required::<OrderStatusKind>(None, "OrderStatus").unwrap_err();
+    let err = parse_required::<OrderStatusKind>(None, "status").unwrap_err();
     match err {
-        Error::Parse(_, _, msg) => assert!(msg.contains("OrderStatus"), "expected label in message, got: {msg}"),
+        Error::Parse { field, reason, .. } => {
+            assert_eq!(field, Some("status"));
+            assert_eq!(reason, "missing");
+        }
         other => panic!("expected Error::Parse, got {other:?}"),
     }
 }
 
 #[test]
 fn parse_required_empty_errors_with_label() {
-    let err = parse_required::<OrderStatusKind>(Some(""), "OrderStatus").unwrap_err();
+    let err = parse_required::<OrderStatusKind>(Some(""), "status").unwrap_err();
     match err {
-        Error::Parse(_, _, msg) => assert!(msg.contains("OrderStatus"), "expected label in message, got: {msg}"),
+        Error::Parse { field, reason, .. } => {
+            assert_eq!(field, Some("status"));
+            assert_eq!(reason, "missing");
+        }
         other => panic!("expected Error::Parse, got {other:?}"),
     }
 }
 
 #[test]
 fn parse_required_valid_round_trips() {
-    let v: OrderStatusKind = parse_required(Some("Submitted"), "OrderStatus").unwrap();
+    let v: OrderStatusKind = parse_required(Some("Submitted"), "status").unwrap();
     assert_eq!(v, OrderStatusKind::Submitted);
 }
 
 #[test]
 fn parse_required_defers_unknown_to_fromstr() {
     // The helper adds no vocabulary policy of its own: a closed enum's
-    // unknown value propagates as the FromStr error. (Open-enum fallback
-    // behavior is owned by the enum and tested beside it — see
-    // order_status_kind_preserves_unknown_wire_status.)
-    assert!(matches!(
-        parse_required::<ExecutionSide>(Some("Garbage"), "side"),
-        Err(Error::Parse(_, _, _))
-    ));
+    // unknown value propagates as the FromStr error, with the field named.
+    // (Open-enum fallback behavior is owned by the enum and tested beside it
+    // — see order_status_kind_preserves_unknown_wire_status.)
+    match parse_required::<ExecutionSide>(Some("Garbage"), "side") {
+        Err(Error::Parse { field, value, .. }) => {
+            assert_eq!(field, Some("side"));
+            assert_eq!(value, "Garbage");
+        }
+        other => panic!("expected Error::Parse, got {other:?}"),
+    }
 }
 
 // === parse_optional ===
 
 #[test]
 fn parse_optional_none_is_ok_none() {
-    let v: Option<OrderStatusKind> = parse_optional(None).unwrap();
+    let v: Option<OrderStatusKind> = parse_optional(None, "status").unwrap();
     assert_eq!(v, None);
 }
 
 #[test]
 fn parse_optional_empty_is_ok_none() {
-    let v: Option<OrderStatusKind> = parse_optional(Some("")).unwrap();
+    let v: Option<OrderStatusKind> = parse_optional(Some(""), "status").unwrap();
     assert_eq!(v, None);
 }
 
 #[test]
 fn parse_optional_valid_round_trips() {
-    let v: Option<OrderStatusKind> = parse_optional(Some("Filled")).unwrap();
+    let v: Option<OrderStatusKind> = parse_optional(Some("Filled"), "status").unwrap();
     assert_eq!(v, Some(OrderStatusKind::Filled));
 }
 
 #[test]
 fn parse_optional_defers_unknown_to_fromstr() {
     // Mirrors parse_required_defers_unknown_to_fromstr.
-    assert!(matches!(parse_optional::<ExecutionSide>(Some("Garbage")), Err(Error::Parse(_, _, _))));
+    match parse_optional::<ExecutionSide>(Some("Garbage"), "side") {
+        Err(Error::Parse { field, value, .. }) => {
+            assert_eq!(field, Some("side"));
+            assert_eq!(value, "Garbage");
+        }
+        other => panic!("expected Error::Parse, got {other:?}"),
+    }
 }
 
 // === parse_optional_decimal ===
@@ -163,7 +178,7 @@ fn parse_decimal_or_zero_passes_values_through() {
 
 #[test]
 fn parse_decimal_or_zero_propagates_parse_error() {
-    assert!(matches!(parse_decimal_or_zero(Some("abc")), Err(Error::Parse(_, _, _))));
+    assert!(matches!(parse_decimal_or_zero(Some("abc")), Err(Error::Parse { .. })));
 }
 
 // === decode_combo_leg end-to-end (docs/rules/testing/exercise-production-code.md) ===
@@ -179,19 +194,19 @@ fn proto_leg(action: Option<&str>) -> proto::ComboLeg {
 
 #[test]
 fn decode_combo_leg_rejects_missing_action() {
-    assert!(matches!(decode_combo_leg(&proto_leg(None)), Err(Error::Parse(_, _, _))));
+    assert!(matches!(decode_combo_leg(&proto_leg(None)), Err(Error::Parse { .. })));
 }
 
 #[test]
 fn decode_combo_leg_rejects_empty_action() {
-    assert!(matches!(decode_combo_leg(&proto_leg(Some(""))), Err(Error::Parse(_, _, _))));
+    assert!(matches!(decode_combo_leg(&proto_leg(Some(""))), Err(Error::Parse { .. })));
 }
 
 #[test]
 fn decode_combo_leg_rejects_unknown_action() {
     // SLONG is the variant LegAction deliberately excludes — guards against
     // a future "let's just reuse Action after all" regression.
-    assert!(matches!(decode_combo_leg(&proto_leg(Some("SLONG"))), Err(Error::Parse(_, _, _))));
+    assert!(matches!(decode_combo_leg(&proto_leg(Some("SLONG"))), Err(Error::Parse { .. })));
 }
 
 #[test]
@@ -247,7 +262,7 @@ fn decode_contract_propagates_bad_combo_leg() {
         combo_legs: vec![proto_leg(Some("NOTAVARIANT"))],
         ..stk_contract()
     };
-    assert!(matches!(decode_contract(&proto_contract), Err(Error::Parse(_, _, _))));
+    assert!(matches!(decode_contract(&proto_contract), Err(Error::Parse { .. })));
 }
 
 // === decode_contract sec_type ===

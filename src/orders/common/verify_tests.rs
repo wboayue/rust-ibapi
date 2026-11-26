@@ -107,7 +107,11 @@ fn verify_order_gates_fields_above_the_floor() {
         (gate.set)(&mut order);
         assert!(verify_order(gate.version, &order).is_ok(), "{name} at its minimum version");
         match verify_order(gate.version - 1, &order) {
-            Err(Error::ServerVersion(required, actual, message)) => assert_eq!(
+            Err(Error::ServerVersion {
+                required,
+                actual,
+                feature: message,
+            }) => assert_eq!(
                 (required, actual, message.as_str()),
                 (gate.version, gate.version - 1, gate.feature),
                 "{name}"

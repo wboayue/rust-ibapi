@@ -112,7 +112,16 @@ mod trade_tick_tests {
     fn decode_trade_tick_proto_invalid_type() {
         // tick_type 3 = BidAsk — wrong feed for the trade decoder.
         let err = decode_trade_tick_proto(fixture(3).to_proto()).expect_err("should reject bid/ask tick type");
-        assert!(err.to_string().contains("Unexpected tick_type"));
+        assert!(
+            matches!(
+                err,
+                Error::Parse {
+                    field: Some("tick_type"),
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
     }
 
     #[test]
@@ -120,7 +129,16 @@ mod trade_tick_tests {
         let mut msg = fixture(1).to_proto();
         msg.tick_type = None;
         let err = decode_trade_tick_proto(msg).expect_err("should reject absent tick type");
-        assert!(err.to_string().contains("Unexpected tick_type"));
+        assert!(
+            matches!(
+                err,
+                Error::Parse {
+                    field: Some("tick_type"),
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
     }
 
     #[test]
@@ -184,7 +202,16 @@ mod bid_ask_tests {
             tick: None,
         };
         let err = decode_bid_ask_tick_proto(msg).expect_err("should reject last tick type");
-        assert!(err.to_string().contains("Unexpected tick_type"));
+        assert!(
+            matches!(
+                err,
+                Error::Parse {
+                    field: Some("tick_type"),
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
     }
 }
 
@@ -210,7 +237,16 @@ mod mid_point_tests {
             tick: None,
         };
         let err = decode_mid_point_tick_proto(msg).expect_err("should reject last tick type");
-        assert!(err.to_string().contains("Unexpected tick_type"));
+        assert!(
+            matches!(
+                err,
+                Error::Parse {
+                    field: Some("tick_type"),
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
     }
 }
 

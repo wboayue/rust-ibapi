@@ -133,7 +133,7 @@ fn update_config_server_version_error() {
 
     let client = Client::stubbed(message_bus, crate::server_versions::UPDATE_CONFIG - 1);
     match client.update_config().reset_api_order_sequence().submit() {
-        Err(Error::ServerVersion(_, _, _)) => {}
+        Err(Error::ServerVersion { .. }) => {}
         other => panic!("expected ServerVersion error, got {other:?}"),
     }
 }

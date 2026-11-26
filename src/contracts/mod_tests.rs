@@ -537,7 +537,7 @@ fn sessions_skip_empty_entries_and_fail_on_one_bad_entry() {
 
     assert_eq!(details.trading_sessions().unwrap().len(), 1);
     assert_eq!(ContractDetails::default().trading_sessions().unwrap(), vec![]);
-    assert!(matches!(details.liquid_sessions(), Err(Error::Parse(_, value, _)) if value == "20090507:0700-1830"));
+    assert!(matches!(details.liquid_sessions(), Err(Error::Parse { value, .. }) if value == "20090507:0700-1830"));
 }
 
 /// JSON written before the event-contract fields existed still deserializes, with them empty.

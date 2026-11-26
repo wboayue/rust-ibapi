@@ -1,6 +1,5 @@
 use super::*;
 use crate::common::test_utils::helpers::tws_error_notice;
-use crate::market_data::historical::HistoricalParseError;
 use crate::messages::ResponseMessage;
 use crate::orders::builder::ValidationError;
 use crate::proto::decoders::DecodeProto;
@@ -30,11 +29,11 @@ fn error_display() {
         (Error::Io(io::Error::new(io::ErrorKind::NotFound, "file not found")), "file not found"),
         (Error::ParseTime(parse_time_error()), "the 'month' component could not be parsed"),
         (
-            Error::Parse(1, "value".to_string(), "message".to_string()),
-            "parse error: 1 - value - message",
-        ),
-        (
-            Error::ServerVersion(2, 1, "old version".to_string()),
+            Error::ServerVersion {
+                required: 2,
+                actual: 1,
+                feature: "old version".to_string(),
+            },
             "server version 2 required, got 1: old version",
         ),
         (Error::InvalidArgument("bad arg".to_string()), "InvalidArgument: bad arg"),
@@ -64,10 +63,6 @@ fn error_display() {
                 requested: AccountId("DU2".into()),
             },
             "account updates already streaming DU1; cancel it before requesting DU2",
-        ),
-        (
-            Error::HistoricalParseError(HistoricalParseError::BarSize("bogus".to_string())),
-            "HistoricalParseError: Invalid BarSize input 'bogus'",
         ),
     ];
 
@@ -129,12 +124,45 @@ fn from_parse_time_error() {
 }
 
 #[test]
-fn from_historical_parse_error() {
-    fn parse(s: &str) -> Result<crate::market_data::historical::BarSize, Error> {
-        Ok(s.parse()?)
+fn parse_display_shows_field_and_value_when_present() {
+    let cases = [
+        (Error::invalid_value("XYZ", "unknown Action"), r#"parse error: "XYZ": unknown Action"#),
+        (Error::invalid_field("action", "missing"), "parse error: action: missing"),
+        (
+            Error::Parse {
+                field: Some("action"),
+                value: "XYZ".into(),
+                reason: "unknown Action".into(),
+            },
+            r#"parse error: action "XYZ": unknown Action"#,
+        ),
+        (Error::invalid_value("", "empty Action"), "parse error: empty Action"),
+        (Error::invalid_text_field(3, "x", "bad int"), r#"parse error: "x": bad int (field 3)"#),
+        (Error::eof_at(2, "int"), "parse error: expected int and found end of message (field 2)"),
+    ];
+    for (error, expected) in cases {
+        assert_eq!(error.to_string(), expected);
     }
-    let error = parse("bogus").unwrap_err();
-    assert!(matches!(error, Error::HistoricalParseError(HistoricalParseError::BarSize(ref s)) if s == "bogus"));
+}
+
+#[test]
+fn parse_constructors_fill_the_named_fields() {
+    match Error::invalid_value("bogus", "unknown BarSize") {
+        Error::Parse { field, value, reason } => {
+            assert_eq!(field, None);
+            assert_eq!(value, "bogus");
+            assert_eq!(reason, "unknown BarSize");
+        }
+        other => panic!("expected Parse, got {other:?}"),
+    }
+    match Error::invalid_field("fa_data_type", "missing in ReceiveFa") {
+        Error::Parse { field, value, reason } => {
+            assert_eq!(field, Some("fa_data_type"));
+            assert!(value.is_empty());
+            assert_eq!(reason, "missing in ReceiveFa");
+        }
+        other => panic!("expected Parse, got {other:?}"),
+    }
 }
 
 #[test]
@@ -227,8 +255,16 @@ fn clone_preserves_payloaded_variants() {
     let response = ResponseMessage::from("4\02\0-1\0200\0boom\0");
     let originals = vec![
         Error::Io(io::Error::other("io")),
-        Error::Parse(3, "v".into(), "m".into()),
-        Error::ServerVersion(10, 5, "feat".into()),
+        Error::Parse {
+            field: Some("f"),
+            value: "v".into(),
+            reason: "m".into(),
+        },
+        Error::ServerVersion {
+            required: 10,
+            actual: 5,
+            feature: "feat".into(),
+        },
         Error::InvalidArgument("a".into()),
         Error::Validation(ValidationError::MissingRequiredField("action")),
         Error::UnsupportedTimeZone("US/Foo".into()),
@@ -236,7 +272,6 @@ fn clone_preserves_payloaded_variants() {
         Error::unexpected_wire_format(&response),
         Error::InvalidFrame("frame length 0 is shorter than the 4-byte message id".into()),
         tws_error_notice(404, "nope"),
-        Error::HistoricalParseError(HistoricalParseError::WhatToShow("Z".into())),
         protobuf_decode_error(),
         Error::ParseTime(parse_time_error()),
         Error::AccountUpdatesInUse {
@@ -296,7 +331,7 @@ fn is_connection_lost_false_for_non_connection() {
         tws_error_notice(200, "No security found"),
         Error::Io(io::Error::new(io::ErrorKind::NotFound, "missing")),
         Error::InvalidArgument("boom".to_string()),
-        Error::Parse(1, "v".to_string(), "m".to_string()),
+        Error::invalid_value("v", "m"),
     ];
 
     for error in cases {
@@ -322,4 +357,19 @@ fn is_read_timeout_only_for_no_data_yet() {
     ] {
         assert!(!error.is_read_timeout(), "{error:?} should not count as a read timeout");
     }
+}
+
+#[test]
+fn in_field_names_only_an_unnamed_parse_error() {
+    // A `FromStr` error gains the decoder's field name.
+    let named = Error::invalid_value("XYZ", "unknown Action").in_field("action");
+    assert!(
+        matches!(&named, Error::Parse { field: Some("action"), value, .. } if value == "XYZ"),
+        "{named:?}"
+    );
+    // A field already named is kept.
+    let kept = Error::invalid_field("contract", "missing in OpenOrder").in_field("action");
+    assert!(matches!(kept, Error::Parse { field: Some("contract"), .. }), "{kept:?}");
+    // Any other error passes through.
+    assert!(matches!(Error::Timeout.in_field("action"), Error::Timeout));
 }

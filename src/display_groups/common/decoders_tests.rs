@@ -44,7 +44,7 @@ fn decode_display_group_list_proto_works() {
         let result = decode_display_group_list_proto(p);
         match expected {
             Some(ids) => assert_eq!(result.unwrap(), *ids, "groups {groups:?}"),
-            None => assert!(matches!(result, Err(Error::Parse(..))), "groups {groups:?}: {result:?}"),
+            None => assert!(matches!(result, Err(Error::Parse { .. })), "groups {groups:?}: {result:?}"),
         }
     }
 }

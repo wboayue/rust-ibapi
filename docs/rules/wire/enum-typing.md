@@ -110,7 +110,7 @@ exists.
 
 ## Required tests
 
-- Both `None` and `Some("")` produce `Err(Error::Parse(..))` for required fields, or `Ok(None)` for
+- Both `None` and `Some("")` produce `Err(Error::Parse { .. })` for required fields, or `Ok(None)` for
   optional ones.
 - A `Display` / `FromStr` round-trip over the full variant table, plus a `modeled_index` guard (an
   exhaustive match, so a new variant without a table row fails to compile — see

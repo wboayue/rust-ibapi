@@ -168,7 +168,7 @@ fn place_order_gates_order_params() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]));
         let client = Client::stubbed(message_bus.clone(), gate.version - 1);
         match client.place_order(20, &contract, &order) {
-            Err(Error::ServerVersion(required, _, _)) => assert_eq!(required, gate.version, "{name}"),
+            Err(Error::ServerVersion { required, .. }) => assert_eq!(required, gate.version, "{name}"),
             Err(other) => panic!("{name}: expected ServerVersion error, got {other:?}"),
             Ok(_) => panic!("{name}: expected place_order to be rejected below the gate"),
         }
@@ -923,7 +923,7 @@ fn order_update_stream_ends_on_empty_action() {
     let stream = client.order_update_stream().expect("failed to create stream");
 
     match stream.next_data() {
-        Some(Err(Error::Parse(_, _, msg))) => assert!(msg.contains("action"), "expected the field name in the error, got {msg}"),
+        Some(Err(Error::Parse { field, .. })) => assert_eq!(field, Some("action"), "expected the field name in the error"),
         other => panic!("expected Error::Parse for the empty action, got {other:?}"),
     }
     assert!(stream.next_data().is_none(), "stream should end after a decode error");
@@ -1259,7 +1259,7 @@ fn preset_legs_rejected_below_attached_orders_gate() {
     let result = client.order(&contract).buy(100).limit(50.0).preset_stop_loss().submit();
 
     match result {
-        Err(Error::ServerVersion(required, _, _)) => assert_eq!(required, server_versions::ATTACHED_ORDERS),
+        Err(Error::ServerVersion { required, .. }) => assert_eq!(required, server_versions::ATTACHED_ORDERS),
         other => panic!("expected ServerVersion error, got {other:?}"),
     }
     assert_eq!(request_message_count(&bus), 0);

@@ -581,7 +581,7 @@ impl FromStr for ExpirationDate {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let invalid = || Error::parse_field(s, "expected an expiration date as YYYYMMDD");
+        let invalid = || Error::invalid_value(s, "expected an expiration date as YYYYMMDD");
         if s.len() != 8 || !s.bytes().all(|b| b.is_ascii_digit()) {
             return Err(invalid());
         }
@@ -614,7 +614,7 @@ impl FromStr for ContractMonth {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let invalid = || Error::parse_field(s, "expected a contract month as YYYYMM");
+        let invalid = || Error::invalid_value(s, "expected a contract month as YYYYMM");
         if s.len() != 6 || !s.bytes().all(|b| b.is_ascii_digit()) {
             return Err(invalid());
         }
@@ -739,7 +739,7 @@ impl FromStr for Expiry {
         match s.len() {
             8 => s.parse().map(Expiry::Date),
             6 => s.parse().map(Expiry::Month),
-            _ => Err(Error::parse_field(s, "expected YYYYMMDD (last trading day) or YYYYMM (contract month)")),
+            _ => Err(Error::invalid_value(s, "expected YYYYMMDD (last trading day) or YYYYMM (contract month)")),
         }
     }
 }
@@ -838,7 +838,7 @@ impl FromStr for TradingSession {
     /// Parses one entry in the form TWS 970 and later sends: `YYYYMMDD:HHMM-YYYYMMDD:HHMM`
     /// or `YYYYMMDD:CLOSED`. The pre-970 form (`20090507:0700-1830`) is an [`Error::Parse`].
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let invalid = || Error::parse_field(s, EXPECTED_SESSION_FORMAT);
+        let invalid = || Error::invalid_value(s, EXPECTED_SESSION_FORMAT);
 
         if let Some(date) = s.strip_suffix(":CLOSED") {
             let date = Date::parse(date, time::macros::format_description!("[year][month][day]")).map_err(|_| invalid())?;

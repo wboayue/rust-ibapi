@@ -6,7 +6,6 @@
 use thiserror::Error;
 
 use crate::accounts::types::AccountId;
-use crate::market_data::historical::HistoricalParseError;
 use crate::messages::{Notice, ResponseMessage};
 use crate::orders::builder::ValidationError;
 
@@ -27,15 +26,30 @@ pub enum Error {
     ParseTime(#[from] time::error::Parse),
 
     // IBAPI-specific errors
-    /// Failed to parse a protocol message.
-    /// Contains: (field_index, field_value, error_description)
-    #[error("parse error: {0} - {1} - {2}")]
-    Parse(usize, String, String),
+    /// A value from TWS, or a string passed to a `FromStr`, could not be parsed.
+    #[error("parse error: {}", parse_context(*field, value, reason))]
+    Parse {
+        /// The field that failed, by its protobuf name (`"action"`,
+        /// `"contract"`), when the decoder that read it names it. `None` from a
+        /// `FromStr` called directly, and where a decoder parses a value without
+        /// naming its field.
+        field: Option<&'static str>,
+        /// The text that failed to parse. Empty when the field was absent.
+        value: String,
+        /// What was wrong with it.
+        reason: String,
+    },
 
-    /// Server version requirement not met.
-    /// Contains: (required_version, actual_version, feature_name)
-    #[error("server version {0} required, got {1}: {2}")]
-    ServerVersion(i32, i32, String),
+    /// The connected server is older than a request or the client needs.
+    #[error("server version {required} required, got {actual}: {feature}")]
+    ServerVersion {
+        /// The minimum server version for `feature`.
+        required: i32,
+        /// The connected server's version.
+        actual: i32,
+        /// What needs `required`.
+        feature: String,
+    },
 
     /// Invalid argument provided to API method.
     #[error("InvalidArgument: {0}")]
@@ -191,10 +205,6 @@ pub enum Error {
         order_id: i32,
     },
 
-    /// Wraps errors parsing historical data parameters.
-    #[error("HistoricalParseError: {0}")]
-    HistoricalParseError(#[from] HistoricalParseError),
-
     /// Failed to decode a protobuf message. The decode detail is in
     /// `Display`; [`source`](std::error::Error::source) is `None`.
     #[error("protobuf decode error: {0}")]
@@ -255,30 +265,54 @@ impl Error {
         Error::UnexpectedWireFormat(format!("{message:?}"))
     }
 
-    /// Build an [`Error::Parse`] when the failing input came from a text-protocol
-    /// wire field whose index is not load-bearing (e.g. inside a helper that has
-    /// lost the index, or in a proto codepath). Encapsulates the placeholder `0`
-    /// so the variant tuple stays the same shape across call sites while
-    /// readers don't have to remember the convention.
-    pub(crate) fn parse_field(value: impl Into<String>, reason: impl Into<String>) -> Error {
-        Error::Parse(0, value.into(), reason.into())
+    /// Build an [`Error::Parse`] for text that failed to parse, where no field
+    /// name is at hand (a `FromStr`, a token inside a field).
+    pub(crate) fn invalid_value(value: impl Into<String>, reason: impl Into<String>) -> Error {
+        Error::Parse {
+            field: None,
+            value: value.into(),
+            reason: reason.into(),
+        }
     }
 
-    /// Same as [`Error::parse_field`], but named for proto-decoded inputs where
-    /// the first arg is a logical field/identifier rather than a wire-field
-    /// string value. Variant shape is identical; the name disambiguates intent
-    /// at the call site.
-    pub(crate) fn parse_proto(field: impl Into<String>, reason: impl Into<String>) -> Error {
-        Error::Parse(0, field.into(), reason.into())
+    /// Build an [`Error::Parse`] naming the field, for a field that is absent
+    /// or holds something other than text (a timestamp out of range).
+    pub(crate) fn invalid_field(field: &'static str, reason: impl Into<String>) -> Error {
+        Error::Parse {
+            field: Some(field),
+            value: String::new(),
+            reason: reason.into(),
+        }
+    }
+
+    /// Build an [`Error::Parse`] for a text-cursor read: field `i` of the
+    /// message held `value` and failed with `reason`. The index goes into the
+    /// reason, since only the handshake still reads text fields by position.
+    /// `reason` is `impl Display` rather than `impl Into<String>` so
+    /// [`Error::eof_at`] can pass `format_args!` without allocating twice.
+    pub(crate) fn invalid_text_field(i: usize, value: impl Into<String>, reason: impl std::fmt::Display) -> Error {
+        Error::invalid_value(value, format!("{reason} (field {i})"))
+    }
+
+    /// Name the field of an [`Error::Parse`] that has none, such as one a
+    /// `FromStr` returned to a decoder that knows which field it was reading.
+    /// Any other error, or a `Parse` already naming a field, is unchanged.
+    pub(crate) fn in_field(self, name: &'static str) -> Error {
+        match self {
+            Error::Parse { field: None, value, reason } => Error::Parse {
+                field: Some(name),
+                value,
+                reason,
+            },
+            other => other,
+        }
     }
 
     /// Build an [`Error::Parse`] for cursor EOF: the message ran out of fields
-    /// while the caller was trying to read field index `i`. `label` names the
-    /// expected type ("int", "string", "datetime", ...) so the resulting
-    /// `parse error: i -  - expected <label> and found end of message`
-    /// pinpoints both location and intent.
+    /// while the caller was trying to read field `i`. `label` names the
+    /// expected type ("int", "string", ...).
     pub(crate) fn eof_at(i: usize, label: &str) -> Error {
-        Error::Parse(i, String::new(), format!("expected {label} and found end of message"))
+        Error::invalid_text_field(i, "", format_args!("expected {label} and found end of message"))
     }
 
     /// Returns `true` if this error means the TWS/Gateway stream is unusable in
@@ -351,14 +385,33 @@ impl Error {
     }
 }
 
+/// `Display` body of [`Error::Parse`]: the field and value when present, then
+/// the reason (`action "XYZ": unknown Action`).
+fn parse_context(field: Option<&str>, value: &str, reason: &str) -> String {
+    match (field, value.is_empty()) {
+        (Some(field), false) => format!("{field} {value:?}: {reason}"),
+        (Some(field), true) => format!("{field}: {reason}"),
+        (None, false) => format!("{value:?}: {reason}"),
+        (None, true) => reason.to_string(),
+    }
+}
+
 // Manual Clone because `std::io::Error` doesn't implement it.
 impl Clone for Error {
     fn clone(&self) -> Self {
         match self {
             Error::Io(e) => Error::Io(std::io::Error::new(e.kind(), e.to_string())),
             Error::ParseTime(e) => Error::ParseTime(*e),
-            Error::Parse(i, v, m) => Error::Parse(*i, v.clone(), m.clone()),
-            Error::ServerVersion(a, b, s) => Error::ServerVersion(*a, *b, s.clone()),
+            Error::Parse { field, value, reason } => Error::Parse {
+                field: *field,
+                value: value.clone(),
+                reason: reason.clone(),
+            },
+            Error::ServerVersion { required, actual, feature } => Error::ServerVersion {
+                required: *required,
+                actual: *actual,
+                feature: feature.clone(),
+            },
             Error::InvalidArgument(s) => Error::InvalidArgument(s.clone()),
             Error::Validation(e) => Error::Validation(e.clone()),
             Error::ConnectionFailed => Error::ConnectionFailed,
@@ -381,7 +434,6 @@ impl Clone for Error {
                 requested: requested.clone(),
             },
             Error::OrderIdInRequestRange { order_id } => Error::OrderIdInRequestRange { order_id: *order_id },
-            Error::HistoricalParseError(e) => Error::HistoricalParseError(e.clone()),
             Error::ProtobufDecode(e) => Error::ProtobufDecode(e.clone()),
         }
     }

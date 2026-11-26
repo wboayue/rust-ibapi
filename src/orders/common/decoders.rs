@@ -17,8 +17,8 @@ use crate::Error;
 /// An order-type field as TWS sends it. Absent, empty and `"None"` in any case (how TWS
 /// echoes an unset `adjusted_order_type` or `delta_neutral_order_type`; `docs/wire-facts/orders.md`)
 /// are `None`; a code this version does not list is `Some(OrderType::Unknown(code))`.
-fn parse_order_type(opt: Option<&str>) -> Result<Option<OrderType>, Error> {
-    parse_optional(opt.filter(|code| !is_unset_order_type(code)))
+fn parse_order_type(opt: Option<&str>, field: &'static str) -> Result<Option<OrderType>, Error> {
+    parse_optional(opt.filter(|code| !is_unset_order_type(code)), field)
 }
 
 // All originating outgoing-request gates for OpenOrder, CompletedOrder,
@@ -73,7 +73,7 @@ pub(crate) fn decode_open_order_proto(p: crate::proto::OpenOrder) -> Result<Orde
 pub(crate) fn decode_order_status_proto(p: crate::proto::OrderStatus) -> Result<OrderStatus, Error> {
     Ok(OrderStatus {
         order_id: p.order_id.unwrap_or_default(),
-        status: parse_required(p.status.as_deref(), "OrderStatus")?,
+        status: parse_required(p.status.as_deref(), "status")?,
         filled: required_decimal(p.filled.as_deref(), "filled", "OrderStatus")?,
         remaining: required_decimal(p.remaining.as_deref(), "remaining", "OrderStatus")?,
         average_fill_price: p.avg_fill_price,
@@ -152,7 +152,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.display_size = proto.display_size.map(Some).unwrap_or(Some(0));
     // Absent, empty and "None" are the unset order type, None; any other code this
     // crate does not list is preserved as Unknown(raw) rather than ending the stream.
-    order.order_type = parse_order_type(proto.order_type.as_deref())?;
+    order.order_type = parse_order_type(proto.order_type.as_deref(), "order_type")?;
     order.limit_price = optional_f64(proto.lmt_price);
     order.aux_price = optional_f64(proto.aux_price);
     // Absent means the field is unset upstream, not GTZ-style unknown:
@@ -182,7 +182,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.good_till_date = s(&proto.good_till_date);
     order.oca_group = s(&proto.oca_group);
     order.order_ref = s(&proto.order_ref);
-    order.rule_80_a = parse_optional::<Rule80A>(proto.rule80_a.as_deref())?;
+    order.rule_80_a = parse_optional::<Rule80A>(proto.rule80_a.as_deref(), "rule80_a")?;
     order.oca_type = OcaType::from(proto.oca_type.unwrap_or_default());
     order.trigger_method = TriggerMethod::from(proto.trigger_method.unwrap_or_default());
 
@@ -200,7 +200,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.volatility_type = proto.volatility_type.map(VolatilityType::from);
     order.continuous_update = proto.continuous_update.unwrap_or_default();
     order.reference_price_type = proto.reference_price_type.map(ReferencePriceType::from);
-    order.delta_neutral_order_type = parse_order_type(proto.delta_neutral_order_type.as_deref())?;
+    order.delta_neutral_order_type = parse_order_type(proto.delta_neutral_order_type.as_deref(), "delta_neutral_order_type")?;
     order.delta_neutral_aux_price = optional_f64(proto.delta_neutral_aux_price);
     order.delta_neutral_con_id = proto.delta_neutral_con_id.unwrap_or_default();
     order.delta_neutral_open_close = s(&proto.delta_neutral_open_close);
@@ -245,7 +245,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.override_percentage_constraints = proto.override_percentage_constraints.unwrap_or_default();
 
     // institutional orders
-    order.open_close = parse_optional::<OrderOpenClose>(proto.open_close.as_deref())?;
+    order.open_close = parse_optional::<OrderOpenClose>(proto.open_close.as_deref(), "open_close")?;
     order.origin = OrderOrigin::from(proto.origin.unwrap_or_default());
     order.short_sale_slot = ShortSaleSlot::from(proto.short_sale_slot.unwrap_or_default());
     order.designated_location = s(&proto.designated_location);
@@ -284,7 +284,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.is_pegged_change_amount_decrease = proto.is_pegged_change_amount_decrease.unwrap_or_default();
     order.reference_change_amount = optional_f64(proto.reference_change_amount);
     order.reference_exchange = s(&proto.reference_exchange_id);
-    order.adjusted_order_type = parse_order_type(proto.adjusted_order_type.as_deref())?;
+    order.adjusted_order_type = parse_order_type(proto.adjusted_order_type.as_deref(), "adjusted_order_type")?;
     order.trigger_price = optional_f64(proto.trigger_price);
     order.adjusted_stop_price = optional_f64(proto.adjusted_stop_price);
     order.adjusted_stop_limit_price = optional_f64(proto.adjusted_stop_limit_price);
@@ -351,7 +351,7 @@ fn decode_order_condition(proto: &proto::OrderCondition) -> Result<OrderConditio
 
     // The reference client always sets `type`, so an absent one is a malformed frame.
     let Some(condition_type) = proto.r#type else {
-        return Err(Error::parse_proto("type", "missing OrderCondition type"));
+        return Err(Error::invalid_field("type", "missing OrderCondition type"));
     };
     let is_conjunction = proto.is_conjunction_connection.unwrap_or(true);
     let is_more = proto.is_more.unwrap_or_default();
@@ -418,7 +418,7 @@ fn decode_order_condition(proto: &proto::OrderCondition) -> Result<OrderConditio
 
 pub(crate) fn decode_order_state(proto: &proto::OrderState) -> Result<OrderState, Error> {
     Ok(OrderState {
-        status: parse_required(proto.status.as_deref(), "OrderStatus")?,
+        status: parse_required(proto.status.as_deref(), "status")?,
         initial_margin_before: optional_f64(proto.init_margin_before),
         maintenance_margin_before: optional_f64(proto.maint_margin_before),
         equity_with_loan_before: optional_f64(proto.equity_with_loan_before),
@@ -475,7 +475,7 @@ pub(crate) fn decode_execution(proto: &proto::Execution) -> Result<Execution, Er
         time: s(&proto.time),
         account_number: s(&proto.acct_number),
         exchange: s(&proto.exchange),
-        side: parse_required::<ExecutionSide>(proto.side.as_deref(), "Execution.side")?,
+        side: parse_required::<ExecutionSide>(proto.side.as_deref(), "side")?,
         // Absent means 0 upstream (Execution.cs ctor sets Shares/CumQty to 0).
         shares: parse_decimal_or_zero(proto.shares.as_deref())?,
         price: proto.price.unwrap_or_default(),

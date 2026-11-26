@@ -406,7 +406,7 @@ pub mod helpers {
     /// they all want this one assertion rather than their own `matches!`.
     pub fn assert_decimal_parse_error<T: std::fmt::Debug>(result: Result<T, crate::Error>, offending_value: &str) {
         match result {
-            Err(crate::Error::Parse(_, value, msg)) => {
+            Err(crate::Error::Parse { value, reason: msg, .. }) => {
                 assert_eq!(value, offending_value, "error should carry the offending wire value");
                 assert!(msg.contains("invalid decimal wire value"), "unexpected message: {msg}");
             }
@@ -419,8 +419,8 @@ pub mod helpers {
     /// message that should have carried it.
     pub fn assert_missing_field<T: std::fmt::Debug>(result: Result<T, crate::Error>, field: &str, message: &str) {
         match result {
-            Err(crate::Error::Parse(_, name, reason)) => {
-                assert_eq!(name, field);
+            Err(crate::Error::Parse { field: name, reason, .. }) => {
+                assert_eq!(name, Some(field));
                 assert_eq!(reason, format!("missing in {message}"));
             }
             other => panic!("expected Error::Parse for a missing {field} in {message}, got {other:?}"),
@@ -532,7 +532,7 @@ pub mod wire_enum {
         assert_eq!(&serde_json::from_value::<T>(json.clone()).unwrap(), value, "deserialize {json}");
     }
 
-    /// Assert every input string in `unknowns` produces `Err(Error::Parse(..))`.
+    /// Assert every input string in `unknowns` produces `Err(Error::Parse { .. })`.
     pub fn check_wire_enum_rejects_unknown<T>(unknowns: &[&str])
     where
         T: std::str::FromStr<Err = crate::Error> + std::fmt::Debug,
@@ -540,7 +540,7 @@ pub mod wire_enum {
         for &s in unknowns {
             let err = T::from_str(s);
             assert!(
-                matches!(err, Err(crate::Error::Parse(_, _, _))),
+                matches!(err, Err(crate::Error::Parse { .. })),
                 "expected Parse error for {s:?}, got {err:?}",
             );
         }

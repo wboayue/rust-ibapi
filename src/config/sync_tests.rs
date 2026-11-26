@@ -59,7 +59,7 @@ fn config_server_version_error() {
 
     let client = Client::stubbed(message_bus, crate::server_versions::CONFIG - 1);
     match client.config() {
-        Err(Error::ServerVersion(_, _, _)) => {}
+        Err(Error::ServerVersion { .. }) => {}
         other => panic!("expected ServerVersion error, got {other:?}"),
     }
 }

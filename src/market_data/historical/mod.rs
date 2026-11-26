@@ -16,9 +16,7 @@
 //! giveaway that the spelling is non-canonical.
 
 use std::fmt::{self, Debug, Display};
-use std::num::ParseIntError;
 use std::str::FromStr;
-use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
 use time::macros::format_description;
@@ -44,23 +42,6 @@ pub mod sync;
 #[doc(hidden)]
 #[cfg(feature = "async")]
 pub mod r#async;
-
-/// Errors surfaced while parsing historical market data parameters.
-#[derive(Clone, Debug, Error, PartialEq)]
-pub enum HistoricalParseError {
-    /// Unsupported bar size string supplied by the caller.
-    #[error("Invalid BarSize input '{0}'")]
-    BarSize(String),
-    /// Invalid duration string or unsupported unit.
-    #[error("Invalid Duration input '{0}' {1}")]
-    Duration(String, String),
-    /// Unsupported `what_to_show` value.
-    #[error("Invalid WhatToShow input '{0}'")]
-    WhatToShow(String),
-    /// Wrapper for integer parsing errors when reading duration values.
-    #[error("ParseIntError '{0}' {1}")]
-    ParseIntError(String, ParseIntError),
-}
 
 /// Timestamp of a historical bar.
 ///
@@ -128,13 +109,13 @@ impl FromStr for BarTimestamp {
         let s = s.trim();
         if s.len() == 8 && s.bytes().all(|b| b.is_ascii_digit()) {
             let fmt = format_description!("[year][month][day]");
-            let d = Date::parse(s, fmt).map_err(|e| Error::parse_field(s, e.to_string()))?;
+            let d = Date::parse(s, fmt).map_err(|e| Error::invalid_value(s, e.to_string()))?;
             return Ok(Self::Date(d));
         }
-        let secs: i64 = s.parse().map_err(|e: std::num::ParseIntError| Error::parse_field(s, e.to_string()))?;
+        let secs: i64 = s.parse().map_err(|e: std::num::ParseIntError| Error::invalid_value(s, e.to_string()))?;
         OffsetDateTime::from_unix_timestamp(secs)
             .map(Self::DateTime)
-            .map_err(|e| Error::parse_field(s, e.to_string()))
+            .map_err(|e| Error::invalid_value(s, e.to_string()))
     }
 }
 
@@ -291,7 +272,7 @@ impl Display for BarSize {
 }
 
 impl FromStr for BarSize {
-    type Err = HistoricalParseError;
+    type Err = Error;
 
     /// Case-insensitive: the wire text (`"5 mins"`) or the variant name (`"MIN5"`).
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -318,7 +299,7 @@ impl FromStr for BarSize {
             "1 DAY" | "DAY" => Ok(Self::Day),
             "1 WEEK" | "WEEK" => Ok(Self::Week),
             "1 MONTH" | "MONTH" => Ok(Self::Month),
-            _ => Err(HistoricalParseError::BarSize(s.to_string())),
+            _ => Err(Error::invalid_value(s, "unknown BarSize")),
         }
     }
 }
@@ -407,26 +388,26 @@ impl Display for Duration {
 }
 
 impl FromStr for Duration {
-    type Err = HistoricalParseError;
-    fn from_str(val: &str) -> Result<Self, HistoricalParseError> {
+    type Err = Error;
+    fn from_str(val: &str) -> Result<Self, Error> {
         if val.is_empty() {
-            return Err(HistoricalParseError::Duration(val.to_string(), "Empty string".to_string()));
+            return Err(Error::invalid_value(val, "empty Duration"));
         }
         match val.to_uppercase().rsplit_once(' ') {
             Some((value_part, unit_part)) => {
                 let value = value_part
                     .parse::<i32>()
-                    .map_err(|e| HistoricalParseError::ParseIntError(value_part.to_string(), e))?;
+                    .map_err(|e| Error::invalid_value(val, format!("Duration count: {e}")))?;
                 match unit_part {
                     "S" => Ok(Self::seconds(value)),
                     "D" => Ok(Self::days(value)),
                     "W" => Ok(Self::weeks(value)),
                     "M" => Ok(Self::months(value)),
                     "Y" => Ok(Self::years(value)),
-                    _ => Err(HistoricalParseError::Duration(val.to_string(), "Unsupported unit".to_string())),
+                    _ => Err(Error::invalid_value(val, "Duration unit is not S, D, W, M or Y")),
                 }
             }
-            None => Err(HistoricalParseError::Duration(val.to_string(), "Missing delimiter".to_string())),
+            None => Err(Error::invalid_value(val, "Duration needs a space between count and unit")),
         }
     }
 }
@@ -805,7 +786,7 @@ impl std::fmt::Display for WhatToShow {
 }
 
 impl FromStr for WhatToShow {
-    type Err = HistoricalParseError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
@@ -820,7 +801,7 @@ impl FromStr for WhatToShow {
             "FEE_RATE" => Ok(Self::FeeRate),
             "SCHEDULE" => Ok(Self::Schedule),
             "ADJUSTED_LAST" => Ok(Self::AdjustedLast),
-            _ => Err(HistoricalParseError::WhatToShow(s.to_string())),
+            _ => Err(Error::invalid_value(s, "unknown WhatToShow")),
         }
     }
 }

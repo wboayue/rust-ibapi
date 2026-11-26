@@ -385,14 +385,14 @@ pub(crate) fn dispatch_unsolicited_message(message: &ResponseMessage, ctx: &Star
 /// letting the gateway silently drop our messages.
 pub(crate) fn require_protobuf_support(server_version: i32) -> Result<(), Error> {
     if server_version < server_versions::PROTOBUF_REST_MESSAGES_3 {
-        return Err(Error::ServerVersion(
-            server_versions::PROTOBUF_REST_MESSAGES_3,
-            server_version,
-            format!(
+        return Err(Error::ServerVersion {
+            required: server_versions::PROTOBUF_REST_MESSAGES_3,
+            actual: server_version,
+            feature: format!(
                 "protobuf transport — rust-ibapi 3.x requires TWS or IB Gateway with server version {} or later; please upgrade",
                 server_versions::PROTOBUF_REST_MESSAGES_3
             ),
-        ));
+        });
     }
     Ok(())
 }
