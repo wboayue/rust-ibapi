@@ -19,8 +19,8 @@ use time::OffsetDateTime;
 use crate::common::error_helpers;
 use crate::contracts::OptionComputation;
 use crate::messages::{
-    IncomingMessages, Notice, ResponseMessage, MARKET_DATA_DELAYED_NOT_ENABLED_CODE, MARKET_DATA_NOT_SUBSCRIBED_CODE, MARKET_DEPTH_RESET_CODE,
-    NO_SECURITY_DEFINITION_CODE, REALTIME_QUERY_INVALID_CODE, TICK_BY_TICK_FAILED_CODE,
+    IncomingMessages, Notice, ResponseMessage, COMPETING_LIVE_SESSION_CODE, MARKET_DATA_DELAYED_NOT_ENABLED_CODE, MARKET_DATA_NOT_SUBSCRIBED_CODE,
+    MARKET_DEPTH_RESET_CODE, NO_SECURITY_DEFINITION_CODE, REALTIME_QUERY_INVALID_CODE, TICK_BY_TICK_FAILED_CODE,
 };
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
@@ -465,6 +465,14 @@ impl StreamDecoder<TickTypes> for TickTypes {
             notice.code,
             NO_SECURITY_DEFINITION_CODE | MARKET_DATA_NOT_SUBSCRIBED_CODE | MARKET_DATA_DELAYED_NOT_ENABLED_CODE
         )
+    }
+
+    /// Live: after 10197 during an internet outage TWS resumed ticks on the
+    /// same request once its farms were back. Not probed on a snapshot: one
+    /// that draws 10197 reads on, waiting for a `SnapshotEnd` TWS may never
+    /// send, so bound it (`snapshot_once`).
+    fn error_continues_request(notice: &Notice, _context: &DecoderContext) -> bool {
+        notice.code == COMPETING_LIVE_SESSION_CODE
     }
 
     fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {

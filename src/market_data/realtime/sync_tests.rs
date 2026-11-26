@@ -1,6 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_request, assert_request_proto, proto_error_response, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
+    assert_proto_msg_id, assert_request, assert_request_proto, proto_error_response, proto_response, request_message_count, text_response,
+    TEST_REQ_ID_FIRST,
 };
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
@@ -9,6 +10,7 @@ use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
     depth_market_data_description, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response,
     mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, reroute_market_data, reroute_market_depth, tick_bid_ask,
@@ -787,13 +789,32 @@ fn market_depth_rejected_with_354_skips_cancel() {
     assert_rejection_ends_without_cancel(&message_bus, subscription, 354);
 }
 
-/// 10197 is terminal on our side but unverified at TWS: the cancel stays.
+/// 10197 during an internet outage: TWS keeps the request and resumes its ticks, so the
+/// subscription yields a notice and reads on, and its cancel is still sent.
 #[test]
-fn market_data_rejected_with_unverified_code_still_cancels() {
-    let (message_bus, client) = rejecting_client(10197);
-    let contract = Contract::stock("AAPL").build();
-    let subscription = client.market_data(&contract).subscribe().expect("subscribe failed");
-    assert!(matches!(subscription.next(), Some(Err(Error::Notice(n))) if n.code == 10197));
-    drop(subscription);
-    assert_eq!(message_bus.request_messages().len(), 2, "request, then the cancel");
+fn market_data_reads_on_after_10197() {
+    let tick = || proto_response(IncomingMessages::TickPrice, tick_price().tick_type(1).price(1.1595).encode_proto());
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        tick(),
+        proto_error_response(TEST_REQ_ID_FIRST, 10197, "No market data during competing live session"),
+        tick(),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let contract = Contract::forex("EUR", "USD").build();
+
+    let subscription = client.market_data(&contract).subscribe().expect("market data request failed");
+    let first = subscription.next();
+    let notice = subscription.next();
+    let after = subscription.next();
+    subscription.cancel();
+
+    assert!(matches!(first, Some(Ok(SubscriptionItem::Data(TickTypes::Price(_))))), "{first:?}");
+    assert!(
+        matches!(notice, Some(Ok(SubscriptionItem::Notice(ref n))) if n.code == 10197),
+        "{notice:?}"
+    );
+    assert!(matches!(after, Some(Ok(SubscriptionItem::Data(TickTypes::Price(_))))), "{after:?}");
+    let requests = message_bus.request_messages();
+    assert_eq!(requests.len(), 2, "the request and its cancel");
+    assert_proto_msg_id(&requests[1], OutgoingMessages::CancelMarketData);
 }

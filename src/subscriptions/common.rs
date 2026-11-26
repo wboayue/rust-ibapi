@@ -5,7 +5,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::errors::Error;
-use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage, SUBSCRIPTION_LAG_CODE};
+use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage, SUBSCRIPTION_DISCONNECTED_CODE, SUBSCRIPTION_LAG_CODE};
+use crate::transport::farm_watch::FarmMark;
 
 /// An item yielded by a [`Subscription`](crate::subscriptions::Subscription).
 ///
@@ -171,6 +172,7 @@ pub(crate) enum RoutedItem {
     Response(ResponseMessage),
     Notice(Notice),
     Error(Error),
+    FarmDisconnected(Notice, FarmMark),
 }
 
 impl From<ResponseMessage> for RoutedItem {
@@ -186,12 +188,21 @@ impl From<Error> for RoutedItem {
 }
 
 impl RoutedItem {
+    /// Capture farm state alongside the request rejection, before another frame can change it.
+    pub(crate) fn with_farm_disconnect_mark(self, mark: impl FnOnce() -> FarmMark) -> Self {
+        match self {
+            Self::Error(Error::Notice(notice)) if notice.code == SUBSCRIPTION_DISCONNECTED_CODE => Self::FarmDisconnected(notice, mark()),
+            item => item,
+        }
+    }
+
     /// Translate to `Result<ResponseMessage, Error>`. Returns `None` for
     /// `Notice` so callers can skip and recv the next item.
     pub(crate) fn into_legacy(self) -> Option<Result<ResponseMessage, Error>> {
         match self {
             RoutedItem::Response(message) => Some(Ok(message)),
             RoutedItem::Error(error) => Some(Err(error)),
+            RoutedItem::FarmDisconnected(notice, _) => Some(Err(Error::Notice(notice))),
             RoutedItem::Notice(_) => None,
         }
     }
@@ -228,6 +239,7 @@ pub(crate) fn is_undeclared(ids: &[IncomingMessages], message: &ResponseMessage)
 pub(crate) fn continuing_error_as_notice<T: StreamDecoder<T>>(item: RoutedItem, context: &DecoderContext) -> RoutedItem {
     match item {
         RoutedItem::Error(Error::Notice(notice)) if T::error_continues_request(&notice, context) => RoutedItem::Notice(notice),
+        RoutedItem::FarmDisconnected(notice, _) if T::error_continues_request(&notice, context) => RoutedItem::Notice(notice),
         item => item,
     }
 }
@@ -344,9 +356,8 @@ pub(crate) trait StreamDecoder<T> {
     /// data line, a scanner slot). Default: `false`, the cancel is written.
     ///
     /// Match the codes verified live, not every error: an unverified terminal
-    /// code (10197 on market data) must keep its cancel. A
-    /// one-shot query with nothing to continue (`HistoricalDataFrame` without
-    /// `keep_up_to_date`) may accept any error.
+    /// code must keep its cancel. A one-shot query with nothing to continue
+    /// (`HistoricalDataFrame` without `keep_up_to_date`) may accept any error.
     ///
     /// `context` is the subscription's request context, so a type serving more
     /// than one request mode can answer per request.
@@ -357,8 +368,8 @@ pub(crate) trait StreamDecoder<T> {
     /// Whether TWS goes on serving the request after this error, so the
     /// subscription yields it as a `SubscriptionItem::Notice` and keeps reading
     /// instead of ending. Opt in only where wire-verified that data follows the
-    /// error (10299 on historical bars). Default: `false`, the error ends the
-    /// stream.
+    /// error (10299 on historical bars, 10197 on market data). Default:
+    /// `false`, the error ends the stream.
     ///
     /// `context` is the subscription's request context, as for
     /// [`rejection_ends_request`](Self::rejection_ends_request).

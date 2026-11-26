@@ -328,3 +328,52 @@ instead of TRADES" on crypto, "Expected what to show is TRADES ..." on others. W
   One sent seconds later drew 162 and stopped them.
 - **Not probed:** other crypto venues (ZEROHASH), RTH equities, bar sizes other than 1 hour
   and 1 minute.
+
+### Streams across an internet outage
+
+*Live 2026-11-25 12:40-13:08 UTC and 2026-11-26 12:00-12:35 UTC (US pre-market, FX open), paper
+TWS, server 223; EUR.USD IDEALPRO; Wi-Fi off for 15 s, 2 min, 6 min and 20 min, router uplink
+unplugged for 2 min; one client never cancelled or re-requested; #1300.*
+
+- `reqMktData`, tick-by-tick, depth and realtime bars resumed on the same request 0.5 to 1.5 s
+  before the 1102. A re-request at the last farm OK or the 1102 delivered 3.4 to 4.4 s later.
+  2026-11-26: they resumed within [-2.2, +0.9] s of the 1102; tick-by-tick 0.1 to 0.9 s after it.
+- Realtime bars: TWS sent every missed 5-second bar on the original request in one burst (5, 30,
+  81 bars, no slot missing; 2026-11-26: 244 bars from 12:00:50 to 12:21:05 and 27 bars, no slot
+  missing). A re-request delivers only new bars. Across a TWS restart nothing is back-filled; see
+  [TWS restart and reconnect](protocol.md#tws-restart-and-reconnect).
+- No tick-by-tick tick stamped more than 5 s before arrival; rate after restore was normal.
+- Depth: 317 arrived in the same millisecond as 2103 for `cashfarm`, at the loss. Rows resumed on
+  the same request with no second 317. 2026-11-26: the first rows after the restore inserted all
+  10 rows, so the book refills from empty.
+- Keep-up-to-date bars: 10182 "Failed to request live updates (disconnected)." arrived in the
+  same millisecond as 2105 for `cashhmds`, after it, every run, every client (one also got 165);
+  2026-11-26, about 1 ms after it. No frame followed in 270 s, 389 s, 635 s, 1587 s and 390 s.
+  A cancel after the 10182 drew 366 within 3 ms (4 of 4), so the stream sends none. A new
+  request after the restore returned a batch covering every outage minute, 2.5 to 3.7 s after
+  the 1102. One sent at the first HMDS OK was answered 0.6 s after the 1102, one sent at the
+  second HMDS OK 0.1 s before it. `Client::resubscribing` reopens the request once no HMDS farm
+  reports broken, and once more if TWS confirms the farms back later and the reopened request
+  has delivered no bar.
+- The second reopen ran live in the 20-minute run: the reopen at the 15-minute limit, with the
+  HMDS farms still broken, got no frame; at the `cashhmds` OK the wrapper cancelled it and
+  reopened, and the batch held all 21 outage minutes:
+
+  ```text
+  12:01:30.656 [10182] on 1500000003; the wrapper yields it and drops the request
+  12:16:30.660 reqHistoricalData 1500000007 (15 min after the 10182; farms still broken)
+  12:21:11.428 2106 cashhmds OK; cancel 1500000007, reqHistoricalData 1500000008
+  12:21:11.960 [366] for the cancel of 1500000007
+  12:21:12.490 batch on 1500000008, 21 of 21 outage minutes, 0.1 s before the 1102
+  ```
+
+- 10197 "No market data during competing live session" does not end a market data request: drawn
+  51 s into the 6-minute outage on all clients; on the client that sent no cancel, ticks resumed
+  on the same id at restore (2233 to the end). Tick-by-tick, depth and realtime bars got no 10197.
+  A market data subscription yields it as a notice and keeps reading
+  (`TickTypes::error_continues_request`).
+- **Not probed:** 1101, and whether streams resume on their own ids after it (a reopen after 1101
+  loses the realtime bar back-fill if they do); whether TWS answers a keep-up-to-date bar request
+  sent during the outage once its farm is back (every such request was replaced before the
+  restore); the path where an HMDS farm goes inactive (2107) instead of reporting OK; stocks,
+  futures, RTH; depth update rows after restore; 10197 during a real competing session.

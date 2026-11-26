@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
+use crossbeam::channel::Receiver;
+
 use log::{debug, error, warn};
 
 use super::common::{
@@ -15,6 +17,7 @@ use super::{log_cancel_error, StreamDecoder};
 use crate::client::ids::RequestId;
 use crate::errors::Error;
 use crate::messages::Notice;
+use crate::transport::farm_watch::FarmMark;
 use crate::transport::{InternalSubscription, MessageBus, SharedTicket};
 
 /// A [Subscription] is a stream of responses returned from TWS. A [Subscription] is normally returned when invoking an API that can return more than one value.
@@ -66,6 +69,7 @@ pub struct Subscription<T: StreamDecoder<T>> {
     /// `cancel_and_drain`. Skips the cancel only where the decoder's
     /// `rejection_ends_request` says TWS ended the request too.
     rejected: OnceLock<Notice>,
+    farm_disconnect_mark: OnceLock<FarmMark>,
     subscription: InternalSubscription,
 }
 
@@ -100,6 +104,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             batch_ended: AtomicBool::new(false),
             ended_natively: AtomicBool::new(false),
             rejected: OnceLock::new(),
+            farm_disconnect_mark: OnceLock::new(),
         }
     }
 
@@ -188,6 +193,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Nothing follows it, though the channel stays open and `next` waits.
     pub(crate) fn snapshot_ended(&self) -> bool {
         self.snapshot_ended.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn farm_disconnect_mark(&self) -> Option<FarmMark> {
+        self.farm_disconnect_mark.get().copied()
     }
 
     /// The id a cancel names: the request id, else the order id.
@@ -368,6 +377,20 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
     }
 
+    /// [`next`](Self::next), or `None` once `wake` receives first, with the
+    /// queue left as it was.
+    pub(crate) fn next_unless(&self, wake: &Receiver<()>) -> Option<Option<Result<SubscriptionItem<T>, Error>>> {
+        if self.stream_ended.load(Ordering::Relaxed) {
+            return Some(None);
+        }
+        loop {
+            match self.handle_response(self.subscription.next_routed_unless(wake)?) {
+                NextAction::Return(val) => return Some(val),
+                NextAction::Skip => continue,
+            }
+        }
+    }
+
     fn handle_response(&self, response: Option<RoutedItem>) -> NextAction<Result<SubscriptionItem<T>, Error>> {
         match response.map(|item| continuing_error_as_notice::<T>(item, &self.context)) {
             Some(RoutedItem::Response(message)) if is_undeclared(T::RESPONSE_MESSAGE_IDS, &message) => {
@@ -411,6 +434,13 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                     self.stream_ended.store(true, Ordering::Relaxed);
                 }
                 NextAction::Return(Some(item))
+            }
+            Some(RoutedItem::FarmDisconnected(notice, mark)) => {
+                let _ = self.farm_disconnect_mark.set(mark);
+                let e = Error::Notice(notice);
+                self.stream_ended.store(true, Ordering::Relaxed);
+                self.note_rejection(&e);
+                NextAction::Return(Some(Err(e)))
             }
             Some(RoutedItem::Error(e)) => {
                 self.stream_ended.store(true, Ordering::Relaxed);
