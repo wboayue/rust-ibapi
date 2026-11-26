@@ -284,15 +284,16 @@ server 223.*
 - `reqMktDepth` EUR.USD (IDEALPRO), 10 rows, two concurrent 26-minute subscriptions, one with
   `isSmartDepth` false and one true: both sides updated every minute, 2,400 to 9,200 updates per
   side per minute; the longest silence was 5.4 s, on both sides at the same moment. Totals per
-  run: about 218,000 updates, 8,900 inserts and 9,000 deletes.
+  subscription: about 218,000 updates, 8,900 inserts and 9,000 deletes.
 - `isSmartDepth` false sends `MarketDepth` rows; true sends `MarketDepthL2` rows with market
   maker `IDEALPRO` and `isSmartDepth` true, after a 2152 notice "Exchanges - Depth: IDEALPRO;".
-- Rows: 50 requested on EUR.USD gives positions 0-9 (10 rows); 5 requested gives 0-4, built with
-  10 inserts and then updates only.
+- Rows: 50 requested on EUR.USD gives positions 0-9 (10 rows) on each side. 5 requested on
+  GBP.USD and USD.JPY gives positions 0-4 on each side, built with 5 inserts per side and then
+  updates only.
 - A fourth concurrent request, from any client id on the same TWS, draws 309 "Max number (3) of
   market depth requests has been reached" and ends the stream.
 - Refusals: AAPL `SMART` without smart depth draws 10092 and ends; AAPL `ISLAND` draws 10089
-  as a notice and then nothing (the stream stays open); SAP `IBIS` and ES draw 354. AAPL smart
+  and then no rows; SAP `IBIS` and ES draw 354. AAPL smart
   depth draws a 2152 listing the exchanges without depth permission, then nothing overnight.
 - No 317 (depth reset) or 316 (halted) arrived in 52 subscription-minutes.
 - No one-sided stall (one side silent while the other updates) reproduced on FX depth.
