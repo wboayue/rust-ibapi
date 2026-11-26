@@ -27,9 +27,10 @@ impl ServerVersion {
     }
 }
 
-/// What a reconnect's handshake refreshes on the client: the order-id floor
-/// and the server version. The client hands it to the transport once, before
-/// the transport starts reading.
+/// Client state the transport raises from what TWS sends: the order-id floor
+/// and the server version, refreshed by a reconnect's handshake, and the
+/// order-id floor again when TWS lists another client's order. The client
+/// hands it to the transport once, before the transport starts reading.
 #[derive(Debug)]
 pub(crate) struct HandshakeState {
     pub(crate) order_ids: Arc<ClientIdManager>,
@@ -46,6 +47,15 @@ impl HandshakeState {
         // server's floor so allocation never resumes below it.
         self.order_ids.raise_order_id_from_server(metadata.next_order_id);
         self.server_version.set(metadata.server_version);
+    }
+
+    /// Raises the order-id floor past `order_id`, an order TWS listed for
+    /// another client. Listing all clients' open orders makes TWS raise this
+    /// client's next valid order id above the highest order id listed, and
+    /// refuse lower ids with 103 "Duplicate order id", without sending the
+    /// new id (`docs/wire-facts/orders.md`).
+    pub(crate) fn raise_past_listed_order(&self, order_id: i32) {
+        self.order_ids.raise_order_id_from_server(order_id.saturating_add(1));
     }
 }
 

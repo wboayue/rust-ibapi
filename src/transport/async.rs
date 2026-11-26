@@ -993,6 +993,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         if !foreign {
             self.order_taps.publish_status(&message);
+        } else if message.message_type() == IncomingMessages::OpenOrder {
+            if let (Some(state), Some(order_id)) = (self.handshake_state.get(), message_order_id) {
+                state.raise_past_listed_order(order_id.value());
+            }
         }
 
         match strategy {

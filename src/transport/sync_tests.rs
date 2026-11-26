@@ -574,6 +574,79 @@ fn reconnect_refreshes_handshake_state() -> Result<(), Error> {
     Ok(())
 }
 
+/// Listing another client's open order makes TWS raise this client's next
+/// valid order id past it without saying so; the dispatcher raises the local
+/// floor to match. Only another client's `OpenOrder` does: this client's own
+/// order and a completed order leave it.
+#[test]
+fn foreign_open_order_raises_order_id_floor() -> Result<(), Error> {
+    use crate::client::ids::REQUEST_ID_FLOOR;
+    use crate::testdata::builders::orders::{completed_order, open_order};
+
+    let cases = [
+        (
+            "another client's open order",
+            helpers::binary_proto(
+                IncomingMessages::OpenOrder as i32,
+                &open_order().order_id(500001).client_id(9420).to_proto(),
+            ),
+            [Ok(500002), Ok(500003)],
+        ),
+        (
+            "this client's open order",
+            helpers::binary_proto(
+                IncomingMessages::OpenOrder as i32,
+                &open_order().order_id(500001).client_id(CLIENT_ID).to_proto(),
+            ),
+            [Ok(100), Ok(101)],
+        ),
+        (
+            "another client's completed order",
+            helpers::binary_proto(
+                IncomingMessages::CompletedOrder as i32,
+                &completed_order().order_id(500001).client_id(9420).to_proto(),
+            ),
+            [Ok(100), Ok(101)],
+        ),
+        (
+            "last usable order id",
+            helpers::binary_proto(
+                IncomingMessages::OpenOrder as i32,
+                &open_order().order_id(REQUEST_ID_FLOOR - 2).client_id(9420).to_proto(),
+            ),
+            [Ok(REQUEST_ID_FLOOR - 1), Err(REQUEST_ID_FLOOR)],
+        ),
+        (
+            "foreign order near i32::MAX",
+            helpers::binary_proto(
+                IncomingMessages::OpenOrder as i32,
+                &open_order().order_id(i32::MAX - 1).client_id(9420).to_proto(),
+            ),
+            [Err(i32::MAX), Err(i32::MAX)],
+        ),
+    ];
+    for (name, frame, expected) in cases {
+        let (stream, bus) = make_bus();
+        let order_ids = Arc::new(ClientIdManager::new(100)?);
+        bus.set_handshake_state(HandshakeState {
+            order_ids: order_ids.clone(),
+            server_version: Arc::new(ServerVersion::new(crate::server_versions::PROTOBUF_REST_MESSAGES_3)),
+        });
+
+        stream.push_inbound(frame);
+        bus.dispatch()?;
+
+        let allocated = [order_ids.next_order_id(), order_ids.next_order_id()];
+        let checked = allocated.map(|id| match id.checked() {
+            Ok(id) => Ok(id.value()),
+            Err(Error::OrderIdInRequestRange { order_id }) => Err(order_id),
+            Err(error) => panic!("{name}: unexpected error {error}"),
+        });
+        assert_eq!(checked, expected, "{name}");
+    }
+    Ok(())
+}
+
 const AAPL_CONTRACT_RESPONSE: &str  = "AAPL|STK||0||SMART|USD|AAPL|NMS|NMS|265598|0.01||ACTIVETIM,AD,ADDONT,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SMARTSTG,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF|SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,NASDAQ,DRCTEDGE,BEX,BATS,EDGEA,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,IBEOS,OVERNIGHT,TPLUS0,PSX|1|0|APPLE INC|NASDAQ||Technology|Computers|Computers|US/Eastern|20250324:0400-20250324:2000;20250325:0400-20250325:2000;20250326:0400-20250326:2000;20250327:0400-20250327:2000;20250328:0400-20250328:2000|20250324:0930-20250324:1600;20250325:0930-20250325:1600;20250326:0930-20250326:1600;20250327:0930-20250327:1600;20250328:0930-20250328:1600|||1|ISIN|US0378331005|1|||26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26||COMMON|0.0001|0.0001|100|";
 
 #[test]

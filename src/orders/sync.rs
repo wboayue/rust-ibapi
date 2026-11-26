@@ -42,6 +42,16 @@ impl Client {
     /// Requests all *current* open orders in associated accounts at the current moment.
     /// Open orders are returned once; this function does not initiate a subscription.
     ///
+    /// The reply lists other clients' orders too. TWS then raises this
+    /// client's next valid order id above the highest order id listed, and
+    /// refuses a lower one with error 103 ("Duplicate order id"), without
+    /// sending the new id. The client raises its own order-id counter past
+    /// each other client's order as the reply arrives, so
+    /// [`next_order_id`](Self::next_order_id) and the order builders allocate
+    /// above it. Read the reply to its end before placing orders: an order
+    /// placed while it is still arriving can get an id TWS refuses. Use
+    /// [`open_orders`](Self::open_orders) when this client's orders are enough.
+    ///
     /// # Examples
     ///
     /// ```no_run

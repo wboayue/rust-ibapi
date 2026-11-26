@@ -32,9 +32,9 @@ impl IdGenerator {
         Self::new(start)
     }
 
-    /// Gets the next ID, incrementing the internal counter
+    /// Gets the next ID, advancing the counter until it reaches `i32::MAX`.
     pub(crate) fn next(&self) -> i32 {
-        self.next_id.fetch_add(1, Ordering::Relaxed)
+        self.next_up_to(i32::MAX - 1).unwrap_or(i32::MAX)
     }
 
     /// Like [`next`](Self::next), but `None` once the next ID would exceed
@@ -125,10 +125,11 @@ impl ClientIdManager {
         self.order_ids.raise(order_id.value());
     }
 
-    /// Raises the order ID from a reconnect handshake's next valid ID. A value
-    /// in the request range is still applied — the server will not accept
-    /// lower ids — but logged, since every order placed from it will be
-    /// rejected ([`OrderId::checked`]).
+    /// Raises the order ID to a floor the server enforces: a reconnect
+    /// handshake's next valid ID, or one past an order TWS listed for another
+    /// client. A value in the request range is still applied — the server will
+    /// not accept lower ids — but logged, since every order placed from it
+    /// will be rejected ([`OrderId::checked`]).
     pub(crate) fn raise_order_id_from_server(&self, next_valid_id: i32) {
         let order_id = OrderId::from(next_valid_id);
         if order_id.checked().is_err() {
