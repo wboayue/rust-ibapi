@@ -1676,7 +1676,14 @@ impl<T, S, O> OrderBuilder<T, S, O> {
 
     /// Size the order in the quote currency instead of shares or units (forex).
     ///
-    /// With a cash quantity, the order quantity may be `0`.
+    /// With a cash quantity, the order quantity may be `0`. Whether TWS accepts it depends on the
+    /// contract, the account and, for crypto, the order: EUR.USD took it on market and limit
+    /// orders, buy and sell; crypto (BTC) let only a market buy through; stocks, options and
+    /// futures (AAPL, an AAPL option, ES) took it on no order. TWS refuses the others with error
+    /// 10244 "Cash Quantity cannot be used for this order" (live: 2026-11-23 and 2026-11-24
+    /// during US hours, paper). A filled cash-quantity order reports `Filled` with the unfilled
+    /// rest of TWS's quantity estimate in `remaining`. See
+    /// `docs/wire-facts/orders.md#cash-quantity`.
     ///
     /// # Examples
     ///

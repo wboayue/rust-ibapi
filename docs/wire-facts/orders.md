@@ -599,3 +599,47 @@ connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
 - **Not probed:** a futures or EFP order, where `refFuturesConId` would be set; a filled or
   partially filled order.
 
+### Cash quantity
+
+*Live 2026-11-23 23:18-23:20Z, paper TWS, server 223; EUR.USD on IDEALPRO and AAPL on SMART.*
+
+- **EUR.USD**: `cash_qty` 1000 with quantity 0 was accepted on MKT BUY, MKT SELL, LMT BUY (0.9)
+  and LMT SELL (1.5). TWS echoed a quantity of 1100.39 and sent 399 "Order Message: SELL 1,000 USD
+  EUR.USD Forex Warning: ... below the EUR 20000 IdealPro minimum ..." for the BUY, which states
+  the order as its USD leg. The market orders filled 916.88 and 917.09 EUR.
+- **Filled with remaining above 0**: those fills reported OrderStatus `Filled` with `filled`
+  916.88 and `remaining` 183.51, measured against the echoed estimate.
+- **AAPL**: every `cash_qty` order drew 10244 and was not created: no OpenOrder or OrderStatus,
+  and a `cancel_order` for the id drew 10147 "not found". A downstream rule that cash quantity
+  works on MKT BUY orders only matches neither instrument: EUR.USD took every type and side,
+  AAPL none.
+- Cash quantity on EUR.USD must be a multiple of 0.01 (10317), and a quantity of 0.21 EUR without
+  `cash_qty` drew 10318 "This order doesn't support fractional quantity trading".
+- **US hours, by security type** (*live 2026-11-24 16:28-16:31 UTC, US market open, paper TWS,
+  server 223*): AAPL stock (LMT BUY at 1.00 and MKT BUY), an AAPL option (LMT BUY), ESZ6 (LMT
+  BUY) and BTC on PAXOS (LMT BUY) each drew 10244 within 0.2 s. BTC MKT BUY with `cash_qty` 100
+  passed that check: TWS echoed a quantity of 0.001678 BTC and then rejected it with 201 "The
+  crypto buy order must be Minutes or IOC"; with `tif` IOC, it echoed 0.00167857 BTC and a limit
+  of 59579.75, then 201 for the account's missing crypto trading permission. BTC MKT SELL and
+  LMT BUY with IOC drew 10244. So for crypto, cash quantity depends on the order type and side.
+- **Filled cash-quantity order, US hours** (*EUR.USD MKT BUY, `cash_qty` 1000*): 399 (the USD
+  leg warning, twice), OpenOrder `PreSubmitted` with quantity 1093.82; OrderStatus
+  `PreSubmitted` with `filled` 911.41 and `remaining` 182.41 before any execution; the
+  ExecutionData (911.41 EUR at 1.0972); `Submitted`; `PendingCancel`; `Filled` with `filled`
+  911.41 and `remaining` 182.41; OpenOrder with the 2 USD commission; the report. TWS cancels the
+  rest of the estimate, and `Filled` keeps the cancelled remainder in `remaining`. The 911.41
+  EUR could not be sold by quantity (10318); a SELL with `cash_qty` 1000 sold 911.57 and a BUY
+  with `cash_qty` 0.18 bought 0.16 (`remaining` 0.04 after `Filled`).
+- **Not probed:** an account with fractional-share or crypto trading permission, other currency
+  pairs, and other order types on EUR.USD.
+
+### `why_held` values
+
+*Live 2026-11-23 23:13-23:21Z, paper TWS, server 223.*
+
+- A simulated EUR.USD TRAIL or TRAIL LIMIT order reported PreSubmitted with `why_held` "trigger"
+  until cancelled. The cancel's Cancelled status carried `why_held` "".
+- Short sales of 1 share (LMT 9999, outside RTH, no position) of BYND, GME, CVNA, SPCE, UPST and
+  LCID went PreSubmitted or Submitted with `why_held` "" and no `Inactive` status. The paper
+  account did not produce a "locate" hold off-hours.
+- **Not probed:** short sales during RTH, a stock the account cannot borrow, and live accounts.

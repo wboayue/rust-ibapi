@@ -466,7 +466,12 @@ pub struct Order {
     /// paper). See
     /// `docs/wire-facts/orders.md#ext_operator-and-manual_order_indicator-on-orders-and-cancels`.
     pub ext_operator: String,
-    /// The native cash quantity.
+    /// The order's size in the quote currency (USD for EUR.USD) instead of
+    /// [`total_quantity`](Self::total_quantity), which may then be `0`. TWS echoes its estimate of
+    /// the quantity, and a filled order reports `Filled` with the unfilled rest of that estimate in
+    /// `remaining`. TWS accepts it for forex and lets a crypto market buy through; it refuses
+    /// it for stocks, options, futures and other crypto orders with error 10244 (live:
+    /// 2026-11-24, paper). See `docs/wire-facts/orders.md#cash-quantity`.
     pub cash_qty: Option<f64>,
     /// Identifies a person as the responsible party for investment decisions within the firm. Orders covered by MiFID 2 (Markets in Financial Instruments Directive 2) must include either Mifid2DecisionMaker or Mifid2DecisionAlgo field (but not both). Requires TWS 969+.
     pub mifid2_decision_maker: String,
@@ -1694,7 +1699,10 @@ pub struct OrderStatus {
     pub last_fill_price: Option<f64>,
     /// API client which submitted the order.
     pub client_id: i32,
-    /// This field is used to identify an order held when TWS is trying to locate shares for a short sell. The value used to indicate this is 'locate'.
+    /// Why TWS holds the order, or empty. IB documents `locate` for a short sale waiting for shares
+    /// to borrow. A simulated trailing stop waiting for its trigger reports `trigger` with status
+    /// `PreSubmitted` (live: 2026-11-23, paper EUR.USD TRAIL; see
+    /// `docs/wire-facts/orders.md#why_held-values`).
     pub why_held: String,
     /// If an order has been capped, this indicates the current capped price. Requires TWS 967+ and API v973.04+. Python API specifically requires API v973.06+. `None` when IBKR did not send a value.
     pub market_cap_price: Option<f64>,
