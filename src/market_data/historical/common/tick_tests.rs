@@ -75,17 +75,9 @@ fn classify_notice_returns_notice() {
 }
 
 #[test]
-fn classify_end_of_stream_error_returns_end_of_stream() {
-    assert!(
-        matches!(classify::<TickLast>(RoutedItem::Error(Error::EndOfStream)), TickAction::EndOfStream),
-        "EndOfStream is a clean terminator, not an Error"
-    );
-}
-
-#[test]
 fn classify_other_error_returns_error() {
-    match classify::<TickLast>(RoutedItem::Error(Error::Simple("boom".into()))) {
-        TickAction::Error(Error::Simple(msg)) => assert_eq!(msg, "boom"),
+    match classify::<TickLast>(RoutedItem::Error(Error::InvalidArgument("boom".into()))) {
+        TickAction::Error(Error::InvalidArgument(msg)) => assert_eq!(msg, "boom"),
         _ => panic!("expected Error"),
     }
 }

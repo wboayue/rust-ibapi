@@ -94,11 +94,11 @@ mod sync_tests {
         let waiter = TestWaiter::reconnecting();
         let result = blocking::retry_on_connection_reset(&waiter, None, || {
             call_count += 1;
-            Err::<i32, Error>(Error::Simple("Other error".to_string()))
+            Err::<i32, Error>(Error::InvalidArgument("Other error".to_string()))
         });
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "Other error"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "Other error"));
         assert_eq!(call_count, 1); // Should not retry on non-ConnectionReset errors
     }
 
@@ -277,13 +277,13 @@ mod async_tests {
             let count = count_clone.clone();
             async move {
                 *count.lock().unwrap() += 1;
-                Err::<i32, Error>(Error::Simple("Other error".to_string()))
+                Err::<i32, Error>(Error::InvalidArgument("Other error".to_string()))
             }
         })
         .await;
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Simple(msg) if msg == "Other error"));
+        assert!(matches!(result.unwrap_err(), Error::InvalidArgument(msg) if msg == "Other error"));
         assert_eq!(*call_count.lock().unwrap(), 1);
     }
 

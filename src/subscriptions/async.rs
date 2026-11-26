@@ -13,7 +13,8 @@ use futures::StreamExt;
 use log::{debug, warn};
 
 use super::common::{
-    collect_step, drain_outcome, filter_notice, is_undeclared, notice_item, Bound, CollectStop, DecoderContext, Drained, RoutedItem, SubscriptionItem,
+    cancel_frame, collect_step, drain_outcome, filter_notice, is_undeclared, notice_item, Bound, CollectStop, DecoderContext, Drained, RoutedItem,
+    SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
 use crate::messages::Notice;
@@ -621,6 +622,11 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                         log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
                         continue;
                     }
+                    if T::END_MESSAGES.contains(&message.message_type()) {
+                        stream_ended.store(true, Ordering::Relaxed);
+                        ended_natively.store(true, Ordering::Relaxed);
+                        return Poll::Ready(None);
+                    }
                     match T::decode(context, &message) {
                         Ok(val) => {
                             if val.is_snapshot_end(context) {
@@ -632,11 +638,6 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                             }
                             return Poll::Ready(Some(Ok(SubscriptionItem::Data(val))));
                         }
-                        Err(Error::EndOfStream) => {
-                            stream_ended.store(true, Ordering::Relaxed);
-                            ended_natively.store(true, Ordering::Relaxed);
-                            return Poll::Ready(None);
-                        }
                         Err(err) => {
                             stream_ended.store(true, Ordering::Relaxed);
                             request.note_rejection(&err);
@@ -645,11 +646,6 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                     }
                 }
                 RoutedItem::Notice(notice) => return Poll::Ready(Some(Ok(notice_item(notice)))),
-                RoutedItem::Error(Error::EndOfStream) => {
-                    stream_ended.store(true, Ordering::Relaxed);
-                    ended_natively.store(true, Ordering::Relaxed);
-                    return Poll::Ready(None);
-                }
                 RoutedItem::Error(e) => {
                     stream_ended.store(true, Ordering::Relaxed);
                     request.note_rejection(&e);
@@ -737,7 +733,7 @@ impl<T: StreamDecoder<T>> RequestState<T> {
         {
             return None;
         }
-        T::cancel_message(self.context.server_version, id, Some(&self.context)).ok()
+        cancel_frame::<T>(&self.context, id)
     }
 }
 
@@ -805,7 +801,7 @@ impl<T: StreamDecoder<T>> Drop for RequestState<T> {
         }
 
         // Decoders without a cancel message (the `StreamDecoder` default) return
-        // `Err(NotImplemented)`; a shared subscription still has its count to
+        // `Ok(None)`; a shared subscription still has its count to
         // release, an id-routed one has nothing to do.
         let id = self.id();
         let shared = self.shared;

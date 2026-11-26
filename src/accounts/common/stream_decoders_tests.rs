@@ -48,7 +48,9 @@ mod account_summary_tests {
 
     #[test]
     fn cancel_message_works() {
-        let bytes = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+        let bytes = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None)
+            .unwrap()
+            .expect("type has a cancel");
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountSummary);
     }
 
@@ -93,7 +95,9 @@ mod pnl_tests {
 
     #[test]
     fn cancel_message_works() {
-        let bytes = PnL::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+        let bytes = PnL::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None)
+            .unwrap()
+            .expect("type has a cancel");
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnL);
     }
 
@@ -138,7 +142,9 @@ mod pnl_single_tests {
 
     #[test]
     fn cancel_message_works() {
-        let bytes = PnLSingle::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+        let bytes = PnLSingle::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None)
+            .unwrap()
+            .expect("type has a cancel");
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnLSingle);
     }
 
@@ -191,7 +197,9 @@ mod position_update_tests {
 
     #[test]
     fn cancel_message_works() {
-        let bytes = PositionUpdate::cancel_message(TEST_SERVER_VERSION, None, None).unwrap();
+        let bytes = PositionUpdate::cancel_message(TEST_SERVER_VERSION, None, None)
+            .unwrap()
+            .expect("type has a cancel");
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositions);
     }
 
@@ -247,7 +255,9 @@ mod position_update_multi_tests {
 
     #[test]
     fn cancel_message_works() {
-        let bytes = PositionUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+        let bytes = PositionUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None)
+            .unwrap()
+            .expect("type has a cancel");
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositionsMulti);
     }
 
@@ -341,7 +351,9 @@ mod account_update_tests {
 
     #[test]
     fn cancel_message_works() {
-        let bytes = AccountUpdate::cancel_message(TEST_SERVER_VERSION, None, None).unwrap();
+        let bytes = AccountUpdate::cancel_message(TEST_SERVER_VERSION, None, None)
+            .unwrap()
+            .expect("type has a cancel");
         assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountData);
     }
 
@@ -399,7 +411,9 @@ mod account_update_multi_tests {
 
     #[test]
     fn cancel_message_works() {
-        let bytes = AccountUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+        let bytes = AccountUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None)
+            .unwrap()
+            .expect("type has a cancel");
         assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountUpdatesMulti);
     }
 
@@ -450,8 +464,12 @@ mod edge_cases {
         let context = DecoderContext::new(TEST_SERVER_VERSION).with_request_type(OutgoingMessages::RequestMarketData);
 
         // Test that context is ignored (should produce same result with or without)
-        let result1 = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
-        let result2 = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), Some(&context)).unwrap();
+        let result1 = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None)
+            .unwrap()
+            .expect("type has a cancel");
+        let result2 = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), Some(&context))
+            .unwrap()
+            .expect("type has a cancel");
 
         // Both should produce identical messages
         assert_eq!(result1, result2);

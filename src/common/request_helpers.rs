@@ -138,8 +138,8 @@ impl<K: CancellableOneShot> StreamDecoder<OneShot<K>> for OneShot<K> {
         K::decode(payload).map(Self)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        K::cancel(error_helpers::require_request_id_for(request_id, "cancel one-shot request")?)
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
+        K::cancel(error_helpers::require_request_id_for(request_id, "cancel one-shot request")?).map(Some)
     }
 
     fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {

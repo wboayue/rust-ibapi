@@ -1355,12 +1355,12 @@ fn tick_subscription_error_surfaces_via_err_arm() {
     // #675 regression guard: a mid-stream RoutedItem::Error must surface through
     // the `Err` arm — NOT be swallowed as a silent `None` indistinguishable from
     // end-of-data. Subsequent calls return None (stream terminated).
-    let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![RoutedItem::Error(Error::Simple("injected".into()))]);
+    let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![RoutedItem::Error(Error::InvalidArgument("injected".into()))]);
 
     assert!(!subscription.is_terminated());
     match subscription.next() {
-        Some(Err(Error::Simple(msg))) => assert_eq!(msg, "injected", "error payload preserved"),
-        other => panic!("expected Some(Err(Simple)), got {other:?}"),
+        Some(Err(Error::InvalidArgument(msg))) => assert_eq!(msg, "injected", "error payload preserved"),
+        other => panic!("expected Some(Err(InvalidArgument)), got {other:?}"),
     }
     assert!(subscription.is_terminated());
     assert!(subscription.next().is_none(), "stream terminates after a terminal error");
@@ -1400,12 +1400,12 @@ fn tick_subscription_iter_data_filters_notice_keeps_error() {
     // iter_data() drops the Notice but still surfaces the terminal Error.
     let (subscription, _signal_rx) = tick_sub_from_routed::<TickLast>(vec![
         RoutedItem::Notice(test_notice(2100, "warning")),
-        RoutedItem::Error(Error::Simple("boom".into())),
+        RoutedItem::Error(Error::InvalidArgument("boom".into())),
     ]);
 
     let mut data = subscription.iter_data();
     match data.next() {
-        Some(Err(Error::Simple(msg))) => assert_eq!(msg, "boom", "error survives the notice filter"),
+        Some(Err(Error::InvalidArgument(msg))) => assert_eq!(msg, "boom", "error survives the notice filter"),
         other => panic!("expected the error after the filtered notice, got {other:?}"),
     }
     assert!(data.next().is_none(), "stream ended after the error");

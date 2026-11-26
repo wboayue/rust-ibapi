@@ -85,7 +85,6 @@ impl StreamDecoder<Orders> for Orders {
             IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(message)?)),
             IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(message)?)),
             IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(message)?)),
-            IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),
             _ => Err(Error::unexpected_response(message)),
         }
     }
@@ -105,7 +104,6 @@ impl StreamDecoder<Executions> for Executions {
             IncomingMessages::CommissionsAndFeesReport => {
                 Ok(Executions::CommissionAndFeesReport(decoders::decode_commission_and_fees_report(message)?))
             }
-            IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
             _ => Err(Error::unexpected_response(message)),
         }
     }

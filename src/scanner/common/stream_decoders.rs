@@ -15,9 +15,9 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
         decoders::decode_scanner_data(message.expect_type(IncomingMessages::ScannerData)?)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel scanner subscription")?;
-        encoders::encode_cancel_scanner_subscription(request_id)
+        encoders::encode_cancel_scanner_subscription(request_id).map(Some)
     }
 
     /// Live: after 162 TWS answers the cancel with 365 (no scanner subscription).

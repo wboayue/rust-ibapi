@@ -7,7 +7,6 @@ use crate::proto::decoders::DecodeProto;
 use crate::transport::routing::DecodedError;
 use std::error::Error as StdError;
 use std::io;
-use std::sync::{Mutex, PoisonError};
 use time::macros::format_description;
 use time::Time;
 
@@ -21,22 +20,15 @@ fn protobuf_decode_error() -> Error {
 
 #[test]
 fn error_debug() {
-    let error = Error::Simple("test error".to_string());
-    assert_eq!(format!("{error:?}"), "Simple(\"test error\")");
+    let error = Error::InvalidArgument("test error".to_string());
+    assert_eq!(format!("{error:?}"), "InvalidArgument(\"test error\")");
 }
 
 #[test]
 fn error_display() {
     let cases = vec![
         (Error::Io(io::Error::new(io::ErrorKind::NotFound, "file not found")), "file not found"),
-        (Error::ParseInt("123x".parse::<i32>().unwrap_err()), "invalid digit found in string"),
-        (
-            Error::FromUtf8(String::from_utf8(vec![0, 159, 146, 150]).unwrap_err()),
-            "invalid utf-8 sequence of 1 bytes from index 1",
-        ),
         (Error::ParseTime(parse_time_error()), "the 'month' component could not be parsed"),
-        (Error::Poison("test poison".to_string()), "test poison"),
-        (Error::NotImplemented, "not implemented"),
         (
             Error::Parse(1, "value".to_string(), "message".to_string()),
             "parse error: 1 - value - message",
@@ -45,7 +37,6 @@ fn error_display() {
             Error::ServerVersion(2, 1, "old version".to_string()),
             "server version 2 required, got 1: old version",
         ),
-        (Error::Simple("simple error".to_string()), "error occurred: simple error"),
         (Error::InvalidArgument("bad arg".to_string()), "InvalidArgument: bad arg"),
         (
             Error::Validation(ValidationError::InvalidQuantity(-1.0)),
@@ -55,7 +46,6 @@ fn error_display() {
         (Error::ConnectionReset, "ConnectionReset"),
         (Error::Cancelled, "Cancelled"),
         (Error::Shutdown, "Shutdown"),
-        (Error::EndOfStream, "EndOfStream"),
         (Error::UnexpectedEndOfStream, "UnexpectedEndOfStream"),
         (Error::Timeout, "timed out before the request ended"),
         (
@@ -114,15 +104,15 @@ fn unexpected_wire_format_display_includes_message_debug() {
 #[test]
 fn unexpected_wire_format_survives_clone() {
     // `clone_preserves_payloaded_variants` only compares Display, which a
-    // collapse to Error::Simple would survive. This pins the discriminant,
+    // collapse to another `String` variant would survive. This pins the discriminant,
     // which is what the dispatcher matches on.
     let msg = ResponseMessage::from("50\0\09000\0");
     assert!(matches!(Error::unexpected_wire_format(&msg).clone(), Error::UnexpectedWireFormat(_)));
 }
 
 #[test]
-fn error_source_returns_none_for_simple() {
-    let error = Error::Simple("test error".to_string());
+fn error_source_returns_none_for_invalid_argument() {
+    let error = Error::InvalidArgument("test error".to_string());
     assert!(error.source().is_none());
 }
 
@@ -133,27 +123,9 @@ fn from_io_error() {
 }
 
 #[test]
-fn from_parse_int_error() {
-    let error: Error = "abc".parse::<i32>().unwrap_err().into();
-    assert!(matches!(error, Error::ParseInt(_)));
-}
-
-#[test]
-fn from_utf8_error() {
-    let error: Error = String::from_utf8(vec![0, 159, 146, 150]).unwrap_err().into();
-    assert!(matches!(error, Error::FromUtf8(_)));
-}
-
-#[test]
 fn from_parse_time_error() {
     let error: Error = parse_time_error().into();
     assert!(matches!(error, Error::ParseTime(_)));
-}
-
-#[test]
-fn from_poison_error() {
-    let error: Error = PoisonError::new(Mutex::new(())).into();
-    assert!(matches!(error, Error::Poison(_)));
 }
 
 #[test]
@@ -237,12 +209,10 @@ fn from_validation_error_keeps_the_variant() {
 #[test]
 fn clone_preserves_unit_variants() {
     for variant in [
-        Error::NotImplemented,
         Error::ConnectionFailed,
         Error::ConnectionReset,
         Error::Cancelled,
         Error::Shutdown,
-        Error::EndOfStream,
         Error::UnexpectedEndOfStream,
         Error::Timeout,
         Error::AlreadySubscribed,
@@ -257,12 +227,8 @@ fn clone_preserves_payloaded_variants() {
     let response = ResponseMessage::from("4\02\0-1\0200\0boom\0");
     let originals = vec![
         Error::Io(io::Error::other("io")),
-        Error::ParseInt("x".parse::<i32>().unwrap_err()),
-        Error::FromUtf8(String::from_utf8(vec![0xff]).unwrap_err()),
-        Error::Poison("p".into()),
         Error::Parse(3, "v".into(), "m".into()),
         Error::ServerVersion(10, 5, "feat".into()),
-        Error::Simple("s".into()),
         Error::InvalidArgument("a".into()),
         Error::Validation(ValidationError::MissingRequiredField("action")),
         Error::UnsupportedTimeZone("US/Foo".into()),
@@ -329,7 +295,7 @@ fn is_connection_lost_false_for_non_connection() {
         Error::Cancelled,
         tws_error_notice(200, "No security found"),
         Error::Io(io::Error::new(io::ErrorKind::NotFound, "missing")),
-        Error::Simple("boom".to_string()),
+        Error::InvalidArgument("boom".to_string()),
         Error::Parse(1, "v".to_string(), "m".to_string()),
     ];
 

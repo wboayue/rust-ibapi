@@ -83,10 +83,13 @@ pub enum StreamDecoderResult {
     Error(&'static str),
 }
 
+/// Builds a cancel message from a request id, as `StreamDecoder::cancel_message` does.
+pub type CancelFn = fn(Option<i32>) -> Result<Option<Vec<u8>>, crate::Error>;
+
 /// Test case for cancel message generation
 pub struct CancelMessageTestCase {
     pub name: &'static str,
-    pub cancel: fn(Option<i32>) -> Result<Vec<u8>, crate::Error>,
+    pub cancel: CancelFn,
     pub request_id: Option<i32>,
     pub expected_msg_id: Result<i32, &'static str>,
 }
@@ -709,11 +712,6 @@ pub fn stream_decoder_test_cases() -> Vec<StreamDecoderTestCase> {
                 exchange: "SMART".to_string(),
                 underlying_conid: 265598,
             },
-        },
-        StreamDecoderTestCase {
-            name: "option chain end of stream",
-            message: text_response("76|9000|"),
-            expected_result: StreamDecoderResult::Error("EndOfStream"),
         },
         StreamDecoderTestCase {
             name: "unexpected message type",

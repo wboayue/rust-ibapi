@@ -122,7 +122,7 @@ fn assert_tws_error_message_matches_code_and_substring() {
 #[test]
 #[should_panic(expected = "expected Error::Notice(code=10089)")]
 fn assert_tws_error_message_panics_on_wrong_variant() {
-    let err = crate::Error::Simple("nope".to_string());
+    let err = crate::Error::InvalidArgument("nope".to_string());
     assert_tws_error_message(err, 10089, "not subscribed");
 }
 

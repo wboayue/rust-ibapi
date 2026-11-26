@@ -80,7 +80,7 @@ impl MemoryStream {
     }
 
     /// Schedule the next `count` `reconnect()` calls to fail with
-    /// `Error::Simple`; subsequent calls succeed.
+    /// a connection-refused `Error::Io`; subsequent calls succeed.
     pub fn set_reconnect_failures(&self, count: usize) {
         self.inner.lock().unwrap().reconnect_failures = count;
     }
@@ -154,7 +154,10 @@ impl AsyncReconnect for MemoryStream {
             }
         };
         if should_fail {
-            Err(Error::Simple("simulated reconnect failure".into()))
+            Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                "simulated reconnect failure",
+            )))
         } else {
             Ok(())
         }

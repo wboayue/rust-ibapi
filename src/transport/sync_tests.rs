@@ -1125,7 +1125,7 @@ fn shared_subscription_cancel_waits_for_last_subscriber() -> Result<(), Error> {
     use crate::subscriptions::{StreamDecoder, SubscriptionItem};
 
     let (stream, bus) = make_bus();
-    let cancel = <PositionUpdate as StreamDecoder<PositionUpdate>>::cancel_message(0, None, None)?;
+    let cancel = <PositionUpdate as StreamDecoder<PositionUpdate>>::cancel_message(0, None, None)?.expect("type has a cancel");
     let cancels_written = || count_frames(&stream.captured(), &cancel);
 
     let first: crate::subscriptions::sync::Subscription<PositionUpdate> =
@@ -1180,7 +1180,9 @@ fn positions_subscription(bus: &Arc<TcpMessageBus<MemoryStream>>) -> Result<Posi
 
 fn positions_cancel() -> Vec<u8> {
     use crate::subscriptions::StreamDecoder;
-    <crate::accounts::PositionUpdate as StreamDecoder<crate::accounts::PositionUpdate>>::cancel_message(0, None, None).unwrap()
+    <crate::accounts::PositionUpdate as StreamDecoder<crate::accounts::PositionUpdate>>::cancel_message(0, None, None)
+        .unwrap()
+        .expect("type has a cancel")
 }
 
 /// A reset ends every shared subscription, so the count restarts at zero for
@@ -1243,7 +1245,9 @@ fn account_updates_subscription(bus: &Arc<TcpMessageBus<MemoryStream>>, name: &s
 
 fn account_updates_cancel() -> Vec<u8> {
     use crate::subscriptions::StreamDecoder;
-    <crate::accounts::AccountUpdate as StreamDecoder<crate::accounts::AccountUpdate>>::cancel_message(0, None, None).unwrap()
+    <crate::accounts::AccountUpdate as StreamDecoder<crate::accounts::AccountUpdate>>::cancel_message(0, None, None)
+        .unwrap()
+        .expect("type has a cancel")
 }
 
 fn account_updates_slot(bus: &TcpMessageBus<MemoryStream>) -> Option<crate::accounts::types::AccountId> {
@@ -3870,7 +3874,8 @@ fn overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
         crate::server_versions::CANCEL_CONTRACT_DATA,
         Some(CONTRACT_REQUEST_ID.raw()),
         None,
-    )?;
+    )?
+    .expect("type has a cancel");
     assert_eq!(count_frames(&stream.captured(), &cancel), 1, "overflow leaves the cancel to drop");
     Ok(())
 }
@@ -3892,7 +3897,8 @@ fn drain_route_survives_its_cancel() -> Result<(), Error> {
         crate::server_versions::CANCEL_CONTRACT_DATA,
         Some(CONTRACT_REQUEST_ID.raw()),
         None,
-    )?;
+    )?
+    .expect("type has a cancel");
 
     let dispatcher = {
         let (stream, bus, cancel) = (stream.clone(), bus.clone(), cancel.clone());

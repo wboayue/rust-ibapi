@@ -666,7 +666,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
             }
 
             // `done` (decoder said this was the last batch) and `stream_ended`
-            // (terminal error/EndOfStream) are distinct: the former is graceful
+            // (terminal error) are distinct: the former is graceful
             // completion, the latter is termination. Either ends the stream once
             // the buffer is drained.
             if self.done.load(Ordering::Relaxed) || self.stream_ended.load(Ordering::Relaxed) {
@@ -682,10 +682,6 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
                 }
                 TickAction::Skip => {}
                 TickAction::Notice(notice) => return Some(Ok(SubscriptionItem::Notice(notice))),
-                TickAction::EndOfStream => {
-                    self.stream_ended.store(true, Ordering::Relaxed);
-                    return None;
-                }
                 TickAction::Error(e) => {
                     self.stream_ended.store(true, Ordering::Relaxed);
                     return Some(Err(e));

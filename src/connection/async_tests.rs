@@ -355,7 +355,7 @@ async fn reconnect_returns_last_error_after_exhausting_attempts() {
 
     let err = connection.reconnect().await.expect_err("must give up after MAX_RECONNECT_ATTEMPTS");
     assert!(
-        matches!(&err, crate::errors::Error::Simple(msg) if msg == "simulated reconnect failure"),
+        matches!(&err, crate::errors::Error::Io(e) if e.to_string() == "simulated reconnect failure"),
         "got {err:?}"
     );
 }
@@ -519,7 +519,10 @@ impl AsyncReconnect for TestSocket {
                 gate.acquire().await.expect("gate closed").forget();
                 Ok(())
             }
-            None => Err(Error::Simple("simulated connect failure".into())),
+            None => Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                "simulated connect failure",
+            ))),
         }
     }
 

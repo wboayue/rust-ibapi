@@ -821,7 +821,9 @@ async fn shared_subscription_cancel_waits_for_last_subscriber() {
     use crate::client::builders::r#async::SubscriptionBuilder;
 
     let (stream, bus) = make_bus();
-    let cancel = <PositionUpdate as StreamDecoder<PositionUpdate>>::cancel_message(0, None, None).unwrap();
+    let cancel = <PositionUpdate as StreamDecoder<PositionUpdate>>::cancel_message(0, None, None)
+        .unwrap()
+        .expect("type has a cancel");
 
     let make = || async {
         let message_bus: Arc<dyn AsyncMessageBus> = bus.clone();
@@ -927,7 +929,9 @@ async fn positions_subscription(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>) -> 
 }
 
 fn positions_cancel() -> Vec<u8> {
-    <crate::accounts::PositionUpdate as StreamDecoder<crate::accounts::PositionUpdate>>::cancel_message(0, None, None).unwrap()
+    <crate::accounts::PositionUpdate as StreamDecoder<crate::accounts::PositionUpdate>>::cancel_message(0, None, None)
+        .unwrap()
+        .expect("type has a cancel")
 }
 
 async fn positions_live(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>) -> usize {
@@ -1046,7 +1050,9 @@ async fn account_updates_subscription(bus: &Arc<AsyncTcpMessageBus<MemoryStream>
 }
 
 fn account_updates_cancel() -> Vec<u8> {
-    <crate::accounts::AccountUpdate as StreamDecoder<crate::accounts::AccountUpdate>>::cancel_message(0, None, None).unwrap()
+    <crate::accounts::AccountUpdate as StreamDecoder<crate::accounts::AccountUpdate>>::cancel_message(0, None, None)
+        .unwrap()
+        .expect("type has a cancel")
 }
 
 async fn account_updates_slot(bus: &AsyncTcpMessageBus<MemoryStream>) -> Option<crate::accounts::types::AccountId> {
@@ -2692,7 +2698,8 @@ async fn overflowed_subscription_cancels_on_drop() {
         Some(CONTRACT_REQUEST_ID.raw()),
         None,
     )
-    .unwrap();
+    .unwrap()
+    .expect("type has a cancel");
     assert_eq!(wait_for_frames(&stream, &cancel, 1).await, 1, "overflow leaves the cancel to drop");
 }
 

@@ -58,9 +58,9 @@ impl StreamDecoder<TickBidAsk> for TickBidAsk {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel bid/ask ticks")?;
-        common::encoders::encode_cancel_tick_by_tick(request_id)
+        common::encoders::encode_cancel_tick_by_tick(request_id).map(Some)
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).
@@ -79,9 +79,9 @@ impl StreamDecoder<TickMidpoint> for TickMidpoint {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel mid point ticks")?;
-        common::encoders::encode_cancel_tick_by_tick(request_id)
+        common::encoders::encode_cancel_tick_by_tick(request_id).map(Some)
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).
@@ -143,9 +143,9 @@ impl StreamDecoder<Bar> for Bar {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel realtime bars")?;
-        common::encoders::encode_cancel_realtime_bars(request_id)
+        common::encoders::encode_cancel_realtime_bars(request_id).map(Some)
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).
@@ -164,9 +164,9 @@ impl StreamDecoder<TickLast> for TickLast {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel trade ticks")?;
-        common::encoders::encode_cancel_tick_by_tick(request_id)
+        common::encoders::encode_cancel_tick_by_tick(request_id).map(Some)
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).
@@ -361,9 +361,9 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
         (notice.code == MARKET_DEPTH_RESET_CODE).then_some(MarketDepths::Reset)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel market depth")?;
-        common::encoders::encode_cancel_market_depth(request_id, context.map(|c| c.is_smart_depth).unwrap_or(false))
+        common::encoders::encode_cancel_market_depth(request_id, context.map(|c| c.is_smart_depth).unwrap_or(false)).map(Some)
     }
 
     /// Live: after 200 TWS answers the cancel with 310 (no such request).
@@ -448,9 +448,9 @@ impl StreamDecoder<TickTypes> for TickTypes {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel market data")?;
-        common::encoders::encode_cancel_market_data(request_id)
+        common::encoders::encode_cancel_market_data(request_id).map(Some)
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).

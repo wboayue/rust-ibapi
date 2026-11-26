@@ -8,9 +8,9 @@ triggers:
   - adding a StreamDecoder or TickDecoder impl
   - a subscription terminates on an unexpected message
   - adding a decode arm for a new message type
-symbols: [require_proto, ResponseMessage::proto, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
+symbols: [require_proto, ResponseMessage::proto, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, END_MESSAGES, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders, one-shot-narrowing]
-precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739", "#740"]
+precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739", "#740", "#1248"]
 ---
 
 Every domain decoder reads its payload with `message.proto()`, which takes the bytes from
@@ -40,8 +40,12 @@ const stays a slice even for single-type decoders.
 `message.expect_type(IncomingMessages::X)?` is its backstop — not redundant with the const (the
 scanner, `WshEventData`, and the three `TickDecoder` impls take this form). Hardcode that literal;
 don't derive it from `Self::RESPONSE_MESSAGE_IDS`, or the gate below compares the const with
-itself. The backstop terminates the subscription loudly. Never `Error::NotImplemented` or
-`Error::Simple(...)`.
+itself. The backstop terminates the subscription loudly.
+
+**End markers go in `END_MESSAGES`, not in `decode`.** A type that TWS sends after the last item
+(`ContractDataEnd`, `ExecutionDataEnd`) is listed in both `RESPONSE_MESSAGE_IDS` and
+`END_MESSAGES`; the subscription drivers end the stream on it before `decode` runs, so `decode`
+has no arm for it. Errors are for failures only: no `Error` variant means "stream over" (#1248).
 
 **Never declare `IncomingMessages::Error` or `Shutdown`, and never write an arm for them.**
 `determine_routing` classifies both before any allow-list: an error reaches the subscription as
@@ -53,8 +57,9 @@ itself. The backstop terminates the subscription loudly. Never `Error::NotImplem
 `response_message_ids_match_decode_arms` (`src/subscriptions/response_message_ids_tests.rs`)
 probes every decoder with a minimal text-framed message of every `IncomingMessages` discriminant
 and requires declared and handled to agree exactly, for both traits: `UnexpectedResponse` means
-"no arm"; anything else (`Ok`, `EndOfStream`, or `UnexpectedWireFormat` from `proto()` on text
-framing) means an arm exists. It also rejects declaring a dispatcher-intercepted type. Handled
+"no arm"; anything else (`Ok`, or `UnexpectedWireFormat` from `proto()` on text framing) means
+an arm exists. An `END_MESSAGES` type must be declared and must have no arm. It also rejects
+declaring a dispatcher-intercepted type. Handled
 but undeclared would otherwise be silent at runtime.
 
 That reading is why a missing backstop is not a style question: a `decode` that dives straight
@@ -116,3 +121,7 @@ Proto framing must be respected in three places; when fixing one, audit the othe
 - #740 — narrowed `decode` from `&mut` to `&ResponseMessage` across 29 impls; no production
   decoder mutated. Find real cursor users with
   `grep -rn "\.next_int()\|\.next_string()\|\.next_double()" --include=*.rs src/ | grep -v "tests\.rs"` (only `connection/common.rs`).
+- #1248 — removed `Error::EndOfStream`: end markers moved from `decode` arms to `END_MESSAGES`,
+  which the drivers check before `decode`. The gate's "`decode` ends on exactly `END_MESSAGES`"
+  check became "an end marker is declared and has no arm". Also removed `NotImplemented`, which
+  the "never `NotImplemented` or `Simple`" backstop rule had to forbid; it's now a compile error.

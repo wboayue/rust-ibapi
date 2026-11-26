@@ -461,7 +461,10 @@ impl Reconnect for TestSocket {
     fn reconnect(&self) -> Result<(), Error> {
         self.state.reconnect_started.store(true, Ordering::SeqCst);
         let Some((open, opened)) = self.state.gate.as_ref() else {
-            return Err(Error::Simple("simulated connect failure".into()));
+            return Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                "simulated connect failure",
+            )));
         };
         let mut open = open.lock().unwrap();
         while !*open {

@@ -247,12 +247,16 @@ fn subscription_integration_table() {
 fn data_stream_cancel_message() {
     let request_id = test_data::REQUEST_ID_METADATA;
 
-    let metadata_cancel = OneShot::<WshMetadataRequest>::cancel_message(0, Some(request_id), None).unwrap();
+    let metadata_cancel = OneShot::<WshMetadataRequest>::cancel_message(0, Some(request_id), None)
+        .unwrap()
+        .expect("type has a cancel");
     let metadata_expected = cancel_wsh_metadata_request().request_id(request_id);
     use crate::testdata::builders::RequestEncoder;
     assert_eq!(metadata_cancel, metadata_expected.encode_request());
 
-    let event_cancel = WshEventData::cancel_message(0, Some(request_id), None).unwrap();
+    let event_cancel = WshEventData::cancel_message(0, Some(request_id), None)
+        .unwrap()
+        .expect("type has a cancel");
     let event_expected = cancel_wsh_event_data_request().request_id(request_id);
     assert_eq!(event_cancel, event_expected.encode_request());
 }
