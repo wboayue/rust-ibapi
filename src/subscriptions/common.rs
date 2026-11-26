@@ -202,7 +202,10 @@ impl RoutedItem {
 /// caller to return it to.
 pub(crate) fn cancel_frame<T: StreamDecoder<T>>(context: &DecoderContext, request_id: Option<i32>) -> Option<Vec<u8>> {
     T::cancel_message(context.server_version, request_id, Some(context)).unwrap_or_else(|e| {
-        log::warn!("cancel message not sent: {e}");
+        log::warn!(
+            "cancel message for {} (request id {request_id:?}) not sent: {e}",
+            std::any::type_name::<T>()
+        );
         None
     })
 }

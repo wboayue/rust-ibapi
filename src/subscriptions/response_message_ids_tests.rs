@@ -281,3 +281,82 @@ fn collect_impls(headers: &[&str]) -> Vec<Vec<String>> {
     }
     found
 }
+
+/// Each failure branch of [`check_decoder`], driven by a synthetic decoder, so a
+/// broken condition can't hide behind a production roster that happens to pass.
+#[test]
+fn check_decoder_reports_each_failure() {
+    use IncomingMessages::{Error as ErrorMessage, TickPrice, TickSize, TickSnapshotEnd};
+
+    struct Case {
+        name: &'static str,
+        declared: &'static [IncomingMessages],
+        end: &'static [IncomingMessages],
+        handled: &'static [IncomingMessages],
+        /// `None`: no failure. `Some(text)`: exactly one failure, containing `text`.
+        expected: Option<&'static str>,
+    }
+
+    let cases = [
+        Case {
+            name: "consistent decoder",
+            declared: &[TickPrice, TickSnapshotEnd],
+            end: &[TickSnapshotEnd],
+            handled: &[TickPrice],
+            expected: None,
+        },
+        Case {
+            name: "declares a dispatcher-intercepted type",
+            declared: &[TickPrice, ErrorMessage],
+            end: &[],
+            handled: &[TickPrice],
+            expected: Some("which the dispatcher intercepts"),
+        },
+        Case {
+            name: "end marker not declared",
+            declared: &[TickPrice],
+            end: &[TickSnapshotEnd],
+            handled: &[TickPrice],
+            expected: Some("in END_MESSAGES but not in RESPONSE_MESSAGE_IDS"),
+        },
+        Case {
+            name: "end marker has a decode arm",
+            declared: &[TickPrice, TickSnapshotEnd],
+            end: &[TickSnapshotEnd],
+            handled: &[TickPrice, TickSnapshotEnd],
+            expected: Some("`decode` arm for end marker"),
+        },
+        Case {
+            name: "declared but unhandled",
+            declared: &[TickPrice, TickSize],
+            end: &[],
+            handled: &[TickPrice],
+            expected: Some("but `decode` has no arm for it"),
+        },
+        Case {
+            name: "handled but undeclared",
+            declared: &[TickPrice],
+            end: &[],
+            handled: &[TickPrice, TickSize],
+            expected: Some("but does not declare it"),
+        },
+    ];
+
+    for case in cases {
+        let failures = check_decoder("Synthetic", case.declared, case.end, |message| {
+            if case.handled.contains(&message.message_type()) {
+                Ok(())
+            } else {
+                Err(Error::unexpected_response(message))
+            }
+        });
+        match case.expected {
+            None => assert!(failures.is_empty(), "{}: unexpected failures {failures:?}", case.name),
+            Some(text) => assert!(
+                failures.len() == 1 && failures[0].contains(text),
+                "{}: expected one failure containing {text:?}, got {failures:?}",
+                case.name
+            ),
+        }
+    }
+}

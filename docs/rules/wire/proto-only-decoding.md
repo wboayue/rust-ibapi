@@ -10,7 +10,7 @@ triggers:
   - adding a decode arm for a new message type
 symbols: [require_proto, ResponseMessage::proto, StreamDecoder, TickDecoder, RESPONSE_MESSAGE_IDS, END_MESSAGES, expect_type, Error::UnexpectedResponse, Error::UnexpectedWireFormat]
 related: [proto-aware-accessors, enum-typing, fixture-builders, one-shot-narrowing]
-precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739", "#740", "#1248"]
+precedents: ["#508", "#731", "#732", "#733", "#734", "#735", "#738", "#739", "#740", "#1324"]
 ---
 
 Every domain decoder reads its payload with `message.proto()`, which takes the bytes from
@@ -121,7 +121,7 @@ Proto framing must be respected in three places; when fixing one, audit the othe
 - #740 — narrowed `decode` from `&mut` to `&ResponseMessage` across 29 impls; no production
   decoder mutated. Find real cursor users with
   `grep -rn "\.next_int()\|\.next_string()\|\.next_double()" --include=*.rs src/ | grep -v "tests\.rs"` (only `connection/common.rs`).
-- #1248 — removed `Error::EndOfStream`: end markers moved from `decode` arms to `END_MESSAGES`,
+- #1324 (#1248) — removed `Error::EndOfStream`: end markers moved from `decode` arms to `END_MESSAGES`,
   which the drivers check before `decode`. The gate's "`decode` ends on exactly `END_MESSAGES`"
   check became "an end marker is declared and has no arm". Also removed `NotImplemented`, which
   the "never `NotImplemented` or `Simple`" backstop rule had to forbid; it's now a compile error.

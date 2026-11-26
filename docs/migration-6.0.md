@@ -1187,7 +1187,8 @@ its code (`as_str()` lists the codes for the string enums, `i32::from` for the i
 
 ### 48. Six `Error` variants are removed
 
-The crate never returned these to a caller, or returned them only as an internal signal:
+The crate never returned five of these to a caller, or returned them only as an internal signal.
+`Poison` reached a caller only after a panic poisoned a blocking-client lock.
 
 | Variant | What it was |
 |---|---|
