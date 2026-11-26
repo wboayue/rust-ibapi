@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Error::is_unsent()`: `true` when the error was raised before the failing call wrote anything, so an order, cancel or exercise request certainly did not reach TWS (`Validation`, `InvalidArgument`, `OrderIdInRequestRange`, `ServerVersion`, `AlreadySubscribed`, `AccountUpdatesInUse`), and `false` when it may have (`ConnectionReset`, which also ends a cut-off write, `Io`, `Notice`, and the rest). A caller no longer keeps its own list of "nothing was sent" variants to decide between reporting a submit as not sent and querying the order (#1279).
 - `ExpirationDate` and `ContractMonth` implement `Copy` (#1260).
 - `ContractDetails::event_contract_topic`, `event_contract_description` and `event_contract_question`: a ForecastEx event contract's topic (`"US Fed Funds Target Rate"`), description (strike, expiry and right, `"FF Jan28'27 3.125"`) and full question. TWS sent them, and the client dropped them. Empty for other contracts. A struct literal or pattern naming every field must add them; see `docs/migration-6.0.md` §35 (#1251).
 - Historical and realtime `Bar`, and `TickLast`, `TickBidAsk`, `TickMidpoint`, `TickAttributeLast` and `TickAttributeBidAsk`, implement `Default`: zero values, empty strings and a Unix-epoch timestamp, with `count` `-1` on a historical `Bar` (what TWS sends for non-TRADES bars) and no `volume` or `wap` on a realtime `Bar` (#1232, #1244).

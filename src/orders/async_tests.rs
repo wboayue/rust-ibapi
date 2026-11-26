@@ -1452,3 +1452,65 @@ async fn next_valid_order_id_then_submit_order_does_not_reissue_the_id() {
 
     assert_eq!(client.next_order_id(), order_id + 1);
 }
+
+/// `Error::is_unsent` is `true` exactly when the failing order call wrote nothing.
+#[tokio::test]
+async fn is_unsent_matches_whether_the_order_call_wrote() {
+    fn bad_operator() -> crate::orders::OrderCancel {
+        crate::orders::OrderCancel {
+            ext_operator: "TRADER_7".to_owned(),
+            ..Default::default()
+        }
+    }
+    fn limit() -> Order {
+        order_builder::limit_order(Action::Buy, 1.0, 1.0)
+    }
+    async fn call(client: &Client, name: &str) -> Result<(), Error> {
+        let contract = Contract::stock("AAPL").build();
+        match name {
+            "place_order, id in the request range" => client.place_order(REQUEST_ID_FLOOR, &contract, &limit()).await.map(drop),
+            "place_order, bad ext_operator" => {
+                let order = Order {
+                    ext_operator: "TRADER_7".to_owned(),
+                    ..limit()
+                };
+                client.place_order(41, &contract, &order).await.map(drop)
+            }
+            "place_order, field above the server version" => {
+                let order = Order {
+                    hedge_max_size: Some(10),
+                    ..limit()
+                };
+                client.place_order(41, &contract, &order).await.map(drop)
+            }
+            "cancel_order_with, bad ext_operator" => client.cancel_order_with(41, &bad_operator()).await.map(drop),
+            "global_cancel_with, bad ext_operator" => client.global_cancel_with(&bad_operator()).await,
+            "builder submit, negative quantity" => client.order(&contract).buy(-100).market().submit().await.map(drop),
+            "submit_order, write fails" => client.submit_order(41, &contract, &limit()).await,
+            "global_cancel, write fails" => client.global_cancel().await,
+            _ => unreachable!("unknown case {name}"),
+        }
+    }
+    let cases = [
+        ("place_order, id in the request range", false),
+        ("place_order, bad ext_operator", false),
+        ("place_order, field above the server version", false),
+        ("cancel_order_with, bad ext_operator", false),
+        ("global_cancel_with, bad ext_operator", false),
+        ("builder submit, negative quantity", false),
+        ("submit_order, write fails", true),
+        ("global_cancel, write fails", true),
+    ];
+
+    for (name, failing_sends) in cases {
+        let stub = MessageBusStub::default();
+        let message_bus = Arc::new(if failing_sends { stub.with_failing_sends() } else { stub });
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+        let err = call(&client, name).await.expect_err(name);
+
+        let written = request_message_count(&message_bus);
+        assert_eq!(err.is_unsent(), written == 0, "{name}: {err:?}, {written} requests written");
+        assert_eq!(written, usize::from(failing_sends), "{name}: requests written");
+    }
+}

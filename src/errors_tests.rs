@@ -339,6 +339,61 @@ fn is_connection_lost_false_for_non_connection() {
 }
 
 #[test]
+fn is_unsent_only_for_errors_raised_before_a_write() {
+    let response = ResponseMessage::from("4\02\0-1\0200\0boom\0");
+    let cases = vec![
+        (Error::Validation(ValidationError::InvalidQuantity(-1.0)), true),
+        (Error::InvalidArgument("buffer_limit must be above zero".into()), true),
+        (Error::OrderIdInRequestRange { order_id: 1_500_000_000 }, true),
+        (
+            Error::ServerVersion {
+                required: 223,
+                actual: 213,
+                feature: "hedge max size".into(),
+            },
+            true,
+        ),
+        (Error::AlreadySubscribed, true),
+        (
+            Error::AccountUpdatesInUse {
+                active: AccountId("DU1".into()),
+                requested: AccountId("DU2".into()),
+            },
+            true,
+        ),
+        (Error::Io(io::Error::new(io::ErrorKind::BrokenPipe, "write failed")), false),
+        (Error::ParseTime(parse_time_error()), false),
+        (
+            Error::Parse {
+                field: Some("action"),
+                value: "v".into(),
+                reason: "m".into(),
+            },
+            false,
+        ),
+        (Error::ConnectionFailed, false),
+        (Error::ConnectionRejected("allow-list".into()), false),
+        (Error::ClientIdInUse { client_id: 7 }, false),
+        (Error::UnsupportedTimeZone("US/Foo".into()), false),
+        (Error::ConnectionReset, false),
+        (Error::Cancelled, false),
+        (Error::Shutdown, false),
+        (Error::unexpected_response(&response), false),
+        (Error::unexpected_wire_format(&response), false),
+        (Error::UnexpectedEndOfStream, false),
+        (Error::Timeout, false),
+        (Error::BufferLimitExceeded { limit: 5 }, false),
+        (Error::InvalidFrame("short".into()), false),
+        (tws_error_notice(201, "Order rejected"), false),
+        (protobuf_decode_error(), false),
+    ];
+
+    for (error, unsent) in cases {
+        assert_eq!(error.is_unsent(), unsent, "{error:?}");
+    }
+}
+
+#[test]
 fn is_read_timeout_only_for_no_data_yet() {
     // Both dispatchers poll on this: a timed-out read means "nothing arrived",
     // and must not be confused with the socket being gone.
