@@ -88,8 +88,23 @@ Generic ticks, option computations and tick types. Format: [README](README.md).
   **sent** as `"-1"`, `barCount` as `-1`. TRADES sends real values.
 - Settles that the two bar types differ: realtime leaves the fields out, historical sends a
   `-1` sentinel. C# reads an absent realtime value as unset (`decimal.MaxValue`).
-- **Not probed:** ASK bars; AAPL realtime bars (no data overnight); `HistoricalDataUpdate`
-  (keep-up-to-date) bars.
+
+*Live 2026-11-16, paper Gateway, server 226; raw capture; #1247.*
+
+- A TRADES bar in which nothing traded sends volume `"0"`, count `0` and WAP as a price, not
+  the `-1` sentinel: 428 of 541 historical 5-second AAPL premarket bars, 6 of 597 ES, 3 of 3
+  realtime BTC/PAXOS.
+- Realtime BID and ASK (EUR.USD, BTC/PAXOS) match MIDPOINT: volume and WAP absent, count `-1`.
+  Historical ASK and BID_ASK (ES), MIDPOINT and ASK (EUR.USD), MIDPOINT (BTC/PAXOS): `-1` for
+  all three. Keep-up-to-date `HistoricalDataUpdate` bars for MIDPOINT and BID: `-1` for all
+  three (16 of 16, EUR.USD and BTC/PAXOS).
+- ADJUSTED_LAST and AGGTRADES carry real trade values. HISTORICAL_VOLATILITY and
+  OPTION_IMPLIED_VOLATILITY (AAPL) send volume `"1"`, count `0` and a WAP.
+- Keep-up-to-date TRADES on BTC/PAXOS, 8 minutes: 97 update bars, all with `bar_count` (81
+  with trades, 16 quiet). TWS answered 10299 ("use AGGTRADES") and streamed anyway.
+- **Not probed:** AAPL realtime bars (no data overnight); a keep-up-to-date TRADES update bar
+  without `bar_count` (#1057), for which stocks and futures need up-to-the-second data (2188 on
+  the probing account).
 
 ### Historical bars for a continuous future take no end date
 

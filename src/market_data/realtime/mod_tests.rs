@@ -79,6 +79,6 @@ fn bar_default_is_zero_at_epoch() {
         count,
     } = Bar::default();
     assert_eq!(date, OffsetDateTime::UNIX_EPOCH);
-    assert_eq!((open, high, low, close, count), (0.0, 0.0, 0.0, 0.0, 0));
-    assert_eq!((volume, wap), (None, None));
+    assert_eq!((open, high, low, close), (0.0, 0.0, 0.0, 0.0));
+    assert_eq!((volume, wap, count), (None, None, None));
 }

@@ -1,6 +1,6 @@
 use crate::market_data::{TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
 use crate::proto;
-use crate::proto::decoders::{parse_decimal_or_zero, ts};
+use crate::proto::decoders::{parse_decimal_or_zero, parse_optional_decimal, ts};
 use crate::Error;
 
 pub(in crate::market_data) fn decode_tick_last(t: proto::HistoricalTickLast) -> Result<TickLast, Error> {
@@ -39,6 +39,35 @@ pub(in crate::market_data) fn decode_tick_midpoint(t: proto::HistoricalTick) -> 
         time: ts(t.time.unwrap_or_default()),
         price: t.price.unwrap_or_default(),
     }
+}
+
+/// A bar's trade fields: volume, WAP and trade count, each `None` when the bar has no trade data.
+#[derive(Debug, PartialEq)]
+pub(in crate::market_data) struct BarTradeFields {
+    pub(in crate::market_data) volume: Option<f64>,
+    pub(in crate::market_data) wap: Option<f64>,
+    pub(in crate::market_data) count: Option<i32>,
+}
+
+/// TWS's "no trade data" marker on a bar. Historical bars send it for volume, WAP and count on
+/// a bar type without trades (MIDPOINT, BID, ASK, BID_ASK); realtime bars send it for count and
+/// leave volume and WAP out (`docs/wire-facts/market-data.md`).
+const NO_TRADE_DATA: i32 = -1;
+
+/// Decodes the trade fields shared by realtime and historical bars, by value rather than by
+/// `WhatToShow`: ADJUSTED_LAST and AGGTRADES carry real trade values too.
+///
+/// Volume and count are `None` when absent or `-1`. WAP is a price, so it is not tested for
+/// `-1`; it is `None` whenever volume is. A TRADES bar in which nothing traded keeps
+/// `Some(0.0)` / `Some(0)`.
+pub(in crate::market_data) fn decode_bar_trade_fields(volume: Option<&str>, wap: Option<&str>, count: Option<i32>) -> Result<BarTradeFields, Error> {
+    let volume = parse_optional_decimal(volume)?.filter(|&v| v != f64::from(NO_TRADE_DATA));
+    let wap = match volume {
+        Some(_) => parse_optional_decimal(wap)?,
+        None => None,
+    };
+    let count = count.filter(|&c| c != NO_TRADE_DATA);
+    Ok(BarTradeFields { volume, wap, count })
 }
 
 #[cfg(test)]

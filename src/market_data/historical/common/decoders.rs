@@ -7,8 +7,8 @@ use crate::common::timezone::{find_timezone, resolve_local};
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use crate::market_data::common::decoders::{decode_tick_bid_ask, decode_tick_last, decode_tick_midpoint};
-use crate::market_data::historical::{Bar, BarTimestamp, HistogramEntry, Schedule, Session, TickBidAsk, TickLast, TickMidpoint, NO_BAR_COUNT};
+use crate::market_data::common::decoders::{decode_bar_trade_fields, decode_tick_bid_ask, decode_tick_last, decode_tick_midpoint, BarTradeFields};
+use crate::market_data::historical::{Bar, BarTimestamp, HistogramEntry, Schedule, Session, TickBidAsk, TickLast, TickMidpoint};
 
 fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
     let mk_err = |e: &dyn std::fmt::Display| Error::parse_field(s, format!("invalid unix-second timestamp: {e}"));
@@ -96,7 +96,7 @@ fn parse_historical_data_end_timestamp(text: &str) -> Result<OffsetDateTime, Err
 // === Protobuf decoders ===
 
 use crate::proto;
-use crate::proto::decoders::{parse_decimal_or_zero, parse_optional_decimal, required};
+use crate::proto::decoders::{parse_optional_decimal, required};
 
 pub(crate) fn decode_historical_data_proto(msg: crate::proto::HistoricalData) -> Result<Vec<Bar>, Error> {
     // Sized up front rather than `.collect::<Result<Vec<_>, _>>()`: collecting into
@@ -112,15 +112,16 @@ pub(crate) fn decode_historical_data_proto(msg: crate::proto::HistoricalData) ->
 
 fn decode_historical_data_bar(b: &proto::HistoricalDataBar) -> Result<Bar, Error> {
     let date = required(b.date.as_deref(), "date", "HistoricalDataBar")?.parse::<BarTimestamp>()?;
+    let BarTradeFields { volume, wap, count } = decode_bar_trade_fields(b.volume.as_deref(), b.wap.as_deref(), b.bar_count)?;
     Ok(Bar {
         date,
         open: b.open.unwrap_or_default(),
         high: b.high.unwrap_or_default(),
         low: b.low.unwrap_or_default(),
         close: b.close.unwrap_or_default(),
-        volume: parse_decimal_or_zero(b.volume.as_deref())?,
-        wap: parse_decimal_or_zero(b.wap.as_deref())?,
-        count: b.bar_count.unwrap_or(NO_BAR_COUNT),
+        volume,
+        wap,
+        count,
     })
 }
 

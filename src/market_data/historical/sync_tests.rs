@@ -271,9 +271,9 @@ fn historical_data() {
     assert_eq!(historical_data.bars[0].high, 186.50, "bar.high");
     assert_eq!(historical_data.bars[0].low, 180.94, "bar.low");
     assert_eq!(historical_data.bars[0].close, 185.90, "bar.close");
-    assert_eq!(historical_data.bars[0].volume, 948837.22, "bar.volume");
-    assert_eq!(historical_data.bars[0].wap, 184.869, "bar.wap");
-    assert_eq!(historical_data.bars[0].count, 324891, "bar.count");
+    assert_eq!(historical_data.bars[0].volume, Some(948837.22), "bar.volume");
+    assert_eq!(historical_data.bars[0].wap, Some(184.869), "bar.wap");
+    assert_eq!(historical_data.bars[0].count, Some(324891), "bar.count");
 
     assert_eq!(historical_data.bars[1].date, BarTimestamp::Date(date!(2023 - 04 - 14)), "daily bar.date");
     assert_eq!(historical_data.bars[1].open, 183.88, "bar[1].open");

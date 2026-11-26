@@ -137,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bar.high,
                 bar.low,
                 bar.close,
-                bar.volume
+                bar.volume.unwrap_or(0.0)
             );
         }
         if historical_data.bars.len() > 10 {
@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bar.high,
                     bar.low,
                     bar.close,
-                    bar.volume
+                    bar.volume.unwrap_or(0.0)
                 );
             }
         }
@@ -176,7 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bar.high,
                 bar.low,
                 bar.close,
-                bar.volume / 1000.0
+                bar.volume.unwrap_or(0.0) / 1000.0
             );
         }
 
@@ -262,7 +262,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bar.high,
                     bar.low,
                     bar.close,
-                    bar.volume
+                    bar.volume.unwrap_or(0.0)
                 );
             }
             Ok(HistoricalDataFrame::End { start, end }) => {

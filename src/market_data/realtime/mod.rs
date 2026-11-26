@@ -112,13 +112,13 @@ pub struct Bar {
     pub volume: Option<f64>,
     /// Volume weighted average price. `None` when [`volume`](Self::volume) is.
     pub wap: Option<f64>,
-    /// Number of trades during the bar period; `-1` for bars that aren't
-    /// [`WhatToShow::Trades`].
-    pub count: i32,
+    /// Number of trades during the bar period. `None` when TWS sends none or `-1`, which it
+    /// does on a MIDPOINT, BID or ASK bar; a quiet TRADES bar reports `Some(0)`.
+    pub count: Option<i32>,
 }
 
 impl Default for Bar {
-    /// A zero-price bar with no volume or WAP, timestamped at the Unix epoch.
+    /// A zero-price bar with no volume, WAP or count, timestamped at the Unix epoch.
     fn default() -> Self {
         Self {
             date: OffsetDateTime::UNIX_EPOCH,
@@ -128,7 +128,7 @@ impl Default for Bar {
             close: 0.0,
             volume: None,
             wap: None,
-            count: 0,
+            count: None,
         }
     }
 }

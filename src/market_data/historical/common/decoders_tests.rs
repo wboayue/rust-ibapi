@@ -50,13 +50,13 @@ fn decode_historical_data_proto_works() {
     assert_eq!(bars[0].high, 186.00);
     assert_eq!(bars[0].low, 185.00);
     assert_eq!(bars[0].close, 185.75);
-    assert_eq!(bars[0].volume, 1000.0);
-    assert_eq!(bars[0].wap, 185.625);
-    assert_eq!(bars[0].count, 150);
+    assert_eq!(bars[0].volume, Some(1000.0));
+    assert_eq!(bars[0].wap, Some(185.625));
+    assert_eq!(bars[0].count, Some(150));
 
     assert_eq!(bars[1].open, 186.00);
     assert_eq!(bars[1].date, BarTimestamp::Date(date!(2023 - 04 - 11)));
-    assert_eq!(bars[1].count, 300);
+    assert_eq!(bars[1].count, Some(300));
 }
 
 #[test]
@@ -335,9 +335,9 @@ fn decode_historical_data_update_proto_works() {
     assert_eq!(result.high, 151.0);
     assert_eq!(result.low, 149.5);
     assert_eq!(result.close, 150.75);
-    assert_eq!(result.volume, 1000.0);
-    assert_eq!(result.wap, 150.5);
-    assert_eq!(result.count, 42);
+    assert_eq!(result.volume, Some(1000.0));
+    assert_eq!(result.wap, Some(150.5));
+    assert_eq!(result.count, Some(42));
     assert_eq!(result.date, BarTimestamp::DateTime(datetime!(2023-04-10 13:30:00 UTC)));
 }
 
@@ -393,7 +393,7 @@ fn decode_historical_data_bar_rejects_missing_or_malformed_date() {
 }
 
 #[test]
-fn decode_historical_data_update_proto_missing_count_is_minus_one() {
+fn decode_historical_data_update_proto_missing_count_is_none() {
     let proto_msg = crate::proto::HistoricalDataUpdate {
         req_id: Some(1),
         historical_data_bar: Some(crate::proto::HistoricalDataBar {
@@ -403,7 +403,7 @@ fn decode_historical_data_update_proto_missing_count_is_minus_one() {
     };
 
     let result = decode_historical_data_update_proto(proto_msg).unwrap();
-    assert_eq!(result.count, -1);
+    assert_eq!(result.count, None);
 }
 
 // ---------------------------------------------------------------------------
@@ -505,7 +505,36 @@ fn decode_historical_data_proto_preserves_fractional_volume() {
         .to_proto();
 
     let bars = super::decode_historical_data_proto(p).unwrap();
-    assert_eq!(bars[0].volume, 0.5);
+    assert_eq!(bars[0].volume, Some(0.5));
+}
+
+/// TWS sends `-1` for volume, WAP and count on a bar type without trade data (MIDPOINT, BID,
+/// ASK, BID_ASK), and real zeros on a TRADES bar in which nothing traded (live, server 226).
+#[test]
+fn decode_historical_data_proto_trade_fields() {
+    let bar = |volume, wap, count| {
+        historical_data_daily_bar("20230101")
+            .ohlc(100.0, 101.0, 99.0, 100.5)
+            .volume(volume)
+            .wap(wap)
+            .count(count)
+    };
+    let p = historical_data_response()
+        .bar(bar(1500.0, 100.25, 42))
+        .bar(bar(0.0, 100.5, 0))
+        .bar(bar(-1.0, -1.0, -1))
+        .to_proto();
+
+    let bars = super::decode_historical_data_proto(p).unwrap();
+    let fields: Vec<_> = bars.iter().map(|b| (b.volume, b.wap, b.count)).collect();
+    assert_eq!(
+        fields,
+        [
+            (Some(1500.0), Some(100.25), Some(42)),
+            (Some(0.0), Some(100.5), Some(0)),
+            (None, None, None)
+        ]
+    );
 }
 
 #[test]
