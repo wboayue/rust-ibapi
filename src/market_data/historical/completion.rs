@@ -32,7 +32,7 @@ pub enum StreamedBar {
 ///
 /// - an update for it that arrives at or after its end (its start plus the bar size), read on
 ///   the local clock. This is TWS's last update for the bar, received under a second after the
-///   bar ends (live: 2026-11-24). It needs the local clock within a few seconds of TWS's.
+///   bar ends (live: 2026-11-24).
 /// - an update for a later bar. Daily and longer bars, whose end depends on the trading
 ///   session, complete only this way.
 ///
@@ -50,9 +50,17 @@ pub enum StreamedBar {
 /// Bars with volume 0 are TWS's own: they come in historical replies too, and some carry a new
 /// price. They are classified like any other bar.
 ///
+/// The rule reads the local clock, so it holds only while that clock is within about a second
+/// of TWS's. A local clock ahead of TWS's by `d` seconds completes a bar on an update TWS sent
+/// up to `d` seconds before the bar ended: with `d` of 5 seconds or more, that is the update
+/// before the last one, and the last update, which can still change the bar, is then dropped
+/// as late. A local clock behind TWS's completes the bar only on the next bar's first update,
+/// about 5 seconds later, with the right values.
+///
 /// Updates for a bar already completed are dropped. Reuse one `BarCompletion` across a
 /// resubscription: the new batch replays the bars already completed, and they are not
-/// repeated.
+/// repeated. At a gap in the stream, such as a reconnect or a 10182 notice, call
+/// [`reset`](Self::reset) to drop the forming bar, which rests on updates from before the gap.
 ///
 /// # Examples
 ///
@@ -252,6 +260,31 @@ impl BarCompletion {
         let bar = self.forming.take()?;
         self.completed_through = Some(bar.date);
         Some(bar)
+    }
+
+    /// Drops the forming bar and returns it, or `None` when no bar is forming. The bars completed
+    /// so far stay completed, so a resubscription's batch does not hand them out again.
+    ///
+    /// For a gap in the stream, such as a reconnect or a 10182 notice from
+    /// `Client::resubscribing`: the forming bar holds only the updates before the gap, and the
+    /// next batch sends the bar again with its full values. Applying an empty batch also drops
+    /// the forming bar, without returning it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::market_data::historical::{Bar, BarCompletion, BarSize, BarTimestamp, HistoricalDataFrame};
+    /// use time::macros::datetime;
+    ///
+    /// let mut completion = BarCompletion::new(BarSize::Min);
+    /// let bar = Bar { date: BarTimestamp::DateTime(datetime!(2026-04-14 9:31 UTC)), ..Bar::default() };
+    /// completion.apply(HistoricalDataFrame::Bars(vec![bar]));
+    ///
+    /// assert_eq!(completion.reset(), Some(bar));
+    /// assert_eq!(completion.forming_end(), None);
+    /// ```
+    pub fn reset(&mut self) -> Option<Bar> {
+        self.forming.take()
     }
 
     /// The end of the forming bar, its start plus the bar size; `None` when no bar is forming or

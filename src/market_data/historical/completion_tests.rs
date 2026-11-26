@@ -246,3 +246,39 @@ fn expire_leaves_a_daily_bar_forming() {
     assert_eq!(expired, None);
     assert_eq!(completion.forming_end(), None);
 }
+
+/// `reset` drops and returns the forming bar; bars completed before it are not handed out again
+/// when a new batch replays them, and the replayed forming bar is forming again.
+#[test]
+fn reset_drops_the_forming_bar_and_keeps_completed_ones() {
+    let mut completion = BarCompletion::new(BarSize::Min);
+    let batch = || HistoricalDataFrame::Bars(vec![bar(datetime!(2026-11-24 9:14 UTC), 1.0), bar(datetime!(2026-11-24 9:15 UTC), 2.0)]);
+    completion.apply_at(batch(), datetime!(2026-11-24 9:15:10 UTC));
+
+    let dropped = completion.reset();
+    let after_reset = completion.forming_end();
+    let replayed = completion.apply_at(batch(), datetime!(2026-11-24 9:15:40 UTC));
+    let empty = BarCompletion::new(BarSize::Min).reset();
+
+    assert_eq!(dropped, Some(bar(datetime!(2026-11-24 9:15 UTC), 2.0)));
+    assert_eq!(after_reset, None);
+    assert_eq!(replayed, vec![StreamedBar::Forming(bar(datetime!(2026-11-24 9:15 UTC), 2.0))]);
+    assert_eq!(empty, None);
+}
+
+/// A local clock 6 s ahead of TWS's completes the bar on the update TWS sent at :55, and the
+/// last update, sent just after :00 with a new close, is dropped as late.
+#[test]
+fn clock_ahead_completes_on_an_earlier_update() {
+    let mut completion = BarCompletion::new(BarSize::Min);
+    completion.apply_at(
+        HistoricalDataFrame::Bars(vec![bar(datetime!(2026-11-24 9:15 UTC), 1.0)]),
+        datetime!(2026-11-24 9:15:30 UTC),
+    );
+
+    let early = completion.apply_at(update(bar(datetime!(2026-11-24 9:15 UTC), 2.0)), datetime!(2026-11-24 9:16:01 UTC));
+    let last = completion.apply_at(update(bar(datetime!(2026-11-24 9:15 UTC), 3.0)), datetime!(2026-11-24 9:16:06 UTC));
+
+    assert_eq!(early, vec![StreamedBar::Completed(bar(datetime!(2026-11-24 9:15 UTC), 2.0))]);
+    assert_eq!(last, vec![]);
+}
