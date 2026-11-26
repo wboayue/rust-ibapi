@@ -96,7 +96,7 @@ impl RateLimiter {
     /// Reserve a send slot at `now`; returns how long to wait before sending.
     /// A cancel takes a slot but never waits.
     pub(crate) fn reserve(&self, now: Instant, is_cancel: bool) -> Duration {
-        let wait = self.state().reserve(now);
+        let wait = self.state().reserve(now, None).expect("unbounded rate-limit reservation");
         if is_cancel {
             Duration::ZERO
         } else {
@@ -113,6 +113,15 @@ impl RateLimiter {
         }
     }
 
+    #[cfg(feature = "sync")]
+    pub(crate) fn acquire_blocking_before(&self, deadline: Instant) -> Result<(), crate::Error> {
+        let wait = self.reserve_before(Instant::now(), deadline)?;
+        if !wait.is_zero() {
+            std::thread::sleep(wait);
+        }
+        Ok(())
+    }
+
     /// Wait, without blocking the runtime, until a slot is free.
     #[cfg(feature = "async")]
     pub(crate) async fn acquire(&self, is_cancel: bool) {
@@ -120,6 +129,20 @@ impl RateLimiter {
         if !wait.is_zero() {
             tokio::time::sleep(wait).await;
         }
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) async fn acquire_before(&self, deadline: tokio::time::Instant) -> Result<(), crate::Error> {
+        let now = tokio::time::Instant::now();
+        let wait = self.reserve_before(now.into_std(), deadline.into_std())?;
+        if !wait.is_zero() {
+            tokio::time::sleep_until(now + wait).await;
+        }
+        Ok(())
+    }
+
+    fn reserve_before(&self, now: Instant, deadline: Instant) -> Result<Duration, crate::Error> {
+        self.state().reserve(now, Some(deadline)).ok_or(crate::Error::Timeout)
     }
 
     /// When the next request could go out without waiting, if any slot was
@@ -168,11 +191,14 @@ impl Gcra {
         }
     }
 
-    fn reserve(&mut self, now: Instant) -> Duration {
+    fn reserve(&mut self, now: Instant, deadline: Option<Instant>) -> Option<Duration> {
         let tat = self.tat.map_or(now, |tat| tat.max(now));
         let send_at = tat.checked_sub(self.tolerance).map_or(now, |earliest| earliest.max(now));
+        if deadline.is_some_and(|deadline| deadline <= send_at) {
+            return None;
+        }
         self.tat = Some(tat + self.interval);
-        send_at - now
+        Some(send_at - now)
     }
 }
 

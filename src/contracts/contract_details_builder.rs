@@ -7,6 +7,8 @@
 
 use crate::client::ids::RequestId;
 use crate::contracts::{Contract, ContractDetails};
+#[cfg(feature = "async")]
+use crate::transport::r#async::WriteAdmission;
 use crate::Error;
 
 /// Builder for a contract-details request that yields one [`ContractDetails`]
@@ -162,7 +164,14 @@ impl<'a> ContractDetailsBuilder<'a, crate::client::sync::Client> {
     /// }
     /// ```
     pub fn subscribe(self) -> Result<crate::subscriptions::sync::Subscription<ContractDetails>, Error> {
-        crate::contracts::sync::contract_details_stream(self.client, self.contract, self.request_id, self.buffer_limit)
+        self.subscribe_before(None)
+    }
+
+    pub(in crate::contracts) fn subscribe_before(
+        self,
+        deadline: Option<std::time::Instant>,
+    ) -> Result<crate::subscriptions::sync::Subscription<ContractDetails>, Error> {
+        crate::contracts::sync::contract_details_stream(self.client, self.contract, self.request_id, self.buffer_limit, deadline)
     }
 }
 
@@ -208,6 +217,14 @@ impl<'a> ContractDetailsBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn subscribe(self) -> Result<crate::subscriptions::r#async::Subscription<ContractDetails>, Error> {
-        crate::contracts::r#async::contract_details_stream(self.client, self.contract, self.request_id, self.buffer_limit).await
+        self.subscribe_before(None)?.await
+    }
+
+    pub(in crate::contracts) fn subscribe_before(
+        self,
+        admission: Option<WriteAdmission>,
+    ) -> Result<impl std::future::Future<Output = Result<crate::subscriptions::r#async::Subscription<ContractDetails>, Error>> + Send + 'static, Error>
+    {
+        crate::contracts::r#async::contract_details_stream(self.client, self.contract, self.request_id, self.buffer_limit, admission)
     }
 }

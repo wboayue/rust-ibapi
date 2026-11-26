@@ -12,7 +12,7 @@ pub(crate) use io::read_framed_message;
 /// The stream traits, for test fixtures that stand in for a socket.
 #[cfg(test)]
 pub(crate) use io::{AsyncIo, AsyncReconnect};
-pub(crate) use io::{AsyncSocket, AsyncStream, Connector};
+pub(crate) use io::{AsyncSocket, AsyncStream, Connector, WriteAdmission};
 use registry::{Route, SenderHash, SharedChannels};
 pub(crate) use shutdown::ShutdownSignal;
 
@@ -195,11 +195,12 @@ pub trait AsyncMessageBus: Send + Sync {
         request_id: RequestId,
         message: Vec<u8>,
         bound: Option<BufferBound>,
+        admission: Option<WriteAdmission>,
     ) -> Result<AsyncInternalSubscription, Error>;
 
     /// [`send_request_capped`](Self::send_request_capped) without a cap.
     async fn send_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.send_request_capped(request_id, message, None).await
+        self.send_request_capped(request_id, message, None, None).await
     }
 
     /// [`send_request`](Self::send_request) for `executions`: an order-class
@@ -841,7 +842,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// handshake writes through `AsyncConnection`, not here.
     async fn write_message(&self, message: &[u8]) -> Result<(), Error> {
         self.throttle(message).await;
-        self.write_now(message).await
+        self.write_now(message, None).await
     }
 
     /// Waits for the rate limiter, if any. Shared-channel paths call this
@@ -857,12 +858,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// under the `session` gate. The gate held for write is a reconnect in
     /// progress, whatever the state signal says yet, so the write is refused
     /// as `ensure_connected` would refuse it once the signal catches up.
-    async fn write_now(&self, message: &[u8]) -> Result<(), Error> {
+    async fn write_now(&self, message: &[u8], admission: Option<&WriteAdmission>) -> Result<(), Error> {
         let Ok(_session) = self.session.try_read() else {
             return Err(self.ended_reason(Error::ConnectionReset));
         };
         self.ensure_connected()?;
-        self.connection.write_message(message).await
+        self.connection.write_message(message, admission).await
     }
 
     /// Fail all registered channels with `Error::ConnectionReset`, before a
@@ -1075,8 +1076,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         key: fn(K) -> RouteKey,
         message: Vec<u8>,
         class: ChannelClass,
-        bound: Option<BufferBound>,
+        (bound, admission): (Option<BufferBound>, Option<&WriteAdmission>),
     ) -> Result<AsyncInternalSubscription, Error> {
+        if let Some(admission) = admission {
+            admission.ensure_open()?;
+        }
         // Read before the gate: a reset after this read leaves the
         // subscription in the old session, which is where its request went.
         let session = self.session_generation();
@@ -1111,7 +1115,22 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // the registration back out on failure rather than leave a channel no
         // reset will clear. `remove_if_same` so a newer registration under the
         // same id survives.
-        if let Err(e) = self.write_message(&message).await {
+        let admitted = match (admission, self.rate_limiter.get()) {
+            (Some(admission), Some(limiter)) => tokio::select! {
+                biased;
+                e = admission.stopped() => Err(e),
+                result = limiter.acquire_before(admission.deadline()) => result,
+            },
+            _ => {
+                self.throttle(&message).await;
+                Ok(())
+            }
+        };
+        let send = match admitted {
+            Ok(()) => self.write_now(&message, admission).await,
+            Err(e) => Err(e),
+        };
+        if let Err(e) = send {
             routes.remove_if_same(id, &lease_ref);
             return Err(e);
         }
@@ -1152,7 +1171,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.ensure_connected()?;
         self.throttle(&message).await;
 
-        let (receiver, ticket) = self.shared_channels.subscribe(message_type, account, || self.write_now(&message)).await?;
+        let (receiver, ticket) = self
+            .shared_channels
+            .subscribe(message_type, account, || self.write_now(&message, None))
+            .await?;
 
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
             .shared(ticket)
@@ -1168,18 +1190,26 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         request_id: RequestId,
         message: Vec<u8>,
         bound: Option<BufferBound>,
+        admission: Option<WriteAdmission>,
     ) -> Result<AsyncInternalSubscription, Error> {
-        self.open_route(&self.requests, request_id, RouteKey::Request, message, ChannelClass::MarketData, bound)
-            .await
+        self.open_route(
+            &self.requests,
+            request_id,
+            RouteKey::Request,
+            message,
+            ChannelClass::MarketData,
+            (bound, admission.as_ref()),
+        )
+        .await
     }
 
     async fn send_executions_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.open_route(&self.requests, request_id, RouteKey::Request, message, ChannelClass::Order, None)
+        self.open_route(&self.requests, request_id, RouteKey::Request, message, ChannelClass::Order, (None, None))
             .await
     }
 
     async fn send_order_request(&self, order_id: OrderId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.open_route(&self.orders, order_id, RouteKey::Order, message, ChannelClass::Order, None)
+        self.open_route(&self.orders, order_id, RouteKey::Order, message, ChannelClass::Order, (None, None))
             .await
     }
 
@@ -1200,7 +1230,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         self.shared_channels
             .unsubscribe(ticket, || async move {
                 match message {
-                    Some(message) => self.write_now(&message).await,
+                    Some(message) => self.write_now(&message, None).await,
                     None => Ok(()),
                 }
             })

@@ -45,6 +45,154 @@ fn make_bus() -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>) {
 
 const TICK: Duration = Duration::from_millis(100);
 
+#[tokio::test(start_paused = true)]
+async fn contract_details_deadline_refuses_rate_limited_send() {
+    let (stream, bus) = make_bus();
+    let limiter = RateLimiter::per_second(1);
+    assert_eq!(limiter.reserve(std::time::Instant::now(), false), Duration::ZERO);
+    let reservation = limiter.reserved_until();
+    bus.set_rate_limiter(limiter.clone());
+    let client = crate::Client::stubbed(bus, server_versions::CANCEL_CONTRACT_DATA).with_one_shot_timeout(Duration::from_millis(10));
+
+    let error = client
+        .contract_details(&crate::contracts::Contract::stock("AAPL").build())
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, Error::Timeout), "got {error:?}");
+    assert!(stream.captured().is_empty(), "the rate-limited request must never reach the socket");
+    assert_eq!(limiter.reserved_until(), reservation);
+}
+
+#[tokio::test(start_paused = true)]
+async fn contract_details_deadline_preserves_an_in_flight_frame() {
+    use crate::common::test_utils::helpers::TEST_REQ_ID_FIRST;
+    use crate::contracts::Contract;
+    use crate::messages::{MESSAGE_ID_LEN, PROTOBUF_MSG_ID};
+    use crate::transport::raw_capture::RawFrameTap;
+    use prost::Message;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (bus, mut peer) = contract_details_duplex(server_versions::CANCEL_CONTRACT_DATA).await;
+    let client = crate::Client::stubbed(bus.clone(), server_versions::CANCEL_CONTRACT_DATA).with_one_shot_timeout(Duration::from_millis(20));
+    let contract = Contract::stock("AAPL").build();
+    let other_id = RequestId::nth(42);
+    let tap = RawFrameTap::disabled();
+    let (other, other_packet) = tokio::join!(bus.send_request(other_id, vec![1, 2, 3, 4]), io::read_framed_message(&mut peer, &tap));
+    let mut other = other.unwrap();
+    assert_eq!(other_packet.unwrap(), [1, 2, 3, 4]);
+
+    let mut prefix = [0; 2];
+    let (result, read) = tokio::join!(
+        client.contract_details(&contract),
+        tokio::time::timeout(Duration::from_secs(1), peer.read_exact(&mut prefix))
+    );
+    read.unwrap().unwrap();
+    assert!(matches!(result, Err(Error::Timeout)), "got {result:?}");
+
+    let queued = client.contract_details(&contract).await;
+    assert!(matches!(queued, Err(Error::Timeout)), "got {queued:?}");
+
+    let (request, cancel) = tokio::time::timeout(Duration::from_secs(1), async {
+        let mut framed = std::io::Cursor::new(prefix).chain(&mut peer);
+        let request = io::read_framed_message(&mut framed, &tap).await.unwrap();
+        let cancel = io::read_framed_message(&mut peer, &tap).await.unwrap();
+        (request, cancel)
+    })
+    .await
+    .expect("the timed-out request must complete its frame and cancel");
+    let request_type = i32::from_be_bytes(request[..MESSAGE_ID_LEN].try_into().unwrap());
+    let cancel_type = i32::from_be_bytes(cancel[..MESSAGE_ID_LEN].try_into().unwrap());
+    assert_eq!(request_type, OutgoingMessages::RequestContractData as i32 + PROTOBUF_MSG_ID);
+    assert_eq!(cancel_type, OutgoingMessages::CancelContractData as i32 + PROTOBUF_MSG_ID);
+    assert_eq!(
+        crate::proto::ContractDataRequest::decode(&request[MESSAGE_ID_LEN..]).unwrap().req_id,
+        Some(TEST_REQ_ID_FIRST)
+    );
+    assert_eq!(
+        crate::proto::CancelContractData::decode(&cancel[MESSAGE_ID_LEN..]).unwrap().req_id,
+        Some(TEST_REQ_ID_FIRST)
+    );
+
+    let body = binary_proto(
+        IncomingMessages::ContractData as i32,
+        &contract_data().request_id(other_id.raw()).contract_id(12345).symbol("AAPL").to_proto(),
+    );
+    let frame = encode_raw_length(&body);
+    let (write, routed) = tokio::join!(peer.write_all(&frame), bus.read_and_route_message());
+    write.unwrap();
+    routed.unwrap();
+    assert!(matches!(other.next_routed().await, Some(RoutedItem::Response(message)) if message.message_type() == IncomingMessages::ContractData));
+    wait_for_async("the timed-out contract routes to close", || {
+        !bus.requests.contains(&RequestId::nth(0)) && !bus.requests.contains(&RequestId::nth(1))
+    })
+    .await;
+    assert!(futures::poll!(Box::pin(peer.read_u8()).as_mut()).is_pending(), "unexpected extra frame");
+}
+
+#[tokio::test(start_paused = true)]
+async fn contract_details_abandoned_while_queued_does_not_send() {
+    use crate::contracts::Contract;
+    use crate::transport::raw_capture::RawFrameTap;
+    use tokio::io::AsyncReadExt;
+
+    let cancel_version = server_versions::CANCEL_CONTRACT_DATA;
+    for version in [cancel_version - 1, cancel_version] {
+        let (bus, mut peer) = contract_details_duplex(version).await;
+        let client = crate::Client::stubbed(bus.clone(), version).with_one_shot_timeout(Duration::from_secs(60));
+        let contract = Contract::stock("AAPL").build();
+        let mut first = Box::pin(bus.send_request(RequestId::nth(42), vec![1, 2, 3, 4]));
+        let mut prefix = [0; 2];
+        tokio::select! {
+            read = peer.read_exact(&mut prefix) => { read.unwrap(); }
+            result = &mut first => panic!("the first frame should be waiting for the peer, got {}", result.is_ok()),
+        }
+
+        let mut abandoned = Box::pin(client.contract_details(&contract));
+        tokio::select! {
+            () = wait_for_async("contract-details route to open", || bus.requests.contains(&RequestId::nth(0))) => {},
+            result = &mut abandoned => panic!("contract details should be waiting for the writer, got {result:?}"),
+        }
+        drop(abandoned);
+
+        let mut framed = std::io::Cursor::new(prefix).chain(&mut peer);
+        let tap = RawFrameTap::disabled();
+        let (result, frame) = tokio::join!(first, io::read_framed_message(&mut framed, &tap));
+        let first = result.unwrap();
+        assert_eq!(frame.unwrap(), [1, 2, 3, 4]);
+        tokio::select! {
+            biased;
+            value = peer.read_u8() => panic!("unexpected bytes for server {version}: {value:?}"),
+            () = wait_for_async("abandoned contract-details route to close", || !bus.requests.contains(&RequestId::nth(0))) => {},
+        }
+        drop(first);
+    }
+}
+
+async fn contract_details_duplex(server: i32) -> (Arc<AsyncTcpMessageBus<AsyncSocket>>, tokio::io::DuplexStream) {
+    let (near, peer) = tokio::io::duplex(2);
+    let near = std::sync::Mutex::new(Some(near));
+    let connector = Connector::from_stream(move || std::future::ready(Ok(near.lock().unwrap().take().unwrap())));
+    let connection = AsyncConnection::stubbed(AsyncSocket::connect(connector).await.unwrap(), CLIENT_ID);
+    connection.set_server_version_for_test(server);
+    (Arc::new(AsyncTcpMessageBus::new(connection)), peer)
+}
+
+#[tokio::test(start_paused = true)]
+async fn contract_details_deadline_covers_admission_and_reply() {
+    let (stream, bus) = make_bus();
+    let limiter = RateLimiter::per_second(2);
+    assert_eq!(limiter.reserve(std::time::Instant::now(), false), Duration::ZERO);
+    bus.set_rate_limiter(limiter);
+    let client = crate::Client::stubbed(bus, server_versions::CANCEL_CONTRACT_DATA - 1).with_one_shot_timeout(Duration::from_millis(800));
+    let contract = crate::contracts::Contract::stock("AAPL").build();
+
+    let result = tokio::time::timeout(Duration::from_secs(1), client.contract_details(&contract)).await;
+
+    assert!(matches!(result, Ok(Err(Error::Timeout))), "got {result:?}");
+    assert!(!stream.captured().is_empty(), "the request was admitted before the reply timed out");
+}
+
 /// `with_channel_capacity` reaches the per-request channels: a capacity-2
 /// channel holds at most 2 queued frames, evicting the oldest (#779).
 #[tokio::test]
@@ -2268,7 +2416,7 @@ impl AsyncIo for HandoffSocket {
         self.stream.read_message().await
     }
 
-    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    async fn write_all(&self, buf: &[u8], admission: Option<&crate::transport::r#async::WriteAdmission>) -> Result<(), Error> {
         let is_sender = carries(buf, self.marker);
         if is_sender {
             self.state.send_modify(|s| s.sender_queued = true);
@@ -2279,7 +2427,7 @@ impl AsyncIo for HandoffSocket {
             s.writes.push((generation, buf.to_vec()));
             s.sender_wrote |= is_sender;
         });
-        self.stream.write_all(buf).await
+        self.stream.write_all(buf, admission).await
     }
 
     async fn close(&self) {
@@ -2406,9 +2554,9 @@ impl AsyncIo for StuckWriteSocket {
         self.stream.read_message().await
     }
 
-    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    async fn write_all(&self, buf: &[u8], admission: Option<&crate::transport::r#async::WriteAdmission>) -> Result<(), Error> {
         if !carries(buf, self.marker) {
-            return self.stream.write_all(buf).await;
+            return self.stream.write_all(buf, admission).await;
         }
         self.state.send_modify(|s| s.stuck = true);
         if self.wait(|s| s.severed).await {
@@ -2508,7 +2656,7 @@ impl AsyncIo for FailingWriteStream {
         self.0.read_message().await
     }
 
-    async fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
+    async fn write_all(&self, _buf: &[u8], _admission: Option<&WriteAdmission>) -> Result<(), Error> {
         Err(Error::ConnectionReset)
     }
 
@@ -2608,7 +2756,7 @@ async fn try_next_routed(sub: &mut AsyncInternalSubscription) -> Option<RoutedIt
 #[tokio::test]
 async fn bounded_request_fails_after_limit_unread() {
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2))).await.unwrap();
+    let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2)), None).await.unwrap();
 
     route_histograms(&stream, &bus, 4, RequestId::nth(100)).await;
 
@@ -2631,7 +2779,7 @@ async fn bounded_request_fails_after_limit_unread() {
 #[tokio::test]
 async fn bounded_request_counts_unread_not_total() {
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2))).await.unwrap();
+    let mut sub = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(2)), None).await.unwrap();
 
     for _ in 0..6 {
         route_histograms(&stream, &bus, 1, RequestId::nth(100)).await;
@@ -2645,8 +2793,8 @@ async fn bounded_request_counts_unread_not_total() {
 #[tokio::test]
 async fn reset_skips_overflowed_route() {
     let (stream, bus) = make_bus();
-    let mut overflowed = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(1))).await.unwrap();
-    let mut at_limit = bus.send_request_capped(RequestId::nth(200), vec![], Some(bound(1))).await.unwrap();
+    let mut overflowed = bus.send_request_capped(RequestId::nth(100), vec![], Some(bound(1)), None).await.unwrap();
+    let mut at_limit = bus.send_request_capped(RequestId::nth(200), vec![], Some(bound(1)), None).await.unwrap();
 
     route_histograms(&stream, &bus, 2, RequestId::nth(100)).await;
     route_histograms(&stream, &bus, 1, RequestId::nth(200)).await;
@@ -2672,7 +2820,7 @@ async fn overflowed_subscription_cancels_on_drop() {
     use crate::contracts::ContractDetails;
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request_capped(CONTRACT_REQUEST_ID, vec![], Some(bound(1))).await.unwrap();
+    let internal = bus.send_request_capped(CONTRACT_REQUEST_ID, vec![], Some(bound(1)), None).await.unwrap();
     let mut subscription: Subscription<ContractDetails> = Subscription::new_from_internal(
         internal,
         bus.clone(),
@@ -2708,7 +2856,7 @@ async fn bounded_request_end_marker_at_limit_still_ends() {
     // A result exactly `limit` rows long, read late: the end marker takes the
     // spare slot, so the stream ends normally and nothing is evicted.
     let (stream, bus) = make_bus();
-    let mut sub = bus.send_request_capped(CONTRACT_REQUEST_ID, vec![], Some(bound(1))).await.unwrap();
+    let mut sub = bus.send_request_capped(CONTRACT_REQUEST_ID, vec![], Some(bound(1)), None).await.unwrap();
 
     for frame in [contract_row(1), contract_end(), contract_row(2)] {
         stream.push_inbound(frame);

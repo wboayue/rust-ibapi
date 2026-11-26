@@ -1,5 +1,7 @@
 //! Asynchronous implementation of contract management functionality
 
+use std::future::Future;
+
 use super::common::stream_decoders::{ImpliedVolatilityRequest, OptionPriceRequest};
 use super::common::{decoders, encoders};
 use super::*;
@@ -10,6 +12,7 @@ use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto}
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
+use crate::transport::r#async::WriteAdmission;
 use crate::{Client, Error};
 
 impl Client {
@@ -20,9 +23,20 @@ impl Client {
     /// Collects every row before returning. To read rows as they arrive, stop reading early, or know the
     /// request id up front, use [Client::contract_details_stream].
     ///
-    /// Waits for TWS's end marker with no time bound. For a bound, use
+    /// A configured [`one_shot_timeout`](crate::ClientBuilder::one_shot_timeout) sets one deadline
+    /// for sending the request and reading the whole reply. With no timeout, the call waits
+    /// without a time limit.
+    /// During a TWS stall, contract-details requests went unanswered, with no error, until TWS
+    /// was restarted (#1299). The request is not resent after a reconnect: a dropped connection
+    /// ends the call with [`Error::ConnectionReset`]. For a bound on one call, use
     /// [`contract_details_stream`](Self::contract_details_stream) and
     /// [`collect_to_end_within`](crate::subscriptions::Subscription::collect_to_end_within).
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if the deadline expires before the end marker. On server version 215
+    /// or later, the client sends a cancel for an open subscription. If the deadline expires
+    /// or the caller drops the future after a write starts, the client finishes the frame in
+    /// the background before cancelling.
     ///
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts.
@@ -46,7 +60,27 @@ impl Client {
     /// }
     /// ```
     pub async fn contract_details(&self, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
-        self.contract_details_stream(contract).subscribe().await?.collect_to_end().await
+        let deadline = request_helpers::one_shot_deadline(self);
+        let request = self.contract_details_stream(contract);
+        let Some(deadline) = deadline else {
+            return request.subscribe().await?.collect_to_end().await;
+        };
+        request_helpers::check_deadline(Some(deadline))?;
+        let (admission, cancel_write) = WriteAdmission::new(deadline);
+        let sending = request.subscribe_before(Some(admission))?;
+        // Keep a write in progress owned after timeout so it cannot truncate the shared socket.
+        let task = self.message_bus.runtime_handle().spawn(sending);
+        let mut subscription = tokio::select! {
+            biased;
+            () = tokio::time::sleep_until(deadline) => return Err(Error::Timeout),
+            result = task => match result {
+                Ok(subscription) => subscription?,
+                Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()),
+                Err(_) => return Err(Error::Shutdown),
+            },
+        };
+        drop(cancel_write);
+        subscription.collect_to_end_before(deadline).await
     }
 
     /// Build a contract-details request whose subscription yields one
@@ -336,14 +370,15 @@ impl Client {
 
 /// Send a contract-details request with a pre-allocated id. Reached through
 /// [`ContractDetailsBuilder::subscribe`].
-pub(in crate::contracts) async fn contract_details_stream(
+pub(in crate::contracts) fn contract_details_stream(
     client: &Client,
     contract: &Contract,
     request_id: RequestId,
     buffer_limit: Option<usize>,
-) -> Result<Subscription<ContractDetails>, Error> {
+    admission: Option<WriteAdmission>,
+) -> Result<impl Future<Output = Result<Subscription<ContractDetails>, Error>> + Send + 'static, Error> {
     let packet = encoders::encode_request_contract_data(request_id.raw(), contract)?;
-    client.request_with_id(request_id).send_capped(packet, buffer_limit).await
+    Ok(client.request_with_id(request_id).send_capped_before(packet, buffer_limit, admission))
 }
 
 /// Request an underlying's option chain. Reached through

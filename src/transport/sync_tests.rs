@@ -184,7 +184,7 @@ impl Io for MockSocket {
         }
     }
 
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    fn write_all(&self, buf: &[u8], _deadline: Option<Instant>) -> Result<(), Error> {
         trace!("===== mock write =====");
         let write_call_count = self.write_call_count.load(Ordering::SeqCst);
         trace!("mock write: write_call_count: {write_call_count}");
@@ -710,7 +710,7 @@ fn request_during_disconnect_raises_error() -> Result<(), Error> {
         Err(_) => {
             connection.socket.reconnect()?;
             connection.handshake()?;
-            connection.write_message(&packet)?;
+            connection.write_message(&packet, None)?;
             connection.start_api()?;
             connection.receive_account_info()?;
         }
@@ -798,6 +798,34 @@ fn make_bus() -> (MemoryStream, Arc<TcpMessageBus<MemoryStream>>) {
 }
 
 const TICK: Duration = Duration::from_millis(100);
+
+#[test]
+fn contract_details_deadline_refuses_rate_limited_send() {
+    let (stream, bus) = make_bus();
+    let limiter = RateLimiter::per_second(1);
+    assert_eq!(limiter.reserve(Instant::now(), false), Duration::ZERO);
+    let reservation = limiter.reserved_until();
+    bus.set_rate_limiter(limiter.clone());
+    let client = Client::stubbed(bus, crate::server_versions::CANCEL_CONTRACT_DATA).with_one_shot_timeout(Duration::from_millis(10));
+
+    let error = client.contract_details(&Contract::stock("AAPL").build()).unwrap_err();
+
+    assert!(matches!(error, Error::Timeout), "got {error:?}");
+    assert!(stream.captured().is_empty(), "the rate-limited request must never reach the socket");
+    assert_eq!(limiter.reserved_until(), reservation);
+}
+
+#[test]
+fn contract_details_deadline_prevents_an_expired_socket_write() {
+    let (socket, peer, _listener) = tcp_socket_pair();
+    peer.set_nonblocking(true).unwrap();
+
+    let error = socket.write_all(b"too late", Some(Instant::now())).unwrap_err();
+    let receive_error = peer.peek(&mut [0]).unwrap_err();
+
+    assert!(matches!(error, Error::Timeout), "got {error:?}");
+    assert_eq!(receive_error.kind(), ErrorKind::WouldBlock);
+}
 
 /// Two in-flight `send_request` subscriptions: responses arrive in reverse order
 /// and each subscription receives only its own message. Validates `requests`
@@ -3428,7 +3456,7 @@ impl Io for HandoffSocket {
         self.stream.read_message()
     }
 
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    fn write_all(&self, buf: &[u8], deadline: Option<Instant>) -> Result<(), Error> {
         let (mutex, changed) = &*self.state;
         let mut state = mutex.lock().unwrap();
         let is_sender = carries(buf, self.marker);
@@ -3447,7 +3475,7 @@ impl Io for HandoffSocket {
             changed.notify_all();
         }
         drop(state);
-        self.stream.write_all(buf)
+        self.stream.write_all(buf, deadline)
     }
 
     fn close(&self) {
@@ -3571,9 +3599,9 @@ impl Io for StuckWriteSocket {
         self.stream.read_message()
     }
 
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    fn write_all(&self, buf: &[u8], deadline: Option<Instant>) -> Result<(), Error> {
         if !carries(buf, self.marker) {
-            return self.stream.write_all(buf);
+            return self.stream.write_all(buf, deadline);
         }
         let (mutex, changed) = &*self.state;
         let mut state = mutex.lock().unwrap();
@@ -3702,7 +3730,7 @@ impl Io for FailingWriteStream {
         self.0.read_message()
     }
 
-    fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
+    fn write_all(&self, _buf: &[u8], _deadline: Option<Instant>) -> Result<(), Error> {
         Err(Error::ConnectionReset)
     }
 
@@ -3808,7 +3836,7 @@ fn route(stream: &MemoryStream, bus: &TcpMessageBus<MemoryStream>, frames: usize
 #[test]
 fn bounded_request_fails_after_limit_unread() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(2)))?;
+    let sub = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(2)), None)?;
 
     route(&stream, &bus, 4, RequestId::nth(100))?;
 
@@ -3822,7 +3850,7 @@ fn bounded_request_fails_after_limit_unread() -> Result<(), Error> {
 #[test]
 fn bounded_request_counts_unread_not_total() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(2)))?;
+    let sub = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(2)), None)?;
 
     for _ in 0..6 {
         route(&stream, &bus, 1, RequestId::nth(100))?;
@@ -3834,8 +3862,8 @@ fn bounded_request_counts_unread_not_total() -> Result<(), Error> {
 #[test]
 fn reset_skips_overflowed_route() -> Result<(), Error> {
     let (stream, bus) = make_bus();
-    let overflowed = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(1)))?;
-    let at_limit = bus.send_request_capped(RequestId::nth(200), &[], Some(bound(1)))?;
+    let overflowed = bus.send_request_capped(RequestId::nth(100), &[], Some(bound(1)), None)?;
+    let at_limit = bus.send_request_capped(RequestId::nth(200), &[], Some(bound(1)), None)?;
 
     route(&stream, &bus, 2, RequestId::nth(100))?;
     route(&stream, &bus, 1, RequestId::nth(200))?;
@@ -3857,7 +3885,7 @@ fn overflowed_subscription_cancels_on_drop() -> Result<(), Error> {
     use crate::subscriptions::DecoderContext;
 
     let (stream, bus) = make_bus();
-    let internal = bus.send_request_capped(CONTRACT_REQUEST_ID, &[], Some(bound(1)))?;
+    let internal = bus.send_request_capped(CONTRACT_REQUEST_ID, &[], Some(bound(1)), None)?;
     let subscription: Subscription<ContractDetails> =
         Subscription::new(bus.clone(), internal, DecoderContext::new(crate::server_versions::CANCEL_CONTRACT_DATA));
 
@@ -3926,7 +3954,7 @@ fn bounded_request_end_marker_at_limit_still_ends() -> Result<(), Error> {
     // A result exactly `limit` rows long, read late: the end marker gets
     // through past the cap, so the stream ends normally.
     let (stream, bus) = make_bus();
-    let sub = bus.send_request_capped(CONTRACT_REQUEST_ID, &[], Some(bound(1)))?;
+    let sub = bus.send_request_capped(CONTRACT_REQUEST_ID, &[], Some(bound(1)), None)?;
 
     for frame in [contract_row(1), contract_end(), contract_row(2)] {
         stream.push_inbound(frame);
@@ -4398,7 +4426,7 @@ fn close_wakes_a_blocked_read_and_is_terminal() {
 
     socket.close();
     assert!(matches!(socket.read_message(), Err(Error::Shutdown)));
-    assert!(matches!(socket.write_all(&[1]), Err(Error::Shutdown)));
+    assert!(matches!(socket.write_all(&[1], None), Err(Error::Shutdown)));
     assert!(matches!(socket.reconnect(), Err(Error::Shutdown)));
 }
 
@@ -4452,14 +4480,14 @@ fn sever_fails_a_stuck_write_until_reconnect() {
         let socket = socket.clone();
         // Larger than loopback send + receive buffers: stalls, as the peer
         // is not reading.
-        move || done_send.send(socket.write_all(&vec![0xAA; 32 * 1024 * 1024])).unwrap()
+        move || done_send.send(socket.write_all(&vec![0xAA; 32 * 1024 * 1024], None)).unwrap()
     });
     helpers::wait_for("the write to take the writer", || socket.writer.try_lock().is_err());
 
     socket.sever();
     let written = done.recv_timeout(Duration::from_secs(1)).expect("sever left the write stuck");
     assert!(matches!(written, Err(Error::ConnectionReset)), "write: {written:?}");
-    assert!(matches!(socket.write_all(&[1]), Err(Error::ConnectionReset)));
+    assert!(matches!(socket.write_all(&[1], None), Err(Error::ConnectionReset)));
 
     let reconnect = std::thread::spawn({
         let socket = socket.clone();
@@ -4467,7 +4495,7 @@ fn sever_fails_a_stuck_write_until_reconnect() {
     });
     let (mut new_peer, _) = listener.accept().unwrap();
     reconnect.join().unwrap().expect("reconnect after sever");
-    socket.write_all(b"live").expect("the new connection must take writes");
+    socket.write_all(b"live", None).expect("the new connection must take writes");
     let mut received = [0u8; 4];
     new_peer.read_exact(&mut received).unwrap();
     assert_eq!(&received, b"live");

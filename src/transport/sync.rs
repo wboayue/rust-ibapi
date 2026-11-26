@@ -452,7 +452,7 @@ impl<S: Stream> TcpMessageBus<S> {
     /// handshake writes through `Connection`, not here.
     fn write_message(&self, message: &[u8]) -> Result<(), Error> {
         self.throttle(message);
-        self.write_now(message)
+        self.write_now(message, None)
     }
 
     /// Waits for the rate limiter, if any. Shared-channel paths call this
@@ -468,7 +468,7 @@ impl<S: Stream> TcpMessageBus<S> {
     /// under the `session` gate. The gate held for write is a reconnect in
     /// progress, whatever the state signal says yet, so the write is refused
     /// as `ensure_connected` would refuse it once the signal catches up.
-    fn write_now(&self, message: &[u8]) -> Result<(), Error> {
+    fn write_now(&self, message: &[u8], deadline: Option<Instant>) -> Result<(), Error> {
         let _session = match self.session.try_read() {
             Ok(guard) => guard,
             // Poison recovery, as `common::lock`: the guard holds nothing.
@@ -476,7 +476,7 @@ impl<S: Stream> TcpMessageBus<S> {
             Err(TryLockError::WouldBlock) => return Err(self.ended_reason(Error::ConnectionReset)),
         };
         self.ensure_connected()?;
-        self.connection.write_message(message)
+        self.connection.write_message(message, deadline)
     }
 
     fn reset(&self) {
@@ -807,7 +807,16 @@ impl<S: Stream> TcpMessageBus<S> {
 
     /// Register `request_id`'s channel, optionally with an unread-item cap,
     /// then write the request.
-    fn open_request(&self, request_id: RequestId, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
+    fn open_request(
+        &self,
+        request_id: RequestId,
+        message: &[u8],
+        bound: Option<BufferBound>,
+        deadline: Option<Instant>,
+    ) -> Result<InternalSubscription, Error> {
+        if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
+            return Err(Error::Timeout);
+        }
         // Read before the gate: a reset after this read leaves the
         // subscription in the old session, which is where its request went.
         let session = self.session_generation();
@@ -826,7 +835,15 @@ impl<S: Stream> TcpMessageBus<S> {
         // the registration back out on failure rather than leave a channel no
         // reset will clear. `remove_if_same` so a newer registration under the
         // same id survives.
-        if let Err(e) = self.write_message(message) {
+        let send = match (deadline, self.rate_limiter.get()) {
+            (Some(deadline), Some(limiter)) => limiter.acquire_blocking_before(deadline),
+            _ => {
+                self.throttle(message);
+                Ok(())
+            }
+        }
+        .and_then(|()| self.write_now(message, deadline));
+        if let Err(e) = send {
             self.requests.remove_if_same(request_id, &lease_ref);
             return Err(e);
         }
@@ -946,7 +963,7 @@ impl<S: Stream> TcpMessageBus<S> {
         let lease_ref = lease.downgrade();
         self.shared_channels.add(message_type, sender.clone(), lease_ref.clone());
         self.throttle(message);
-        let ticket = match self.shared_channels.subscribe(message_type, account, || self.write_now(message)) {
+        let ticket = match self.shared_channels.subscribe(message_type, account, || self.write_now(message, None)) {
             Ok(ticket) => ticket,
             Err(e) => {
                 self.shared_channels.remove(&lease_ref);
@@ -970,8 +987,14 @@ impl<S: Stream> TcpMessageBus<S> {
 }
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
-    fn send_request_capped(&self, request_id: RequestId, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
-        self.open_request(request_id, message, bound)
+    fn send_request_capped(
+        &self,
+        request_id: RequestId,
+        message: &[u8],
+        bound: Option<BufferBound>,
+        deadline: Option<Instant>,
+    ) -> Result<InternalSubscription, Error> {
+        self.open_request(request_id, message, bound, deadline)
     }
 
     fn send_order_request(&self, order_id: OrderId, message: &[u8]) -> Result<InternalSubscription, Error> {
@@ -1059,7 +1082,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             self.throttle(message);
         }
         self.shared_channels
-            .unsubscribe(ticket, || message.map_or(Ok(()), |message| self.write_now(message)))
+            .unsubscribe(ticket, || message.map_or(Ok(()), |message| self.write_now(message, None)))
     }
 
     fn notice_subscribe(&self) -> NoticeStream {
@@ -1499,8 +1522,11 @@ impl Io for TcpSocket {
         read_message(&mut *reader, &self.tap).map_err(|err| self.closed_or(err))
     }
 
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    fn write_all(&self, buf: &[u8], deadline: Option<Instant>) -> Result<(), Error> {
         let mut writer = lock(&self.writer);
+        if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
+            return Err(Error::Timeout);
+        }
         writer.write_all(buf).map_err(|err| self.closed_or(err.into()))
     }
 
@@ -1520,7 +1546,7 @@ impl Io for TcpSocket {
 
 pub(crate) trait Io {
     fn read_message(&self) -> Result<Vec<u8>, Error>;
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
+    fn write_all(&self, buf: &[u8], deadline: Option<Instant>) -> Result<(), Error>;
     /// Release the physical stream, even while owners still hold it: pending
     /// and later reads and writes fail with [`Error::Shutdown`], and
     /// `reconnect` refuses. Idempotent. Twin of `AsyncIo::close`.

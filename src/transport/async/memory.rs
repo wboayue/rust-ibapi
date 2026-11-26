@@ -119,8 +119,11 @@ impl AsyncIo for MemoryStream {
         }
     }
 
-    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    async fn write_all(&self, buf: &[u8], admission: Option<&crate::transport::r#async::WriteAdmission>) -> Result<(), Error> {
         let mut inner = self.inner.lock().unwrap();
+        if let Some(admission) = admission {
+            admission.ensure_open()?;
+        }
         if inner.retired {
             return Err(Error::Shutdown);
         }

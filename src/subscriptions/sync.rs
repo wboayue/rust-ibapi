@@ -617,7 +617,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// }
     /// ```
     pub fn collect_to_end_within(&self, timeout: Duration) -> Result<Vec<T>, Error> {
-        let (rows, stopped) = self.collect_core(Bound::At(Instant::now() + timeout), |_| false);
+        self.collect_to_end_before(Instant::now() + timeout)
+    }
+
+    pub(crate) fn collect_to_end_before(&self, deadline: Instant) -> Result<Vec<T>, Error> {
+        let (rows, stopped) = self.collect_core(Bound::At(deadline), |_| false);
         stopped.into_result(rows)
     }
 

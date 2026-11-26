@@ -329,7 +329,11 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     /// }
     /// ```
     pub async fn collect_to_end_within(&mut self, timeout: Duration) -> Result<Vec<T>, Error> {
-        let (rows, stopped) = self.collect_core(Bound::At(tokio::time::Instant::now() + timeout), |_| false).await;
+        self.collect_to_end_before(tokio::time::Instant::now() + timeout).await
+    }
+
+    pub(crate) async fn collect_to_end_before(&mut self, deadline: tokio::time::Instant) -> Result<Vec<T>, Error> {
+        let (rows, stopped) = self.collect_core(Bound::At(deadline), |_| false).await;
         stopped.into_result(rows)
     }
 
