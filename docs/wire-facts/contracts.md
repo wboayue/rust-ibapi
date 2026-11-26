@@ -219,6 +219,44 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
 - Settles typing `OptionChain::expirations` as dates. No contract month (`YYYYMM`) form appeared.
 - **Not probed:** bond or warrant chains; other futures roots.
 
+### Listing option contracts: `option_chain` against one `contract_details` query
+
+*Live 2026-11-24 04:50-05:20 ET off-hours, paper TWS, server 223; `reqSecDefOptParams` and
+`reqContractDetails` with no strike.*
+
+| Underlying | `option_chain` | Contracts from `contract_details` |
+| --- | --- | --- |
+| AAPL (265598) | 22 chains, one per exchange (SMART, CBOE, ... IBUSOPT), each 24 expiries x 133 strikes | 3,546 on SMART (49 s), 3,546 on CBOE (62 s); 980 for 202612 (0.8 s); 156 for 20261127 (0.4 s) |
+| SPX (416904, IND) | 9 chains: SPX, SPXW and SPXO each on SMART, CBOE and IBUSOPT; SPXW 38 x 843 | 33,502 on SMART (72 s); 23,248 for class SPXW (38 s); 13,156 for 202612 (20 s) |
+| ESZ6 (515416632, CME) | 19 chains, one per trading class (ES, EW, EW1-EW4, E1A-E4C), 1 expiry each | `FOP` ES on CME: 25,847 over 13 underlying futures (66 s); 11,583 for 202612 over ESZ6 and ESH7 (4.9 s) |
+| ZCH7 (748101140, CBOT) | 12 chains, strikes `360`, `365`, ... | `FOP` ZC 202612: 776 over ZCH7 and ZCZ7, strikes `3.6` to `5.85`, magnifier 100 |
+| VOD (ICEEU) | not run | 2,140 options, 60 expiries (41 s) |
+
+- `option_chain` answers in 2 ms to 1.2 s with expiry and strike lists. Their combinations
+  far exceed the listed contracts: AAPL's 24 x 133 x 2 = 6,384 per exchange, against 3,546
+  real ones. The chain also lists the expiry that ended the day before (20261123).
+- A `contract_details` query with symbol, security type, exchange and currency and no strike
+  returns every listed contract, each once, when the exchange is named. With an empty exchange,
+  AAPL 20261127 came back 3,432 times for 156 contracts: once per listing exchange.
+- The query contract's security type follows the underlying: `OPT` for a stock, ETF or index,
+  `FOP` for a future, with the future's exchange.
+- A futures-option query returns options on several futures. Neither a date nor a month
+  narrows it to one: ZC 20261224 returned 266 `OZC` options on ZCH7 and 204 `OCD` options on
+  ZCZ7. Select one future's options by `underConId`.
+- Expiry narrows to one date or one month. For `OPT` the month is the expiry month (SPX
+  202612: 20261201 to 20261231). For `FOP` it is the option's contract month: `OZC` January
+  2027 options expire 20261224, `202701` with class `OZC` returned 266, and `202612` with class
+  `OZC` drew 200.
+- Without an expiry a reply takes 40 to 75 s, and the rows can all come at the end: AAPL on
+  CBOE sent its first row at 61 s of 62, SPX on SMART at 49 s of 72 (AAPL on SMART at 2.7 s
+  of 49).
+- Right narrows: AAPL calls only returned 1,773 of 3,546. A strike narrows to that strike, and
+  one not listed draws 200 (AAPL 20261127 267.5).
+- Strikes in contract details are in currency units, and in `option_chain` they are in the
+  sub-unit for a magnified product (ZC `3.6` against `360`, `priceMagnifier` 100).
+- **Not probed:** pacing of many back-to-back per-strike requests (not needed by the single
+  query), queries during market hours, and chains of more than one currency.
+
 ### Market rule ids align with valid exchanges
 
 *Live 2026-11-10 RTH, paper Gateway, server 226; #1198.*

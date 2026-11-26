@@ -347,6 +347,71 @@ impl Contract {
         ContinuousFuturesBuilder::new(symbol)
     }
 
+    /// Creates a query contract that lists the option contracts of `underlying` through
+    /// `contract_details`.
+    ///
+    /// Supply the underlying's symbol and currency, as returned by `contract_details`. For
+    /// futures options, also supply its exchange and set `security_type` to
+    /// `Some(SecurityType::Future)` or `Some(SecurityType::ContinuousFuture)`. Other values,
+    /// including an unset `security_type`, select an option query on `SMART`. The query omits
+    /// the strike. You can filter by right, trading class, or expiry. TWS returns every
+    /// matching listed contract in one reply.
+    ///
+    /// The `SMART` default was probed for US underlyings only (AAPL, SPX). For an underlying
+    /// listed outside the US, set the option exchange with
+    /// [`on_exchange`](OptionsQueryBuilder::on_exchange): VOD's options were listed on `ICEEU`,
+    /// and whether `SMART` lists them was not probed.
+    ///
+    /// Use this to get the contracts. `option_chain` (`reqSecDefOptParams`) returns, per
+    /// exchange and trading class, a list of expiries and a list of strikes, and most of their
+    /// combinations are not listed: AAPL's chain on one exchange spans 24 expiries and 133
+    /// strikes (6,384 calls and puts) while 3,546 AAPL options exist, and the same chain comes
+    /// once for each of 22 exchanges. Requesting each combination costs one request per
+    /// candidate and an error 200 for each missing one. `option_chain` stays the cheap way to
+    /// see which expiries and strikes exist: it answers in milliseconds.
+    ///
+    /// What TWS returns (live 2026-11-24, paper TWS, server 223):
+    ///
+    /// - Futures options of several futures come back for one date or month: ES December 2026
+    ///   options belong to ESZ6 and ESH7, so keep the rows whose
+    ///   [`under_contract_id`](ContractDetails::under_contract_id) is the future's.
+    /// - TWS filters expiries by one date ([`expiring`](OptionsQueryBuilder::expiring)) or one
+    ///   month ([`expiring_in`](OptionsQueryBuilder::expiring_in)) only; filter a range of
+    ///   expiries or strikes from the rows. Strikes in the rows are in currency units, while
+    ///   `option_chain` strikes of a magnified product are in its sub-unit (ZC: `3.6` against
+    ///   `360`; see [`price_magnifier`](ContractDetails::price_magnifier)).
+    /// - Without an expiry the reply takes 40 to 75 seconds for a large underlying (AAPL 3,546
+    ///   rows, SPX 33,502, ES 25,847), and its rows can all come at the end: AAPL on CBOE sent
+    ///   its first row at 61 s of 62, while AAPL on SMART started at 2.7 s of 49. One month took
+    ///   0.7 to 21 seconds (SPX December, 13,156 rows) and one date at most 5. Asking per month
+    ///   bounds each reply.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, ContractDetails, ContractMonth};
+    ///
+    /// // AAPL as contract_details returns it.
+    /// let mut aapl = Contract::stock("AAPL").build();
+    /// aapl.contract_id = 265598;
+    ///
+    /// let query = Contract::options_on(&aapl).expiring_in(ContractMonth::new(2026, 12)?).calls().build();
+    /// // let rows = client.contract_details(&query).await?;
+    ///
+    /// // The contracts of this underlying with strikes in [250, 300].
+    /// fn near_the_money(rows: &[ContractDetails], underlying_id: i32) -> Vec<&ContractDetails> {
+    ///     rows.iter()
+    ///         .filter(|row| row.under_contract_id == underlying_id)
+    ///         .filter(|row| (250.0..=300.0).contains(&row.contract.strike))
+    ///         .collect()
+    /// }
+    /// assert!(near_the_money(&[], aapl.contract_id).is_empty());
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn options_on(underlying: &Contract) -> OptionsQueryBuilder {
+        OptionsQueryBuilder::new(underlying)
+    }
+
     /// Creates a forex contract builder.
     ///
     /// # Examples
