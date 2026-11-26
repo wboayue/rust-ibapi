@@ -130,7 +130,7 @@ fn decode_order_status_proto_rejects_empty_status() {
             mkt_cap_price: None,
         };
 
-        assert!(matches!(decode_order_status_proto(proto_msg), Err(crate::Error::Parse(..))));
+        assert!(matches!(decode_order_status_proto(proto_msg), Err(crate::Error::Parse { .. })));
     }
 }
 
@@ -469,8 +469,8 @@ fn decode_order_status_proto_requires_filled_and_remaining() {
     ];
     for (label, field, p) in cases {
         match super::decode_order_status_proto(p) {
-            Err(Error::Parse(_, name, reason)) => {
-                assert_eq!(name, field, "{label}");
+            Err(Error::Parse { field: name, reason, .. }) => {
+                assert_eq!(name, Some(field), "{label}");
                 assert_eq!(reason, "missing in OrderStatus", "{label}");
             }
             other => panic!("{label}: expected Error::Parse, got {other:?}"),
@@ -930,7 +930,7 @@ fn decode_order_rejects_missing_or_empty_action() {
         },
     ] {
         assert!(
-            matches!(decode_order(&proto_order), Err(Error::Parse(_, _, _))),
+            matches!(decode_order(&proto_order), Err(Error::Parse { .. })),
             "expected Error::Parse for {proto_order:?}"
         );
     }
@@ -944,7 +944,7 @@ fn decode_order_rejects_unknown_action() {
         action: Some("NOTASIDE".into()),
         ..proto_order()
     };
-    assert!(matches!(decode_order(&proto_order), Err(Error::Parse(_, _, _))));
+    assert!(matches!(decode_order(&proto_order), Err(Error::Parse { .. })));
 }
 
 #[test]
@@ -1100,7 +1100,7 @@ fn decode_order_condition_missing_type_is_parse_error() {
         ..proto_order()
     };
     match decode_order(&proto_order).unwrap_err() {
-        Error::Parse(_, _, msg) => assert!(msg.contains("OrderCondition type"), "got: {msg}"),
+        Error::Parse { reason: msg, .. } => assert!(msg.contains("OrderCondition type"), "got: {msg}"),
         other => panic!("expected Error::Parse, got {other:?}"),
     }
 }

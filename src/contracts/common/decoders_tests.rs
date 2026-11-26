@@ -390,7 +390,7 @@ fn parse_market_rule_ids_table() {
     for (input, expected) in cases {
         match (parse_market_rule_ids(input), expected) {
             (Ok(ids), Ok(want)) => assert_eq!(ids, want, "input {input:?}"),
-            (Err(Error::Parse(_, value, msg)), Err(token)) => {
+            (Err(Error::Parse { value, reason: msg, .. }), Err(token)) => {
                 assert_eq!(value, token, "input {input:?}");
                 assert!(msg.contains("invalid market rule id"), "input {input:?}: {msg}");
                 assert!(msg.contains(&format!("{:?}", input.unwrap())), "reason names the list: {msg}");
@@ -482,7 +482,7 @@ fn decode_contract_details_rejects_malformed_market_rule_id() {
     };
     assert!(matches!(
         decode_contract_and_details(&stk_contract(), &details),
-        Err(Error::Parse(_, value, _)) if value == "abc"
+        Err(Error::Parse { value, .. }) if value == "abc"
     ));
 }
 

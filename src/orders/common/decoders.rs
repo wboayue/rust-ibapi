@@ -351,7 +351,7 @@ fn decode_order_condition(proto: &proto::OrderCondition) -> Result<OrderConditio
 
     // The reference client always sets `type`, so an absent one is a malformed frame.
     let Some(condition_type) = proto.r#type else {
-        return Err(Error::parse_proto("type", "missing OrderCondition type"));
+        return Err(Error::invalid_field("type", "missing OrderCondition type"));
     };
     let is_conjunction = proto.is_conjunction_connection.unwrap_or(true);
     let is_more = proto.is_more.unwrap_or_default();

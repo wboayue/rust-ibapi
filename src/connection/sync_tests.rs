@@ -49,7 +49,11 @@ fn establish_connection_rejects_pre_protobuf_server() {
 
     let err = connection.establish_connection().expect_err("must reject old server");
     match err {
-        crate::errors::Error::ServerVersion(required, got, ref msg) => {
+        crate::errors::Error::ServerVersion {
+            required,
+            actual: got,
+            feature: ref msg,
+        } => {
             assert_eq!(required, server_versions::PROTOBUF_REST_MESSAGES_3);
             assert_eq!(got, too_old);
             assert!(msg.contains("protobuf"), "message should mention protobuf: {msg}");

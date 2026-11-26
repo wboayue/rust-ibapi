@@ -314,7 +314,7 @@ impl FromStr for IncomingMessages {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse::<i32>() {
             Ok(n) => Ok(IncomingMessages::from(n)),
-            Err(_) => Err(Error::parse_field(s, "invalid incoming message type")),
+            Err(_) => Err(Error::invalid_value(s, "invalid incoming message type")),
         }
     }
 }
@@ -684,7 +684,7 @@ impl TryFrom<i32> for OutgoingMessages {
             107 => Ok(OutgoingMessages::CancelHistoricalTicks),
             108 => Ok(OutgoingMessages::ReqConfig),
             109 => Ok(OutgoingMessages::UpdateConfig),
-            n => Err(Error::parse_field(n.to_string(), "unknown outgoing message type")),
+            n => Err(Error::invalid_value(n.to_string(), "unknown outgoing message type")),
         }
     }
 }
@@ -693,7 +693,7 @@ impl FromStr for OutgoingMessages {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let id = s.parse::<i32>().map_err(|_| Error::parse_field(s, "invalid outgoing message type"))?;
+        let id = s.parse::<i32>().map_err(|_| Error::invalid_value(s, "invalid outgoing message type"))?;
         OutgoingMessages::try_from(id)
     }
 }
@@ -1191,7 +1191,7 @@ impl ResponseMessage {
         let field = &self.fields[i];
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(Error::Parse(i, field.into(), err.to_string())),
+            Err(err) => Err(Error::invalid_text_field(i, field.as_str(), err)),
         }
     }
 
@@ -1206,7 +1206,7 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
+            Err(err) => Err(Error::invalid_text_field(self.i, field.as_str(), err)),
         }
     }
 
@@ -1239,7 +1239,7 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
+            Err(err) => Err(Error::invalid_text_field(self.i, field.as_str(), err)),
         }
     }
 

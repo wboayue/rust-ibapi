@@ -78,7 +78,7 @@ pub(crate) fn parse_optional_decimal(opt: Option<&str>) -> Result<Option<f64>, E
     }
     let value = text
         .parse::<f64>()
-        .map_err(|e| Error::parse_field(text, format!("invalid decimal wire value: {e}")))?;
+        .map_err(|e| Error::invalid_value(text, format!("invalid decimal wire value: {e}")))?;
     // Spelling-independent half of the unset check: catches every rendering of
     // the f64::MAX sentinel ("1.7976931348623157E308", "…e308", "…E+308") and
     // absorbs inf/NaN, which f64::from_str accepts but no size can be.
@@ -120,7 +120,7 @@ pub(crate) fn parse_decimal_or_zero(opt: Option<&str>) -> Result<f64, Error> {
 /// field, including an explicit `"0"` (evidence: #1088, #1089). Otherwise use
 /// [`parse_decimal_or_zero`] or [`parse_optional_decimal`]: a decode error ends
 /// the stream it arrives on.
-pub(crate) fn required_decimal(opt: Option<&str>, field: &str, message: &str) -> Result<f64, Error> {
+pub(crate) fn required_decimal(opt: Option<&str>, field: &'static str, message: &str) -> Result<f64, Error> {
     required(parse_optional_decimal(opt)?, field, message)
 }
 
@@ -132,13 +132,13 @@ pub(crate) fn required_decimal(opt: Option<&str>, field: &str, message: &str) ->
 /// Accepts `Option<&str>` so proto callers can pass `proto.field.as_deref()`
 /// and text-protocol callers can pass `Some(text_str.as_str())` without
 /// allocating a wrapper.
-pub(crate) fn parse_required<T>(opt: Option<&str>, label: &str) -> Result<T, Error>
+pub(crate) fn parse_required<T>(opt: Option<&str>, label: &'static str) -> Result<T, Error>
 where
     T: std::str::FromStr<Err = Error>,
 {
     match opt {
         Some(s) if !s.is_empty() => s.parse(),
-        _ => Err(Error::Parse(0, String::new(), format!("missing {label}"))),
+        _ => Err(Error::invalid_field(label, "missing")),
     }
 }
 
@@ -166,8 +166,8 @@ where
 /// frame as `Error::Parse` instead. Defaulting is the one option neither client
 /// takes: it hands the caller data that reads as real, such as a phantom BUY
 /// order over an empty contract (docs/rules/wire/enum-typing.md).
-pub(crate) fn required<T>(field: Option<T>, name: &str, message: &str) -> Result<T, Error> {
-    field.ok_or_else(|| Error::parse_proto(name, format!("missing in {message}")))
+pub(crate) fn required<T>(field: Option<T>, name: &'static str, message: &str) -> Result<T, Error> {
+    field.ok_or_else(|| Error::invalid_field(name, format!("missing in {message}")))
 }
 
 pub(crate) fn ts(secs: i64) -> time::OffsetDateTime {

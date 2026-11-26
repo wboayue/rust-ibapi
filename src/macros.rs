@@ -111,9 +111,9 @@ macro_rules! impl_wire_enum {
             type Err = $crate::Error;
             fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
                 if s.is_empty() {
-                    return Err($crate::Error::Parse(0, s.to_string(), concat!("empty ", stringify!($name)).into()));
+                    return Err($crate::Error::invalid_value(s, concat!("empty ", stringify!($name))));
                 }
-                Self::from_wire(s).ok_or_else(|| $crate::Error::Parse(0, s.to_string(), concat!("unknown ", stringify!($name)).into()))
+                Self::from_wire(s).ok_or_else(|| $crate::Error::invalid_value(s, concat!("unknown ", stringify!($name))))
             }
         }
     };
@@ -123,7 +123,7 @@ macro_rules! impl_wire_enum {
             type Err = $crate::Error;
             fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
                 if s.is_empty() {
-                    return Err($crate::Error::Parse(0, s.to_string(), concat!("empty ", stringify!($name)).into()));
+                    return Err($crate::Error::invalid_value(s, concat!("empty ", stringify!($name))));
                 }
                 Ok(Self::from_wire(s).unwrap_or_else(|| $name::$variant(s.to_string())))
             }

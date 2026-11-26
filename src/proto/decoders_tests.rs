@@ -8,7 +8,10 @@ use crate::orders::{ExecutionSide, OrderStatusKind, ShortSaleSlot};
 fn parse_required_none_errors_with_label() {
     let err = parse_required::<OrderStatusKind>(None, "OrderStatus").unwrap_err();
     match err {
-        Error::Parse(_, _, msg) => assert!(msg.contains("OrderStatus"), "expected label in message, got: {msg}"),
+        Error::Parse { field, reason, .. } => {
+            assert_eq!(field, Some("OrderStatus"));
+            assert_eq!(reason, "missing");
+        }
         other => panic!("expected Error::Parse, got {other:?}"),
     }
 }
@@ -17,7 +20,10 @@ fn parse_required_none_errors_with_label() {
 fn parse_required_empty_errors_with_label() {
     let err = parse_required::<OrderStatusKind>(Some(""), "OrderStatus").unwrap_err();
     match err {
-        Error::Parse(_, _, msg) => assert!(msg.contains("OrderStatus"), "expected label in message, got: {msg}"),
+        Error::Parse { field, reason, .. } => {
+            assert_eq!(field, Some("OrderStatus"));
+            assert_eq!(reason, "missing");
+        }
         other => panic!("expected Error::Parse, got {other:?}"),
     }
 }
@@ -36,7 +42,7 @@ fn parse_required_defers_unknown_to_fromstr() {
     // order_status_kind_preserves_unknown_wire_status.)
     assert!(matches!(
         parse_required::<ExecutionSide>(Some("Garbage"), "side"),
-        Err(Error::Parse(_, _, _))
+        Err(Error::Parse { .. })
     ));
 }
 
@@ -63,7 +69,7 @@ fn parse_optional_valid_round_trips() {
 #[test]
 fn parse_optional_defers_unknown_to_fromstr() {
     // Mirrors parse_required_defers_unknown_to_fromstr.
-    assert!(matches!(parse_optional::<ExecutionSide>(Some("Garbage")), Err(Error::Parse(_, _, _))));
+    assert!(matches!(parse_optional::<ExecutionSide>(Some("Garbage")), Err(Error::Parse { .. })));
 }
 
 // === parse_optional_decimal ===
@@ -163,7 +169,7 @@ fn parse_decimal_or_zero_passes_values_through() {
 
 #[test]
 fn parse_decimal_or_zero_propagates_parse_error() {
-    assert!(matches!(parse_decimal_or_zero(Some("abc")), Err(Error::Parse(_, _, _))));
+    assert!(matches!(parse_decimal_or_zero(Some("abc")), Err(Error::Parse { .. })));
 }
 
 // === decode_combo_leg end-to-end (docs/rules/testing/exercise-production-code.md) ===
@@ -179,19 +185,19 @@ fn proto_leg(action: Option<&str>) -> proto::ComboLeg {
 
 #[test]
 fn decode_combo_leg_rejects_missing_action() {
-    assert!(matches!(decode_combo_leg(&proto_leg(None)), Err(Error::Parse(_, _, _))));
+    assert!(matches!(decode_combo_leg(&proto_leg(None)), Err(Error::Parse { .. })));
 }
 
 #[test]
 fn decode_combo_leg_rejects_empty_action() {
-    assert!(matches!(decode_combo_leg(&proto_leg(Some(""))), Err(Error::Parse(_, _, _))));
+    assert!(matches!(decode_combo_leg(&proto_leg(Some(""))), Err(Error::Parse { .. })));
 }
 
 #[test]
 fn decode_combo_leg_rejects_unknown_action() {
     // SLONG is the variant LegAction deliberately excludes — guards against
     // a future "let's just reuse Action after all" regression.
-    assert!(matches!(decode_combo_leg(&proto_leg(Some("SLONG"))), Err(Error::Parse(_, _, _))));
+    assert!(matches!(decode_combo_leg(&proto_leg(Some("SLONG"))), Err(Error::Parse { .. })));
 }
 
 #[test]
@@ -247,7 +253,7 @@ fn decode_contract_propagates_bad_combo_leg() {
         combo_legs: vec![proto_leg(Some("NOTAVARIANT"))],
         ..stk_contract()
     };
-    assert!(matches!(decode_contract(&proto_contract), Err(Error::Parse(_, _, _))));
+    assert!(matches!(decode_contract(&proto_contract), Err(Error::Parse { .. })));
 }
 
 // === decode_contract sec_type ===

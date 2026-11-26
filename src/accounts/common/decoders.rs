@@ -45,12 +45,12 @@ pub(crate) fn decode_account_update_time(message: &ResponseMessage) -> Result<Ac
 
 pub(crate) fn decode_server_time_proto(proto: crate::proto::CurrentTime) -> Result<OffsetDateTime, Error> {
     let timestamp = proto.current_time.unwrap_or(0);
-    OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::parse_proto("current_time", e.to_string()))
+    OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::invalid_field("current_time", e.to_string()))
 }
 
 pub(crate) fn decode_server_time_millis_proto(proto: crate::proto::CurrentTimeInMillis) -> Result<OffsetDateTime, Error> {
     let millis = proto.current_time_in_millis.unwrap_or(0);
-    OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::parse_proto("current_time_in_millis", e.to_string()))
+    OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::invalid_field("current_time_in_millis", e.to_string()))
 }
 
 pub(crate) fn decode_managed_accounts_proto(p: crate::proto::ManagedAccounts) -> Result<Vec<String>, Error> {
@@ -191,7 +191,7 @@ pub(crate) fn receive_fa_for(fa_data_type: FaDataType) -> impl Fn(&crate::messag
 pub(crate) fn decode_receive_fa_proto(p: crate::proto::ReceiveFa) -> Result<FaConfig, Error> {
     let fa_data_type = p
         .fa_data_type
-        .ok_or_else(|| Error::Parse(0, String::new(), "missing fa_data_type in ReceiveFa".into()))
+        .ok_or_else(|| Error::invalid_field("fa_data_type", "missing in ReceiveFa"))
         .and_then(FaDataType::from_i32)?;
     Ok(FaConfig {
         fa_data_type,

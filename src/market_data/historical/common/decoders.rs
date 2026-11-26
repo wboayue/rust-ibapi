@@ -11,7 +11,7 @@ use crate::market_data::common::decoders::{decode_bar_trade_fields, decode_tick_
 use crate::market_data::historical::{Bar, BarTimestamp, HistogramEntry, Schedule, Session, TickBidAsk, TickLast, TickMidpoint};
 
 fn parse_unix_seconds_str(s: &str) -> Result<OffsetDateTime, Error> {
-    let mk_err = |e: &dyn std::fmt::Display| Error::parse_field(s, format!("invalid unix-second timestamp: {e}"));
+    let mk_err = |e: &dyn std::fmt::Display| Error::invalid_value(s, format!("invalid unix-second timestamp: {e}"));
     let secs: i64 = s.parse().map_err(|e: std::num::ParseIntError| mk_err(&e))?;
     OffsetDateTime::from_unix_timestamp(secs).map_err(|e| mk_err(&e))
 }
@@ -84,7 +84,7 @@ fn parse_historical_data_end_timestamp(text: &str) -> Result<OffsetDateTime, Err
     }
     let mut parts = text.splitn(3, ' ');
     let (Some(date), Some(time), Some(zone_name)) = (parts.next(), parts.next(), parts.next()) else {
-        return Err(Error::parse_field(text, "expected 'YYYYMMDD HH:MM:SS <zone>' or 'YYYYMMDD-HH:MM:SS'"));
+        return Err(Error::invalid_value(text, "expected 'YYYYMMDD HH:MM:SS <zone>' or 'YYYYMMDD-HH:MM:SS'"));
     };
     // Wall clock before zone, so a malformed clock reports a parse error rather than
     // an unsupported timezone.

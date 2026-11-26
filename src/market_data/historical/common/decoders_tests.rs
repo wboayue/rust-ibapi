@@ -260,7 +260,7 @@ fn decode_historical_data_end_rejected_renderings() {
     for rendering in parse_errors {
         let err = super::parse_historical_data_end_timestamp(rendering).unwrap_err();
         assert!(
-            matches!(err, Error::Parse(..) | Error::ParseTime(_)),
+            matches!(err, Error::Parse { .. } | Error::ParseTime(_)),
             "rendering: {rendering:?} -> {err:?}"
         );
     }
@@ -385,7 +385,7 @@ fn decode_historical_data_bar_rejects_missing_or_malformed_date() {
             ("update", update(Some(malformed)).map(|_| ())),
         ] {
             match result {
-                Err(Error::Parse(_, value, _)) => assert_eq!(value, malformed, "{path} path should carry the offending date"),
+                Err(Error::Parse { value, .. }) => assert_eq!(value, malformed, "{path} path should carry the offending date"),
                 other => panic!("{path} path: expected Error::Parse for {malformed:?}, got {other:?}"),
             }
         }

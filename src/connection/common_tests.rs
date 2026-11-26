@@ -367,7 +367,11 @@ fn require_protobuf_support_rejects_older() {
     let err = require_protobuf_support(actual).expect_err("older versions must be rejected");
 
     match &err {
-        Error::ServerVersion(required, got, msg) => {
+        Error::ServerVersion {
+            required,
+            actual: got,
+            feature: msg,
+        } => {
             assert_eq!(*required, server_versions::PROTOBUF_REST_MESSAGES_3);
             assert_eq!(*got, actual);
             assert!(msg.contains("protobuf"), "message should mention protobuf: {msg}");
@@ -391,7 +395,7 @@ fn require_protobuf_support_rejects_previous_scan_data_floor() {
     let previous_floor = server_versions::PROTOBUF_SCAN_DATA;
     let err = require_protobuf_support(previous_floor).expect_err("previous floor must now be rejected");
     match err {
-        Error::ServerVersion(required, got, _) => {
+        Error::ServerVersion { required, actual: got, .. } => {
             assert_eq!(required, server_versions::PROTOBUF_REST_MESSAGES_3);
             assert_eq!(got, previous_floor);
         }
@@ -1129,7 +1133,7 @@ fn parse_handshake_ack_works() {
             }
             (Expect::Rejected, Err(Error::ConnectionRejected(msg))) => assert!(msg.contains("server may be rejecting"), "{name}: {msg}"),
             (Expect::Io(kind), Err(Error::Io(err))) => assert_eq!(err.kind(), kind, "{name}"),
-            (Expect::Parse, Err(Error::Parse(..))) => {}
+            (Expect::Parse, Err(Error::Parse { .. })) => {}
             (_, other) => panic!("{name}: unexpected result {other:?}"),
         }
     }

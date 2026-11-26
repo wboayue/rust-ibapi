@@ -454,7 +454,7 @@ fn expiry_from_str_is_strict() {
     );
     assert_eq!("202612".parse::<Expiry>().unwrap(), Expiry::Month(ContractMonth::new(2026, 12).unwrap()));
     for bad in ["", "2026", "20261340", "20261218 08:30:00 US/Central", "20430504 16:00 Europe/London"] {
-        assert!(matches!(bad.parse::<Expiry>(), Err(Error::Parse(..))), "{bad:?}");
+        assert!(matches!(bad.parse::<Expiry>(), Err(Error::Parse { .. })), "{bad:?}");
     }
 }
 
@@ -576,6 +576,6 @@ fn trading_session_rejects_malformed_entries() {
     ];
     for (label, raw) in cases {
         let err = raw.parse::<TradingSession>().unwrap_err();
-        assert!(matches!(&err, Error::Parse(_, value, _) if value == raw), "{label}: {err:?}");
+        assert!(matches!(&err, Error::Parse { value, .. } if value == raw), "{label}: {err:?}");
     }
 }

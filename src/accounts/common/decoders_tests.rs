@@ -509,7 +509,7 @@ fn decode_receive_fa_rejects_invalid_fa_data_type() {
         xml: Some("<bad/>".into()),
     };
     let err = super::decode_receive_fa_proto(p).unwrap_err();
-    assert!(matches!(err, super::Error::Parse(_, _, _)), "got {err:?}");
+    assert!(matches!(err, super::Error::Parse { .. }), "got {err:?}");
 }
 
 #[test]
@@ -519,7 +519,7 @@ fn decode_receive_fa_rejects_missing_fa_data_type() {
         xml: Some("<groups/>".into()),
     };
     let err = super::decode_receive_fa_proto(p).unwrap_err();
-    assert!(matches!(err, super::Error::Parse(_, _, _)), "got {err:?}");
+    assert!(matches!(err, super::Error::Parse { .. }), "got {err:?}");
 }
 
 #[test]

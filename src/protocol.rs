@@ -44,10 +44,14 @@ impl Features {
 }
 
 /// `Ok(())` if `server_version` supports `feature`, else
-/// `Error::ServerVersion(required, actual, name)`.
+/// `Error::ServerVersion { required, actual, feature }`.
 pub(crate) fn check_version(server_version: i32, feature: ProtocolFeature) -> Result<(), Error> {
     if !feature.is_supported_by(server_version) {
-        Err(Error::ServerVersion(feature.min_version, server_version, feature.name.to_string()))
+        Err(Error::ServerVersion {
+            required: feature.min_version,
+            actual: server_version,
+            feature: feature.name.to_string(),
+        })
     } else {
         Ok(())
     }
