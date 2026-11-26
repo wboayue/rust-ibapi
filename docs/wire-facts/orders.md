@@ -565,3 +565,109 @@ connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
 - **Not probed:** a futures or EFP order, where `refFuturesConId` would be set; a filled or
   partially filled order.
 
+
+### Order rejections outside the 200-399 band
+
+*Live 2026-11-23 23:12-23:23Z (Monday evening ET; US stocks closed, EUR.USD trading), paper TWS,
+server 223.*
+
+Each code below answered a new order's `placeOrder` with no OpenOrder and no OrderStatus. The
+notice carried the order id as its request id and reached both the `place_order` subscription
+(which ended on it) and `order_update_stream`. A `cancel_order` of the same id then drew 10147
+("not found"), so TWS created no order.
+
+| Code | Order | Message |
+| ---- | ----- | ------- |
+| 110 | AAPL BUY 1 LMT 1.001; EUR.USD BUY 20000 LMT 0.900001 | "The price does not conform to the minimum price variation for this contract." |
+| 103 | an id re-sent after a 110 for it; an id below the highest this client had used | "Duplicate order id: 1" |
+| 10244 | AAPL `cash_qty` 100 on LMT BUY, LMT SELL, STP BUY, MKT BUY and MKT SELL | "Cash Quantity cannot be used for this order" |
+| 10317 | EUR.USD MKT BUY `cash_qty` 0.229 | "The Cash Quantity size of 0.229 does not conform to minimum variation of 0.01 for this contract" |
+
+- Sequence for 110 (client 9602): 23:12:51.165 place sent; 23:12:51.335 notice 110 on both
+  streams; 23:12:51.336 `open_orders` empty; cancel then 10147 in the same millisecond.
+- 103 is not what reusing a finished order's id draws: an id whose order was cancelled drew 104
+  ("Cannot modify a filled order."), and a working order's id is a modify. 103 arrived only for
+  an id with no order behind it.
+- 110 answers a new order only. An off-tick price on a modify of a working order drew 201 instead;
+  see [refused modifies](#refused-modifies-leave-the-order-working).
+- 10244 also came during US hours, on AAPL, an AAPL option, ESZ6 and BTC limit orders.
+- **Not probed:** 10244 on other stocks; the same codes on IB Gateway or a live account.
+
+### Orders TWS discards (461 and 10311)
+
+*Live 2026-11-24 22:03-22:23 UTC (SEHK and TSE closed), paper TWS, server 223.*
+
+| Code | Order | Message |
+| ---- | ----- | ------- |
+| 461 | 700 SEHK BUY 150 LMT 320; 7203 SMART BUY 150 LMT 2000 (board lot 100) | "BUY 150 700 SEHK @ 320.00: Order size 150 is not correct; it should be a multiple of 100" |
+| 10311 | 7203 TSEJ BUY 100 LMT 2000 | "This order will be directly routed to TSEJ. Direct routed orders may result in higher trade fees. Restriction is specified in Precautionary Settings of Global Configuration/API." |
+
+- Each notice carried the order id and came on the `place_order` reply with no OpenOrder or
+  OrderStatus before it, 0.2 s (10311) to 2.4 s (461) after the order was sent.
+  `all_open_orders` afterwards listed neither order.
+- A `cancel_order` sent at once drew OrderStatus `Cancelled`, 202 "Order Canceled - reason:Order
+  was discarded." and 161 "Cancel attempted when order is not in a cancellable state", for both
+  codes. An order TWS never created draws 10147 instead: TWS assigned a perm id and discarded
+  the order, as it does with a 201.
+- The same 7203 order with `SMART` and 100 shares rested (Submitted) and was cancelled normally.
+  A size below the lot drew 388 and an off-tick price 110, both before the routing check.
+- 10311 names a TWS setting, so whether it fires depends on the TWS configuration.
+- **Not probed:** other exchanges for 10311; the other precautionary codes; TWS with the setting
+  off; 461 on a modify.
+
+### Refused modifies leave the order working
+
+*Live 2026-11-23 23:12-23:23Z, paper TWS, server 223. AAPL BUY 1 LMT 1.00 resting off-hours
+(Submitted), and EUR.USD SELL 20000 TRAIL (PreSubmitted, `why_held` "trigger").*
+
+Each modify below (`place_order` with the working order's id) was refused. `open_orders` right
+after listed the order with its earlier terms and status. No `Inactive` status and no other status
+change arrived for any of them.
+
+| Modify sent | Reply |
+| ----------- | ----- |
+| limit 1.00 -> 1.001 (off tick) | OpenOrder and OrderStatus Submitted (twice), then 201 "Order rejected - reason:Invalid Price" |
+| quantity 1 -> 10,000,000 | OpenOrder and OrderStatus Submitted (twice), then 201 "... YOUR EQUITY WITH LOAN VALUE ... MUST EXCEED THE INITIAL MARGIN ..." |
+| quantity 1 -> 0 | 321 "Error validating request.-'v' : cause - The size value cannot be zero:" |
+| quantity 1 -> 0.5 | 10242 "Fractional-sized order cannot be modified via API. ..." with request id **0**, not the order id |
+| action BUY -> SELL; contract AAPL -> MSFT | 105 "Order being modified does not match original order." |
+| `cash_qty` 100 added | 10241 "Order Quantity is expressed in monetary terms. Modification is not supported via API. ..." |
+| TRAIL `trail_stop_price` changed, trailing amount kept | 10067 "Stop price must be changed together with the trailing amount for a trailing order" |
+
+- A modify sent with the id of a cancelled order (AAPL BUY 1 LMT 1.00, cancelled 5 s earlier) drew
+  104 "Cannot modify a filled order." with no status; the order stayed Cancelled and
+  `open_orders` stayed empty.
+- The 201 and 321 codes are in the order-rejection band, yet here they reject the modification
+  only. The order goes on working with its previous terms.
+- For the TRAIL order, a modify of stop price and amount together, and of the amount alone, was
+  accepted. Sequence for 10067 (client 9605): 23:14:00.602 modify sent; 23:14:00.604 notice 10067;
+  23:14:00.606 `open_orders` showed the order PreSubmitted with stop 0.79045 and amount 0.3,
+  unchanged.
+- A downstream claim that a refused modify can make TWS report the working order as `Inactive`
+  did not reproduce in these seven variants.
+- **Not probed:** modifies during RTH, of a partly filled order, or of an order TWS holds
+  (`why_held` "locate"); IB Gateway; live accounts.
+
+### Cancel refusals
+
+*Live 2026-11-23 23:12-23:23Z, paper TWS, server 223.*
+
+Every refusal below carried the order id as its request id, reached the `cancel_order`
+subscription (which ended on it) and `order_update_stream`, and came with no status.
+
+| Order state at the cancel | Reply |
+| ------------------------- | ----- |
+| Filled (EUR.USD MKT) | 10148 "OrderId 1 that needs to be cancelled cannot be cancelled, state: Filled." |
+| Cancelled (a second cancel) | 10148 "... state: Cancelled." |
+| Never created (rejected with 110 or 10244, or an id never sent) | 10147 "OrderId 52 that needs to be cancelled is not found." |
+| Held (`transmit` false) | OrderStatus Cancelled, 202 "Order Canceled - reason:Order was discarded.", then 161 "Cancel attempted when order is not in a cancellable state.  Order permId =..." |
+
+- 161 does not mean the order is unaffected: in the held case the same cancel ended the order,
+  and 161 followed the Cancelled status and 202 in the same millisecond. Earlier entries record
+  161 for a global cancel of a PendingCancel order, where the order did not change; see
+  [`ext_operator`](#ext_operator-and-manual_order_indicator-on-orders-and-cancels).
+- A filled or cancelled order drew 10148, never 161, on the connection that had seen it. A
+  contributor reports 10147 instead on paper Gateway (server 226, 2026-11-15) for an order
+  cancelled or filled on an earlier connection and cancelled from a new one; not checked on TWS.
+- **Not probed:** a cancel of a partly filled order, or one sent while a fill is in flight; a
+  cancel from a new connection on TWS.

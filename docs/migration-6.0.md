@@ -1696,3 +1696,27 @@ connection dropped still end with `ConnectionReset`. `submit_oca_orders` and `su
 `Reconnecting` when their first send is refused, and otherwise list a refused order in
 `OrdersPartiallySent::not_sent` (§53). Refusals after the reconnect gives up
 (`ConnectionFailed`) or after a shutdown (`Shutdown`) are unchanged.
+
+### 56. Order codes outside 200-399 move out of `NoticeCategory::Error`
+
+Thirteen order codes outside the order-rejection band no longer classify as `NoticeCategory::Error`.
+Each was verified against a paper account (`docs/wire-facts/orders.md`):
+
+| Codes | Category | Meaning |
+| ----- | -------- | ------- |
+| 103, 110, 461, 10244, 10311, 10317 | `OrderRejection` | TWS rejected a new order and created none |
+| 104, 105, 10067, 10147, 10148, 10241, 10242 | `OrderChangeRejection` (new) | TWS refused a cancel or modify, and the request changed nothing |
+
+`NoticeCategory` is `#[non_exhaustive]`, so a `match` compiles unchanged, but a
+`NoticeCategory::Error` arm no longer sees these codes. `is_error()` is still
+true for all of them, and they still end the `place_order` or `cancel_order` subscription that
+receives them, except 10242, which arrives with request id 0 and so reaches no order
+subscription. A wildcard arm is where the seven `OrderChangeRejection` codes now land.
+
+Check code that drops an order on `is_order_rejection()`. On a modify of a working order, TWS also
+answers with an `OrderRejection` code (201, 321), and the order goes on working with its earlier
+terms. Treat the order as gone only when no status has been seen for it. For an
+`OrderChangeRejection`, the order keeps its state; read its statuses or `open_orders` to learn it.
+
+A refused cancel or modify that arrives before any status for the order no longer starts an
+`order_status_stream`, so `wait_for_fill` does not report it as `OrderOutcome::Rejected`.

@@ -267,11 +267,18 @@ impl<S: TapSender> OrderTaps<S> {
     /// order's status streams, which end on it. Only before any status or
     /// earlier rejection: once TWS has sent a status the order exists, and an
     /// error (e.g. a refused modify) leaves it working; its statuses report
-    /// how it ends. Anything else is ignored.
+    /// how it ends. A refused cancel or modify
+    /// ([`NoticeCategory::OrderChangeRejection`](crate::NoticeCategory::OrderChangeRejection)) changed nothing, so it is not
+    /// the order's rejection either: a 10148 or 10147 for an order filled before
+    /// this connection must not end a wait that would find the fill. Anything else
+    /// is ignored.
     pub(crate) fn publish_rejection(&self, id: WireId, item: &RoutedItem) {
         let (WireId::Order(order_id), RoutedItem::Error(Error::Notice(notice))) = (id, item) else {
             return;
         };
+        if notice.is_order_change_rejection() {
+            return;
+        }
         let mut state = self.lock();
         let slot = state.statuses.entry(order_id).or_default();
         if slot.latest.is_some() {

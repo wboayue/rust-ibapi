@@ -105,6 +105,8 @@ pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
         NoticeCategory::SystemMessage
     } else if REQUEST_ERROR_CODES.contains(&code) {
         NoticeCategory::RequestError
+    } else if let Some(&(_, category)) = ORDER_CODE_CATEGORIES.iter().find(|(c, _)| *c == code) {
+        category
     } else if ORDER_REJECTION_CODE_RANGE.contains(&code) {
         NoticeCategory::OrderRejection
     } else {
@@ -113,7 +115,7 @@ pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
 }
 
 /// Check if an error code is informational: every [`NoticeCategory`] except
-/// `RequestError`, `OrderRejection` and `Error`.
+/// `RequestError`, `OrderRejection`, `OrderChangeRejection` and `Error`.
 ///
 /// For these TWS proceeds with the request, the frame confirms an outcome the
 /// caller asked for, or the frame reports a connection-wide state change
@@ -132,7 +134,7 @@ pub(crate) fn is_informational_code(code: i32, message: &str) -> bool {
     // routing disposition here, not inherit one from a wildcard.
     match classify(code, message) {
         NoticeCategory::Cancellation | NoticeCategory::DataAdvisory | NoticeCategory::Warning | NoticeCategory::SystemMessage => true,
-        NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => false,
+        NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::OrderChangeRejection | NoticeCategory::Error => false,
     }
 }
 
@@ -239,6 +241,44 @@ fn farm_entry(code: i32) -> Option<(DataFarmKind, ConnectivityStatus)> {
 /// [`NoticeCategory::OrderRejection`] unless an earlier rule claims it; see
 /// [`NoticeCategory`] for the precedence chain.
 pub const ORDER_REJECTION_CODE_RANGE: std::ops::RangeInclusive<i32> = 200..=399;
+
+/// Order codes outside [`ORDER_REJECTION_CODE_RANGE`] whose meaning was verified live, with their
+/// category. Every entry answered an order request with no change of status; all but 10242
+/// carried the order id.
+///
+/// Leave a code out until a live probe settles whether it rejects the order or only the
+/// request: a code wrongly
+/// classified as an [`OrderRejection`](NoticeCategory::OrderRejection) makes a consumer drop an
+/// order that is still working. 161 stays [`Error`](NoticeCategory::Error): it answered a refused
+/// cancel, and also a cancel that ended the order (`docs/wire-facts/orders.md#cancel-refusals`).
+const ORDER_CODE_CATEGORIES: &[(i32, NoticeCategory)] = &[
+    // docs/wire-facts/orders.md#order-rejections-outside-the-200-399-band
+    (103, NoticeCategory::OrderRejection),
+    // docs/wire-facts/orders.md#order-rejections-outside-the-200-399-band
+    (110, NoticeCategory::OrderRejection),
+    // docs/wire-facts/orders.md#order-rejections-outside-the-200-399-band
+    (10244, NoticeCategory::OrderRejection),
+    // docs/wire-facts/orders.md#order-rejections-outside-the-200-399-band
+    (10317, NoticeCategory::OrderRejection),
+    // docs/wire-facts/orders.md#orders-tws-discards-461-and-10311
+    (461, NoticeCategory::OrderRejection),
+    // docs/wire-facts/orders.md#orders-tws-discards-461-and-10311
+    (10311, NoticeCategory::OrderRejection),
+    // docs/wire-facts/orders.md#refused-modifies-leave-the-order-working
+    (104, NoticeCategory::OrderChangeRejection),
+    // docs/wire-facts/orders.md#refused-modifies-leave-the-order-working
+    (105, NoticeCategory::OrderChangeRejection),
+    // docs/wire-facts/orders.md#refused-modifies-leave-the-order-working
+    (10067, NoticeCategory::OrderChangeRejection),
+    // docs/wire-facts/orders.md#refused-modifies-leave-the-order-working
+    (10241, NoticeCategory::OrderChangeRejection),
+    // docs/wire-facts/orders.md#refused-modifies-leave-the-order-working
+    (10242, NoticeCategory::OrderChangeRejection),
+    // docs/wire-facts/orders.md#cancel-refusals
+    (10147, NoticeCategory::OrderChangeRejection),
+    // docs/wire-facts/orders.md#cancel-refusals
+    (10148, NoticeCategory::OrderChangeRejection),
+];
 
 /// Synthesized notice code emitted when a handshake-time frame's recognized
 /// [`IncomingMessages`](super::IncomingMessages) kind has no typed `StartupMessage` variant. A frame
@@ -462,9 +502,13 @@ pub(crate) fn resubscribed_notice() -> Notice {
 /// 4. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
 /// 5. [`RequestError`](Self::RequestError) — [`REQUEST_ERROR_CODES`]. Ahead of
 ///    [`ORDER_REJECTION_CODE_RANGE`], which they sit inside.
-/// 6. [`OrderRejection`](Self::OrderRejection) — [`ORDER_REJECTION_CODE_RANGE`],
+/// 6. Order codes outside the band, each verified live:
+///    [`OrderRejection`](Self::OrderRejection) for 103, 110, 461, 10244, 10311 and 10317;
+///    [`OrderChangeRejection`](Self::OrderChangeRejection) for 104, 105, 10067,
+///    10147, 10148, 10241 and 10242.
+/// 7. [`OrderRejection`](Self::OrderRejection) — [`ORDER_REJECTION_CODE_RANGE`],
 ///    excluding the cases above.
-/// 7. [`Error`](Self::Error) — everything else.
+/// 8. [`Error`](Self::Error) — everything else.
 ///
 /// Each `Notice::is_*` category predicate ([`Notice::is_cancellation`],
 /// [`Notice::is_warning`], ...) is `category() == X` for its variant `X`, so the
@@ -497,9 +541,27 @@ pub enum NoticeCategory {
     Warning,
     /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
     SystemMessage,
-    /// Order rejection ([`ORDER_REJECTION_CODE_RANGE`], excluding the cases
-    /// above it in the precedence chain).
+    /// TWS rejected an order request ([`ORDER_REJECTION_CODE_RANGE`] excluding the
+    /// cases above it in the precedence chain, and 103, 110, 461, 10244, 10311, 10317).
+    ///
+    /// For a new order, TWS created no order. For a modify of a working order, TWS
+    /// rejected the modification only: the order goes on working with its previous
+    /// terms and status (live: 201 for an off-tick price and for
+    /// margin, 321 for a zero size; `docs/wire-facts/orders.md#refused-modifies-leave-the-order-working`).
+    /// Only the caller knows which request the order id answers, so check for a status
+    /// already seen for the order before treating it as gone.
     OrderRejection,
+    /// TWS refused a request to cancel or modify an existing order, and the request
+    /// changed nothing. The order keeps the state it had: still working (105, 10067,
+    /// 10241, 10242), finished (104, 10148), or not found (10147): never created, and,
+    /// as a contributor saw on paper Gateway (server 226), an order cancelled or filled on an
+    /// earlier connection, cancelled from a new one. Its statuses, or `open_orders`, tell
+    /// which.
+    ///
+    /// 10242 arrives with request id 0, not the order id
+    /// (`docs/wire-facts/orders.md#refused-modifies-leave-the-order-working`). 161 is
+    /// not in this category: one live cancel drew it after it ended the order.
+    OrderChangeRejection,
     /// A request other than an order failed ([`REQUEST_ERROR_CODES`]): market
     /// data, depth, historical data, scanner, session setup. Terminal.
     RequestError,
@@ -723,6 +785,9 @@ impl Notice {
     /// Returns `true` if this notice is an order rejection
     /// ([`NoticeCategory::OrderRejection`]).
     ///
+    /// On a modify of a working order, it rejects the modification only and the
+    /// order goes on working; see [`NoticeCategory::OrderRejection`].
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -734,6 +799,31 @@ impl Notice {
     /// ```
     pub fn is_order_rejection(&self) -> bool {
         self.category() == NoticeCategory::OrderRejection
+    }
+
+    /// Returns `true` if TWS refused a cancel or modify of an order and the
+    /// request changed nothing ([`NoticeCategory::OrderChangeRejection`]).
+    ///
+    /// The order keeps whatever state it had, which may be working, finished, or
+    /// never created; do not treat it as ended on this notice alone.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::Notice;
+    ///
+    /// let notice = Notice {
+    ///     request_id: Some(7),
+    ///     code: 10148,
+    ///     message: "OrderId 7 that needs to be cancelled cannot be cancelled, state: Filled.".into(),
+    ///     error_time: None,
+    ///     advanced_order_reject_json: String::new(),
+    /// };
+    /// assert!(notice.is_order_change_rejection());
+    /// assert!(!notice.is_order_rejection());
+    /// ```
+    pub fn is_order_change_rejection(&self) -> bool {
+        self.category() == NoticeCategory::OrderChangeRejection
     }
 
     /// Returns `true` if a request other than an order failed
@@ -812,7 +902,10 @@ impl Notice {
     ///     | NoticeCategory::Warning
     ///     | NoticeCategory::DataAdvisory
     ///     | NoticeCategory::SystemMessage => "informational",
-    ///     NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => "error",
+    ///     NoticeCategory::RequestError
+    ///     | NoticeCategory::OrderRejection
+    ///     | NoticeCategory::OrderChangeRejection
+    ///     | NoticeCategory::Error => "error",
     ///     _ => "unknown",
     /// };
     /// # let _ = kind;
@@ -880,7 +973,8 @@ impl Notice {
     /// System connectivity codes are graded by how much they matter: 1102
     /// (restored, data maintained) → info; 1101 (restored, data lost —
     /// resubscribe required) → warn; 1100 (connectivity lost) and 1300 (socket
-    /// reset) → error. Request errors, order rejections and errors log at `error`.
+    /// reset) → error. Request errors, order rejections, refused order changes and
+    /// errors log at `error`.
     fn log_level(&self) -> log::Level {
         use log::Level;
         match self.category() {
@@ -900,7 +994,9 @@ impl Notice {
                 CONNECTIVITY_RESTORED_DATA_LOST_CODE => Level::Warn,
                 _ => Level::Error,
             },
-            NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => Level::Error,
+            NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::OrderChangeRejection | NoticeCategory::Error => {
+                Level::Error
+            }
         }
     }
 
