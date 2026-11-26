@@ -128,3 +128,30 @@ connectivity flaps; #1209 (`FARM_CODES`, `Notice::data_farm` in `src/messages/no
 - **Not probed:** 2107 (HMDS inactive): `ushmds` stayed up through 30 min idle after one
   head-timestamp request. Non-OK codes on TWS (only Gateway showed them), and farms other than
   those named above.
+
+### A TWS stall leaves historical, contract-detail and completed-order requests unanswered
+
+*Live 2026-11-24 23:06 to 2026-11-25 06:19 UTC, paper TWS, server 223; ended by a TWS restart.*
+
+| Request | During the stall | After the restart (06:21) |
+| ------- | ---------------- | ------------------------- |
+| `contract_details` OPT 700 SEHK | 23:06: no reply, no error in 170 s | 139 rows in 1 s |
+| `completed_orders` (`api_only` true and false) | 23:09-23:10: nothing in 10 s, three times | 8 orders at once |
+| `historical_data`, keep-up-to-date or not (700 SEHK, HSI future, EUR.USD) | from 00:55: no batch, no update, no error, on new connections too, checked 10 times until 06:19 | batch and updates within 1 s |
+| `reqMktData`, `realtime_bars`, orders and cancels | answered throughout | answered |
+
+- The N225 historical request at 23:30 still answered, so the historical service stopped
+  between 23:30 and 00:55. At 00:56:40-00:57:51 the farm notices reported `usfuture`, `ushmds`,
+  `cashhmds`, `usfarm`, `secdefnj`, `cashfarm`, `usopt` and `uscrypto` broken and then OK again;
+  no notice marked the stall itself or its end.
+- New connections took the handshake as usual, except some that timed out after 30 s ("no
+  startup reply from TWS") when made seconds after another connection closed (22:04 twice,
+  01:36, 04:05).
+- A subscription opened during the stall is created normally and then stays silent, which on a
+  keep-up-to-date stream looks like a session break, and a one-shot request without a timeout
+  waits for good. Only a watchdog on the caller's side detects it.
+- Whether long-held keep-up-to-date streams caused it is not settled: the probe's own streams
+  (up to four at once, held 1.5 h, 21:41-23:20) had all ended by 00:40, before the historical
+  service stopped, but other clients on the same TWS ran their own requests.
+- **Not probed:** the cause; IB Gateway; whether a reconnect of every client, short of a restart,
+  clears it.

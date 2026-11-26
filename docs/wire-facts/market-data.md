@@ -33,6 +33,30 @@ Generic ticks, option computations, tick types and historical bars. Format: [REA
   the overnight session alike (2026-10-29 23:55 ET: AAPL/SPY/IBKR, real bid/ask). No -1 seen.
 - **Not probed:** a weekend (true no-quote) snapshot.
 
+### Option computation ticks during US hours
+
+*Live 2026-11-24 15:57-16:04 UTC, US market open, paper TWS, server 223; streaming `reqMktData`
+for 30 s on AAPL Dec 2026 350 call and put, Nov 27 350 call and Dec 500 call, and ES Dec 2026
+7500 call and put; raw capture decoded.*
+
+- Delayed data (type 3): `DelayedBidOption` (80), `DelayedAskOption` (81), `DelayedLastOption`
+  (82) and `DelayedModelOption` (83), 172 frames in all. Bid, ask and last arrived 6 to 12 times
+  per contract in 30 s, the model 1 to 4 times. No real-time computation tick (10 to 13) came.
+- Real-time data (type 1) on the AAPL options and the ES option: 354, and no computation tick.
+- A field TWS has not computed is sent as a value, never left out: `-1` for implied volatility
+  and the option price, `-2` for delta, gamma, vega and theta. Every frame carried all eleven
+  fields. 20 of the 158 bid, ask and last frames carried `-1` and `-2` for implied volatility
+  and every greek, 11 of them also `-1` for the price (a side with no quote); the other 138
+  carried them all. The first model frame of the AAPL 350 call sent present value of dividends
+  `-1`, its later ones `0`; bid, ask and last sent `0` there every time.
+- A real value can equal a sentinel of the other group: `DelayedLastOption` on the ES 7500 put
+  sent theta `-1.0`, then `-1.25`, `-0.5` and `-0.0` as its last price aged (the other
+  computations of that put had theta about `-1.9`). Theta `-1` is a value; only `-2` means not
+  computed for a greek.
+- `tick_attribute` was `0` (return based) on every frame. `underlying_price` was always set.
+- **Not probed:** real-time computations (no option data permission); snapshots during US
+  hours; index options.
+
 ### TickEFP is never sent
 
 *Live 2026-05-27, paper Gateway, server 220+; removed in v3.0 (#651).*
@@ -301,3 +325,57 @@ server 223.*
   drops size-only updates here too.
 - ES and EUR.USD tick-by-tick sizes, all sent: [Size fields are always sent](#size-fields-are-always-sent).
 - **Not probed:** live stock ticks during RTH, live accounts, TWS rather than the Gateway.
+
+### Realtime bars across the SEHK and HKFE lunch break
+
+*Live 2026-11-25 01:38-05:00 UTC (SEHK and HKFE trading, lunch 04:00-05:00 UTC), paper TWS,
+server 223; `realtime_bars` (5-second TRADES bars, all trading hours) on 700 (SEHK) and the HSI
+December future (HKFE), both with real-time permission.*
+
+- During the session TWS sent a bar every 5 seconds, 5 to 6 s after the bar's start, including
+  bars with volume 0 at the last price (700 at 03:58:00, 03:58:15; HSI at 03:59:50, 03:59:55).
+- The last bar before the break, 03:59:55, arrived at 04:00:01.3 like any other. Then nothing,
+  no bar and no notice, for both contracts until 05:00:05.4, when the 05:00:00 bar arrived.
+  No bar was sent for the break.
+- The first 700 bar after the break carried 196,800 shares against hundreds to tens of thousands
+  per bar before it.
+- **Not probed:** the SEHK closing auction (08:00-08:10 UTC); RTH-only realtime bars;
+  keep-up-to-date historical bars across the same break (historical requests went unanswered
+  from 00:55 UTC that night, with no error, while market data kept working).
+
+### Market depth rows are fixed positions
+
+*Live 2026-11-25 19:16-19:19 UTC, paper TWS, server 223; EUR.USD on IDEALPRO, 5 rows, 150 s.
+Reported downstream the same day: a 3-minute recording with 10 rows.*
+
+- 12,336 row operations: 73 inserts, 12,139 updates and 124 deletes. The downstream recording had
+  46,775.
+- An update replaces the price and size of the row at `position`: 2,052 of the updates changed
+  the row's price, so a row is a slot, not a price level.
+- Every insert after the first dump landed above every row present on its side, that is at the
+  end of the side (73 here, all 1,322 downstream).
+- Deletes target the last row and arrive with price 0 and size 0 (124 of 124). Here 64 removed
+  the side's last row and 60 repeated a delete of a row already gone, at the same position.
+  Downstream, 1,292 removed the last row, 17 a lower row and 18 an absent one.
+- Read the operations as fixed slots: insert and update set row `position`, delete clears it and
+  the rows after it. Downstream, a model that shifts rows on insert and delete left a side
+  unsorted after 31,049 of the operations, against 3,775 transient states for fixed slots. In
+  this run both models gave the same book, because no delete hit a lower row.
+- **Not probed:** depth of other instruments (no CME or US stock depth permission); SMART depth
+  (`MarketDepthL2`).
+
+### Long historical bar requests take minutes
+
+*Live 2026-11-25 19:12-19:16 UTC, paper TWS, server 223; one request at a time. ES `CONTFUT`
+reported downstream the same day.*
+
+| Request | Time | Bars |
+| ------- | ---- | ---- |
+| EUR.USD MIDPOINT, 1-minute bars, 30 D | 102.8 s | 42,583 |
+| EUR.USD MIDPOINT, 1-hour bars, 5 Y | 138.0 s | 31,072 |
+| ES `CONTFUT` TRADES, 1-minute bars, 30 D (downstream) | 107.6 s | 40,877 |
+| ES `CONTFUT` TRADES, 1-hour bars, 5 Y (downstream) | 161.8 s | 16,121 |
+
+- A `one_shot_timeout` of 60 s ends each of these with `Error::Timeout` before the bars arrive.
+  Size the timeout to the longest request, or split the range.
+- **Not probed:** other bar sizes and instruments; how the time grows with concurrent requests.

@@ -269,14 +269,20 @@ pub struct Reroute {
 }
 
 /// How a [`MarketDepth`] / [`MarketDepthL2`] row changes the book.
+///
+/// Rows are fixed slots, not a list that shifts: TWS inserted rows only at the end of a side,
+/// re-priced rows in place with `Update`, and deleted the last rows. Shifting the rows after
+/// `position` on an insert or delete left the book unsorted (live: 2026-11-25, server 223;
+/// `docs/wire-facts/market-data.md#market-depth-rows-are-fixed-positions`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DepthOperation {
-    /// Insert a new row at `position`. Wire code `0`. Also the value when TWS omits the field.
+    /// Set the row at `position`, which TWS sent at the end of the side. Wire code `0`. Also the
+    /// value when TWS omits the field.
     #[default]
     Insert,
-    /// Update the row at `position`. Wire code `1`.
+    /// Replace the price and size of the row at `position`. Wire code `1`.
     Update,
-    /// Delete the row at `position`. Wire code `2`.
+    /// Remove the row at `position` and any rows after it. TWS sends price and size 0. Wire code `2`.
     Delete,
     /// Operation code not modeled by this version of the API.
     Unknown(i32),
