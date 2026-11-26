@@ -91,6 +91,11 @@ pub(crate) const MARKET_DATA_DELAYED_NOT_ENABLED_CODE: i32 = 10168;
 /// "Failed to request tick-by-tick data" (e.g. no market data permission).
 pub(crate) const TICK_BY_TICK_FAILED_CODE: i32 = 10189;
 
+/// "Expected what to show is AGGTRADES, please use that instead of TRADES" (or the reverse
+/// for non-crypto). On a historical bar request TWS goes on with the `whatToShow` it names
+/// and sends that series (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`).
+pub(crate) const WHAT_TO_SHOW_SUBSTITUTED_CODE: i32 = 10299;
+
 /// Range of error codes that are considered warnings: the whole `21xx` band.
 ///
 /// IB's published table stops at 2169, but the gateway keeps adding codes above

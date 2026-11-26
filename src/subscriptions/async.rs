@@ -13,8 +13,8 @@ use futures::StreamExt;
 use log::{debug, warn};
 
 use super::common::{
-    cancel_frame, collect_step, drain_outcome, filter_notice, is_undeclared, notice_outcome, Bound, CollectStop, DecoderContext, Drained, RoutedItem,
-    SubscriptionItem,
+    cancel_frame, collect_step, continuing_error_as_notice, drain_outcome, filter_notice, is_undeclared, notice_outcome, Bound, CollectStop,
+    DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
 use crate::messages::Notice;
@@ -621,7 +621,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                 Poll::Pending => return Poll::Pending,
             };
 
-            match routed {
+            match continuing_error_as_notice::<T>(routed, context) {
                 RoutedItem::Response(message) => {
                     if is_undeclared(T::RESPONSE_MESSAGE_IDS, &message) {
                         log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
