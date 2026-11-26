@@ -193,7 +193,7 @@ impl StreamDecoder<CollectItem> for CollectItem {
         Ok(CollectItem(msg.peek_int(1)?))
     }
 
-    fn is_snapshot_end(&self) -> bool {
+    fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
         self.0 == -1
     }
 
@@ -775,7 +775,7 @@ impl StreamDecoder<DrainItem> for DrainItem {
         Ok(drain_cancel_frame())
     }
 
-    fn is_snapshot_end(&self) -> bool {
+    fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
         self.0 == -1
     }
 }

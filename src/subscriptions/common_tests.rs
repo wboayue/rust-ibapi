@@ -207,7 +207,7 @@ fn lag_as_error_fails_only_lag_notices() {
 
 /// Whether `T` skips its cancel after a terminal error with `code`.
 fn rejection_ends<T: StreamDecoder<T>>(code: i32) -> bool {
-    T::rejection_ends_request(&Notice::synthesized(code, String::new()))
+    T::rejection_ends_request(&Notice::synthesized(code, String::new()), &DecoderContext::new(0))
 }
 
 /// Each opt-in covers only the code verified live to end the request at TWS;

@@ -150,9 +150,10 @@ pub(crate) fn collect_step<T: StreamDecoder<T>>(
     rows: &mut Vec<T>,
     item: Result<SubscriptionItem<T>, Error>,
     stop: &mut impl FnMut(&[T]) -> bool,
+    context: &DecoderContext,
 ) -> Option<CollectStop> {
     match filter_notice(lag_as_error(item))? {
-        Ok(value) if value.is_snapshot_end() => Some(CollectStop::Stopped),
+        Ok(value) if value.is_snapshot_end(context) => Some(CollectStop::Stopped),
         Ok(value) => {
             rows.push(value);
             stop(rows).then_some(CollectStop::Stopped)
@@ -297,7 +298,9 @@ pub(crate) trait StreamDecoder<T> {
     /// code (10197 on market data) must keep its cancel. A
     /// one-shot query with nothing to continue (`HistoricalDataFrame`) may
     /// accept any error.
-    fn rejection_ends_request(_notice: &Notice) -> bool {
+    ///
+    /// `context` is the request's, for a type whose request modes differ here.
+    fn rejection_ends_request(_notice: &Notice, _context: &DecoderContext) -> bool {
         false
     }
 
@@ -315,8 +318,9 @@ pub(crate) trait StreamDecoder<T> {
     }
 
     /// Returns true if this decoded value represents the end of a snapshot subscription
-    #[allow(unused)]
-    fn is_snapshot_end(&self) -> bool {
+    /// (no cancel on drop; `collect` stops). `context` is the request's, for a
+    /// type whose request modes differ here.
+    fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
         false
     }
 

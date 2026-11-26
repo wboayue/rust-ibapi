@@ -204,7 +204,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             debug!("request {:?} outlived its session: cancel skipped", self.request_id);
             return None;
         }
-        if self.ended_natively() || self.rejected.get().is_some_and(T::rejection_ends_request) || self.snapshot_ended.load(Ordering::Relaxed) {
+        if self.ended_natively()
+            || self.rejected.get().is_some_and(|notice| T::rejection_ends_request(notice, &self.context))
+            || self.snapshot_ended.load(Ordering::Relaxed)
+        {
             return None;
         }
         T::cancel_message(self.context.server_version, self.id(), Some(&self.context)).ok()
@@ -363,7 +366,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             }
             Some(RoutedItem::Response(message)) => match T::decode(&self.context, &message) {
                 Ok(val) => {
-                    if val.is_snapshot_end() {
+                    if val.is_snapshot_end(&self.context) {
                         self.snapshot_ended.store(true, Ordering::Relaxed);
                     }
                     if val.ends_request() {
@@ -703,7 +706,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 return (rows, stopped);
             };
             let read = rows.len();
-            if let Some(stopped) = collect_step(&mut rows, item, &mut stop) {
+            if let Some(stopped) = collect_step(&mut rows, item, &mut stop, &self.context) {
                 return (rows, stopped);
             }
             if let Bound::Idle(quiet) = bound {

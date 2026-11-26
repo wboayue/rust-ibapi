@@ -423,7 +423,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
                 return (rows, stopped);
             };
             let read = rows.len();
-            if let Some(stopped) = collect_step(&mut rows, item, &mut stop) {
+            if let Some(stopped) = collect_step(&mut rows, item, &mut stop, &self.request.context) {
                 return (rows, stopped);
             }
             if let Bound::Idle(quiet) = bound {
@@ -623,7 +623,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                     }
                     match T::decode(context, &message) {
                         Ok(val) => {
-                            if val.is_snapshot_end() {
+                            if val.is_snapshot_end(context) {
                                 snapshot_ended.store(true, Ordering::Relaxed);
                             }
                             if val.ends_request() {
@@ -726,7 +726,7 @@ impl<T: StreamDecoder<T>> RequestState<T> {
             return None;
         }
         if self.request_id.is_some() && self.ended_natively.load(Ordering::Relaxed)
-            || self.rejected.get().is_some_and(T::rejection_ends_request)
+            || self.rejected.get().is_some_and(|notice| T::rejection_ends_request(notice, &self.context))
             || self.snapshot_ended.load(Ordering::Relaxed)
         {
             return None;

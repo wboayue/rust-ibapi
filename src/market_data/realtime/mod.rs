@@ -64,7 +64,7 @@ impl StreamDecoder<TickBidAsk> for TickBidAsk {
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
     }
 }
@@ -85,7 +85,7 @@ impl StreamDecoder<TickMidpoint> for TickMidpoint {
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
     }
 }
@@ -149,7 +149,7 @@ impl StreamDecoder<Bar> for Bar {
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
     }
 }
@@ -170,7 +170,7 @@ impl StreamDecoder<TickLast> for TickLast {
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
     }
 }
@@ -367,7 +367,7 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
     }
 
     /// Live: after 200 TWS answers the cancel with 310 (no such request).
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
     }
 
@@ -454,11 +454,11 @@ impl StreamDecoder<TickTypes> for TickTypes {
     }
 
     /// Live: after 200 TWS answers the cancel with 300 (no such request).
-    fn rejection_ends_request(notice: &Notice) -> bool {
+    fn rejection_ends_request(notice: &Notice, _context: &DecoderContext) -> bool {
         notice.code == NO_SECURITY_DEFINITION_CODE
     }
 
-    fn is_snapshot_end(&self) -> bool {
+    fn is_snapshot_end(&self, _context: &DecoderContext) -> bool {
         matches!(self, TickTypes::SnapshotEnd)
     }
 
