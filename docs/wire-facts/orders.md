@@ -20,8 +20,9 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - An AAPL BUY 1 LMT with `transmit=false`, then an unrelated AAPL BUY 1 LMT with `transmit=true`
   on the same client: the second went `PreSubmitted` and `Submitted`; the held one stayed held.
   Eight seconds later it had still sent no frame on its own stream and `all_open_orders` did not
-  list it. Only a child that names it as `parent_id` releases a held order (see
-  [Bracket child quantity](#bracket-child-quantity-follows-the-parent)). Its cancel drew
+  list it. A transmitted child that names it as `parent_id` releases a held order (see
+  [Bracket child quantity](#bracket-child-quantity-follows-the-parent)); re-sending the held
+  order itself with `transmit=true` was not probed. Its cancel drew
   `Cancelled`, 202 "Order was discarded" and 161, as above.
 
 ### Held orders survive a reconnect
@@ -257,16 +258,17 @@ first `Inactive` event.*
 - `specific_dates` one day at a time, 2026-10-26 to 2026-11-16: 2026-11-11 and 2026-11-15
   returned their fills; every other day, including each day 8 to 21 days back, returned none,
   no error, only the end message.
+- **Not probed:** a `specific_dates` day older than a week that has executions. None was
+  reachable (`last_n_days` above 7 returns nothing), so whether TWS applies the "within the
+  past week" in IB's `ExecutionFilter.proto` to `specific_dates` is not known.
+
 *Live 2026-11-25 19:15 UTC, paper TWS, server 223; `time` with `last_n_days = 7`.*
 
 - `time` from 1978-01-01 00:00 UTC to the present was accepted: each date from one day to
   48 years back (1978-01-01, 1980, 2002, 30, 60, 365 and 3,650 days back) returned the same 317
-  executions as the 7-day window. 1977-12-31 and earlier (1977-08-14, 1975, 1970-01-02, 1970-01-01)
-  drew 10314 "The date, time, or time-zone entered is invalid." A `time` one day ahead returned
-  no executions and no error.
-- **Not probed:** a `specific_dates` day older than a week that has executions. None was
-  reachable (`last_n_days` above 7 returns nothing), so whether TWS applies the "within the
-  past week" in IB's `ExecutionFilter.proto` to `specific_dates` is not known.
+  executions as the 7-day window. 1977-12-31 and earlier (1977-08-14, 1975, 1970-01-02,
+  1970-01-01) drew 10314 "The date, time, or time-zone entered is invalid." A `time` one day
+  ahead returned no executions and no error.
 
 ### Commission report timing and values
 
@@ -630,7 +632,6 @@ connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
 - **Not probed:** a futures or EFP order, where `refFuturesConId` would be set; a filled or
   partially filled order.
 
-
 ### Non-US orders outside and during the trading session
 
 *Live 2026-11-24 22:03-22:17 UTC (SEHK, HKFE, TSE, OSE and KSE closed) and 2026-11-24
@@ -668,8 +669,8 @@ non-marketable limit orders, each cancelled after 5 to 10 s.*
   22:03 when TSE was closed, so neither status tells whether the order is at the exchange.
 - Distance from the market decides the SEHK status (06:25, bid 339, ask 339.2): BUY 100 LMT 336
   and LMT 330 went PreSubmitted, then Submitted 0.2 s later; LMT 320 stayed PreSubmitted, and so
-  did 7203 LMT 2000 again. IB holds a limit that far from the market without sending it on, and
-  says so in no field.
+  did 7203 LMT 2000 again. Inferred: IB holds a limit that far from the market without sending
+  it on, and says so in no field.
 - **Not probed:** fills; marketable orders; orders during the SEHK closing auction.
 
 ### Auction orders on SEHK and TSE
@@ -711,9 +712,9 @@ permission, so an order that passes every other check is rejected for that.*
 
 - A crypto BUY order takes only IOC or `Minutes`, a market order only IOC, and FOK is refused on
   every order. A market BUY needs a cash quantity, and every other order refuses one.
-- TWS sends `Minutes` as the `tif` text of the order and echoes it on the open order. IB cancels
-  an unfilled `Minutes` order after 5 minutes; this run could not observe that, as every order was
-  rejected.
+- The client sends `Minutes` as the order's `tif` text, and TWS echoes it on the open order. IB
+  cancels an unfilled `Minutes` order after 5 minutes; this run could not observe that, as every
+  order was rejected.
 - The open order and the Inactive status came before the 201 in all 21 orders that drew both,
   0.1 to 33 ms apart; the open order and status were then sent again. A downstream run reported
   the 201 first in some orders, 0.1 to 0.7 s apart; this run did not reproduce it.

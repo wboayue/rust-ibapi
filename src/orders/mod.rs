@@ -130,9 +130,10 @@ pub struct Order {
     pub order_ref: String,
     /// Specifies whether the order will be transmitted by TWS. If set to false, the order will be created at TWS but will not be sent.
     ///
-    /// A held order sends no frames, is not listed by `all_open_orders`, and stays held until a
-    /// child that names it as [`parent_id`](Self::parent_id) is transmitted; a later unrelated
-    /// order does not release it (live: 2026-11-25, server 223;
+    /// A held order sends no frames and is not listed by `all_open_orders`. A later unrelated
+    /// order does not release it; a transmitted child that names it as
+    /// [`parent_id`](Self::parent_id) does. Re-sending the held order with `transmit` true was
+    /// not probed (live: 2026-11-25, server 223;
     /// `docs/wire-facts/orders.md#transmit-absent-means-held`).
     pub transmit: bool,
     /// If set to true, the order is de-activated (inactive). Since TWS 10.48, `reqOpenOrders`
