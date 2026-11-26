@@ -226,6 +226,10 @@ tick_types! {
     /// Delayed session low.
     DelayedLow = 73, "delayedLow", "Delayed Low";
     /// Delayed volume.
+    ///
+    /// Unreliable on US stocks: TWS sent negative values (MSFT `-235087060`) and positive ones
+    /// that disagree with the day's bar volume, with no transform that repairs them (live:
+    /// 2026-11-24, server 223; `docs/wire-facts/market-data.md#delayed-volume-is-negative-or-wrong-on-the-wire`).
     DelayedVolume = 74, "delayedVolume", "Delayed Volume";
     /// Delayed session close.
     DelayedClose = 75, "delayedClose", "Delayed Close";
