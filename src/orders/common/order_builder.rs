@@ -47,8 +47,9 @@
 //! `trailing_stop`, `pegged_to_midpoint`) or arguments of distinct types (`volatility`,
 //! `limit_order_with_manual_order_time`).
 
+use crate::builder::ValidationError;
 use crate::orders::builder::validation::validate_bracket_prices;
-use crate::orders::builder::{BracketPrices, Price, TrailBy, ValidationError};
+use crate::orders::builder::{BracketPrices, Price, TrailBy};
 use crate::orders::{Action, AdjustableTrailingUnit, OcaType, Order, OrderComboLeg, OrderId, OrderType, TagValue, TimeInForce, VolatilityType};
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
@@ -528,7 +529,7 @@ pub fn pegged_to_midpoint(action: Action, quantity: f64, offset: f64, limit_pric
 /// let orders = bracket_order(100, Action::Buy, 10.0, prices)?;
 /// assert_eq!(orders.len(), 3);
 /// assert_eq!(orders[2].aux_price, Some(45.0));
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn bracket_order(
     parent_order_id: impl Into<OrderId>,

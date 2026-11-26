@@ -1,7 +1,7 @@
 use super::*;
+use crate::builder::ValidationError;
 use crate::common::test_utils::helpers::tws_error_notice;
 use crate::messages::ResponseMessage;
-use crate::orders::builder::ValidationError;
 use crate::proto::decoders::DecodeProto;
 use crate::transport::routing::DecodedError;
 use std::error::Error as StdError;

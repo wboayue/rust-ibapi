@@ -1,4 +1,5 @@
-use super::types::{BracketPrices, ValidationError};
+use super::types::BracketPrices;
+use crate::builder::ValidationError;
 use crate::orders::Action;
 
 /// Validates bracket order prices

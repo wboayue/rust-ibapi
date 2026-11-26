@@ -453,7 +453,7 @@ pub struct Order {
     /// This is a regulatory attribute that applies to all US Commodity (Futures) Exchanges, provided to allow client to comply with CFTC Tag 50 Rules.
     ///
     /// Empty, or 1–16 ASCII letters or digits; `place_order` and `submit_order` return
-    /// [`Error::InvalidArgument`](crate::Error::InvalidArgument) for anything else, without
+    /// [`ValidationError::InvalidField`](crate::builder::ValidationError::InvalidField), in `Error::Validation`, for anything else, without
     /// sending. TWS rejects those with 201 "Invalid value in field # 8089" (live: 2026-11-14,
     /// paper). See
     /// `docs/wire-facts/orders.md#ext_operator-and-manual_order_indicator-on-orders-and-cancels`.
@@ -1908,7 +1908,7 @@ pub struct OrderCancel {
     /// [`Order::ext_operator`]. Empty sends none.
     ///
     /// Empty, or 1–16 ASCII letters or digits; `cancel_order_with` and `global_cancel_with`
-    /// return [`Error::InvalidArgument`](crate::Error::InvalidArgument) for anything else,
+    /// return [`ValidationError::InvalidField`](crate::builder::ValidationError::InvalidField), in `Error::Validation`, for anything else,
     /// without sending. TWS never answers a cancel carrying such an ID (live: 2026-11-14,
     /// paper): the order sticks in `PendingCancel`, later cancels are refused (10148 / 161),
     /// and by the next daily reset TWS drops the cancel and the order is working again. See

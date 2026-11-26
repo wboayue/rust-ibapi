@@ -5,7 +5,7 @@
 //! Adaptive, Close Price, Dark Ice, Accumulate/Distribute (AD and AccuDistr),
 //! Balance Impact Risk, and Minimise Impact.
 
-use super::types::ValidationError;
+use crate::builder::ValidationError;
 use crate::contracts::TagValue;
 use crate::orders::OrderType;
 use crate::ToField;
@@ -116,7 +116,7 @@ impl From<&str> for AlgoParams {
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "VwapBuilder does nothing until you call .build()"]
@@ -230,7 +230,7 @@ impl TwapStrategyType {
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "TwapBuilder does nothing until you call .build()"]
@@ -302,7 +302,7 @@ impl TwapBuilder {
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "PctVolBuilder does nothing until you call .build()"]
@@ -402,7 +402,7 @@ impl RiskAversion {
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "ArrivalPriceBuilder does nothing until you call .build()"]
@@ -513,7 +513,7 @@ impl AdaptivePriority {
 /// let algo = adaptive()
 ///     .priority(AdaptivePriority::Normal)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "AdaptiveBuilder does nothing until you call .build()"]
@@ -562,7 +562,7 @@ impl AdaptiveBuilder {
 ///     .start_time("15:30:00 US/Eastern")
 ///     .force_completion(true)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "ClosePriceBuilder does nothing until you call .build()"]
@@ -637,7 +637,7 @@ impl ClosePriceBuilder {
 ///     .start_time("09:30:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "DarkIceBuilder does nothing until you call .build()"]
@@ -711,7 +711,7 @@ impl DarkIceBuilder {
 ///     .randomize_time_20(true)
 ///     .randomize_size_55(true)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "AccumulateDistributeBuilder does nothing until you call .build()"]
@@ -823,7 +823,7 @@ impl AccumulateDistributeBuilder {
 ///     .risk_aversion(RiskAversion::Neutral)
 ///     .force_completion(true)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "BalanceImpactRiskBuilder does nothing until you call .build()"]
@@ -887,7 +887,7 @@ impl BalanceImpactRiskBuilder {
 /// let algo = minimise_impact()
 ///     .max_pct_vol(0.2)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "MinimiseImpactBuilder does nothing until you call .build()"]
@@ -943,7 +943,7 @@ impl MinimiseImpactBuilder {
 ///     .start_time("09:30:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "PctVolPriceBuilder does nothing until you call .build()"]
@@ -1045,7 +1045,7 @@ impl PctVolPriceBuilder {
 ///     .start_time("09:30:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "PctVolSizeBuilder does nothing until you call .build()"]
@@ -1127,7 +1127,7 @@ impl PctVolSizeBuilder {
 ///     .start_time("09:30:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "PctVolTimeBuilder does nothing until you call .build()"]
@@ -1219,7 +1219,7 @@ impl PctVolTimeBuilder {
 ///     .active_time_end("20260101-16:00:00")
 ///     .active_time_tz("US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 #[must_use = "AccuDistrBuilder does nothing until you call .build()"]

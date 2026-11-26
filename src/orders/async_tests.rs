@@ -1,4 +1,5 @@
 use super::*;
+use crate::builder::ValidationError;
 use crate::client::ids::{OrderId, RequestId, REQUEST_ID_FLOOR};
 use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, create_test_client, create_test_client_with_ordered_proto_responses, decode_request_proto,
@@ -7,7 +8,7 @@ use crate::common::test_utils::helpers::{
 use crate::contracts::{Contract, SecurityIdType, SecurityType};
 use crate::contracts::{Currency, Exchange, OptionRight, Symbol};
 use crate::messages::IncomingMessages;
-use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
+use crate::orders::builder::{BracketPrices, TrailBy};
 use crate::orders::{OcaType, OrderStatusKind, OrderType, TimeInForce};
 use crate::proto;
 use crate::stubs::MessageBusStub;
@@ -889,7 +890,12 @@ async fn invalid_ext_operator_is_rejected_before_sending() {
     let mut order = order_builder::limit_order(Action::Buy, 1.0, 1.0);
     order.ext_operator = "TRADER_7".to_owned();
 
-    let rejected = |result: Result<(), Error>, what: &str| assert!(matches!(result, Err(Error::InvalidArgument(_))), "{what}: {result:?}");
+    let rejected = |result: Result<(), Error>, what: &str| {
+        assert!(
+            matches!(result, Err(Error::Validation(ValidationError::InvalidField { .. }))),
+            "{what}: {result:?}"
+        )
+    };
     rejected(client.cancel_order_with(41, &cancel).await.map(drop), "cancel_order_with");
     rejected(client.global_cancel_with(&cancel).await, "global_cancel_with");
     rejected(client.place_order(41, &contract, &order).await.map(drop), "place_order");

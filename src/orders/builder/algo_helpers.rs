@@ -39,7 +39,7 @@ use crate::orders::builder::algo_builders::{
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn vwap() -> VwapBuilder {
     VwapBuilder::new()
@@ -58,7 +58,7 @@ pub fn vwap() -> VwapBuilder {
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn twap() -> TwapBuilder {
     TwapBuilder::new()
@@ -78,7 +78,7 @@ pub fn twap() -> TwapBuilder {
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn pct_vol() -> PctVolBuilder {
     PctVolBuilder::new()
@@ -99,7 +99,7 @@ pub fn pct_vol() -> PctVolBuilder {
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn arrival_price() -> ArrivalPriceBuilder {
     ArrivalPriceBuilder::new()
@@ -117,7 +117,7 @@ pub fn arrival_price() -> ArrivalPriceBuilder {
 /// let algo = adaptive()
 ///     .priority(AdaptivePriority::Normal)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn adaptive() -> AdaptiveBuilder {
     AdaptiveBuilder::new()
@@ -137,7 +137,7 @@ pub fn adaptive() -> AdaptiveBuilder {
 ///     .risk_aversion(RiskAversion::Neutral)
 ///     .start_time("15:30:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn close_price() -> ClosePriceBuilder {
     ClosePriceBuilder::new()
@@ -157,7 +157,7 @@ pub fn close_price() -> ClosePriceBuilder {
 ///     .start_time("09:30:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn dark_ice() -> DarkIceBuilder {
     DarkIceBuilder::new()
@@ -176,7 +176,7 @@ pub fn dark_ice() -> DarkIceBuilder {
 ///     .component_size(100)
 ///     .time_between_orders(60)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn accumulate_distribute() -> AccumulateDistributeBuilder {
     AccumulateDistributeBuilder::new()
@@ -195,7 +195,7 @@ pub fn accumulate_distribute() -> AccumulateDistributeBuilder {
 ///     .max_pct_vol(0.2)
 ///     .risk_aversion(RiskAversion::Neutral)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn balance_impact_risk() -> BalanceImpactRiskBuilder {
     BalanceImpactRiskBuilder::new()
@@ -213,7 +213,7 @@ pub fn balance_impact_risk() -> BalanceImpactRiskBuilder {
 /// let algo = minimise_impact()
 ///     .max_pct_vol(0.2)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn minimise_impact() -> MinimiseImpactBuilder {
     MinimiseImpactBuilder::new()
@@ -232,7 +232,7 @@ pub fn minimise_impact() -> MinimiseImpactBuilder {
 ///     .pct_vol(0.1)
 ///     .delta_pct_vol(0.05)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn pct_vol_price() -> PctVolPriceBuilder {
     PctVolPriceBuilder::new()
@@ -251,7 +251,7 @@ pub fn pct_vol_price() -> PctVolPriceBuilder {
 ///     .start_pct_vol(0.1)
 ///     .end_pct_vol(0.4)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn pct_vol_size() -> PctVolSizeBuilder {
     PctVolSizeBuilder::new()
@@ -270,7 +270,7 @@ pub fn pct_vol_size() -> PctVolSizeBuilder {
 ///     .start_pct_vol(0.1)
 ///     .end_pct_vol(0.4)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn pct_vol_time() -> PctVolTimeBuilder {
     PctVolTimeBuilder::new()
@@ -293,7 +293,7 @@ pub fn pct_vol_time() -> PctVolTimeBuilder {
 ///     .route_order_type(OrderType::Limit)
 ///     .component_size(100)
 ///     .build()?;
-/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+/// # Ok::<(), ibapi::builder::ValidationError>(())
 /// ```
 pub fn accu_distr() -> AccuDistrBuilder {
     AccuDistrBuilder::new()

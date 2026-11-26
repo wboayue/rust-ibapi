@@ -2,6 +2,7 @@ use super::algo_builders::AlgoParams;
 use super::types::*;
 use super::validation;
 use crate::accounts::types::{AccountId, ContractId};
+use crate::builder::ValidationError;
 use crate::contracts::Contract;
 use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
@@ -420,7 +421,7 @@ impl<T> OrderBuilder<T> {
     ///
     /// let by_percent = Order::builder().sell(100).trailing_stop(TrailBy::Percent(1.5), 148.0).build()?;
     /// assert_eq!(by_percent.trailing_percent, Some(1.5));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn trailing_stop(mut self, trail: TrailBy, stop_price: impl Into<f64>) -> Self {
         self.order_type = Some(OrderType::TrailingStop);
@@ -452,7 +453,7 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(100).limit(150.0).order_type(OrderType::PegBest).build()?;
     /// assert_eq!(order.order_type, Some(OrderType::PegBest));
     /// assert_eq!(order.limit_price, Some(150.0));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn order_type(mut self, order_type: OrderType) -> Self {
         self.order_type = Some(order_type);
@@ -473,7 +474,7 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::TrailingStopLimit));
     /// assert_eq!(order.aux_price, Some(2.0));
     /// assert_eq!(order.limit_price_offset, Some(0.5));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn trailing_stop_limit(mut self, trail: TrailBy, stop_price: impl Into<f64>, limit_offset: f64) -> Self {
         self.order_type = Some(OrderType::TrailingStopLimit);
@@ -576,7 +577,7 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(1).relative_limit_combo(2.5).non_guaranteed().build()?;
     /// assert_eq!(order.order_type, Some(OrderType::RelativeLimitCombo));
     /// assert_eq!(order.limit_price, Some(2.5));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn relative_limit_combo(mut self, limit_price: impl Into<f64>) -> Self {
         self.limit_price = Some(limit_price.into());
@@ -595,7 +596,7 @@ impl<T> OrderBuilder<T> {
     ///
     /// let order = Order::builder().buy(1).relative_market_combo().build()?;
     /// assert_eq!(order.order_type, Some(OrderType::RelativeMarketCombo));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn relative_market_combo(mut self) -> Self {
         self.aux_price = None;
@@ -651,7 +652,7 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::Volatility));
     /// assert_eq!(order.volatility, Some(40.0));
     /// assert_eq!(order.volatility_type, Some(VolatilityType::Annual));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn volatility_order(mut self, volatility: f64, volatility_type: VolatilityType) -> Self {
         self.volatility = Some(volatility);
@@ -1319,7 +1320,7 @@ impl<T> OrderBuilder<T> {
     ///     .peg_best(150.0, CompeteAgainstBest::UpToMid(MidOffsets { at_whole: 0.02, at_half: 0.025 }))
     ///     .build()?;
     /// assert_eq!(up_to_mid.mid_offset_at_whole, Some(0.02));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn peg_best(mut self, limit_price: impl Into<f64>, compete: CompeteAgainstBest) -> Self {
         self.order_type = Some(OrderType::PegBest);
@@ -1347,7 +1348,7 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToMidpoint));
     /// assert_eq!(order.mid_offset_at_half, Some(0.025));
     /// assert_eq!(order.aux_price, None);
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn peg_mid(mut self, limit_price: impl Into<f64>, offsets: MidOffsets) -> Self {
         self.order_type = Some(OrderType::PeggedToMidpoint);
@@ -1371,7 +1372,7 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(100).pegged_to_market(0.05).build()?;
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToMarket));
     /// assert_eq!(order.aux_price, Some(0.05));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn pegged_to_market(mut self, offset: f64) -> Self {
         self.order_type = Some(OrderType::PeggedToMarket);
@@ -1393,7 +1394,7 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToMidpoint));
     /// assert_eq!(order.aux_price, Some(0.01));
     /// assert_eq!(order.limit_price, Some(150.0));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn pegged_to_midpoint(mut self, offset: f64, limit_price: impl Into<f64>) -> Self {
         self.order_type = Some(OrderType::PeggedToMidpoint);
@@ -1414,7 +1415,7 @@ impl<T> OrderBuilder<T> {
     ///
     /// let order = Order::builder().buy(10).box_top().build()?;
     /// assert_eq!(order.order_type, Some(OrderType::BoxTop));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn box_top(mut self) -> Self {
         self.order_type = Some(OrderType::BoxTop);
@@ -1448,7 +1449,7 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToStock));
     /// assert_eq!(order.delta, Some(0.5));
     /// assert_eq!(order.starting_price, Some(2.10));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn pegged_to_stock(mut self, delta: f64, starting_price: impl Into<f64>) -> Self {
         self.order_type = Some(OrderType::PeggedToStock);
@@ -1497,7 +1498,7 @@ impl<T> OrderBuilder<T> {
     ///     .build()?;
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToBenchmark));
     /// assert_eq!(order.reference_contract_id, 12345);
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn pegged_to_benchmark(mut self, starting_price: impl Into<f64>) -> Self {
         self.order_type = Some(OrderType::PeggedToBenchmark);
@@ -1550,7 +1551,7 @@ impl<T> OrderBuilder<T> {
     ///
     /// let order = Order::builder().buy(1).limit(2.5).non_guaranteed().build()?;
     /// assert_eq!(order.smart_combo_routing_params[0].tag, "NonGuaranteed");
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn non_guaranteed(mut self) -> Self {
         self.smart_combo_routing_params = non_guaranteed_params();
@@ -1567,7 +1568,7 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(1).market().combo_leg_prices([1.10, 2.25]).build()?;
     /// assert_eq!(order.order_combo_legs.len(), 2);
     /// assert_eq!(order.order_combo_legs[1].price, Some(2.25));
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn combo_leg_prices(mut self, prices: impl IntoIterator<Item = f64>) -> Self {
         self.order_combo_legs = prices.into_iter().map(|price| OrderComboLeg { price: Some(price) }).collect();
@@ -1593,7 +1594,7 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(0).limit(1.10).cash_qty(20_000.0).build()?;
     /// assert_eq!(order.cash_qty, Some(20_000.0));
     /// assert_eq!(order.total_quantity, 0.0);
-    /// # Ok::<(), ibapi::orders::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::builder::ValidationError>(())
     /// ```
     pub fn cash_qty(mut self, cash_qty: f64) -> Self {
         self.cash_qty = Some(cash_qty);

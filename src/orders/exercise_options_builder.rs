@@ -9,10 +9,10 @@
 
 use time::OffsetDateTime;
 
-use super::builder::ValidationError;
 use super::common::encoders;
 use super::{ExerciseAction, PlaceOrder};
 use crate::accounts::types::AccountId;
+use crate::builder::ValidationError;
 use crate::contracts::Contract;
 use crate::orders::OrderId;
 use crate::Error;

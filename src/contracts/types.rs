@@ -1,5 +1,6 @@
 //! Strong types for contract building with validation.
 
+use crate::builder::ValidationError;
 use crate::{Error, ToField};
 use std::fmt;
 use std::str::FromStr;
@@ -270,9 +271,24 @@ pub struct Strike(f64);
 
 impl Strike {
     /// Construct a validated strike price ensuring it is positive and finite.
-    pub fn new(price: f64) -> Result<Self, String> {
+    ///
+    /// # Errors
+    ///
+    /// [`ValidationError::InvalidPrice`] for zero, a negative, NaN or an infinite price.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::builder::ValidationError;
+    /// use ibapi::contracts::Strike;
+    ///
+    /// assert_eq!(Strike::new(150.0)?.value(), 150.0);
+    /// assert_eq!(Strike::new(0.0), Err(ValidationError::InvalidPrice(0.0)));
+    /// # Ok::<(), ValidationError>(())
+    /// ```
+    pub fn new(price: f64) -> Result<Self, ValidationError> {
         if !price.is_finite() || price <= 0.0 {
-            Err("Strike price must be positive and finite".to_string())
+            Err(ValidationError::InvalidPrice(price))
         } else {
             Ok(Strike(price))
         }
@@ -299,7 +315,7 @@ impl ExpirationDate {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidArgument`] unless the components form a real calendar
+    /// [`ValidationError::InvalidDate`] unless the components form a real calendar
     /// date with a year of at most 9999 (the wire form is `YYYYMMDD`).
     ///
     /// # Examples
@@ -314,7 +330,7 @@ impl ExpirationDate {
     /// assert!(ExpirationDate::new(2026, 13, 1).is_err());
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn new(year: u16, month: u8, day: u8) -> Result<Self, Error> {
+    pub fn new(year: u16, month: u8, day: u8) -> Result<Self, ValidationError> {
         Self::unchecked(year, month, day).validated()
     }
 
@@ -350,8 +366,11 @@ impl ExpirationDate {
     }
 
     /// `Ok(self)` if the components form a real date with a 4-digit year.
-    pub(crate) fn validated(self) -> Result<Self, Error> {
-        let invalid = || Error::InvalidArgument(format!("invalid expiration date {:04}-{:02}-{:02}", self.year, self.month, self.day));
+    pub(crate) fn validated(self) -> Result<Self, ValidationError> {
+        let invalid = || ValidationError::InvalidDate {
+            value: format!("{:04}-{:02}-{:02}", self.year, self.month, self.day),
+            expected: "a calendar date with a year of at most 9999",
+        };
         if self.year > 9999 {
             return Err(invalid());
         }
@@ -448,7 +467,7 @@ impl ContractMonth {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidArgument`] unless `month` is 1–12 and `year` is at most
+    /// [`ValidationError::InvalidDate`] unless `month` is 1–12 and `year` is at most
     /// 9999 (the wire form is `YYYYMM`).
     ///
     /// # Examples
@@ -462,9 +481,12 @@ impl ContractMonth {
     /// assert!(ContractMonth::new(2026, 13).is_err());
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn new(year: u16, month: u8) -> Result<Self, Error> {
+    pub fn new(year: u16, month: u8) -> Result<Self, ValidationError> {
         if year > 9999 || !(1..=12).contains(&month) {
-            return Err(Error::InvalidArgument(format!("invalid contract month {year:04}-{month:02}")));
+            return Err(ValidationError::InvalidDate {
+                value: format!("{year:04}-{month:02}"),
+                expected: "a month 1-12 with a year of at most 9999",
+            });
         }
         Ok(ContractMonth { year, month })
     }
@@ -565,7 +587,8 @@ impl fmt::Display for ContractMonth {
     }
 }
 
-/// `YYYYMMDD` (8 digits, a real calendar date) → [`ExpirationDate`].
+/// `YYYYMMDD` (8 digits, a real calendar date) → [`ExpirationDate`]; anything
+/// else is a [`ValidationError::InvalidDate`].
 ///
 /// # Examples
 ///
@@ -578,10 +601,13 @@ impl fmt::Display for ContractMonth {
 /// # Ok::<(), ibapi::Error>(())
 /// ```
 impl FromStr for ExpirationDate {
-    type Err = Error;
+    type Err = ValidationError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let invalid = || Error::invalid_value(s, "expected an expiration date as YYYYMMDD");
+        let invalid = || ValidationError::InvalidDate {
+            value: s.to_owned(),
+            expected: "YYYYMMDD",
+        };
         if s.len() != 8 || !s.bytes().all(|b| b.is_ascii_digit()) {
             return Err(invalid());
         }
@@ -591,14 +617,15 @@ impl FromStr for ExpirationDate {
 }
 
 impl TryFrom<&str> for ExpirationDate {
-    type Error = Error;
+    type Error = ValidationError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         s.parse()
     }
 }
 
-/// `YYYYMM` (6 digits, month 01–12) → [`ContractMonth`].
+/// `YYYYMM` (6 digits, month 01–12) → [`ContractMonth`]; anything else is a
+/// [`ValidationError::InvalidDate`].
 ///
 /// # Examples
 ///
@@ -611,10 +638,13 @@ impl TryFrom<&str> for ExpirationDate {
 /// # Ok::<(), ibapi::Error>(())
 /// ```
 impl FromStr for ContractMonth {
-    type Err = Error;
+    type Err = ValidationError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let invalid = || Error::invalid_value(s, "expected a contract month as YYYYMM");
+        let invalid = || ValidationError::InvalidDate {
+            value: s.to_owned(),
+            expected: "YYYYMM",
+        };
         if s.len() != 6 || !s.bytes().all(|b| b.is_ascii_digit()) {
             return Err(invalid());
         }
@@ -624,7 +654,7 @@ impl FromStr for ContractMonth {
 }
 
 impl TryFrom<&str> for ContractMonth {
-    type Error = Error;
+    type Error = ValidationError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         s.parse()
@@ -731,21 +761,24 @@ impl fmt::Display for Expiry {
 }
 
 /// Strict: `YYYYMMDD` → [`Expiry::Date`], `YYYYMM` → [`Expiry::Month`], anything
-/// else is an error.
+/// else is a [`ValidationError::InvalidDate`].
 impl FromStr for Expiry {
-    type Err = Error;
+    type Err = ValidationError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.len() {
             8 => s.parse().map(Expiry::Date),
             6 => s.parse().map(Expiry::Month),
-            _ => Err(Error::invalid_value(s, "expected YYYYMMDD (last trading day) or YYYYMM (contract month)")),
+            _ => Err(ValidationError::InvalidDate {
+                value: s.to_owned(),
+                expected: "YYYYMMDD (last trading day) or YYYYMM (contract month)",
+            }),
         }
     }
 }
 
 impl TryFrom<&str> for Expiry {
-    type Error = Error;
+    type Error = ValidationError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         s.parse()

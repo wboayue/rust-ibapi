@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+use crate::builder::ValidationError;
 use crate::orders::OrderId;
 
 /// Order IDs from [`AttachedOrdersBuilder::submit`](crate::orders::AttachedOrdersBuilder).
@@ -177,69 +178,6 @@ pub struct BracketPrices {
     /// Stop price of the stop-loss order.
     pub stop_loss: f64,
 }
-
-/// Validation errors
-#[derive(Debug, Clone, PartialEq)]
-pub enum ValidationError {
-    /// Quantity must be positive and finite.
-    InvalidQuantity(f64),
-    /// Price must be finite (not NaN or infinity).
-    InvalidPrice(f64),
-    /// Required builder field was not supplied.
-    MissingRequiredField(&'static str),
-    /// Combination of inputs violates broker rules.
-    InvalidCombination(String),
-    /// Stop price conflicts with current market context.
-    InvalidStopPrice {
-        /// Stop trigger price supplied by caller.
-        stop: f64,
-        /// Reference market price used for validation.
-        current: f64,
-    },
-    /// Limit price conflicts with current market context.
-    InvalidLimitPrice {
-        /// Limit price supplied by caller.
-        limit: f64,
-        /// Reference market price used for validation.
-        current: f64,
-    },
-    /// Bracket order configuration is invalid.
-    InvalidBracketOrder(String),
-    /// Percentage value outside allowed range (10-50%).
-    InvalidPercentage {
-        /// The field name (e.g., "max_pct_vol", "pct_vol").
-        field: &'static str,
-        /// The invalid value provided.
-        value: f64,
-        /// Minimum allowed value.
-        min: f64,
-        /// Maximum allowed value.
-        max: f64,
-    },
-}
-
-impl fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidQuantity(q) => write!(f, "Invalid quantity: {}", q),
-            Self::InvalidPrice(p) => write!(f, "Invalid price: {}", p),
-            Self::MissingRequiredField(field) => write!(f, "Missing required field: {}", field),
-            Self::InvalidCombination(msg) => write!(f, "Invalid combination: {}", msg),
-            Self::InvalidStopPrice { stop, current } => {
-                write!(f, "Invalid stop price {} for current price {}", stop, current)
-            }
-            Self::InvalidLimitPrice { limit, current } => {
-                write!(f, "Invalid limit price {} for current price {}", limit, current)
-            }
-            Self::InvalidBracketOrder(msg) => write!(f, "Invalid bracket order: {}", msg),
-            Self::InvalidPercentage { field, value, min, max } => {
-                write!(f, "Invalid {}: {} (must be between {} and {})", field, value, min, max)
-            }
-        }
-    }
-}
-
-impl std::error::Error for ValidationError {}
 
 #[cfg(test)]
 #[path = "types_tests.rs"]

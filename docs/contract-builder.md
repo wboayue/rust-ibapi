@@ -99,7 +99,7 @@ let direct_route = Contract::stock("BMW")
 
 ### Options
 
-Options require strike price and expiration date. The builder enforces these at compile time; `build()` returns `Error::InvalidArgument` for a strike that isn't positive and finite.
+Options require strike price and expiration date. The builder enforces these at compile time; `build()` returns `Error::Validation(ValidationError::InvalidPrice)` for a strike that isn't positive and finite.
 
 ```rust
 use ibapi::contracts::{Contract, ExpirationDate};
@@ -417,7 +417,10 @@ let contract = builder3.build()?;  // Build only available when all required fie
 
 ## Error Handling
 
-The API validates inputs and returns errors for invalid data:
+The API validates inputs and returns errors for invalid data. A bad value a caller can
+correct at runtime (a strike, a date) is an `ibapi::builder::ValidationError`, wrapped in
+`Error::Validation` when a `build()` returns it; a missing required field (no legs, no symbol)
+is `Error::InvalidArgument`:
 
 ```rust
 use ibapi::contracts::{Contract, Strike};

@@ -6,8 +6,8 @@
 use thiserror::Error;
 
 use crate::accounts::types::AccountId;
+use crate::builder::ValidationError;
 use crate::messages::{Notice, ResponseMessage};
-use crate::orders::builder::ValidationError;
 
 /// The main error type for IBAPI operations.
 ///
@@ -51,14 +51,26 @@ pub enum Error {
         feature: String,
     },
 
-    /// Invalid argument provided to API method.
+    /// The call itself is wrong, a caller bug no one recovers from at runtime:
+    /// a builder missing a required field (`Contract::spread` without legs,
+    /// `ContractBuilder` without a symbol), an invalid `historical_data`
+    /// duration or range, a bad `ClientBuilder` setting, `buffer_limit(0)`.
+    /// Fix the code; the message says what to change.
+    ///
+    /// A bad *value* a caller may correct at runtime is [`Error::Validation`].
     #[error("InvalidArgument: {0}")]
     InvalidArgument(String),
 
-    /// An order builder rejected its inputs before anything was sent (e.g.
-    /// `OrderBuilder::submit`), or `?` was applied to a [`ValidationError`].
-    /// Carries the `ValidationError`, so callers match on its variants instead
+    /// A runtime value was rejected before anything was sent: data a caller may
+    /// correct, such as a quantity or price, a strike, a date parsed from user or
+    /// file input, or a field on a caller-built `Order` / `OrderCancel`
+    /// (`ext_operator`). Returned by the order builders' `submit`, `place_order`,
+    /// `submit_order`, `cancel_order_with`, `global_cancel_with` and contract
+    /// `build()`, or by `?` on a [`ValidationError`]. Match its variants instead
     /// of parsing a message.
+    ///
+    /// A caller bug (wrong call, missing required builder field) is
+    /// [`Error::InvalidArgument`].
     #[error("validation error: {0}")]
     Validation(#[from] ValidationError),
 

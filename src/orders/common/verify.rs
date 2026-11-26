@@ -1,3 +1,4 @@
+use crate::builder::ValidationError;
 use crate::client::id_generator::ClientIdManager;
 use crate::orders::OrderId;
 use crate::orders::{Order, OrderCancel};
@@ -126,19 +127,21 @@ pub(crate) fn verify_order_cancel(order_cancel: &OrderCancel) -> Result<(), Erro
 const EXT_OPERATOR_MAX_LEN: usize = 16;
 
 /// Rejects an operator ID outside the set TWS accepts: 1–16 ASCII letters or
-/// digits. Empty passes, since it is not sent.
+/// digits, with [`ValidationError::InvalidField`]. Empty passes, since it is not sent.
 ///
 /// On an order TWS rejects anything else with 201; on a cancel it never replies and
 /// the order sticks in `PendingCancel`. Probed on paper, server 226 (2026-11-14):
 /// see `docs/wire-facts/orders.md#ext_operator-and-manual_order_indicator-on-orders-and-cancels`.
 /// TWS also accepts 65+ letters and digits, but this function rejects those too.
-fn verify_ext_operator(field: &str, value: &str) -> Result<(), Error> {
+fn verify_ext_operator(field: &'static str, value: &str) -> Result<(), Error> {
     if value.is_empty() || (value.len() <= EXT_OPERATOR_MAX_LEN && value.bytes().all(|b| b.is_ascii_alphanumeric())) {
         return Ok(());
     }
-    Err(Error::InvalidArgument(format!(
-        "{field} {value:?}: TWS accepts 1-{EXT_OPERATOR_MAX_LEN} ASCII letters or digits"
-    )))
+    Err(ValidationError::InvalidField {
+        field,
+        reason: format!("{value:?}: TWS accepts 1-{EXT_OPERATOR_MAX_LEN} ASCII letters or digits"),
+    }
+    .into())
 }
 
 #[cfg(test)]

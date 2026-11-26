@@ -1,4 +1,5 @@
 use super::*;
+use crate::builder::ValidationError;
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 
 #[test]
@@ -66,7 +67,7 @@ fn put_option_builder() {
 fn invalid_strike_price() {
     let result = Strike::new(-10.0);
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err(), "Strike price must be positive and finite");
+    assert_eq!(result.unwrap_err(), ValidationError::InvalidPrice(-10.0));
 
     let result = Strike::new(0.0);
     assert!(result.is_err());
@@ -81,7 +82,7 @@ fn invalid_strike_price() {
 fn option_build_rejects_invalid_expires_on() {
     let result = Contract::call("AAPL").strike(150.0).expires_on(2026, 2, 30).build();
     assert!(
-        matches!(result, Err(Error::InvalidArgument(ref message)) if message == "invalid expiration date 2026-02-30"),
+        matches!(result, Err(Error::Validation(ValidationError::InvalidDate { ref value, .. })) if value == "2026-02-30"),
         "got {result:?}"
     );
 
@@ -106,8 +107,8 @@ fn option_build_rejects_invalid_strike() {
         for builder in [Contract::call("AAPL"), Contract::put("AAPL")] {
             let result = builder.strike(strike).expires_on(2024, 12, 20).build();
             match result {
-                Err(Error::InvalidArgument(message)) => assert_eq!(message, "Strike price must be positive and finite", "{label}"),
-                other => panic!("{label}: expected InvalidArgument, got {other:?}"),
+                Err(Error::Validation(ValidationError::InvalidPrice(price))) => assert!(price == strike || price.is_nan(), "{label}: {price}"),
+                other => panic!("{label}: expected InvalidPrice, got {other:?}"),
             }
         }
     }

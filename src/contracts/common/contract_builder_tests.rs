@@ -245,18 +245,21 @@ fn contract_builder_build_futures_option_missing_contract_month() {
     );
 }
 
+/// Same check as `OptionBuilder::build`: zero, negative, NaN and infinite strikes are rejected.
 #[test]
-fn contract_builder_build_negative_strike() {
-    let err = ContractBuilder::option("AAPL", "SMART", "USD")
-        .strike(-10.0)
-        .right(OptionRight::Call)
-        .last_trade_date_or_contract_month("20231215")
-        .build()
-        .unwrap_err();
-    assert!(
-        matches!(err, Error::InvalidArgument(ref msg) if msg == "Strike price cannot be negative"),
-        "got {err:?}"
-    );
+fn contract_builder_build_rejects_invalid_strike() {
+    for strike in [-10.0, 0.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let err = ContractBuilder::option("AAPL", "SMART", "USD")
+            .strike(strike)
+            .right(OptionRight::Call)
+            .last_trade_date_or_contract_month("20231215")
+            .build()
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::Validation(ValidationError::InvalidPrice(price)) if price == strike || (price.is_nan() && strike.is_nan())),
+            "{strike}: got {err:?}"
+        );
+    }
 }
 
 #[test]
@@ -481,7 +484,7 @@ fn build_parses_last_trade_date_or_contract_month() {
     );
     for bad in ["2026-12", "202613", "20261218 08:30:00 US/Central"] {
         assert!(
-            matches!(future(bad), Err(Error::InvalidArgument(msg)) if msg.contains("last_trade_date_or_contract_month")),
+            matches!(future(bad), Err(Error::Validation(ValidationError::InvalidDate { ref value, .. })) if value == bad),
             "{bad:?}"
         );
     }
