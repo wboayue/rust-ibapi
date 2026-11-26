@@ -97,9 +97,10 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     ///   after midnight UTC drops the bar dated that day.
     /// - **Weekly and monthly bars** are dated at the end of their period: a complete week on
     ///   its Friday, a complete month on its last weekday, and the period in progress on
-    ///   today's date (live: 2026-11-23; a holiday on a period's last weekday was not probed). So the bar holding `start` is kept unless `start`
-    ///   falls after midnight UTC on its date, and it can include trading before `start`: a
-    ///   range longer than a day requests a day more than it spans.
+    ///   today's date (live: 2026-11-23; a holiday on a period's last weekday was not
+    ///   probed). So the bar holding `start` is kept unless `start` falls after midnight UTC on
+    ///   its date, and it can include trading before `start`: a range longer than a day
+    ///   requests a day more than it spans.
     ///
     /// TWS rejects any end date for a [`ContinuousFuture`](SecurityType::ContinuousFuture)
     /// (error 10339), so for one the request has no end date and covers `[start, now)`; the bars
