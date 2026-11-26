@@ -87,11 +87,9 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     /// Convenience: specify an explicit date range.
     ///
     /// IBKR measures request durations in trading time, so no duration maps exactly onto a
-    /// wall-clock range. The request asks for a duration that covers `[start, end)`, and bars
-    /// timestamped outside that range are dropped from the result. Bars are stamped with their
-    /// start time, so a bar that begins before `start` is dropped even if it overlaps the range.
-    /// Daily and longer bars carry only a date and compare as midnight UTC: a `start` after
-    /// midnight UTC drops that day's bar.
+    /// wall-clock range. The request asks for a duration that covers `[start, end)`, and the
+    /// result is trimmed to that range with [`HistoricalData::trim_to`], whose docs say which
+    /// bar at each edge survives for intraday, daily, weekly and monthly bars.
     ///
     /// TWS rejects any end date for a [`ContinuousFuture`](SecurityType::ContinuousFuture)
     /// (error 10339), so for one the request has no end date and covers `[start, now)`; the bars

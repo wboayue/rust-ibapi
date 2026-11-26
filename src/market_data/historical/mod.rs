@@ -504,8 +504,24 @@ impl HistoricalData {
     /// IBKR counts a request's duration in trading time, so a range request
     /// returns bars from before `start` too. [`fetch`](HistoricalDataBuilder::fetch)
     /// after [`between`](HistoricalDataBuilder::between) trims for you; use
-    /// this on bars read from a subscription. A daily bar's
-    /// [`Date`](BarTimestamp::Date) counts as midnight UTC.
+    /// this on bars read from a subscription.
+    ///
+    /// Bars are kept by timestamp, so which bar at an edge survives depends on where TWS
+    /// stamps it:
+    ///
+    /// - **Intraday bars** are stamped with their start time, so a bar that begins before
+    ///   `start` is dropped even if it overlaps the range.
+    /// - **Date-only bars** ([`Date`](BarTimestamp::Date): daily, weekly, monthly) compare as
+    ///   midnight UTC of their date, so a `start` after midnight UTC drops the bar dated that
+    ///   day. A daily bar is dated its day. A weekly or monthly bar is dated at the end of its
+    ///   period: a complete week on its Friday, a complete month on its last weekday, and the
+    ///   period in progress on the last trading day so far. So the weekly or monthly bar
+    ///   holding `start` is kept unless `start` falls after midnight UTC on its date, and it can
+    ///   include trading before `start`: it covers its period from the request's window start,
+    ///   which the duration places before `start`. With a past `end`, how TWS dates the last,
+    ///   partial period was not probed, so whether its bar survives is unknown (live:
+    ///   2026-11-23, a trading day after the US close; a holiday on a period's last weekday was
+    ///   not probed; `docs/wire-facts/market-data.md#weekly-and-monthly-bars-are-dated-at-the-end-of-the-period`).
     ///
     /// # Examples
     ///
