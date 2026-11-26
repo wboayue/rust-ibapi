@@ -127,7 +127,9 @@ and after it), paper TWS, server 223. TRADES, regular hours.*
   after the previous request finished, so it was sent late or re-sent; not diagnosed.
 - Settles the boundary: 2000 S passes and 2001 S fails for 1-second bars (bisected on AAPL;
   ESZ6 agrees at 2000 and 2400 S). Inferred: the limit is on the step count (duration over
-  bar size), not on bars returned, since 5760 five-second bars passed.
+  bar size), not on bars returned. ESZ6 returns fewer bars than steps (1192 over 1800 S), so
+  its 2400 S request would hold about 1600 bars, yet it failed. Nor is it a bar cap shared by
+  every bar size: 5760 five-second bars passed.
 - **Not probed:** 5-second bars above 28800 S; other bar sizes' limits; ES in the
   22:00-23:00Z closure; the Gateway.
 

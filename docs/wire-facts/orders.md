@@ -141,8 +141,8 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - After order 1 was cancelled (Cancelled status seen), `open_orders()` returned only working
   order 2, on the same connection and on a fresh one with the same client id. Finished orders
   are reachable only through `completed_orders`.
-- A 201-rejected order also leaves, within 50 ms:
-  [Order rejected with 201](#order-rejected-with-201-events-and-listings).
+- A 201-rejected order also leaves `open_orders` within 50 ms
+  ([Order rejected with 201](#order-rejected-with-201-events-and-listings)).
 - **Not probed:** filled orders (assumed the same).
 
 ### Order rejected with 201: events and listings
@@ -207,7 +207,9 @@ first `Inactive` event.*
 ### Commission report timing and values
 
 *Live 2026-11-23 21:20Z (after the US close), paper TWS, server 223; EUR.USD BUY 20000 MKT, then
-SELL 20000 MKT to flatten.*
+SELL 20000 MKT to flatten. Stocks, options and partial fills: live 2026-11-24 16:04-16:21 UTC (US
+hours), paper TWS, server 223; AAPL 1 share and an AAPL Dec 2026 350 call, 1 contract, each bought
+and sold at market; MSFT orders of 500 shares filled in 7 to 9 parts.*
 
 - One `CommissionAndFeesReport` per fill on the `place_order` stream, 5.0 ms (BUY) and 5.9 ms
   (SELL) after its ExecutionData.
@@ -220,14 +222,12 @@ SELL 20000 MKT to flatten.*
   to `None`; which one TWS sent was not captured.
 - No `-1`, `f64::MAX` or other sentinel in `commission_and_fees`, live or in the six reports
   `executions()` replayed 8-16 s later (2.0, 2.0, 2.24, 2.24, 2.0, 2.0).
-- **Stocks and options during US hours** (*live 2026-11-24 16:04-16:21 UTC, paper TWS, server
-  223; AAPL 1 share and an AAPL Dec 2026 350 call, 1 contract, each bought and sold at market;
-  MSFT orders of 500 shares filled in 7 to 9 parts*): one report per execution, 1 to 2 ms after
+- **Stocks and options during US hours**: one report per execution, 1 to 2 ms after
   it, 20 ms for the option sale. The sequence is the forex BUY's: ExecutionData; OpenOrder
   Filled with `commission_and_fees` `None`; OrderStatus Filled; OpenOrder Filled with the
   commission; OrderStatus; the report. Values: 1.000003 and 1.007222 USD for the stock, 0.7653
   and 0.7859 for the option; `realized_pnl` `None` on the opening executions, set on the
-  closing ones (-2.127225, -21.5512).
+  closing ones (-2.127225, -21.5512), unlike the forex SELL that closed its position.
 - **Partial fills**: each part got its own report right after its execution. The first part
   carried the order's minimum (1.000126 USD for 42 MSFT shares), later parts the increment
   (0.00012 for 40 shares, 0.60036 for 120), and OpenOrder's `commission_and_fees` ran as the
@@ -411,7 +411,6 @@ with `override_natural_action`.*
   list (it listed nothing in both runs, so it had nothing to raise the id above); whether TWS
   sends a `nextValidId` frame after the listing; `reqCompletedOrders(apiOnly=true)`; client
   id 0; the Gateway.
-
 
 ### Order ids are per client id
 
