@@ -129,6 +129,11 @@ pub struct Order {
     /// Intended for institutional customers only, although all customers may use it to identify the API client that sent the order when multiple API clients are running.
     pub order_ref: String,
     /// Specifies whether the order will be transmitted by TWS. If set to false, the order will be created at TWS but will not be sent.
+    ///
+    /// A held order sends no frames, is not listed by `all_open_orders`, and stays held until a
+    /// child that names it as [`parent_id`](Self::parent_id) is transmitted; a later unrelated
+    /// order does not release it (live: 2026-11-25, server 223;
+    /// `docs/wire-facts/orders.md#transmit-absent-means-held`).
     pub transmit: bool,
     /// If set to true, the order is de-activated (inactive). Since TWS 10.48, `reqOpenOrders`
     /// returns de-activated orders; this flag distinguishes them from active orders.
@@ -154,6 +159,10 @@ pub struct Order {
     /// Requires TWS/Gateway server version 216 (`ADDITIONAL_ORDER_PARAMS_1`) or later.
     pub ignore_open_auction: bool,
     /// The order ID of the parent order, used for bracket and auto trailing stop orders.
+    ///
+    /// TWS cuts a child's [`total_quantity`](Self::total_quantity) to the parent's without an error:
+    /// a child of 5,000,000 on a parent of 1 was echoed as 1 (live: 2026-11-25, server 223;
+    /// `docs/wire-facts/orders.md#bracket-child-quantity-follows-the-parent`).
     pub parent_id: i32,
     /// Order ID for a stop-loss that TWS attaches to this order from its order presets.
     ///
@@ -1953,6 +1962,11 @@ pub struct ExecutionFilter {
     /// `time` filters within the days the filter covers and never extends them: with
     /// [`last_n_days`](Self::last_n_days) at 0 that is today only, so a `time` on an earlier
     /// day returns nothing unless `last_n_days` reaches back to it.
+    ///
+    /// TWS accepts a `time` from 1978-01-01 00:00 UTC on; an earlier one, such as
+    /// `OffsetDateTime::UNIX_EPOCH`, draws error 10314. To ask for every execution in the window,
+    /// leave `time` at `None` (live: 2026-11-25, server 223;
+    /// `docs/wire-facts/orders.md#executions-last_n_days-and-specific_dates`).
     pub time: Option<time::OffsetDateTime>,
     /// The instrument's symbol
     pub symbol: String,

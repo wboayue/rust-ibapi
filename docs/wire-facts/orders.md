@@ -15,6 +15,15 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - An untransmitted order gets no open-order or status frames, so a TWS-derived value (e.g. a
   VOL order's limit) is only visible once transmitted.
 
+*Live 2026-11-25 19:12 UTC (US RTH), paper TWS, server 223.*
+
+- An AAPL BUY 1 LMT with `transmit=false`, then an unrelated AAPL BUY 1 LMT with `transmit=true`
+  on the same client: the second went `PreSubmitted` and `Submitted`; the held one stayed held.
+  Eight seconds later it had still sent no frame on its own stream and `all_open_orders` did not
+  list it. Only a child that names it as `parent_id` releases a held order (see
+  [Bracket child quantity](#bracket-child-quantity-follows-the-parent)). Its cancel drew
+  `Cancelled`, 202 "Order was discarded" and 161, as above.
+
 ### Held orders survive a reconnect
 
 *Live 2026-11-27, paper Gateway, server 226; #1335.*
@@ -248,6 +257,13 @@ first `Inactive` event.*
 - `specific_dates` one day at a time, 2026-10-26 to 2026-11-16: 2026-11-11 and 2026-11-15
   returned their fills; every other day, including each day 8 to 21 days back, returned none,
   no error, only the end message.
+*Live 2026-11-25 19:15 UTC, paper TWS, server 223; `time` with `last_n_days = 7`.*
+
+- `time` from 1978-01-01 00:00 UTC to the present was accepted: each date from one day to
+  48 years back (1978-01-01, 1980, 2002, 30, 60, 365 and 3,650 days back) returned the same 317
+  executions as the 7-day window. 1977-12-31 and earlier (1977-08-14, 1975, 1970-01-02, 1970-01-01)
+  drew 10314 "The date, time, or time-zone entered is invalid." A `time` one day ahead returned
+  no executions and no error.
 - **Not probed:** a `specific_dates` day older than a week that has executions. None was
   reachable (`last_n_days` above 7 returns nothing), so whether TWS applies the "within the
   past week" in IB's `ExecutionFilter.proto` to `specific_dates` is not known.
@@ -404,8 +420,23 @@ with `override_natural_action`.*
   day.
 - The open order has no field marking it as an exercise; only the shared `permId` links it to the
   executions.
-- **Not probed:** lapse, assignment, automatic exercise at expiry, puts, futures options, and
-  exercising from a client other than the one that bought.
+- **Again during US hours** (*live 2026-11-24 16:23 and 16:31 UTC, paper TWS, server 223;
+  AAPL Nov 27 2026 calls, bought by one client and exercised by another*): the same frames and
+  order. The 340 call (in the money, AAPL at 352): 10349, OpenOrder and OrderStatus
+  `PreSubmitted`, 6 ms later ExecutionData BOT 100 AAPL at 340, OpenOrder and OrderStatus Filled
+  with 100, then ExecutionData SLD 1 call at 0 and Filled with 1, all within 20 ms. The two
+  execution ids share their first two fields and differ in the third (`.01.01` stock, `.02.01`
+  option), like a combo's. No commission report for either, live or in `executions` 3 minutes
+  later. An exercise of the out-of-the-money 380 call (AAPL at 351) went through the same way,
+  buying 100 AAPL at 380.
+- Lapse before the last trading day: 10349, OpenOrder and OrderStatus `Inactive`, 201 "Order
+  rejected - reason:trade date must match last trade date of the contract", then 322
+  "Error processing request.Exercise/Lapse failed due to server rejection." on the same id.
+- Futures option (ES Dec 2026 6800 put, held): 10349, `Inactive`, 201 "Order rejected -
+  reason:Real time exercise of FOP is not available. Please send TMS ticket to request this
+  exercise.", then 322. The position was unchanged.
+- **Not probed:** a lapse on the last trading day, assignment, automatic exercise at expiry,
+  puts, and the Gateway.
 
 ### Weekend cancel of a PreSubmitted ES order wedges in PendingCancel
 
@@ -599,3 +630,161 @@ connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
 - **Not probed:** a futures or EFP order, where `refFuturesConId` would be set; a filled or
   partially filled order.
 
+
+### Non-US orders outside and during the trading session
+
+*Live 2026-11-24 22:03-22:17 UTC (SEHK, HKFE, TSE, OSE and KSE closed) and 2026-11-24
+23:46 to 2026-11-25 04:07 UTC (in session and at lunch), paper TWS, server 223;
+non-marketable limit orders, each cancelled after 5 to 10 s.*
+
+| Order | Reply | Cancel |
+| ----- | ----- | ------ |
+| 700 SEHK BUY 100 LMT 320 | 399 "Warning: Your order will not be placed at the exchange until 2026-11-25 09:30:00 Hongkong", then PreSubmitted | Cancelled, 202 |
+| HSI future HKFE BUY 1 LMT 20000; HSI option `HSI25600L6` BUY 1 LMT 1 | the same 399 with `09:15:00 Hongkong`, PreSubmitted, then Submitted within 1.3 s | Cancelled, 202 |
+| HSI futures option `PHS25600L6` BUY 1 LMT 1 | 399 with `09:15:00`, PreSubmitted twice | Cancelled, 202 |
+| N225M future OSE.JPN BUY 1 LMT 40000 | PreSubmitted, no 399 | Cancelled, 202 |
+| 7203 SMART BUY 100 LMT 2000 | Submitted, no 399 | Cancelled, 202 |
+| K200 future KSE BUY 1 LMT 300 | nothing in 5 s | nothing in 5 s; `PendingCancel` in `all_open_orders` 21 s after placing; at 22:17 a second cancel drew 10147 and no open order was listed |
+
+- The 399 carries a `Warning:` line and the order goes on, so it is a warning, not a rejection.
+  The time is the exchange's next open in its own zone, as text.
+- HKFE orders reached `Submitted` while the exchange was closed: `Submitted` does not mean the
+  order is at the exchange.
+- The KSE order neither acknowledged nor cancelled promptly, like the
+  [weekend ES cancel](#weekend-cancel-of-a-presubmitted-es-order-wedges-in-pendingcancel), and
+  cleared without a terminal status reaching the probe.
+- The same orders while the venue traded or was at lunch (2026-11-25, each cancelled after 10 s):
+
+  | Order | Session | Lunch break |
+  | ----- | ------- | ----------- |
+  | 700 SEHK BUY 100 LMT 320 (last 344) | 01:36 UTC: PreSubmitted, no 399 | 04:05: PreSubmitted, no 399 |
+  | HSI option `HSI25600L6` BUY 1 LMT 1 | 01:36: Submitted | 04:05: Submitted |
+  | HSI future BUY 1 LMT 20000 | not run (connection timed out) | 04:07: Submitted |
+  | 7203 SMART BUY 100 LMT 2000 | 00:01: PreSubmitted | 02:35: PreSubmitted; 03:35 after lunch: PreSubmitted |
+  | K200 future BUY 1 LMT 700; N225M future BUY 1 LMT 50000 | 23:46 (day session): Submitted, cancelled at once | |
+
+- No 399 came during a session or a lunch break. The SEHK and TSE stock orders stayed
+  PreSubmitted with an empty `why_held` while their venue traded, and 7203 had been Submitted at
+  22:03 when TSE was closed, so neither status tells whether the order is at the exchange.
+- Distance from the market decides the SEHK status (06:25, bid 339, ask 339.2): BUY 100 LMT 336
+  and LMT 330 went PreSubmitted, then Submitted 0.2 s later; LMT 320 stayed PreSubmitted, and so
+  did 7203 LMT 2000 again. IB holds a limit that far from the market without sending it on, and
+  says so in no field.
+- **Not probed:** fills; marketable orders; orders during the SEHK closing auction.
+
+### Auction orders on SEHK and TSE
+
+*Live 2026-11-24 22:04-22:06 UTC (both closed), paper TWS, server 223.*
+
+| Order | 700 SEHK | 7203 SMART (JPY) |
+| ----- | -------- | ---------------- |
+| LMT, `tif` OPG (LOO) | Inactive, 201 "The time-in-force OPG is invalid for this combination of exchange and security type." | not run (connection timed out) |
+| MKT, `tif` OPG (MOO) | not run (connection timed out) | Submitted; cancelled |
+| MOC | 387 "Unsupported order type for this exchange and security type." | no frame in 5 s; `PendingSubmit` in `all_open_orders`; cancelled (PendingCancel, Cancelled, 202) |
+| LOC | 387 | as MOC |
+| MTL or LMT, `tif` AUC | Inactive, 201 "The time-in-force AUC is invalid ..." | Inactive, 201 (MTL) |
+
+- The unsupported time in force drew an Inactive status before the 201; the unsupported order
+  type drew 387 with no status.
+- The 7203 MOC and LOC orders sat in `PendingSubmit` with no frame on their `place_order`
+  replies while two other connections in the same minute timed out at the handshake, so the
+  silence may be TWS load rather than the order type.
+- **Not probed:** SEHK's closing auction order types (`tif` AUC was refused; no other type
+  tried), TSE MOC and LOC during a session.
+
+### Crypto orders on PAXOS: time in force and cash quantity
+
+*Live 2026-11-25 11:01-11:03 UTC, paper TWS, server 223; BTC.USD (`CRYPTO`, PAXOS), BUY limits at
+1000 and SELL limits at 1000000, 0.01 BTC or 10 USD. The account has no crypto trading
+permission, so an order that passes every other check is rejected for that.*
+
+| Order | Reply |
+| ----- | ----- |
+| BUY LMT, `tif` DAY or GTC | Inactive, 201 "The crypto buy order must be Minutes or IOC." |
+| BUY LMT, `tif` IOC or `Minutes`; SELL LMT, `tif` DAY or `Minutes` | Inactive, 201 for the missing permission |
+| BUY LMT or BUY MKT, `tif` FOK | 10052 "Invalid time in force:FOK", no open order or status |
+| SELL LMT, `tif` FOK | Inactive, 201 "The time-in-force FOK is invalid for this combination of exchange and security type." |
+| BUY MKT `Minutes` with cash quantity; SELL MKT DAY | Inactive, 201 "The crypto MKT order must be IOC." |
+| BUY MKT IOC with a quantity and no cash quantity | 10289 "You must set Cash Quantity for this order", no open order |
+| BUY MKT IOC with cash quantity 10; SELL MKT IOC with a quantity | Inactive, 201 for the missing permission |
+| BUY LMT `Minutes` or SELL MKT IOC with cash quantity 10 | 10244 "Cash Quantity cannot be used for this order", no open order |
+
+- A crypto BUY order takes only IOC or `Minutes`, a market order only IOC, and FOK is refused on
+  every order. A market BUY needs a cash quantity, and every other order refuses one.
+- TWS sends `Minutes` as the `tif` text of the order and echoes it on the open order. IB cancels
+  an unfilled `Minutes` order after 5 minutes; this run could not observe that, as every order was
+  rejected.
+- The open order and the Inactive status came before the 201 in all 21 orders that drew both,
+  0.1 to 33 ms apart; the open order and status were then sent again. A downstream run reported
+  the 201 first in some orders, 0.1 to 0.7 s apart; this run did not reproduce it.
+- The 10052, 10289 and 10244 refusals came within 4 ms, with no open order: these orders are not
+  in completed orders either. Each order that drew a 201 is in `completed_orders` with its order
+  id and perm id, status `Cancelled`, and `completed_status` "Rejected by System:" followed by
+  the 201 text. A market order shows the price cap IB set (`lmt` 58796.25 on a SELL, 58798 on a 10 USD
+  BUY, whose quantity became 0.00017006).
+- Observed once, in a downstream run on 2026-11-25: an order with a refused time in force drew no
+  frame at all for 55 minutes and then appeared in completed orders as rejected. Not reproduced
+  here.
+- **Not probed:** fills and the 5-minute cancel of a `Minutes` order (needs crypto permission);
+  ZEROHASH; other crypto symbols; GTD and OPG.
+
+### OCA groups
+
+*Live 2026-11-25 19:12-19:14 UTC (US RTH), paper TWS, server 223; AAPL limits far below the
+market, EUR.USD market orders.*
+
+- Cancelling one member cancels the others: with two AAPL BUY limits in one group (`ocaType` 1),
+  a cancel of the first sent the second `PendingCancel`, then `Cancelled` with 202, on its own
+  stream; `all_open_orders` no longer listed it.
+- A member placed after another member filled is rejected: EUR.USD BUY 20,000 MKT in a group
+  filled at once; a second BUY 20,000 MKT in the same group went `Inactive`, then drew 201 "Order
+  rejected - reason:OCA group is already filled".
+- **Not probed:** `ocaType` 2 (reduce with block) and 3. Reported downstream the same day: type 2
+  reduces the remaining members by the filled quantity, with block.
+
+### Bracket child quantity follows the parent
+
+*Live 2026-11-25 19:12 UTC (US RTH), paper TWS, server 223.*
+
+- Parent AAPL BUY 1 LMT with `transmit=false`, then a child SELL 5,000,000 LMT with `parent_id` set
+  to the parent and `transmit=true`: TWS echoed the child with `totalQuantity` 1 and `remaining` 1,
+  `PreSubmitted` with `whyHeld` `child`, and no error. The child released the parent, which went
+  `Submitted`.
+- Cancelling the parent removed the child: `all_open_orders` listed neither afterwards.
+- So TWS cuts a child's quantity to the parent's without telling the caller. Compare the echo with
+  what was sent.
+
+### Modify and directed routing refusals
+
+*Live 2026-11-25 19:13 UTC (US RTH), paper TWS, server 223; AAPL BUY 1 LMT far below the market.*
+
+| Request | Reply |
+| ------- | ----- |
+| Modify a working SMART order with the exchange changed to ARCA | 105 "Order being modified does not match original order." The order kept working. |
+| Modify the same order's price, exchange unchanged | `PreSubmitted`, `Submitted` |
+| New order directed to LSE, which does not list AAPL | 200 "No security definition has been found for the request" |
+| New order directed to IEX | `PreSubmitted`, `Submitted`, no 10311 |
+| Cancel of the order rejected with 200 | 10147 "OrderId 6 that needs to be cancelled is not found." |
+| Second cancel of an order cancelled 3 s before | 10148 "OrderId 5 that needs to be cancelled cannot be cancelled, state: Cancelled." |
+
+- 10311 ("This order will be directly routed to ...") did not appear because the TWS API
+  precautionary setting allowed direct routes. With the setting off, a downstream adapter saw
+  10311 for directed orders.
+- Reported downstream the same day: 10147 for cancels of orders it had cancelled earlier. Not
+  reproduced here: a second cancel within the session drew 10148.
+- **Not probed:** a modify that changes the exchange of a held order.
+
+### Option orders acknowledged late
+
+*Live 2026-11-25 19:14 UTC (US RTH), paper TWS, server 223; AAPL 2026-12-18 245 call (deep in the
+money) BUY 1 LMT 0.05.*
+
+- The order's own stream received nothing from TWS for 13.1 s, then an `OpenOrder` past
+  `PendingSubmit` (`PreSubmitted` or `Submitted`; the log does not say which). Before that,
+  each `all_open_orders` request (at 5 s and 10 s) listed the order as `PendingSubmit`, and that
+  reply also reached the order's stream as an `OpenOrder` and an `OrderStatus` `PendingSubmit`.
+- A second order cancelled 3.5 s after placing went `PendingCancel` 1.7 s after the cancel, then
+  `Cancelled`.
+- A downstream adapter reported delays from 1.5 s to 60 s on the same paper TWS. Treat an option
+  order without an acknowledgement as pending, not lost.
+- **Not probed:** option orders on IB Gateway or a live account; other option roots.
