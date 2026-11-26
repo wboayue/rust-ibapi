@@ -106,9 +106,9 @@ pub struct Bar {
     pub close: f64,
     /// Total volume traded during the bar period.
     ///
-    /// `None` when TWS sends no volume, which it does for every bar that isn't
-    /// [`WhatToShow::Trades`]: a MIDPOINT, BID or ASK bar has no traded volume. It never
-    /// means nothing traded; a quiet TRADES bar reports `Some(0.0)`.
+    /// `None` when TWS omits volume or sends the sentinel `-1`, as observed for MIDPOINT,
+    /// BID, and ASK. BTC AGGTRADES bars can carry volume. A quiet TRADES bar reports
+    /// `Some(0.0)`.
     pub volume: Option<f64>,
     /// Volume weighted average price. `None` when [`volume`](Self::volume) is.
     pub wap: Option<f64>,

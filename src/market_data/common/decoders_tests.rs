@@ -74,7 +74,7 @@ fn tick_midpoint_ignores_size() {
     }
 }
 
-/// Bar trade fields by wire value (live, server 226; #1247). `(label, volume, wap, count)` in,
+/// Bar trade fields by wire value (live, servers 223 and 226; #1247). `(label, volume, wap, count)` in,
 /// `BarTradeFields` out.
 #[test]
 fn bar_trade_fields_by_value() {
@@ -85,13 +85,14 @@ fn bar_trade_fields_by_value() {
         Option<i32>,
         (Option<f64>, Option<f64>, Option<i32>),
     );
-    let cases: [Case; 8] = [
+    let cases: [Case; 9] = [
         ("TRADES", Some("1500"), Some("185.7"), Some(42), (Some(1500.0), Some(185.7), Some(42))),
         ("TRADES, quiet bar", Some("0"), Some("185.7"), Some(0), (Some(0.0), Some(185.7), Some(0))),
         ("historical non-TRADES: -1 sentinel", Some("-1"), Some("-1"), Some(-1), (None, None, None)),
         ("realtime non-TRADES: absent, count -1", None, None, Some(-1), (None, None, None)),
         ("volatility bar", Some("1"), Some("0.23"), Some(0), (Some(1.0), Some(0.23), Some(0))),
         ("WAP tied to volume", Some("-1"), Some("185.7"), Some(-1), (None, None, None)),
+        ("magnified WAP sentinel", Some("-1"), Some("-100"), Some(-1), (None, None, None)),
         ("count absent", Some("10"), Some("185.7"), None, (Some(10.0), Some(185.7), None)),
         ("WAP absent, volume present", Some("10"), None, Some(5), (Some(10.0), None, Some(5))),
     ];
