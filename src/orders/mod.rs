@@ -1291,14 +1291,59 @@ pub struct SoftDollarTier {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderData {
-    /// The order's unique id
-    pub order_id: i32,
     /// The order's Contract.
     pub contract: Contract,
-    /// The currently active order
+    /// The order. Its `order_id` is per API client: pair it with `order.client_id` to
+    /// identify an order across clients. A completed order can carry `order_id` `0`;
+    /// `order.perm_id` identifies it.
     pub order: Order,
     /// The order's OrderState
     pub order_state: OrderState,
+}
+
+impl OrderData {
+    /// The [`OrderStatus`] of a completed-order record, as `completed_orders` returns it.
+    ///
+    /// A completed order's `order.total_quantity` is the quantity left unfilled, not the
+    /// size ordered, so it is `remaining` as is: `0` once filled, `400` for a 1000-share
+    /// order cancelled after 600 filled. The size ordered is `filled + remaining`. The
+    /// record has no fill prices, so `average_fill_price` and `last_fill_price` are
+    /// `None`. Use it on completed records only: an open order's status arrives as its
+    /// own [`Orders::OrderStatus`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::orders::{Order, OrderData, OrderState, OrderStatusKind};
+    ///
+    /// // 1000 shares ordered, cancelled after 600 filled.
+    /// let data = OrderData {
+    ///     order: Order { total_quantity: 400.0, filled_quantity: 600.0, ..Default::default() },
+    ///     order_state: OrderState { status: OrderStatusKind::Cancelled, ..Default::default() },
+    ///     ..Default::default()
+    /// };
+    ///
+    /// let status = data.completed_order_status();
+    /// assert_eq!(status.status, OrderStatusKind::Cancelled);
+    /// assert_eq!((status.filled, status.remaining), (600.0, 400.0));
+    /// assert_eq!(status.filled + status.remaining, 1000.0);
+    /// ```
+    pub fn completed_order_status(&self) -> OrderStatus {
+        let order = &self.order;
+        OrderStatus {
+            order_id: order.order_id,
+            status: self.order_state.status.clone(),
+            filled: order.filled_quantity,
+            remaining: order.total_quantity,
+            average_fill_price: None,
+            perm_id: order.perm_id,
+            parent_id: order.parent_id,
+            last_fill_price: None,
+            client_id: order.client_id,
+            why_held: String::new(),
+            market_cap_price: None,
+        }
+    }
 }
 
 /// Provides an active order's current state.

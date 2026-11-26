@@ -27,7 +27,7 @@ fn builder_startup_callback_fires_during_handshake() {
         .startup_callback(move |msg| {
             // Sanity-check the typed payload — should match one of the known variants.
             if let StartupMessage::OpenOrder(ref o) = msg {
-                assert!(o.order_id >= 0);
+                assert!(o.order.order_id >= 0);
             }
             *count_clone.lock().unwrap() += 1;
         })

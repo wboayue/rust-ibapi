@@ -182,6 +182,23 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - Bracket sibling-cancel (#1030) confirmed the same day; a fill without a Filled status never
   appeared in 8 fills.
 
+### Completed order ids can be `0`
+
+*Live 2026-11-25 Wed 11:10 ET (RTH), paper TWS, server 223; #1263.*
+
+- `completed_orders(ApiOnly::No)` returned 230 records; 185 carried `order.order_id` `0`. The
+  ones printed had `order.client_id` `0`, status `Cancelled` and `completed_status` "Cancelled by
+  Trader", each with a distinct `perm_id`. Paper Gateway (server 226, 2026-11-15) listed three
+  cancelled orders the same way.
+- Settles that a completed record's order id does not identify it; `perm_id` does. The
+  `CompletedOrder` message has no top-level id, so `order.order_id` is the only id it carries.
+- On paper Gateway (server 226), every `OpenOrder` frame captured (226 across sessions) carried
+  the same id at the top level and on its order, including an order listed to a second client
+  and to client 0's `all_open_orders`. The second client saw the first client's order under id
+  `1`, so an open order's id identifies it only with `order.client_id`.
+- **Not probed:** how the id-`0` orders were placed (they predate this run); an order entered in
+  TWS by hand; one bound with `auto_open_orders`.
+
 ### `open_orders` excludes finished orders
 
 *Live 2026-10-18, paper Gateway, server 220; #1020.*

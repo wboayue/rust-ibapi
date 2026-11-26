@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         OrderUpdate::OpenOrder(open_order) => {
                             println!(
                                 "[Monitor] Open Order {}: {} {} shares of {} @ {:?}",
-                                open_order.order_id,
+                                open_order.order.order_id,
                                 open_order.order.action,
                                 open_order.order.total_quantity,
                                 open_order.contract.symbol,

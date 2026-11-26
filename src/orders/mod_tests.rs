@@ -539,3 +539,66 @@ fn order_type_fields_serde_unset_is_null_and_reads_legacy_strings() {
     assert_eq!(order.order_type, Some(OrderType::StopLimit));
     assert_eq!(order.adjusted_order_type, Some(OrderType::TrailingStop));
 }
+
+/// Completed-order frames as TWS sends them (`docs/wire-facts/orders.md`): `totalQuantity`
+/// is the unfilled quantity, so it is `remaining` as is.
+#[test]
+fn completed_order_status_of_a_decoded_record() {
+    use crate::orders::common::decoders::decode_completed_order_proto;
+
+    let cases = [
+        ("filled", "Filled", "0", "1000", OrderStatusKind::Filled, 1000.0, 0.0),
+        (
+            "cancelled after a partial fill",
+            "Cancelled",
+            "400",
+            "600",
+            OrderStatusKind::Cancelled,
+            600.0,
+            400.0,
+        ),
+    ];
+    for (name, status, total, filled_quantity, kind, filled, remaining) in cases {
+        let frame = crate::proto::CompletedOrder {
+            contract: Some(crate::proto::Contract {
+                con_id: Some(41329),
+                symbol: Some("EWN".into()),
+                sec_type: Some("STK".into()),
+                ..Default::default()
+            }),
+            order: Some(crate::proto::Order {
+                client_id: Some(7),
+                order_id: Some(13),
+                perm_id: Some(913),
+                parent_id: Some(3),
+                action: Some("BUY".into()),
+                total_quantity: Some(total.into()),
+                filled_quantity: Some(filled_quantity.into()),
+                order_type: Some("LMT".into()),
+                ..Default::default()
+            }),
+            order_state: Some(crate::proto::OrderState {
+                status: Some(status.into()),
+                ..Default::default()
+            }),
+        };
+
+        let data = decode_completed_order_proto(frame).unwrap();
+
+        let expected = OrderStatus {
+            order_id: 13,
+            status: kind,
+            filled,
+            remaining,
+            average_fill_price: None,
+            perm_id: 913,
+            parent_id: 3,
+            last_fill_price: None,
+            client_id: 7,
+            why_held: String::new(),
+            market_cap_price: None,
+        };
+        assert_eq!(data.order.order_id, 13, "{name}: order_id");
+        assert_eq!(data.completed_order_status(), expected, "{name}");
+    }
+}

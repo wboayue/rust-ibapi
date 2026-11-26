@@ -305,7 +305,7 @@ pub mod sync_impl {
         ///     .address("127.0.0.1:4002")
         ///     .client_id(100)
         ///     .startup_callback(|msg| if let StartupMessage::OpenOrder(o) = msg {
-        ///         println!("startup open order: {}", o.order_id);
+        ///         println!("startup open order: {}", o.order.order_id);
         ///     })
         ///     .connect();
         /// ```
@@ -656,7 +656,7 @@ pub mod async_impl {
         ///     .address("127.0.0.1:4002")
         ///     .client_id(100)
         ///     .startup_callback(|msg| if let StartupMessage::OpenOrder(o) = msg {
-        ///         println!("startup open order: {}", o.order_id);
+        ///         println!("startup open order: {}", o.order.order_id);
         ///     })
         ///     .connect()
         ///     .await?;

@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 Ok(OrderUpdate::OpenOrder(order_data)) => {
                     println!("Open Order Update:");
-                    println!("  Order ID: {}", order_data.order_id);
+                    println!("  Order ID: {}", order_data.order.order_id);
                     println!("  Symbol: {}", order_data.contract.symbol);
                     println!("  Action: {:?}", order_data.order.action);
                     println!("  Quantity: {}", order_data.order.total_quantity);
