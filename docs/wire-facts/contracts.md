@@ -297,8 +297,8 @@ options), paper TWS, server 223; contract details of every listed contract.*
 | OPT K200 KSE 202612 | 1,134 | `K200270L6.KS`, `K200992L6.KS` (992.5 C), `K200220X6.KS` | `01` |
 | OPT 700 SEHK 202612 C | 139 | `TCH DEC26 640 C` | `TCH` |
 
-- HKFE and KSE: trading class (`K200` for KSE), strike, one letter for month and right, last digit
-  of the expiry year, then `.KS` on KSE. Calls take `A` (January) to `L` (December), puts `M` to
+- HKFE and KSE: the trading class on HKFE or the symbol on KSE (`K200`; its trading class is
+  `01`), strike, one letter for month and right, last digit of the expiry year, then `.KS` on KSE. Calls take `A` (January) to `L` (December), puts `M` to
   `X`. All 5,380 HKFE rows matched the contract's own strike, right and expiry month and year.
   KSE drops a strike's decimals: `K200992L6.KS` is the 992.5 call.
 - The year is one digit: `HSI19200L6` expires in 2026 and `HSI19200L0` in 2030, so the symbol

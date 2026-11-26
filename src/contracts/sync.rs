@@ -121,6 +121,7 @@ impl Client {
     /// an LSE stock quoted and ordered in pence, multiply them by the magnifier before comparing
     /// them with an order or market data price (live: 2026-11-24, server 223;
     /// `docs/wire-facts/contracts.md#tick-size-bands-of-tse-sehk-and-lse-stocks`).
+    ///
     /// A list of market rule ids can be obtained by invoking [Self::contract_details()] for a particular contract.
     /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [`crate::contracts::ContractDetails`].
     ///
