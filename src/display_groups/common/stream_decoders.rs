@@ -35,9 +35,9 @@ impl StreamDecoder<DisplayGroupUpdate> for DisplayGroupUpdate {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "unsubscribe from group events")?;
-        encoders::encode_unsubscribe_from_group_events(request_id)
+        encoders::encode_unsubscribe_from_group_events(request_id).map(Some)
     }
 }
 

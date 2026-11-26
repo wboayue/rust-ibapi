@@ -199,7 +199,7 @@ misleading. Once verified, add `impl FromStr<Err = Error>` and decode with the g
 back to `T::default()`, which masks incomplete TWS responses. Full detail:
 [wire enum typing](rules/wire/enum-typing.md).
 
-For `StreamDecoder`, list every type your `decode` match handles in `RESPONSE_MESSAGE_IDS` — the subscription drivers skip anything not listed there before `decode` runs, so an arm for an unlisted type is dead code. End the match with `_ => Err(Error::unexpected_response(message))` as a backstop for the two disagreeing; never `NotImplemented` or `Simple`. Full detail: [proto-only decoding](rules/wire/proto-only-decoding.md).
+For `StreamDecoder`, list every type your `decode` match handles in `RESPONSE_MESSAGE_IDS` — the subscription drivers skip anything not listed there before `decode` runs, so an arm for an unlisted type is dead code. End the match with `_ => Err(Error::unexpected_response(message))` as a backstop for the two disagreeing. An end marker (`ContractDataEnd`) goes in both `RESPONSE_MESSAGE_IDS` and `END_MESSAGES` and gets no arm: the driver ends the stream on it before `decode`. Full detail: [proto-only decoding](rules/wire/proto-only-decoding.md).
 
 ### Step 5: Implement Sync Version
 

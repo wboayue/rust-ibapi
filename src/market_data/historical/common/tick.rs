@@ -22,8 +22,6 @@ pub(crate) enum TickAction<T> {
     Skip,
     /// A non-fatal IB notice bound to this subscription; the stream stays open.
     Notice(Notice),
-    /// The stream ended cleanly.
-    EndOfStream,
     /// A terminal error; the stream is over.
     Error(Error),
 }
@@ -44,7 +42,6 @@ pub(crate) fn classify<T: TickDecoder<T>>(item: RoutedItem) -> TickAction<T> {
             Err(e) => TickAction::Error(e),
         },
         RoutedItem::Notice(notice) => TickAction::Notice(notice),
-        RoutedItem::Error(Error::EndOfStream) => TickAction::EndOfStream,
         RoutedItem::Error(e) => TickAction::Error(e),
     }
 }

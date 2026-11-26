@@ -45,7 +45,9 @@ fn cancel_message_works() {
     use crate::testdata::builders::display_groups::unsubscribe_from_group_events_request;
     use crate::testdata::builders::RequestEncoder;
 
-    let message = DisplayGroupUpdate::cancel_message(176, Some(9000), None).expect("cancel message failed");
+    let message = DisplayGroupUpdate::cancel_message(176, Some(9000), None)
+        .expect("cancel message failed")
+        .expect("type has a cancel");
     assert_eq!(message, unsubscribe_from_group_events_request().request_id(9000).encode_request());
 }
 

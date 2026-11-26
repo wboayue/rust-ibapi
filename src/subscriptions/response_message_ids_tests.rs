@@ -17,11 +17,14 @@
 //! The probe is a minimal *text*-framed message carrying only the discriminant.
 //! That is what makes the two cases mechanically distinguishable without a
 //! per-type fixture: no arm falls through to `Error::unexpected_response`,
-//! while every real arm either returns `Ok`/`EndOfStream` without touching the
+//! while every real arm either returns `Ok` without touching the
 //! payload or reaches `require_proto()` and returns `Error::UnexpectedWireFormat`
 //! (#731). So `UnexpectedResponse` means "no arm", and anything else means
 //! "arm exists" — which only holds while every `decode` has a backstop. One that
 //! dives straight into `require_proto()` reads as handling everything.
+//!
+//! `END_MESSAGES` are the exception: the driver ends the stream on one before
+//! `decode`, so an end marker must be declared and must *not* have an arm.
 
 use std::collections::BTreeSet;
 
@@ -68,7 +71,12 @@ const DISPATCHER_INTERCEPTED: &[IncomingMessages] = &[IncomingMessages::Error, I
 /// batch. Erasing that difference here keeps the failure taxonomy below in one
 /// copy; the alternative was a second `check` that drifts from this one, which
 /// is the shape of defect this whole file exists to catch.
-fn check_decoder(decoder: &str, declared_ids: &[IncomingMessages], decode: impl Fn(&ResponseMessage) -> Result<(), Error>) -> Vec<String> {
+fn check_decoder(
+    decoder: &str,
+    declared_ids: &[IncomingMessages],
+    end_ids: &[IncomingMessages],
+    decode: impl Fn(&ResponseMessage) -> Result<(), Error>,
+) -> Vec<String> {
     let mut failures = Vec::new();
 
     for kind in all_message_types() {
@@ -83,6 +91,22 @@ fn check_decoder(decoder: &str, declared_ids: &[IncomingMessages], decode: impl 
         }
 
         let handled = !matches!(decode(&probe(kind)), Err(Error::UnexpectedResponse(_)));
+
+        if end_ids.contains(&kind) {
+            if !declared {
+                failures.push(format!(
+                    "{decoder} lists {kind:?} in END_MESSAGES but not in RESPONSE_MESSAGE_IDS — \
+                     the driver skips it as undeclared, so the stream never ends"
+                ));
+            }
+            if handled {
+                failures.push(format!(
+                    "{decoder} has a `decode` arm for end marker {kind:?} — \
+                     the driver ends the stream before `decode`, so the arm is unreachable"
+                ));
+            }
+            continue;
+        }
 
         match (declared, handled) {
             (true, false) => failures.push(format!(
@@ -119,25 +143,12 @@ struct Roster {
 fn check_stream<D: StreamDecoder<D>>(roster: &mut Roster) {
     let context = DecoderContext::default();
     roster.stream += 1;
-    roster
-        .failures
-        .extend(check_decoder(std::any::type_name::<D>(), D::RESPONSE_MESSAGE_IDS, |message| {
-            <D as StreamDecoder<D>>::decode(&context, message).map(|_| ())
-        }));
-    // Compared as sets of discriminants: declaration order doesn't matter.
-    let ends: BTreeSet<i32> = D::RESPONSE_MESSAGE_IDS
-        .iter()
-        .filter(|kind| matches!(<D as StreamDecoder<D>>::decode(&context, &probe(**kind)), Err(Error::EndOfStream)))
-        .map(|kind| *kind as i32)
-        .collect();
-    let declared: BTreeSet<i32> = D::END_MESSAGES.iter().map(|kind| *kind as i32).collect();
-    if ends != declared {
-        roster.failures.push(format!(
-            "{} declares END_MESSAGES {:?}, but `decode` ends the stream on message ids {ends:?}",
-            std::any::type_name::<D>(),
-            D::END_MESSAGES
-        ));
-    }
+    roster.failures.extend(check_decoder(
+        std::any::type_name::<D>(),
+        D::RESPONSE_MESSAGE_IDS,
+        D::END_MESSAGES,
+        |message| <D as StreamDecoder<D>>::decode(&context, message).map(|_| ()),
+    ));
 }
 
 /// The tick driver (`market_data/historical/common/tick.rs::classify`) filters on
@@ -147,7 +158,7 @@ fn check_tick<T: TickDecoder<T>>(roster: &mut Roster) {
     roster.tick += 1;
     roster
         .failures
-        .extend(check_decoder(std::any::type_name::<T>(), T::RESPONSE_MESSAGE_IDS, |message| {
+        .extend(check_decoder(std::any::type_name::<T>(), T::RESPONSE_MESSAGE_IDS, &[], |message| {
             <T as TickDecoder<T>>::decode(message).map(|_| ())
         }));
 }

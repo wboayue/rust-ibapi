@@ -165,8 +165,8 @@ struct UnroutableDecoder;
 impl StreamDecoder<UnroutableDecoder> for UnroutableDecoder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::FamilyCodes];
 
-    fn decode(_context: &DecoderContext, _message: &ResponseMessage) -> Result<Self, Error> {
-        Err(Error::NotImplemented)
+    fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<Self, Error> {
+        Err(Error::unexpected_response(message))
     }
 }
 
@@ -288,4 +288,21 @@ fn rejection_ends_request_only_for_verified_codes() {
     for code in [162, 200, 10197, 10314] {
         assert!(rejection_ends::<HistoricalDataFrame>(code), "one-shot HistoricalDataFrame: {code}");
     }
+}
+
+#[test]
+fn cancel_frame_covers_each_cancel_outcome() {
+    use crate::accounts::PnL;
+    use crate::contracts::OptionChain;
+
+    let context = DecoderContext::default();
+    // The type has a cancel and the id it needs.
+    assert_eq!(
+        cancel_frame::<PnL>(&context, Some(9000)),
+        PnL::cancel_message(0, Some(9000), None).expect("encodes"),
+    );
+    // The encode fails (no request id): logged, nothing to send.
+    assert!(cancel_frame::<PnL>(&context, None).is_none());
+    // The type has no cancel (the `StreamDecoder` default).
+    assert!(cancel_frame::<OptionChain>(&context, Some(9000)).is_none());
 }

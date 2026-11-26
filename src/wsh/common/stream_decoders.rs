@@ -19,9 +19,9 @@ impl StreamDecoder<WshEventData> for WshEventData {
         decoders::decode_wsh_event_data(message.expect_type(IncomingMessages::WshEventData)?)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel wsh event data message")?;
-        super::encoders::encode_cancel_wsh_event_data(request_id)
+        super::encoders::encode_cancel_wsh_event_data(request_id).map(Some)
     }
 }
 

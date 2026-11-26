@@ -256,7 +256,7 @@ fn cancel_messages() {
         match &test_case.expected_msg_id {
             Ok(expected_id) => {
                 assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-                let bytes = result.unwrap();
+                let bytes = result.unwrap().expect("type has a cancel");
                 let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
                 assert_eq!(msg_id, *expected_id, "Test '{}' message id mismatch", test_case.name);
             }

@@ -58,17 +58,18 @@ impl StreamDecoder<ContractDetails> for ContractDetails {
         match message.message_type() {
             IncomingMessages::ContractData => decoders::decode_contract_details(message),
             IncomingMessages::BondContractData => decoders::decode_bond_contract_details(message),
-            IncomingMessages::ContractDataEnd => Err(Error::EndOfStream),
             _ => Err(Error::unexpected_response(message)),
         }
     }
 
     /// Below server 215 TWS has no contract-details cancel, so dropping the
     /// subscription writes nothing.
-    fn cancel_message(server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        check_version(server_version, Features::CANCEL_CONTRACT_DATA)?;
+    fn cancel_message(server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
+        if check_version(server_version, Features::CANCEL_CONTRACT_DATA).is_err() {
+            return Ok(None);
+        }
         let request_id = error_helpers::require_request_id_for(request_id, "cancel contract details")?;
-        encoders::encode_cancel_contract_data(request_id)
+        encoders::encode_cancel_contract_data(request_id).map(Some)
     }
 }
 
@@ -82,7 +83,6 @@ impl StreamDecoder<OptionChain> for OptionChain {
     fn decode(_context: &DecoderContext, message: &ResponseMessage) -> Result<OptionChain, Error> {
         match message.message_type() {
             IncomingMessages::SecurityDefinitionOptionParameter => Ok(decoders::decode_option_chain(message)?),
-            IncomingMessages::SecurityDefinitionOptionParameterEnd => Err(Error::EndOfStream),
             _ => Err(Error::unexpected_response(message)),
         }
     }

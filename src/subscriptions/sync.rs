@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use log::{debug, error, warn};
 
 use super::common::{
-    collect_step, debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, notice_item, Bound, CollectStop, DecoderContext,
-    Drained, RoutedItem, SubscriptionItem,
+    cancel_frame, collect_step, debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, notice_item, Bound, CollectStop,
+    DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
 use crate::client::ids::RequestId;
@@ -116,7 +116,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
         if let Some(ticket) = self.shared {
             // The count is released whether or not the type has a cancel message.
-            let message = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)).ok();
+            let message = cancel_frame::<T>(&self.context, self.request_id);
             if let Err(e) = self.message_bus.cancel_shared_subscription(ticket, message.as_deref()) {
                 log_cancel_error("shared subscription", &e);
             }
@@ -216,7 +216,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         {
             return None;
         }
-        T::cancel_message(self.context.server_version, self.id(), Some(&self.context)).ok()
+        cancel_frame::<T>(&self.context, self.id())
     }
 
     /// Cancel the request and wait, up to `deadline`, for TWS to confirm it
@@ -370,6 +370,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
                 NextAction::Skip
             }
+            Some(RoutedItem::Response(message)) if T::END_MESSAGES.contains(&message.message_type()) => {
+                self.stream_ended.store(true, Ordering::Relaxed);
+                self.ended_natively.store(true, Ordering::Relaxed);
+                NextAction::Return(None)
+            }
             Some(RoutedItem::Response(message)) => match T::decode(&self.context, &message) {
                 Ok(val) => {
                     if val.is_snapshot_end(&self.context) {
@@ -380,11 +385,6 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                         self.ended_natively.store(true, Ordering::Relaxed);
                     }
                     NextAction::Return(Some(Ok(SubscriptionItem::Data(val))))
-                }
-                Err(Error::EndOfStream) => {
-                    self.stream_ended.store(true, Ordering::Relaxed);
-                    self.ended_natively.store(true, Ordering::Relaxed);
-                    NextAction::Return(None)
                 }
                 Err(err) => {
                     match &err {
@@ -397,11 +397,6 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 }
             },
             Some(RoutedItem::Notice(notice)) => NextAction::Return(Some(Ok(notice_item(notice)))),
-            Some(RoutedItem::Error(Error::EndOfStream)) => {
-                self.stream_ended.store(true, Ordering::Relaxed);
-                self.ended_natively.store(true, Ordering::Relaxed);
-                NextAction::Return(None)
-            }
             Some(RoutedItem::Error(e)) => {
                 self.stream_ended.store(true, Ordering::Relaxed);
                 self.note_rejection(&e);

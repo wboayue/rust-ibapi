@@ -3,7 +3,6 @@
 //! This module defines all error types that can occur during API operations,
 //! including I/O errors, parsing errors, and TWS-specific protocol errors.
 
-use std::{num::ParseIntError, string::FromUtf8Error};
 use thiserror::Error;
 
 use crate::accounts::types::AccountId;
@@ -23,27 +22,11 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// Failed to parse an integer from string.
-    #[error(transparent)]
-    ParseInt(#[from] ParseIntError),
-
-    /// Invalid UTF-8 sequence in response data.
-    #[error(transparent)]
-    FromUtf8(#[from] FromUtf8Error),
-
     /// Failed to parse time/date string.
     #[error(transparent)]
     ParseTime(#[from] time::error::Parse),
 
-    /// Mutex was poisoned by a panic in another thread.
-    #[error("{0}")]
-    Poison(String),
-
     // IBAPI-specific errors
-    /// Feature or method not yet implemented.
-    #[error("not implemented")]
-    NotImplemented,
-
     /// Failed to parse a protocol message.
     /// Contains: (field_index, field_value, error_description)
     #[error("parse error: {0} - {1} - {2}")]
@@ -53,10 +36,6 @@ pub enum Error {
     /// Contains: (required_version, actual_version, feature_name)
     #[error("server version {0} required, got {1}: {2}")]
     ServerVersion(i32, i32, String),
-
-    /// Generic error with custom message.
-    #[error("error occurred: {0}")]
-    Simple(String),
 
     /// Invalid argument provided to API method.
     #[error("InvalidArgument: {0}")]
@@ -113,10 +92,6 @@ pub enum Error {
     /// Client is shutting down.
     #[error("Shutdown")]
     Shutdown,
-
-    /// Reached end of data stream.
-    #[error("EndOfStream")]
-    EndOfStream,
 
     /// Received unexpected message type. The string carries the `Debug` repr
     /// of the offending wire envelope for diagnostic logging; the structured
@@ -381,14 +356,9 @@ impl Clone for Error {
     fn clone(&self) -> Self {
         match self {
             Error::Io(e) => Error::Io(std::io::Error::new(e.kind(), e.to_string())),
-            Error::ParseInt(e) => Error::ParseInt(e.clone()),
-            Error::FromUtf8(e) => Error::FromUtf8(e.clone()),
             Error::ParseTime(e) => Error::ParseTime(*e),
-            Error::Poison(s) => Error::Poison(s.clone()),
-            Error::NotImplemented => Error::NotImplemented,
             Error::Parse(i, v, m) => Error::Parse(*i, v.clone(), m.clone()),
             Error::ServerVersion(a, b, s) => Error::ServerVersion(*a, *b, s.clone()),
-            Error::Simple(s) => Error::Simple(s.clone()),
             Error::InvalidArgument(s) => Error::InvalidArgument(s.clone()),
             Error::Validation(e) => Error::Validation(e.clone()),
             Error::ConnectionFailed => Error::ConnectionFailed,
@@ -398,7 +368,6 @@ impl Clone for Error {
             Error::ConnectionReset => Error::ConnectionReset,
             Error::Cancelled => Error::Cancelled,
             Error::Shutdown => Error::Shutdown,
-            Error::EndOfStream => Error::EndOfStream,
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
             Error::UnexpectedWireFormat(m) => Error::UnexpectedWireFormat(m.clone()),
             Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
@@ -415,12 +384,6 @@ impl Clone for Error {
             Error::HistoricalParseError(e) => Error::HistoricalParseError(e.clone()),
             Error::ProtobufDecode(e) => Error::ProtobufDecode(e.clone()),
         }
-    }
-}
-
-impl<T> From<std::sync::PoisonError<T>> for Error {
-    fn from(err: std::sync::PoisonError<T>) -> Error {
-        Error::Poison(format!("Mutex poison error: {err}"))
     }
 }
 

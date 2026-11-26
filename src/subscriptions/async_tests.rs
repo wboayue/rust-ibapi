@@ -21,7 +21,8 @@ use tokio::sync::broadcast;
 struct IntItem(i32);
 
 impl StreamDecoder<IntItem> for IntItem {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice, IncomingMessages::TickSnapshotEnd];
+    const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::TickSnapshotEnd];
 
     fn decode(_context: &DecoderContext, msg: &ResponseMessage) -> Result<IntItem, Error> {
         Ok(IntItem(msg.peek_int(1)?))
@@ -47,8 +48,8 @@ impl StreamDecoder<CancellableItem> for CancellableItem {
         Ok(CancellableItem)
     }
 
-    fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        Ok(cancel_frame())
+    fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
+        Ok(Some(cancel_frame()))
     }
 }
 
@@ -72,7 +73,7 @@ impl StreamDecoder<DecodeError> for DecodeError {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
     fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<DecodeError, Error> {
-        Err(Error::Simple("decode error".into()))
+        Err(Error::InvalidArgument("decode error".into()))
     }
 }
 
@@ -82,9 +83,10 @@ struct EndOfStreamItem;
 
 impl StreamDecoder<EndOfStreamItem> for EndOfStreamItem {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+    const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
     fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<EndOfStreamItem, Error> {
-        Err(Error::EndOfStream)
+        unreachable!("an end marker ends the stream before decode")
     }
 }
 
@@ -105,8 +107,8 @@ impl StreamDecoder<CancellableSnapshotItem> for CancellableSnapshotItem {
         self.0 == -1
     }
 
-    fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        Ok(cancel_frame())
+    fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
+        Ok(Some(cancel_frame()))
     }
 }
 
@@ -116,17 +118,15 @@ impl StreamDecoder<CancellableSnapshotItem> for CancellableSnapshotItem {
 struct CancellableEndItem(i32);
 
 impl StreamDecoder<CancellableEndItem> for CancellableEndItem {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice, IncomingMessages::TickSnapshotEnd];
+    const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::TickSnapshotEnd];
 
     fn decode(_context: &DecoderContext, msg: &ResponseMessage) -> Result<CancellableEndItem, Error> {
-        match msg.peek_int(1)? {
-            -1 => Err(Error::EndOfStream),
-            value => Ok(CancellableEndItem(value)),
-        }
+        Ok(CancellableEndItem(msg.peek_int(1)?))
     }
 
-    fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        Ok(cancel_frame())
+    fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
+        Ok(Some(cancel_frame()))
     }
 }
 
@@ -138,6 +138,12 @@ fn cancel_frame() -> Vec<u8> {
 /// the payload `IntItem` reads sits at field 1.
 fn int_frame(value: i32) -> RoutedItem {
     RoutedItem::Response(ResponseMessage::from(&format!("1\0{value}\0")))
+}
+
+/// The end marker (`TickSnapshotEnd`) that `IntItem` and `CancellableEndItem`
+/// declare in `END_MESSAGES`.
+fn end_frame() -> RoutedItem {
+    RoutedItem::Response(ResponseMessage::from("57\0"))
 }
 
 /// What a test built by [`subscription_with`] gets back: the subscription, the
@@ -313,26 +319,23 @@ async fn subscription_no_retries_after_end_of_stream() {
 
     static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-    /// First frame ends the stream; any later call is a stray that must not happen.
+    /// Every frame is an end marker; any `decode` call is a stray.
     #[derive(Debug)]
     struct EndThenStray;
 
     impl StreamDecoder<EndThenStray> for EndThenStray {
         const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
+        const END_MESSAGES: &'static [IncomingMessages] = &[IncomingMessages::TickPrice];
 
         fn decode(_context: &DecoderContext, _msg: &ResponseMessage) -> Result<EndThenStray, Error> {
-            let n = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
-            if n == 0 {
-                Err(Error::EndOfStream)
-            } else {
-                Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
-            }
+            CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+            Err(Error::unexpected_response(&ResponseMessage::from("stray\0")))
         }
     }
 
     let (mut subscription, tx) = subscription::<EndThenStray>();
 
-    // First message triggers EndOfStream
+    // The end marker ends the stream
     tx.send(int_frame(1)).unwrap();
     let result = subscription.next().await;
     assert!(result.is_none());
@@ -345,8 +348,8 @@ async fn subscription_no_retries_after_end_of_stream() {
     let result = subscription.next().await;
     assert!(result.is_none());
 
-    // Decoder should have been called only once (for the EndOfStream message)
-    assert_eq!(CALL_COUNT.load(Ordering::Relaxed), 1);
+    // The end marker never reaches the decoder, nor do the strays behind it
+    assert_eq!(CALL_COUNT.load(Ordering::Relaxed), 0);
 }
 
 #[tokio::test]
@@ -410,24 +413,6 @@ async fn stream_yields_error_then_ends() {
 
     let third = subscription.next().await;
     assert!(third.is_none(), "stream must end after a terminal error");
-}
-
-#[tokio::test]
-async fn routed_end_of_stream_ends_without_error() {
-    // `EndOfStream` arriving as a routed error — not from the decoder — is a
-    // graceful end: `None`, not `Some(Err(..))`. The historical-tick streams
-    // read it this way (`market_data::historical::common::tick`), so the arm
-    // is reachable in production.
-    let (mut subscription, tx) = subscription::<IntItem>();
-
-    tx.send(int_frame(1)).unwrap();
-    tx.send(RoutedItem::Error(Error::EndOfStream)).unwrap();
-    tx.send(int_frame(2)).unwrap();
-
-    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(IntItem(1))))));
-    assert!(subscription.next().await.is_none(), "routed EndOfStream ends the stream");
-    // `stream_ended` latched, so the frame queued behind it is never yielded.
-    assert!(subscription.next().await.is_none(), "stream stays ended");
 }
 
 /// Exercises `impl Stream for Subscription<T>` end-to-end via `StreamExt`:
@@ -508,7 +493,7 @@ async fn reset_before_construction_sends_nothing() {
 
 #[tokio::test]
 async fn subscription_cancel_without_cancel_message_sends_nothing() {
-    // `StreamDecoder::cancel_message` defaults to `Err(NotImplemented)`.
+    // `StreamDecoder::cancel_message` defaults to `Ok(None)`.
     let f = subscription_with::<IntItem>(Some(123), None, DecoderContext::default());
 
     f.subscription.cancel().await;
@@ -906,7 +891,7 @@ async fn decoded_end_skips_cancel_on_cancel_and_drop() {
     let mut f = subscription_with::<CancellableEndItem>(Some(123), None, DecoderContext::default());
 
     f.tx.send(int_frame(1)).unwrap();
-    f.tx.send(int_frame(-1)).unwrap();
+    f.tx.send(end_frame()).unwrap();
     assert!(matches!(
         f.subscription.next().await,
         Some(Ok(SubscriptionItem::Data(CancellableEndItem(1))))
@@ -918,19 +903,6 @@ async fn decoded_end_skips_cancel_on_cancel_and_drop() {
     drop(f.subscription);
     settle().await;
     assert!(f.bus.request_messages().is_empty(), "no cancel after the end marker");
-}
-
-#[tokio::test]
-async fn routed_end_skips_cancel_on_drop() {
-    let mut f = subscription_with::<CancellableItem>(Some(123), None, DecoderContext::default());
-
-    f.tx.send(RoutedItem::Error(Error::EndOfStream)).unwrap();
-    assert!(f.subscription.next().await.is_none());
-    assert!(f.subscription.ended_natively());
-
-    drop(f.subscription);
-    settle().await;
-    assert!(f.bus.request_messages().is_empty(), "no cancel after a routed end");
 }
 
 #[tokio::test]
@@ -952,7 +924,7 @@ async fn end_seen_by_one_clone_skips_cancel_from_another() {
     let mut f = subscription_with::<CancellableEndItem>(Some(123), None, DecoderContext::default());
     let other = f.subscription.clone();
 
-    f.tx.send(int_frame(-1)).unwrap();
+    f.tx.send(end_frame()).unwrap();
     assert!(f.subscription.next().await.is_none());
 
     drop(other);
@@ -968,7 +940,7 @@ async fn collect_to_end_returns_items_and_skips_notices() {
     tx.send(int_frame(10)).unwrap();
     tx.send(RoutedItem::Notice(test_notice(2104, "Market data farm OK"))).unwrap();
     tx.send(int_frame(20)).unwrap();
-    tx.send(RoutedItem::Error(Error::EndOfStream)).unwrap();
+    tx.send(end_frame()).unwrap();
 
     assert_eq!(sub.collect_to_end().await.unwrap(), vec![IntItem(10), IntItem(20)]);
 }
@@ -1013,10 +985,7 @@ fn is_lag_error(result: &Result<Vec<impl std::fmt::Debug>, Error>) -> bool {
 async fn collect_to_end_within_fails_on_lag() {
     // Rows 10 and 20 are evicted; the end marker after the gap must not
     // turn the remainder into a complete-looking result.
-    let mut f = lagged_subscription::<IntItem>(
-        2,
-        vec![int_frame(10), int_frame(20), int_frame(30), RoutedItem::Error(Error::EndOfStream)],
-    );
+    let mut f = lagged_subscription::<IntItem>(2, vec![int_frame(10), int_frame(20), int_frame(30), end_frame()]);
 
     let result = f.subscription.collect_to_end_within(Duration::from_secs(30)).await;
 
@@ -1025,10 +994,7 @@ async fn collect_to_end_within_fails_on_lag() {
 
 #[tokio::test]
 async fn collect_to_end_fails_on_lag() {
-    let mut f = lagged_subscription::<IntItem>(
-        2,
-        vec![int_frame(10), int_frame(20), int_frame(30), RoutedItem::Error(Error::EndOfStream)],
-    );
+    let mut f = lagged_subscription::<IntItem>(2, vec![int_frame(10), int_frame(20), int_frame(30), end_frame()]);
 
     let result = f.subscription.collect_to_end().await;
 
@@ -1078,7 +1044,7 @@ async fn drop_after_lag_error_sends_cancel() {
 
 #[tokio::test]
 async fn collect_to_end_within_returns_items_at_end_marker() {
-    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(20), RoutedItem::Error(Error::EndOfStream)], true);
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(20), end_frame()], true);
 
     assert_eq!(
         sub.collect_to_end_within(Duration::from_secs(30)).await.unwrap(),
@@ -1097,7 +1063,7 @@ async fn collect_to_end_within_times_out_without_end_marker() {
 #[tokio::test]
 async fn collect_to_end_within_deadline_holds_while_items_are_ready() {
     // The whole result is already queued, but the deadline has passed.
-    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(20), RoutedItem::Error(Error::EndOfStream)], true);
+    let (mut sub, _keep) = collect_subscription(vec![int_frame(10), int_frame(20), end_frame()], true);
 
     assert!(matches!(sub.collect_to_end_within(Duration::ZERO).await, Err(Error::Timeout)));
 }
@@ -1197,7 +1163,7 @@ fn drain_fixture_on(bus: MessageBusStub) -> Fixture<CancellableEndItem> {
 async fn drain_after_end_writes_nothing() {
     let mut f = drain_fixture();
     f.tx.send(int_frame(1)).unwrap();
-    f.tx.send(int_frame(-1)).unwrap();
+    f.tx.send(end_frame()).unwrap();
     while f.subscription.next().await.is_some() {}
 
     assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
@@ -1209,7 +1175,7 @@ async fn drain_after_end_writes_nothing() {
 async fn drain_cancels_then_sees_end() {
     let f = drain_fixture();
     f.tx.send(int_frame(1)).unwrap();
-    f.tx.send(int_frame(-1)).unwrap();
+    f.tx.send(end_frame()).unwrap();
 
     assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
     settle().await;
@@ -1226,7 +1192,7 @@ async fn drain_after_collect_timeout() {
         f.subscription.collect_to_end_within(Duration::from_millis(20)).await,
         Err(Error::Timeout)
     ));
-    f.tx.send(int_frame(-1)).unwrap();
+    f.tx.send(end_frame()).unwrap();
     assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
     settle().await;
     assert_eq!(f.bus.request_messages(), vec![cancel_frame()], "one cancel, not repeated on drop");
@@ -1376,7 +1342,7 @@ async fn drain_on_one_clone_leaves_others_reading() {
     let f = drain_fixture();
     let mut other = f.subscription.clone();
     f.tx.send(int_frame(1)).unwrap();
-    f.tx.send(int_frame(-1)).unwrap();
+    f.tx.send(end_frame()).unwrap();
 
     assert_eq!(f.subscription.cancel_and_drain(drain_deadline()).await.unwrap(), Drained::Ended);
     assert!(matches!(other.next().await, Some(Ok(SubscriptionItem::Data(CancellableEndItem(1))))));

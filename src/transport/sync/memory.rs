@@ -88,7 +88,7 @@ impl MemoryStream {
 impl Io for MemoryStream {
     fn read_message(&self) -> Result<Vec<u8>, Error> {
         let (mutex, cv) = &*self.inner;
-        let mut guard = mutex.lock()?;
+        let mut guard = mutex.lock().unwrap();
         loop {
             if guard.retired {
                 return Err(Error::Shutdown);
@@ -99,13 +99,13 @@ impl Io for MemoryStream {
                 None if guard.hung_up => return Err(closed()),
                 None => {}
             }
-            guard = cv.wait(guard)?;
+            guard = cv.wait(guard).unwrap();
         }
     }
 
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let (mutex, _) = &*self.inner;
-        let mut inner = mutex.lock()?;
+        let mut inner = mutex.lock().unwrap();
         if inner.retired {
             return Err(Error::Shutdown);
         }
@@ -125,7 +125,7 @@ impl Io for MemoryStream {
 impl Reconnect for MemoryStream {
     fn reconnect(&self) -> Result<(), Error> {
         let (mutex, _) = &*self.inner;
-        let mut inner = mutex.lock()?;
+        let mut inner = mutex.lock().unwrap();
         if inner.retired {
             return Err(Error::Shutdown);
         }

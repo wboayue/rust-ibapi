@@ -643,8 +643,8 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        cancel_historical_data(request_id)
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
+        cancel_historical_data(request_id).map(Some)
     }
 
     /// `End` ends the request only without `keep_up_to_date`; with it, updates

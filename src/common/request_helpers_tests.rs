@@ -415,7 +415,7 @@ mod cancelling {
         type Output = ();
 
         fn decode(_payload: Self::Proto) -> Result<(), Error> {
-            Err(Error::Simple("bad answer".into()))
+            Err(Error::InvalidArgument("bad answer".into()))
         }
 
         fn cancel(_request_id: i32) -> Result<Vec<u8>, Error> {

@@ -494,7 +494,7 @@ impl<T: TickDecoder<T> + Unpin> Stream for TickSubscription<T> {
             }
 
             // `done` (decoder's last-batch flag) and `stream_ended` (terminal
-            // error / EndOfStream) are distinct reasons the stream is over;
+            // error) are distinct reasons the stream is over;
             // either ends it once the buffer is drained.
             if this.done || this.stream_ended {
                 return Poll::Ready(None);
@@ -521,10 +521,6 @@ impl<T: TickDecoder<T> + Unpin> Stream for TickSubscription<T> {
                 }
                 TickAction::Skip => {}
                 TickAction::Notice(notice) => return Poll::Ready(Some(Ok(SubscriptionItem::Notice(notice)))),
-                TickAction::EndOfStream => {
-                    this.stream_ended = true;
-                    return Poll::Ready(None);
-                }
                 TickAction::Error(e) => {
                     this.stream_ended = true;
                     return Poll::Ready(Some(Err(e)));

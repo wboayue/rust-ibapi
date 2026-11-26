@@ -26,9 +26,9 @@ impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
         matches!(self, AccountSummaryResult::End)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
-        encoders::encode_cancel_account_summary(request_id)
+        encoders::encode_cancel_account_summary(request_id).map(Some)
     }
 }
 
@@ -42,9 +42,9 @@ impl StreamDecoder<PnL> for PnL {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
-        encoders::encode_cancel_pnl(request_id)
+        encoders::encode_cancel_pnl(request_id).map(Some)
     }
 
     /// Live: after 321 TWS answers the cancel with 10185 (not subscribed).
@@ -63,9 +63,9 @@ impl StreamDecoder<PnLSingle> for PnLSingle {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
-        encoders::encode_cancel_pnl_single(request_id)
+        encoders::encode_cancel_pnl_single(request_id).map(Some)
     }
 
     /// Live: after 321 TWS answers the cancel with 10186 (not subscribed).
@@ -89,8 +89,8 @@ impl StreamDecoder<PositionUpdate> for PositionUpdate {
         matches!(self, PositionUpdate::PositionEnd)
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        encoders::encode_cancel_positions()
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
+        encoders::encode_cancel_positions().map(Some)
     }
 }
 
@@ -109,9 +109,9 @@ impl StreamDecoder<PositionUpdateMulti> for PositionUpdateMulti {
         matches!(self, PositionUpdateMulti::PositionEnd)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
-        encoders::encode_cancel_positions_multi(request_id)
+        encoders::encode_cancel_positions_multi(request_id).map(Some)
     }
 }
 
@@ -131,8 +131,8 @@ impl StreamDecoder<AccountUpdate> for AccountUpdate {
         matches!(self, AccountUpdate::End)
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        encoders::encode_cancel_account_updates()
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
+        encoders::encode_cancel_account_updates().map(Some)
     }
 }
 
@@ -151,9 +151,9 @@ impl StreamDecoder<AccountUpdateMulti> for AccountUpdateMulti {
         matches!(self, AccountUpdateMulti::End)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel account updates multi")?;
-        encoders::encode_cancel_account_updates_multi(request_id)
+        encoders::encode_cancel_account_updates_multi(request_id).map(Some)
     }
 }
 

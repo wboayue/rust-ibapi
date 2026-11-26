@@ -1184,3 +1184,22 @@ enum rejects a name or a tagged object. An open string enum (`SecurityType`, `Se
 unrecognized code. A `Contract` stored by 5.x with `"security_type":"Stock"` loads as
 `SecurityType::Other("Stock")`, and a request built from it sends `Stock` to TWS. Convert stored JSON before loading it, by mapping each variant name to
 its code (`as_str()` lists the codes for the string enums, `i32::from` for the integer ones).
+
+### 48. Six `Error` variants are removed
+
+The crate never returned these to a caller, or returned them only as an internal signal:
+
+| Variant | What it was |
+|---|---|
+| `Simple(String)` | A generic message. Only the crate's test transports built it. |
+| `NotImplemented` | The default `cancel_message` for a stream type with no cancel. A subscription read it as "no cancel" and never passed it on. |
+| `EndOfStream` | The signal a decoder returned for an end marker (`ContractDataEnd`). A subscription read it as "stream over" and ended with `None`, as it still does. |
+| `Poison(String)` | A lock poisoned by a panic in another thread, from the blocking client's socket and connection locks. The client now recovers the lock, as its other locks already did. |
+| `ParseInt(ParseIntError)`, `FromUtf8(FromUtf8Error)` | `From` conversions that no crate code used. |
+
+`Error` is `#[non_exhaustive]`, so a `match` already has a wildcard arm. Remove any arm naming one
+of these variants. A caller that built `Error::Simple(..)` for its own failures, as
+[`migration-5.0.md`](migration-5.0.md) §15 suggested for prost errors, should use its own error
+type (or `Box<dyn std::error::Error>`): no crate API takes a caller's `ibapi::Error`. Code that
+used `?` to turn a `ParseIntError`, `FromUtf8Error` or `PoisonError` into an `ibapi::Error` needs
+its own conversion.

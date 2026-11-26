@@ -197,6 +197,16 @@ impl RoutedItem {
     }
 }
 
+/// The cancel frame for a `T` stream, or `None` when the type has none. An
+/// encode failure is logged and also yields `None`: drop and `cancel` have no
+/// caller to return it to.
+pub(crate) fn cancel_frame<T: StreamDecoder<T>>(context: &DecoderContext, request_id: Option<i32>) -> Option<Vec<u8>> {
+    T::cancel_message(context.server_version, request_id, Some(context)).unwrap_or_else(|e| {
+        log::warn!("cancel message not sent: {e}");
+        None
+    })
+}
+
 /// `true` when `message` is not this subscription's to decode.
 ///
 /// Shared and order-id channels fan several message types out to subscriptions
@@ -290,9 +300,10 @@ pub(crate) trait StreamDecoder<T> {
     /// handshake is their only caller now.
     fn decode(context: &DecoderContext, message: &ResponseMessage) -> Result<T, Error>;
 
-    /// The messages TWS sends after the last item, which `decode` turns into
-    /// `Error::EndOfStream`. **Exactly** those: `response_message_ids_tests.rs`
-    /// checks the list against the `decode` arms. A `buffer_limit` cap always
+    /// The messages TWS sends after the last item. The stream ends on one
+    /// without calling `decode`, so each must also be in
+    /// `RESPONSE_MESSAGE_IDS` and `decode` has no arm for it;
+    /// `response_message_ids_tests.rs` checks both. A `buffer_limit` cap always
     /// lets them through, so a result that fills the cap exactly still ends
     /// normally. Empty (the default): the stream has no end marker, and only
     /// an error ends a capped stream.
@@ -323,9 +334,10 @@ pub(crate) trait StreamDecoder<T> {
         None
     }
 
-    /// Generate a cancellation message for this stream
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
-        Err(Error::NotImplemented)
+    /// The cancel message for this stream, or `Ok(None)` when TWS has none
+    /// for the request. Default: `Ok(None)`.
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {
+        Ok(None)
     }
 
     /// Returns true if this decoded value represents the end of a snapshot subscription

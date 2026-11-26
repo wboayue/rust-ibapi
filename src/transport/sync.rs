@@ -1357,9 +1357,9 @@ impl Reconnect for TcpSocket {
         stream.set_nodelay(self.tcp_no_delay)?;
 
         // The close handle last; see `CloseHandle` for the order.
-        let mut reader = self.reader.lock()?;
-        let mut writer = self.writer.lock()?;
-        let mut handle = self.close_handle.lock()?;
+        let mut reader = lock(&self.reader);
+        let mut writer = lock(&self.writer);
+        let mut handle = lock(&self.close_handle);
         if handle.closed {
             // Dropping `stream` closes the new connection.
             return Err(Error::Shutdown);
@@ -1489,12 +1489,12 @@ pub(crate) fn read_message(reader: &mut impl Read, tap: &RawFrameTap) -> Result<
 
 impl Io for TcpSocket {
     fn read_message(&self) -> Result<Vec<u8>, Error> {
-        let mut reader = self.reader.lock()?;
+        let mut reader = lock(&self.reader);
         read_message(&mut *reader, &self.tap).map_err(|err| self.closed_or(err))
     }
 
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        let mut writer = self.writer.lock()?;
+        let mut writer = lock(&self.writer);
         writer.write_all(buf).map_err(|err| self.closed_or(err.into()))
     }
 

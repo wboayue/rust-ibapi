@@ -11,7 +11,7 @@ use super::common::{
 use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{encode_raw_length, ResponseMessage};
-use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
+use crate::transport::common::{lock, FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
 use crate::transport::sync::{NoticeBroadcaster, ShutdownSignal, Stream, TcpSocket, STARTUP_TIMEOUT_LIMIT};
 
@@ -276,7 +276,7 @@ impl<S: Stream> Connection<S> {
 
         let ack = parse_handshake_ack(&self.connection_handler, self.read_startup_frame())?;
 
-        let mut connection_metadata = self.connection_metadata.lock()?;
+        let mut connection_metadata = lock(&self.connection_metadata);
         connection_metadata.server_version = ack.server_version;
         connection_metadata.connection_time = ack.connection_time;
         connection_metadata.time_zone = ack.time_zone;
@@ -306,7 +306,7 @@ impl<S: Stream> Connection<S> {
             }
         }
 
-        self.connection_metadata.lock()?.apply_account_info(account_info);
+        lock(&self.connection_metadata).apply_account_info(account_info);
 
         Ok(())
     }
