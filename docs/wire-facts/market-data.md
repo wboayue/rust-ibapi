@@ -164,7 +164,7 @@ hours, TRADES.*
 - Not decoded: one stock out of three contracts, with no documented meaning.
 - **Not probed:** options, crypto, non-US stocks.
 
-### Delayed volume can be negative on the wire
+### Delayed volume is negative or wrong on the wire
 
 *Live 2026-11-24 01:00Z (Monday 20:00 ET, after hours), paper TWS, server 223; raw capture.*
 
@@ -173,8 +173,8 @@ hours, TRADES.*
   negative decimal strings for MSFT (`"-235087060"`, then `"-234537060"` 10 s later), NVDA,
   INTC, F, SPY and QQQ, in both modes. The raw frame holds the text: field 3, length 10,
   `2d 32 33 35 30 38 37 30 36 30` (`-235087060`). The decoder parses that string to the same
-  `f64`; nothing narrows it to 32 bits. The first report, MSFT `-1232329840` (snapshot,
-  23:49Z), is the same fact.
+  `f64`; nothing narrows it to 32 bits. An earlier run (snapshot, 23:49Z) saw MSFT
+  `-1232329840`.
 - The values also disagree with the day's volume where they are positive. Daily TRADES bars
   for 2026-11-23, extended hours: AAPL 41,406,011 against `DelayedVolume` 48,288,217; AMD
   42,241,724 against 2,119,449,190; IBKR 4,649,304 against 1,226,539,095. Neither the raw
