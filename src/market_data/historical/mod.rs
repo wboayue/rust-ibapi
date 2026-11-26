@@ -25,6 +25,7 @@ use time::{Date, OffsetDateTime};
 use crate::builder::ValidationError;
 use crate::common::error_helpers;
 use crate::common::request_helpers::CancellableOneShot;
+use crate::contracts::SecurityType;
 use crate::messages::{
     IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE, REQUEST_VALIDATION_CODE, WHAT_TO_SHOW_SUBSTITUTED_CODE,
 };
@@ -781,11 +782,15 @@ pub enum WhatToShow {
     BidAsk,
     /// Aggregated trade data (wire value `AGGTRADES`).
     ///
-    /// Crypto's trade-price series. A crypto `TRADES` bar request draws error 10299 and TWS
-    /// serves the AGGTRADES series anyway; `AGGTRADES` on a stock or future draws 10299 and TWS
-    /// serves TRADES. With live updates (`subscribe_with_updates()`) crypto `AGGTRADES` draws 321, so crypto
-    /// bars stream only as `TRADES`. Historical ticks get nothing after 10299
-    /// (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`).
+    /// The trade-price series for crypto. A crypto `TRADES` bar request draws
+    /// notice 10299 ("Expected what to show is AGGTRADES") and is then served
+    /// this series; historical ticks are refused with 10299. With `keepUpToDate`
+    /// ([`subscribe_with_updates`](HistoricalDataBuilder::subscribe_with_updates))
+    /// TWS refuses `AGGTRADES` with error 321, so a crypto stream needs
+    /// [`Trades`](Self::Trades). On stocks and futures `AGGTRADES` draws 10299
+    /// and the `TRADES` bars; on forex, 10299 then 162.
+    /// [`trades_for`](Self::trades_for) and [`trades_for_updates`](Self::trades_for_updates) pick
+    /// between the two (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`).
     AggTrades,
     /// Historical volatility computed by IB.
     HistoricalVolatility,
@@ -797,6 +802,72 @@ pub enum WhatToShow {
     Schedule,
     /// Split-adjusted last price series.
     AdjustedLast,
+}
+
+impl WhatToShow {
+    /// The `whatToShow` that requests trade prices for `security_type`, or `None` where TWS has
+    /// no trade data for it.
+    ///
+    /// - Crypto: [`AggTrades`](Self::AggTrades). TWS serves `TRADES` bars too, the same data, after
+    ///   notice 10299; it refuses `TRADES` historical ticks with 10299. A keep-up-to-date
+    ///   [`subscribe_with_updates`](HistoricalDataBuilder::subscribe_with_updates) on
+    ///   crypto must use [`Trades`](Self::Trades) instead, which
+    ///   [`trades_for_updates`](Self::trades_for_updates) returns.
+    /// - Forex pairs, commodities (`XAUUSD`) and CFDs: `None`. TWS answers `TRADES` with error 162
+    ///   ("No historical market data"); request [`MidPoint`](Self::MidPoint), [`Bid`](Self::Bid)
+    ///   or [`Ask`](Self::Ask) instead.
+    /// - Every other security type: [`Trades`](Self::Trades). An index's TRADES bars carry no
+    ///   volume.
+    ///
+    /// Live-checked for stocks, futures, options, futures options, indices, forex, `XAUUSD`, an
+    /// index CFD and crypto (`docs/wire-facts/market-data.md#trade-price-whattoshow-by-security-type`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::SecurityType;
+    /// use ibapi::market_data::historical::WhatToShow;
+    ///
+    /// assert_eq!(WhatToShow::trades_for(&SecurityType::Crypto), Some(WhatToShow::AggTrades));
+    /// assert_eq!(WhatToShow::trades_for(&SecurityType::Stock), Some(WhatToShow::Trades));
+    /// assert_eq!(WhatToShow::trades_for(&SecurityType::ForexPair), None);
+    /// ```
+    pub fn trades_for(security_type: &SecurityType) -> Option<Self> {
+        match security_type {
+            SecurityType::Crypto => Some(Self::AggTrades),
+            SecurityType::ForexPair | SecurityType::Commodity | SecurityType::CFD => None,
+            _ => Some(Self::Trades),
+        }
+    }
+
+    /// The `whatToShow` that streams trade-price bars for `security_type` with keep-up-to-date
+    /// ([`subscribe_with_updates`](HistoricalDataBuilder::subscribe_with_updates)), or `None`
+    /// where TWS has no trade data for it.
+    ///
+    /// The same as [`trades_for`](Self::trades_for) except for crypto, which takes
+    /// [`Trades`](Self::Trades): TWS refuses `AGGTRADES` with keep-up-to-date (error 321, "Source
+    /// price not supported with live updates") and streams a crypto `TRADES` request after notice
+    /// 10299.
+    ///
+    /// Live-checked for crypto, stocks, futures and forex
+    /// (`docs/wire-facts/market-data.md#trade-price-whattoshow-by-security-type`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::SecurityType;
+    /// use ibapi::market_data::historical::WhatToShow;
+    ///
+    /// assert_eq!(WhatToShow::trades_for_updates(&SecurityType::Crypto), Some(WhatToShow::Trades));
+    /// assert_eq!(WhatToShow::trades_for_updates(&SecurityType::Future), Some(WhatToShow::Trades));
+    /// assert_eq!(WhatToShow::trades_for_updates(&SecurityType::ForexPair), None);
+    /// ```
+    pub fn trades_for_updates(security_type: &SecurityType) -> Option<Self> {
+        match security_type {
+            SecurityType::Crypto => Some(Self::Trades),
+            _ => Self::trades_for(security_type),
+        }
+    }
 }
 
 impl std::fmt::Display for WhatToShow {

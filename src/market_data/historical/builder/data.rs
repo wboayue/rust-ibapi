@@ -303,7 +303,7 @@ impl<'a, D: DateSpec> HistoricalDataBuilder<'a, crate::client::sync::Client, D> 
     /// series' bars with nothing to show the substitution: AGGTRADES bars for crypto `TRADES`,
     /// TRADES bars for `AGGTRADES` on a stock or future (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`). Request
     /// [`WhatToShow::AggTrades`] for crypto and [`WhatToShow::Trades`] otherwise to get the
-    /// series you name.
+    /// series you name; [`WhatToShow::trades_for`] picks it.
     ///
     /// Without a `one_shot_timeout`, waits without a time limit. Any error
     /// before the end marker cancels the request at TWS.
@@ -539,7 +539,7 @@ impl<'a, D: DateSpec> HistoricalDataBuilder<'a, crate::client::r#async::Client, 
     /// series' bars with nothing to show the substitution: AGGTRADES bars for crypto `TRADES`,
     /// TRADES bars for `AGGTRADES` on a stock or future (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`). Request
     /// [`WhatToShow::AggTrades`] for crypto and [`WhatToShow::Trades`] otherwise to get the
-    /// series you name.
+    /// series you name; [`WhatToShow::trades_for`] picks it.
     ///
     /// Without a `one_shot_timeout`, waits without a time limit; to bound one
     /// call, wrap the future in `tokio::time::timeout`. Dropping it, or any

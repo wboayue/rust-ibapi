@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::common::error_helpers;
-use crate::contracts::OptionComputation;
+use crate::contracts::{OptionComputation, SecurityType};
 use crate::messages::{
     IncomingMessages, Notice, ResponseMessage, MARKET_DATA_DELAYED_NOT_ENABLED_CODE, MARKET_DATA_NOT_SUBSCRIBED_CODE, MARKET_DEPTH_RESET_CODE,
     NO_SECURITY_DEFINITION_CODE, REALTIME_QUERY_INVALID_CODE, TICK_BY_TICK_FAILED_CODE,
@@ -198,13 +198,45 @@ pub enum WhatToShow {
     Ask,
     /// Aggregated trade data (wire value `AGGTRADES`).
     ///
-    /// Required for crypto contracts: TWS rejects `TRADES` for crypto with
-    /// error 10299 on `reqRealTimeBars`, so crypto trade-price bars must be
-    /// requested as `AGGTRADES`.
+    /// For crypto. TWS also accepts [`Trades`](Self::Trades) for crypto on
+    /// `reqRealTimeBars` and sends the same bars, as historical bar requests do
+    /// after a 10299 notice (see [`trades_for`](Self::trades_for)). Other
+    /// security types reject it.
     AggTrades,
 }
 
 impl WhatToShow {
+    /// The `whatToShow` that requests trade-price bars for `security_type`, or `None` where TWS
+    /// has no trade data for it.
+    ///
+    /// - Crypto: [`AggTrades`](Self::AggTrades), the value historical bars expect. TWS also
+    ///   accepts `TRADES` here and sends the same bars.
+    /// - Forex pairs, commodities (`XAUUSD`) and CFDs: `None`. TWS answers `TRADES` on a forex
+    ///   pair or commodity with error 420; request [`MidPoint`](Self::MidPoint),
+    ///   [`Bid`](Self::Bid) or [`Ask`](Self::Ask) instead.
+    /// - Every other security type: [`Trades`](Self::Trades).
+    ///
+    /// Live-checked for crypto, forex and `XAUUSD`; CFDs follow the historical rule
+    /// (`docs/wire-facts/market-data.md#trade-price-whattoshow-by-security-type`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::SecurityType;
+    /// use ibapi::market_data::realtime::WhatToShow;
+    ///
+    /// assert_eq!(WhatToShow::trades_for(&SecurityType::Crypto), Some(WhatToShow::AggTrades));
+    /// assert_eq!(WhatToShow::trades_for(&SecurityType::Future), Some(WhatToShow::Trades));
+    /// assert_eq!(WhatToShow::trades_for(&SecurityType::ForexPair), None);
+    /// ```
+    pub fn trades_for(security_type: &SecurityType) -> Option<Self> {
+        match security_type {
+            SecurityType::Crypto => Some(Self::AggTrades),
+            SecurityType::ForexPair | SecurityType::Commodity | SecurityType::CFD => None,
+            _ => Some(Self::Trades),
+        }
+    }
+
     fn as_str(&self) -> &'static str {
         match self {
             Self::Trades => "TRADES",
