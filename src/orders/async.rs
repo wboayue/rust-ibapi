@@ -449,6 +449,11 @@ impl Client {
     /// The generator only moves up, never below order IDs already allocated
     /// locally, including IDs whose order has not yet reached the server.
     ///
+    /// TWS keeps one order-ID sequence per client ID: the same ID from another client ID places
+    /// a separate order, and an ID this client ID has not used, below the highest it has used,
+    /// draws error 103 ("Duplicate order id") (live: 2026-11-24, server 223;
+    /// `docs/wire-facts/orders.md#order-ids-are-per-client-id`).
+    ///
     /// # Errors
     /// - [`Error::OrderIdInRequestRange`] if TWS returns an id at or above 1,500,000,000 (reserved for request ids).
     /// - [`Error::Timeout`] if TWS sends no answer within 30 seconds, or within [`one_shot_timeout`](crate::ClientBuilder::one_shot_timeout) when set.

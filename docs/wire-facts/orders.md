@@ -141,7 +141,44 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - After order 1 was cancelled (Cancelled status seen), `open_orders()` returned only working
   order 2, on the same connection and on a fresh one with the same client id. Finished orders
   are reachable only through `completed_orders`.
+- A 201-rejected order also leaves `open_orders` within 50 ms
+  ([Order rejected with 201](#order-rejected-with-201-events-and-listings)).
 - **Not probed:** filled orders (assumed the same).
+
+### Order rejected with 201: events and listings
+
+*Live 2026-11-23 21:17-21:19Z (after the US close), paper TWS, server 223. Six orders, each from
+a fresh client; listings polled at +0, 50, 100, 250 and 500 ms and +1, 2, 3 and 10 s after the
+first `Inactive` event.*
+
+- Never accepted (SPY BUY 1 LMT 1.00, 201 "No Trading Permission, Customer Ineligible", MiFID
+  KID; four runs): the first OpenOrder and the first OrderStatus already carry `Inactive`, with
+  a permId; no PreSubmitted step. The 201 follows 4-19 ms later.
+- Accepted, then rejected (AAPL BUY 10,000,000 LMT 1.00, 201 "Your order is too large"; two
+  runs): OpenOrder and OrderStatus `PreSubmitted`, then both `Inactive` 1-3 ms later, then the
+  201 2-13 ms after that. The permId is the same throughout.
+- The `place_order` stream ends with the 201.
+- The placing client's `open_orders()` listed the order only in the +0 ms poll of 2 of 6 runs,
+  polls that started 1-2 ms after the `Inactive` event: status `Inactive`, filled 0, total the
+  ordered quantity, `order_id` and `order.order_id` both the placed id. From +50 ms on it was
+  never listed. This crate also routes a client's own OpenOrder frames to a listening
+  `open_orders()` channel, so those two hits may be pushed frames rather than rows of the
+  `reqOpenOrders` reply; the probe did not tell them apart.
+- Another client's `all_open_orders()` never listed it, from +0 ms on.
+- `completed_orders(false)` lists it with status `Cancelled`, not `Inactive`; filled 0; total
+  the ordered quantity, as for any unfilled cancelled order
+  ([totalQuantity](#completed-order-totalquantity-is-the-unfilled-quantity)); the API order
+  id in `order.order_id`. At the time of the probe the crate's top-level `order_id` was -1
+  (#1263). The first listing that held it ended 19-204 ms after the `Inactive` event (five
+  runs); two listings that ended 6 and 10 ms after it did not hold it. It stayed listed through
+  +10 s and in a read minutes later. In one run the same +0 ms poll showed it `Inactive` in
+  `open_orders()` and `Cancelled` in `completed_orders()`.
+- Settles that a 201-rejected order leaves `open_orders` like any finished order
+  ([`open_orders` excludes finished orders](#open_orders-excludes-finished-orders)), within
+  50 ms. Inferred: the `Inactive` event is the terminal signal, and a lookup in
+  `completed_orders` has to match on `perm_id` or `order.order_id`.
+- **Not probed:** other 201 reasons; a 201 on a modify; `completed_orders(true)`; a raw capture
+  to settle the two `open_orders()` hits; the Gateway.
 
 ### Executions: `last_n_days` and `specific_dates`
 
@@ -166,6 +203,37 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - **Not probed:** a `specific_dates` day older than a week that has executions. None was
   reachable (`last_n_days` above 7 returns nothing), so whether TWS applies the "within the
   past week" in IB's `ExecutionFilter.proto` to `specific_dates` is not known.
+
+### Commission report timing and values
+
+*Live 2026-11-23 21:20Z (after the US close), paper TWS, server 223; EUR.USD BUY 20000 MKT, then
+SELL 20000 MKT to flatten. Stocks, options and partial fills: live 2026-11-24 16:04-16:21 UTC (US
+hours), paper TWS, server 223; AAPL 1 share and an AAPL Dec 2026 350 call, 1 contract, each bought
+and sold at market; MSFT orders of 500 shares filled in 7 to 9 parts.*
+
+- One `CommissionAndFeesReport` per fill on the `place_order` stream, 5.0 ms (BUY) and 5.9 ms
+  (SELL) after its ExecutionData.
+- BUY sequence: OpenOrder Submitted; ExecutionData; OpenOrder Filled with
+  `order_state.commission_and_fees` `None`; OrderStatus Filled; OpenOrder Filled with `Some(2.0)`;
+  the report. The SELL's OpenOrder Filled with `Some(2.0)` came 6 ms after its ExecutionData,
+  in the same millisecond as the report.
+- Each report: `commission_and_fees` 2.0 USD, `realized_pnl` `None` (also on the SELL that
+  closed the position), `yields` `None`. The decoder maps an absent field and `f64::MAX` both
+  to `None`; which one TWS sent was not captured.
+- No `-1`, `f64::MAX` or other sentinel in `commission_and_fees`, live or in the six reports
+  `executions()` replayed 8-16 s later (2.0, 2.0, 2.24, 2.24, 2.0, 2.0).
+- **Stocks and options during US hours**: one report per execution, 1 to 2 ms after
+  it, 20 ms for the option sale. The sequence is the forex BUY's: ExecutionData; OpenOrder
+  Filled with `commission_and_fees` `None`; OrderStatus Filled; OpenOrder Filled with the
+  commission; OrderStatus; the report. Values: 1.000003 and 1.007222 USD for the stock, 0.7653
+  and 0.7859 for the option; `realized_pnl` `None` on the opening executions, set on the
+  closing ones (-2.127225, -21.5512), unlike the forex SELL that closed its position.
+- **Partial fills**: each part got its own report right after its execution. The first part
+  carried the order's minimum (1.000126 USD for 42 MSFT shares), later parts the increment
+  (0.00012 for 40 shares, 0.60036 for 120), and OpenOrder's `commission_and_fees` ran as the
+  order's total (1.000126, 1.000246, ... 2.5015 after 500 shares).
+- **Not probed:** futures; a later corrected report; a raw capture of `realized_pnl`; the
+  Gateway.
 
 ### `Execution.time` rendering
 
@@ -315,6 +383,51 @@ with `override_natural_action`.*
   repeat the id.
 - **Not probed:** whether a plain order (not an exercise) shows the same, whether it depends on
   the client id, and whether TWS rejects the reused id later.
+
+### `reqAllOpenOrders` raises the caller's next valid order id
+
+*Live 2026-11-23 about 18:35Z and 21:19-21:20Z (after the US close), paper TWS, server 223.*
+
+- Client 9420 placed AAPL BUY 1 LMT 1.00 as order 500001. Client 9421 connected with next valid
+  id 1, listed 500001 with `all_open_orders()`, then sent its own order with id 1: TWS refused
+  it 3 ms later with 103 "Duplicate order id: 1", although 9421 had never used id 1. A `reqIds`
+  (`next_valid_order_id()`) 5 s later returned 500002.
+- Earlier run: client 9332 read next valid id 1, still 1 after `open_orders()`, and 500002 after
+  `all_open_orders()` listed client 9331's open AAPL order 500001. A fresh connection with the
+  same client id read 500002 again, so the raise persists across connections.
+- Control: client 9422 listed with `open_orders()` (0 rows), sent id 1, and TWS accepted it
+  (PreSubmitted); `reqIds` then returned 2.
+- `reqCompletedOrders(apiOnly=false)` and `reqExecutions` left it at 1 on a reconnect. Clients
+  9431 and 9435 read 1 at connect, listed `completed_orders(false)` (22 rows, including other
+  clients' orders 700001 and 500001 in `order.order_id`), and read 1 again on reconnect.
+  Client 9437 did the same around `executions()` (six executions, the highest order id
+  1000320). A client that sent no request also read 1 both times.
+- The builder's `submit()` took the stale id 1 from `Client::next_order_id()` and returned
+  `Ok(OrderId(1))`; the 103 arrived as a notice bound to order 1 on `order_update_stream()`.
+- Settles that `all_open_orders()` can leave this crate's order-id counter below the floor TWS
+  enforces for duplicates; `next_valid_order_id()` returns the raised value.
+- **Not probed:** whether `reqCompletedOrders` or `reqExecutions` raise the id within the same
+  session (no `reqIds` between the listing and the disconnect); `reqOpenOrders` with rows to
+  list (it listed nothing in both runs, so it had nothing to raise the id above); whether TWS
+  sends a `nextValidId` frame after the listing; `reqCompletedOrders(apiOnly=true)`; client
+  id 0; the Gateway.
+
+### Order ids are per client id
+
+*Live 2026-11-24 16:35 UTC, US market open, paper TWS, server 223; clients A and B on two
+connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
+
+- Both read next valid id 1 at connect. A placed id 2 (Submitted); `reqIds` then returned 3 to A
+  and still 1 to B.
+- B sent id 2, A's working id: TWS placed a second order with its own perm id, and
+  `all_open_orders` listed both, under A's and B's client ids. `reqIds` then returned 3 to B.
+- B sent id 2 again with quantity 2: TWS modified B's order (same perm id, quantity 2).
+- A sent id 1, which it had never used and which is below its highest id 2: 103 "Duplicate order
+  id: 1", 3 ms later.
+- Settles that the next valid id and the duplicate check run per client id. An id the client has
+  used names that client's order with the id (a modify, or 104 once the order is finished); an
+  unused id below the client's highest draws 103.
+- **Not probed:** client id 0, which can see other clients' orders; the Gateway.
 
 ### `ext_operator` and `manual_order_indicator` on orders and cancels
 
