@@ -66,7 +66,7 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 
-use crate::contracts::Contract;
+use crate::contracts::{Contract, SecurityType};
 
 // Public types - always available regardless of feature flags
 
@@ -1626,23 +1626,32 @@ impl ExecutionData {
     ///
     /// `false` for an option exercise ([`OptionExerciseType::Exercise`]): TWS sent no report
     /// for either execution of an exercise, within 40 s or from `executions` later the same day
-    /// (live 2026-11-13, paper TWS, server 223). `true` for every other execution, including
-    /// lapses, assignments and the other exercise types, which have not been checked.
+    /// (live 2026-11-13, paper TWS, server 223). `false` for a combo's own execution (contract
+    /// security type [`SecurityType::Spread`]): TWS reports the
+    /// commissions on the leg executions only (live 2026-11-23, ES calendars on CME, paper
+    /// TWS, server 223). `true` for every other execution, including lapses, assignments and
+    /// the other exercise types, which have not been checked.
     ///
     /// # Examples
     ///
     /// ```
+    /// use ibapi::contracts::{Contract, SecurityType};
     /// use ibapi::orders::{Execution, ExecutionData, OptionExerciseType};
     ///
     /// let exercise = ExecutionData {
     ///     execution: Execution { option_exercise_type: OptionExerciseType::Exercise, ..Default::default() },
     ///     ..Default::default()
     /// };
+    /// let combo = ExecutionData {
+    ///     contract: Contract { security_type: Some(SecurityType::Spread), ..Default::default() },
+    ///     ..Default::default()
+    /// };
     /// assert!(!exercise.expects_commission_report());
+    /// assert!(!combo.expects_commission_report());
     /// assert!(ExecutionData::default().expects_commission_report());
     /// ```
     pub fn expects_commission_report(&self) -> bool {
-        self.execution.option_exercise_type != OptionExerciseType::Exercise
+        self.execution.option_exercise_type != OptionExerciseType::Exercise && self.contract.security_type != Some(SecurityType::Spread)
     }
 }
 

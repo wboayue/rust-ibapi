@@ -603,23 +603,48 @@ loop {
         SubscriptionItem::Data(OrderUpdate::CommissionAndFeesReport(report)) => match matcher.push_report(report) {
             ReportMatch::Paired(fill) => println!("fill: {fill:?}"),
             ReportMatch::Late(report) => println!("late commission: {report:?}"),
-            ReportMatch::Waiting | ReportMatch::Duplicate(_) => {}
+            ReportMatch::Waiting | ReportMatch::ComboPending | ReportMatch::Duplicate(_) => {}
         },
         _ => {}
     }
 }
 ```
 
+For a combo (BAG) order, TWS sends each fill as an execution for the combo itself (the combo's
+quantity and net price, no commission report) and one execution per leg, each with its report.
+Pass the order's `perm_id` and legs to `add_combo`, for example from its open-order echo, which
+TWS sends before the first execution, and the matcher returns each fill as one `Fill` whose
+`legs` hold the leg fills. A report that pairs with a leg before the combo fill is complete is
+`ReportMatch::ComboPending`; `take_expired` returns incomplete combo fills in `Unpaired::fills`:
+
+```rust
+SubscriptionItem::Data(OrderUpdate::OpenOrder(order)) if !order.contract.combo_legs.is_empty() => {
+    matcher.add_combo(order.order.perm_id, &order.contract.combo_legs);
+}
+```
+
+If TWS corrects a leg execution before assembly, the revision with the highest numeric
+suffix in its execution ID supplies the quantity and commission. For example, `.02`
+supersedes `.01` with the same prefix. Use the raw execution stream to observe each revision.
+A correction arriving after the combo fill is returned does not revise that fill.
+
 For a whole `executions` reply, `FillMatcher::pair_executions` returns the fills in execution
 order and the executions and reports that found no partner. Use the same matcher for the
 live stream to pair reply items with waiting live counterparts and recognize copies while
-their IDs stay in memory.
+their IDs stay in memory. An incomplete live combo continues waiting until it completes
+or `take_expired` returns it.
 
 ```rust
 let rows = client.executions(ExecutionFilter::default())?.collect_to_end_within(Duration::from_secs(10))?;
 let mut matcher = FillMatcher::new();
 let (fills, unpaired) = matcher.pair_executions(rows);
 ```
+
+A combo fill's `Fill::combo_legs()` returns the order's legs (contract id, ratio and action) from
+its leg executions, sorted by contract id as TWS's order echoes list them, with the exchange that
+executed each leg: the order's exchange for a combo routed to one exchange, the executing venue
+(not `SMART`) for a `SMART` combo. Use it to identify the combo when the order echo is gone, as
+for a previous day's fill.
 
 ### Concurrent Subscriptions
 ```rust

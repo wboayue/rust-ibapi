@@ -1,6 +1,6 @@
 use super::*;
-use crate::contracts::SecurityType;
-use crate::orders::{Execution, OptionExerciseType};
+use crate::contracts::{LegAction, SecurityType};
+use crate::orders::{Execution, ExecutionSide, OptionExerciseType};
 
 const MAX_WAIT: Duration = Duration::from_secs(5);
 
@@ -403,28 +403,25 @@ fn caller_rule_returns_the_fill_at_once_and_remembers_it() {
 }
 
 #[test]
-fn expects_commission_report_is_false_only_for_exercise() {
+fn expects_commission_report_is_false_for_exercise_and_combo() {
     let cases = [
-        (OptionExerciseType::None, true),
-        (OptionExerciseType::Exercise, false),
-        (OptionExerciseType::Lapse, true),
-        (OptionExerciseType::DoNothing, true),
-        (OptionExerciseType::Assigned, true),
-        (OptionExerciseType::AutoexerciseClearing, true),
-        (OptionExerciseType::Expired, true),
-        (OptionExerciseType::AutoexerciseTrading, true),
-        (OptionExerciseType::Netting, true),
-        (OptionExerciseType::Unknown(7), true),
+        (OptionExerciseType::None, SecurityType::Future, true),
+        (OptionExerciseType::Exercise, SecurityType::Option, false),
+        (OptionExerciseType::Lapse, SecurityType::Option, true),
+        (OptionExerciseType::DoNothing, SecurityType::Option, true),
+        (OptionExerciseType::Assigned, SecurityType::Option, true),
+        (OptionExerciseType::AutoexerciseClearing, SecurityType::Option, true),
+        (OptionExerciseType::Expired, SecurityType::Option, true),
+        (OptionExerciseType::AutoexerciseTrading, SecurityType::Option, true),
+        (OptionExerciseType::Netting, SecurityType::Option, true),
+        (OptionExerciseType::Unknown(7), SecurityType::Option, true),
+        (OptionExerciseType::None, SecurityType::Spread, false),
     ];
-    for (option_exercise_type, expected) in cases {
-        let data = ExecutionData {
-            execution: Execution {
-                option_exercise_type,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        assert_eq!(data.expects_commission_report(), expected, "{option_exercise_type:?}");
+    for (option_exercise_type, security_type, expected) in cases {
+        let mut data = execution("e1");
+        data.execution.option_exercise_type = option_exercise_type;
+        data.contract.security_type = Some(security_type.clone());
+        assert_eq!(data.expects_commission_report(), expected, "{option_exercise_type:?} {security_type:?}");
     }
 }
 
@@ -629,7 +626,10 @@ fn pair_executions_keeps_a_live_report_when_the_reply_repeats_it() {
     let copy = matcher.push_report_at(live, start);
 
     assert!(fills.is_empty(), "{fills:?}");
-    assert!(unpaired.executions.is_empty() && unpaired.reports.is_empty(), "{unpaired:?}");
+    assert!(
+        unpaired.executions.is_empty() && unpaired.reports.is_empty() && unpaired.fills.is_empty(),
+        "{unpaired:?}"
+    );
     assert_fill(&paired.expect("the live execution pairs with the original report"), "live", Some(1.25));
     assert_duplicate(copy, "live");
     assert_nothing_waits(&matcher);
@@ -650,7 +650,10 @@ fn pair_executions_pairs_a_live_report_with_the_reply_execution_once() {
     let report_copy = matcher.push_report_at(live, start);
 
     assert_eq!(fill_ids(&fills), vec![("live", Some(1.25))]);
-    assert!(unpaired.executions.is_empty() && unpaired.reports.is_empty(), "{unpaired:?}");
+    assert!(
+        unpaired.executions.is_empty() && unpaired.reports.is_empty() && unpaired.fills.is_empty(),
+        "{unpaired:?}"
+    );
     assert!(execution_copy.is_none(), "{execution_copy:?}");
     assert_duplicate(report_copy, "live");
     assert_nothing_waits(&matcher);
@@ -701,4 +704,1348 @@ fn pair_executions_of_empty_reply() {
     assert!(fills.is_empty());
     assert!(unpaired.executions.is_empty());
     assert!(unpaired.reports.is_empty());
+}
+
+const PERM_ID: i64 = 1290491156;
+const ESZ6: i32 = 515416632;
+const ESH7: i32 = 649180684;
+
+fn combo_legs(near_ratio: i32, far_ratio: i32) -> Vec<ComboLeg> {
+    vec![
+        ComboLeg {
+            contract_id: ESZ6,
+            ratio: near_ratio,
+            action: LegAction::Buy,
+            ..Default::default()
+        },
+        ComboLeg {
+            contract_id: ESH7,
+            ratio: far_ratio,
+            action: LegAction::Sell,
+            ..Default::default()
+        },
+    ]
+}
+
+fn combo_matcher(near_ratio: i32, far_ratio: i32) -> FillMatcher {
+    let mut matcher = FillMatcher::new();
+    matcher.add_combo(PERM_ID, &combo_legs(near_ratio, far_ratio));
+    matcher
+}
+
+fn bag(execution_id: &str, shares: f64) -> ExecutionData {
+    let mut data = combo(execution_id);
+    data.contract.contract_id = 16472979;
+    data.execution.perm_id = PERM_ID;
+    data.execution.shares = shares;
+    data.execution.price = -69.65;
+    data
+}
+
+fn leg(execution_id: &str, contract_id: i32, shares: f64) -> ExecutionData {
+    let mut data = execution(execution_id);
+    data.contract.security_type = Some(SecurityType::Future);
+    data.contract.contract_id = contract_id;
+    data.execution.perm_id = PERM_ID;
+    data.execution.shares = shares;
+    data
+}
+
+/// (execution id, contract id, shares, commission) of each leg fill.
+fn leg_fills(fill: &Fill) -> Vec<(&str, i32, f64, Option<f64>)> {
+    fill.legs
+        .iter()
+        .map(|leg| {
+            (
+                leg.execution.execution.execution_id.as_str(),
+                leg.execution.contract.contract_id,
+                leg.execution.execution.shares,
+                leg.commission.as_ref().map(|report| report.commission_and_fees),
+            )
+        })
+        .collect()
+}
+
+fn assert_combo_fill(fill: &Fill, execution_id: &str, shares: f64) {
+    assert_eq!(fill.execution.execution.execution_id, execution_id, "combo execution_id");
+    assert_eq!(fill.execution.contract.security_type, Some(SecurityType::Spread));
+    assert_eq!(fill.execution.execution.shares, shares, "combo shares");
+    assert_eq!(fill.execution.execution.price, -69.65, "combo price");
+    assert!(fill.commission.is_none(), "a combo-level execution has no report: {:?}", fill.commission);
+}
+
+fn assert_no_combo_parts(matcher: &FillMatcher) {
+    assert_nothing_waits(matcher);
+    assert!(matcher.combo_parts.is_empty(), "combo parts held: {:?}", matcher.combo_parts);
+}
+
+/// Feeds `events` at `now`; returns the fills handed out, and how many `ComboPending`.
+fn feed(matcher: &mut FillMatcher, events: Vec<Executions>, now: Instant) -> (Vec<Fill>, usize) {
+    let mut fills = Vec::new();
+    let mut pending = 0;
+    for event in events {
+        match event {
+            Executions::ExecutionData(execution) => fills.extend(matcher.push_execution_at(execution, now)),
+            Executions::CommissionAndFeesReport(report) => match matcher.push_report_at(report, now) {
+                ReportMatch::Paired(fill) => fills.push(fill),
+                ReportMatch::ComboPending => pending += 1,
+                ReportMatch::Waiting => {}
+                other => panic!("unexpected {other:?}"),
+            },
+        }
+    }
+    (fills, pending)
+}
+
+/// The calendar fill as TWS sent it live: combo-level execution, far leg, near leg, then the
+/// leg reports.
+fn calendar_events() -> Vec<Executions> {
+    vec![
+        Executions::ExecutionData(bag("0000e1a7.6b0717ad.01.01", 1.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ad.02.01", ESH7, 1.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ad.03.01", ESZ6, 1.0)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ad.02.01", 2.16)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ad.03.01", 2.17)),
+    ]
+}
+
+#[test]
+fn combo_fill_in_the_order_tws_sends_it() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+
+    let (fills, pending) = feed(&mut matcher, calendar_events(), now);
+
+    assert_eq!(fills.len(), 1, "{fills:?}");
+    assert_combo_fill(&fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&fills[0]),
+        vec![
+            ("0000e1a7.6b0717ad.02.01", ESH7, 1.0, Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)),
+        ]
+    );
+    assert_eq!(pending, 1, "the first leg report pairs and waits for the second");
+    assert_no_combo_parts(&matcher);
+}
+
+fn permutations(items: Vec<usize>) -> Vec<Vec<usize>> {
+    if items.len() <= 1 {
+        return vec![items];
+    }
+    let mut all = Vec::new();
+    for index in 0..items.len() {
+        let mut rest = items.clone();
+        let first = rest.remove(index);
+        for mut tail in permutations(rest) {
+            tail.insert(0, first);
+            all.push(tail);
+        }
+    }
+    all
+}
+
+#[test]
+fn combo_fill_in_every_arrival_order() {
+    let now = Instant::now();
+    for order in permutations((0..5).collect()) {
+        let mut matcher = combo_matcher(1, 1);
+        let mut events: Vec<Option<Executions>> = calendar_events().into_iter().map(Some).collect();
+        let ordered: Vec<Executions> = order.iter().map(|&index| events[index].take().expect("each event once")).collect();
+
+        let (fills, _pending) = feed(&mut matcher, ordered, now);
+
+        assert_eq!(fills.len(), 1, "order {order:?}: {fills:?}");
+        assert_combo_fill(&fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+        let mut legs = leg_fills(&fills[0]);
+        legs.sort_by_key(|leg| leg.1);
+        assert_eq!(
+            legs,
+            vec![
+                ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)),
+                ("0000e1a7.6b0717ad.02.01", ESH7, 1.0, Some(2.16)),
+            ],
+            "order {order:?}"
+        );
+        assert_no_combo_parts(&matcher);
+    }
+}
+
+#[test]
+fn ratio_leg_completes_at_quantity_times_ratio() {
+    let now = Instant::now();
+    let mut short = combo_matcher(1, 2);
+    let mut full = combo_matcher(1, 2);
+    let events = |far_shares: f64| {
+        vec![
+            Executions::ExecutionData(bag("0000e1a7.6b071816.01.01", 1.0)),
+            Executions::ExecutionData(leg("0000e1a7.6b071816.02.01", ESH7, far_shares)),
+            Executions::ExecutionData(leg("0000e1a7.6b071816.03.01", ESZ6, 1.0)),
+            Executions::CommissionAndFeesReport(report("0000e1a7.6b071816.02.01", 4.32)),
+            Executions::CommissionAndFeesReport(report("0000e1a7.6b071816.03.01", 2.16)),
+        ]
+    };
+
+    let (short_fills, _) = feed(&mut short, events(1.0), now);
+    let (full_fills, _) = feed(&mut full, events(2.0), now);
+
+    assert!(short_fills.is_empty(), "1 of 2 far-leg shares is not complete: {short_fills:?}");
+    assert_eq!(short.combo_parts.len(), 1);
+    assert_eq!(full_fills.len(), 1, "{full_fills:?}");
+    assert_eq!(
+        leg_fills(&full_fills[0]),
+        vec![
+            ("0000e1a7.6b071816.02.01", ESH7, 2.0, Some(4.32)),
+            ("0000e1a7.6b071816.03.01", ESZ6, 1.0, Some(2.16)),
+        ]
+    );
+}
+
+#[test]
+fn each_partial_fill_is_its_own_combo_fill() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    let mut events = Vec::new();
+    for key in ["0000e1a7.6b0719db", "0000e1a7.6b0719de"] {
+        events.push(Executions::ExecutionData(bag(&format!("{key}.01.01"), 2.0)));
+        events.push(Executions::ExecutionData(leg(&format!("{key}.02.01"), ESH7, 2.0)));
+        events.push(Executions::ExecutionData(leg(&format!("{key}.03.01"), ESZ6, 2.0)));
+        events.push(Executions::CommissionAndFeesReport(report(&format!("{key}.02.01"), 4.32)));
+        events.push(Executions::CommissionAndFeesReport(report(&format!("{key}.03.01"), 4.33)));
+    }
+
+    let (fills, pending) = feed(&mut matcher, events, now);
+
+    let summary: Vec<(&str, Vec<&str>)> = fills
+        .iter()
+        .map(|fill| {
+            (
+                fill.execution.execution.execution_id.as_str(),
+                fill.legs.iter().map(|leg| leg.execution.execution.execution_id.as_str()).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("0000e1a7.6b0719db.01.01", vec!["0000e1a7.6b0719db.02.01", "0000e1a7.6b0719db.03.01"]),
+            ("0000e1a7.6b0719de.01.01", vec!["0000e1a7.6b0719de.02.01", "0000e1a7.6b0719de.03.01"]),
+        ]
+    );
+    assert_eq!(pending, 2);
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn take_expired_hands_out_an_incomplete_combo_with_the_legs_that_came() {
+    let start = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    assert!(matcher.push_execution_at(bag("0000e1a7.6b0717ad.01.01", 1.0), start).is_none());
+    assert!(matcher.push_execution_at(leg("0000e1a7.6b0717ad.02.01", ESH7, 1.0), start).is_none());
+    assert!(matches!(
+        matcher.push_report_at(report("0000e1a7.6b0717ad.02.01", 2.16), start),
+        ReportMatch::ComboPending
+    ));
+    let later = start + Duration::from_secs(1);
+    assert!(matcher.push_execution_at(leg("0000e1a7.6b0717ad.03.01", ESZ6, 1.0), later).is_none());
+
+    let early = matcher.take_expired_at(MAX_WAIT, start + MAX_WAIT - Duration::from_millis(1));
+    let due = matcher.take_expired_at(MAX_WAIT, start + MAX_WAIT);
+    let late = matcher.push_report_at(report("0000e1a7.6b0717ad.03.01", 2.17), start + MAX_WAIT);
+
+    assert!(early.fills.is_empty() && early.executions.is_empty(), "{early:?}");
+    assert_eq!(due.fills.len(), 1, "{:?}", due.fills);
+    assert_combo_fill(&due.fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&due.fills[0]),
+        vec![
+            ("0000e1a7.6b0717ad.02.01", ESH7, 1.0, Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, None),
+        ]
+    );
+    assert!(due.executions.is_empty() && due.reports.is_empty(), "{due:?}");
+    assert_late(late, "0000e1a7.6b0717ad.03.01", 2.17);
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn combo_expiry_uses_a_younger_leg_correction_without_its_report() {
+    let start = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    let mut events = calendar_events();
+    let near_report = events.pop().expect("near-leg report");
+    let (fills, pending) = feed(&mut matcher, events, start);
+    assert!(fills.is_empty(), "{fills:?}");
+    assert_eq!(pending, 1);
+    let corrected = "0000e1a7.6b0717ad.02.02";
+    let shortly_before_expiry = start + MAX_WAIT - Duration::from_millis(100);
+    assert!(matcher.push_execution_at(leg(corrected, ESH7, 0.75), shortly_before_expiry).is_none());
+    let (fills, pending) = feed(&mut matcher, vec![near_report], shortly_before_expiry);
+    assert!(fills.is_empty(), "{fills:?}");
+    assert_eq!(pending, 1);
+
+    let early = matcher.take_expired_at(MAX_WAIT, shortly_before_expiry);
+    let due = matcher.take_expired_at(MAX_WAIT, start + MAX_WAIT);
+    let late = matcher.push_report_at(report(corrected, 2.25), start + MAX_WAIT);
+    let copy = matcher.push_report_at(report(corrected, 2.25), start + MAX_WAIT);
+    let later = matcher.take_expired_at(MAX_WAIT, start + MAX_WAIT + MAX_WAIT);
+
+    assert!(
+        early.executions.is_empty() && early.reports.is_empty() && early.fills.is_empty(),
+        "{early:?}"
+    );
+    assert_eq!(due.fills.len(), 1, "{due:?}");
+    assert!(due.executions.is_empty() && due.reports.is_empty(), "{due:?}");
+    assert_combo_fill(&due.fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&due.fills[0]),
+        vec![("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)), (corrected, ESH7, 0.75, None),]
+    );
+    assert_late(late, corrected, 2.25);
+    assert_duplicate(copy, corrected);
+    assert!(
+        later.executions.is_empty() && later.reports.is_empty() && later.fills.is_empty(),
+        "{later:?}"
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn leg_without_report_completes_its_combo_when_taken() {
+    let start = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    let events = vec![
+        Executions::ExecutionData(bag("0000e1a7.6b0717ad.01.01", 1.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ad.02.01", ESH7, 1.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ad.03.01", ESZ6, 1.0)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ad.02.01", 2.16)),
+    ];
+    let (fills, _) = feed(&mut matcher, events, start);
+
+    let due = matcher.take_expired_at(MAX_WAIT, start + MAX_WAIT);
+    let late = matcher.push_report_at(report("0000e1a7.6b0717ad.03.01", 2.17), start + MAX_WAIT);
+
+    assert!(fills.is_empty(), "{fills:?}");
+    assert_eq!(due.fills.len(), 1, "{:?}", due.fills);
+    assert_combo_fill(&due.fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&due.fills[0]),
+        vec![
+            ("0000e1a7.6b0717ad.02.01", ESH7, 1.0, Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, None),
+        ]
+    );
+    assert!(due.executions.is_empty(), "a combo leg goes into its combo fill: {:?}", due.executions);
+    assert_late(late, "0000e1a7.6b0717ad.03.01", 2.17);
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn legs_without_their_combo_execution_come_out_one_by_one() {
+    let start = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    let events = vec![
+        Executions::ExecutionData(leg("0000e1a7.6b0717ad.02.01", ESH7, 1.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ad.03.01", ESZ6, 1.0)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ad.02.01", 2.16)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ad.03.01", 2.17)),
+    ];
+    let (fills, pending) = feed(&mut matcher, events, start);
+
+    let due = matcher.take_expired_at(MAX_WAIT, start + MAX_WAIT);
+
+    assert!(fills.is_empty(), "{fills:?}");
+    assert_eq!(pending, 2);
+    let legs: Vec<(&str, Option<f64>, usize)> = due
+        .fills
+        .iter()
+        .map(|fill| {
+            (
+                fill.execution.execution.execution_id.as_str(),
+                fill.commission.as_ref().map(|report| report.commission_and_fees),
+                fill.legs.len(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        legs,
+        vec![("0000e1a7.6b0717ad.02.01", Some(2.16), 0), ("0000e1a7.6b0717ad.03.01", Some(2.17), 0)]
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn combo_not_announced_comes_as_separate_fills() {
+    let now = Instant::now();
+    let mut matcher = FillMatcher::new();
+
+    let (fills, pending) = feed(&mut matcher, calendar_events(), now);
+
+    assert_eq!(
+        fill_ids(&fills),
+        vec![
+            ("0000e1a7.6b0717ad.01.01", None),
+            ("0000e1a7.6b0717ad.02.01", Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", Some(2.17)),
+        ],
+        "the default rule expects no report for the combo-level execution"
+    );
+    assert!(fills.iter().all(|fill| fill.legs.is_empty()));
+    assert_eq!(pending, 0);
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn second_combo_execution_for_the_same_fill_passes_through() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    assert!(matcher.push_execution_at(bag("0000e1a7.6b0717ad.01.01", 1.0), now).is_none());
+
+    let again = matcher
+        .push_execution_at(bag("0000e1a7.6b0717ad.04.01", 1.0), now)
+        .expect("not held twice");
+
+    assert_combo_fill(&again, "0000e1a7.6b0717ad.04.01", 1.0);
+    assert!(again.legs.is_empty());
+    assert_eq!(matcher.combo_parts.len(), 1);
+}
+
+#[test]
+fn copies_of_a_combo_fill_after_it_completes_are_dropped() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    let (fills, pending) = feed(&mut matcher, calendar_events(), now);
+    assert_eq!(fills.len(), 1, "{fills:?}");
+
+    let mut copies = Vec::new();
+    let mut duplicates = 0;
+    for event in calendar_events() {
+        match event {
+            Executions::ExecutionData(execution) => copies.extend(matcher.push_execution_at(execution, now)),
+            Executions::CommissionAndFeesReport(report) => match matcher.push_report_at(report, now) {
+                ReportMatch::Duplicate(_) => duplicates += 1,
+                other => panic!("expected Duplicate, got {other:?}"),
+            },
+        }
+    }
+    let leftovers = matcher.take_expired_at(Duration::ZERO, now);
+
+    assert_eq!(pending, 1, "the first leg report waits for the second leg");
+    assert!(copies.is_empty(), "a replayed combo fill comes out once: {copies:?}");
+    assert_eq!(duplicates, 2);
+    assert!(
+        leftovers.executions.is_empty() && leftovers.reports.is_empty() && leftovers.fills.is_empty(),
+        "{leftovers:?}"
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn copy_of_a_leg_execution_does_not_count_toward_its_combo() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 2);
+    assert!(matcher.push_execution_at(bag("0000e1a7.6b0717ad.01.01", 1.0), now).is_none());
+    assert!(matcher.push_execution_at(leg("0000e1a7.6b0717ad.03.01", ESH7, 1.0), now).is_none());
+    assert!(matches!(
+        matcher.push_report_at(report("0000e1a7.6b0717ad.03.01", 1.0), now),
+        ReportMatch::ComboPending
+    ));
+
+    let copy = matcher.push_execution_at(leg("0000e1a7.6b0717ad.03.01", ESH7, 1.0), now);
+    let report_copy = matcher.push_report_at(report("0000e1a7.6b0717ad.03.01", 1.0), now);
+
+    assert!(copy.is_none(), "{copy:?}");
+    assert_duplicate(report_copy, "0000e1a7.6b0717ad.03.01");
+    assert_eq!(matcher.combo_parts.len(), 1, "the far leg has filled 1 of 2");
+    assert_eq!(matcher.combo_parts[0].legs.len(), 1);
+}
+
+#[test]
+fn a_retained_combo_leg_rejects_replays_after_handout_memory_eviction() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 2).memory(1);
+    let (fills, pending) = feed(&mut matcher, calendar_events(), now);
+    assert!(fills.is_empty(), "{fills:?}");
+    assert_eq!(pending, 2);
+    for (id, commission) in [("e1", 1.25), ("e2", 2.5)] {
+        assert!(matcher.push_execution_at(execution(id), now).is_none());
+        let paired = matcher.push_report_at(report(id, commission), now);
+        let ReportMatch::Paired(fill) = paired else {
+            panic!("expected the standalone execution to pair, got {paired:?}");
+        };
+        assert_fill(&fill, id, Some(commission));
+    }
+    let first_far_leg = "0000e1a7.6b0717ad.02.01";
+    let next_far_leg = "0000e1a7.6b0717ad.04.01";
+
+    let replayed_leg = matcher.push_execution_at(leg(first_far_leg, ESH7, 1.0), now);
+    let replayed_report = matcher.push_report_at(report(first_far_leg, 2.16), now);
+    let next_leg = matcher.push_execution_at(leg(next_far_leg, ESH7, 1.0), now);
+    let next_report = matcher.push_report_at(report(next_far_leg, 2.18), now);
+
+    assert!(replayed_leg.is_none(), "{replayed_leg:?}");
+    assert_duplicate(replayed_report, first_far_leg);
+    assert!(next_leg.is_none(), "{next_leg:?}");
+    let ReportMatch::Paired(fill) = next_report else {
+        panic!("expected the distinct execution to complete the combo, got {next_report:?}");
+    };
+    assert_combo_fill(&fill, "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&fill),
+        vec![
+            (first_far_leg, ESH7, 1.0, Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)),
+            (next_far_leg, ESH7, 1.0, Some(2.18)),
+        ]
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn only_the_latest_leg_revision_counts_toward_combo_completion() {
+    let now = Instant::now();
+    let (original, corrected, distinct) = ("0000e1a7.6b0717ad.02.01", "0000e1a7.6b0717ad.02.02", "0000e1a7.6b0717ad.04.01");
+    for revisions in [
+        [(original, 0.75, 1.5), (corrected, 1.25, 2.5)],
+        [(corrected, 1.25, 2.5), (original, 0.75, 1.5)],
+    ] {
+        let mut matcher = combo_matcher(1, 2);
+        assert!(matcher.push_execution_at(bag("0000e1a7.6b0717ad.01.01", 1.0), now).is_none());
+        for (id, shares, commission) in revisions {
+            assert!(matcher.push_execution_at(leg(id, ESH7, shares), now).is_none());
+            assert!(matches!(matcher.push_report_at(report(id, commission), now), ReportMatch::ComboPending));
+        }
+        let near = "0000e1a7.6b0717ad.03.01";
+        assert!(matcher.push_execution_at(leg(near, ESZ6, 1.0), now).is_none());
+
+        let near_report = matcher.push_report_at(report(near, 2.17), now);
+        let final_leg = matcher.push_execution_at(leg(distinct, ESH7, 0.75), now);
+        let final_report = matcher.push_report_at(report(distinct, 1.75), now);
+
+        assert!(matches!(near_report, ReportMatch::ComboPending), "{near_report:?}");
+        assert!(final_leg.is_none(), "{final_leg:?}");
+        let ReportMatch::Paired(fill) = final_report else {
+            panic!("expected the distinct leg to complete the combo, got {final_report:?}");
+        };
+        assert_combo_fill(&fill, "0000e1a7.6b0717ad.01.01", 1.0);
+        assert_eq!(
+            leg_fills(&fill),
+            vec![
+                (corrected, ESH7, 1.25, Some(2.5)),
+                (near, ESZ6, 1.0, Some(2.17)),
+                (distinct, ESH7, 0.75, Some(1.75)),
+            ]
+        );
+        assert_eq!(
+            fill.combo_legs().iter().map(|leg| (leg.contract_id, leg.ratio)).collect::<Vec<_>>(),
+            vec![(ESZ6, 1), (ESH7, 2)]
+        );
+        assert_duplicate(matcher.push_report_at(report(original, 1.5), now), original);
+        assert_no_combo_parts(&matcher);
+    }
+}
+
+#[test]
+fn a_known_leg_correction_waits_for_its_own_report() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    let mut events = calendar_events();
+    let near_report = events.pop().expect("near-leg report");
+    let (fills, pending) = feed(&mut matcher, events, now);
+    assert!(fills.is_empty(), "{fills:?}");
+    assert_eq!(pending, 1);
+    let corrected = "0000e1a7.6b0717ad.02.02";
+    assert!(matcher.push_execution_at(leg(corrected, ESH7, 1.0), now).is_none());
+
+    let (premature, pending) = feed(&mut matcher, vec![near_report], now);
+    let result = matcher.push_report_at(report(corrected, 2.25), now);
+
+    assert!(premature.is_empty(), "{premature:?}");
+    assert_eq!(pending, 1);
+    let ReportMatch::Paired(fill) = result else {
+        panic!("expected the corrected leg to complete the combo, got {result:?}");
+    };
+    assert_combo_fill(&fill, "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&fill),
+        vec![("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)), (corrected, ESH7, 1.0, Some(2.25)),]
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn memory_bounds_the_combos_remembered() {
+    let now = Instant::now();
+    let mut matcher = FillMatcher::new().memory(1);
+    matcher.add_combo(PERM_ID - 1, &combo_legs(1, 1));
+    matcher.add_combo(PERM_ID, &combo_legs(1, 1));
+    matcher.add_combo(PERM_ID, &combo_legs(1, 2));
+    let mut forgotten = bag("0000e1a7.6b071700.01.01", 1.0);
+    forgotten.execution.perm_id = PERM_ID - 1;
+    let mut none = FillMatcher::new().memory(0);
+    none.add_combo(PERM_ID, &combo_legs(1, 1));
+
+    let passed = matcher.push_execution_at(forgotten, now);
+    let held = matcher.push_execution_at(bag("0000e1a7.6b071816.01.01", 1.0), now);
+    let unannounced = none.push_execution_at(bag("0000e1a7.6b0717ad.01.01", 1.0), now);
+
+    assert!(passed.is_some_and(|fill| fill.legs.is_empty()), "the oldest combo was dropped");
+    assert!(held.is_none(), "the newest combo is remembered");
+    assert_eq!(
+        matcher.combos.get(&PERM_ID).map(AsRef::as_ref),
+        Some(&[(ESZ6, 1.0), (ESH7, 2.0)][..]),
+        "legs replaced"
+    );
+    assert_eq!(matcher.combo_order.len(), 1);
+    assert!(unannounced.is_some(), "memory(0) remembers no combo");
+    assert!(none.combos.is_empty());
+}
+
+#[test]
+fn a_pending_combo_keeps_its_ratios_after_announcement_eviction() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 2).memory(1);
+    let mut events = calendar_events();
+    let bag_event = events.remove(0);
+    let (fills, pending) = feed(&mut matcher, vec![bag_event], now);
+    assert!(fills.is_empty(), "{fills:?}");
+    assert_eq!(pending, 0);
+    matcher.add_combo(PERM_ID + 1, &combo_legs(1, 1));
+
+    let (partial, pending) = feed(&mut matcher, events, now);
+    let distinct = "0000e1a7.6b0717ad.04.01";
+    let (completed, final_pending) = feed(
+        &mut matcher,
+        vec![
+            Executions::ExecutionData(leg(distinct, ESH7, 1.0)),
+            Executions::CommissionAndFeesReport(report(distinct, 1.25)),
+        ],
+        now,
+    );
+
+    assert!(partial.is_empty(), "{partial:?}");
+    assert_eq!(pending, 2);
+    assert_eq!(final_pending, 0);
+    assert_eq!(completed.len(), 1, "{completed:?}");
+    assert_combo_fill(&completed[0], "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&completed[0]),
+        vec![
+            ("0000e1a7.6b0717ad.02.01", ESH7, 1.0, Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)),
+            (distinct, ESH7, 1.0, Some(1.25)),
+        ]
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn a_combo_leg_waiting_for_commission_keeps_its_ratios_after_announcement_eviction() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 2).memory(1);
+    let far = "0000e1a7.6b0717ad.02.01";
+    let distinct = "0000e1a7.6b0717ad.04.01";
+    let near = "0000e1a7.6b0717ad.03.01";
+    let combo = "0000e1a7.6b0717ad.01.01";
+    assert!(matcher.push_execution_at(leg(far, ESH7, 1.25), now).is_none());
+    matcher.add_combo(PERM_ID + 1, &combo_legs(1, 1));
+
+    let first_report = matcher.push_report_at(report(far, 3.25), now);
+    let bag_result = matcher.push_execution_at(bag(combo, 1.0), now);
+    let (partial, pending) = feed(
+        &mut matcher,
+        vec![
+            Executions::ExecutionData(leg(near, ESZ6, 1.0)),
+            Executions::CommissionAndFeesReport(report(near, 2.17)),
+        ],
+        now,
+    );
+    let final_leg = matcher.push_execution_at(leg(distinct, ESH7, 0.75), now);
+    let final_report = matcher.push_report_at(report(distinct, 1.75), now);
+
+    assert!(matches!(first_report, ReportMatch::ComboPending), "{first_report:?}");
+    assert!(bag_result.is_none(), "{bag_result:?}");
+    assert!(partial.is_empty(), "{partial:?}");
+    assert_eq!(pending, 1);
+    assert!(final_leg.is_none(), "{final_leg:?}");
+    let ReportMatch::Paired(fill) = final_report else {
+        panic!("expected the distinct execution to complete the combo, got {final_report:?}");
+    };
+    assert_combo_fill(&fill, combo, 1.0);
+    assert_eq!(
+        leg_fills(&fill),
+        vec![
+            (far, ESH7, 1.25, Some(3.25)),
+            (near, ESZ6, 1.0, Some(2.17)),
+            (distinct, ESH7, 0.75, Some(1.75)),
+        ]
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn a_restored_combo_leg_keeps_its_ratios_after_announcement_eviction() {
+    let start = Instant::now();
+    let due = start + MAX_WAIT;
+    let mut matcher = combo_matcher(1, 2).memory(1);
+    let far = "0000e1a7.6b0717ad.02.01";
+    let near = "0000e1a7.6b0717ad.03.01";
+    let combo = "0000e1a7.6b0717ad.01.01";
+    assert!(matcher.push_execution_at(leg(far, ESH7, 2.0), start).is_none());
+    let expired = matcher.take_expired_at(MAX_WAIT, due);
+    assert!(expired.executions.is_empty() && expired.reports.is_empty(), "{expired:?}");
+    assert_eq!(fill_ids(&expired.fills), vec![(far, None)]);
+    assert_no_combo_parts(&matcher);
+
+    let expired_leg = expired.fills.into_iter().next().expect("the uncommissioned leg is due");
+    let restored = matcher.put_back(expired_leg.execution);
+    let restored_arrived = matcher.executions.first().map(|(_, arrived)| *arrived);
+    matcher.add_combo(PERM_ID + 1, &combo_legs(1, 1));
+    let far_report = matcher.push_report_at(report(far, 3.25), due);
+    let bag_result = matcher.push_execution_at(bag(combo, 1.0), due);
+    let near_result = matcher.push_execution_at(leg(near, ESZ6, 1.0), due);
+    let near_report = matcher.push_report_at(report(near, 2.17), due);
+
+    assert!(restored.is_none(), "{restored:?}");
+    assert_eq!(restored_arrived, Some(start));
+    assert!(matches!(far_report, ReportMatch::ComboPending), "{far_report:?}");
+    assert!(bag_result.is_none(), "{bag_result:?}");
+    assert!(near_result.is_none(), "{near_result:?}");
+    let ReportMatch::Paired(fill) = near_report else {
+        panic!("expected the restored combo to complete, got {near_report:?}");
+    };
+    assert_combo_fill(&fill, combo, 1.0);
+    assert_eq!(leg_fills(&fill), vec![(far, ESH7, 2.0, Some(3.25)), (near, ESZ6, 1.0, Some(2.17))]);
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn combo_expiry_takes_waiting_legs_after_announcement_eviction() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 2).memory(2);
+    let far = "0000e1a7.6b0717ad.02.01";
+    let near = "0000e1a7.6b0717ad.03.01";
+    assert!(matcher.push_execution_at(leg(far, ESH7, 2.0), now).is_none());
+    matcher.add_combo(PERM_ID + 1, &combo_legs(1, 1));
+    matcher.add_combo(PERM_ID + 2, &combo_legs(1, 1));
+    let near_arrived = now + MAX_WAIT - Duration::from_millis(100);
+    assert!(matcher.push_execution_at(leg(near, ESZ6, 1.0), near_arrived).is_none());
+
+    let early = matcher.take_expired_at(MAX_WAIT, near_arrived);
+    let due = matcher.take_expired_at(MAX_WAIT, now + MAX_WAIT);
+    let far_report = matcher.push_report_at(report(far, 3.25), now + MAX_WAIT);
+    let near_report = matcher.push_report_at(report(near, 2.17), now + MAX_WAIT);
+    let later = matcher.take_expired_at(MAX_WAIT, near_arrived + MAX_WAIT);
+
+    assert!(
+        early.executions.is_empty() && early.reports.is_empty() && early.fills.is_empty(),
+        "{early:?}"
+    );
+    assert!(due.executions.is_empty() && due.reports.is_empty(), "{due:?}");
+    assert_eq!(fill_ids(&due.fills), vec![(far, None), (near, None)]);
+    assert_eq!(
+        due.fills
+            .iter()
+            .map(|fill| (fill.execution.contract.contract_id, fill.execution.execution.shares))
+            .collect::<Vec<_>>(),
+        vec![(ESH7, 2.0), (ESZ6, 1.0)]
+    );
+    assert_late(far_report, far, 3.25);
+    assert_late(near_report, near, 2.17);
+    assert!(
+        later.executions.is_empty() && later.reports.is_empty() && later.fills.is_empty(),
+        "{later:?}"
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn a_commission_without_its_execution_does_not_keep_a_combo_announcement() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1).memory(1);
+    let far = "0000e1a7.6b0717ad.02.01";
+    let combo = "0000e1a7.6b0717ad.01.01";
+    let waiting = matcher.push_report_at(report(far, 3.25), now);
+    matcher.add_combo(PERM_ID + 1, &combo_legs(1, 1));
+
+    let paired = matcher.push_execution_at(leg(far, ESH7, 3.0), now);
+    let bag_result = matcher.push_execution_at(bag(combo, 1.0), now);
+
+    assert!(matches!(waiting, ReportMatch::Waiting), "{waiting:?}");
+    let paired = paired.expect("the leg pairs as a standalone fill");
+    assert_fill(&paired, far, Some(3.25));
+    assert!(paired.legs.is_empty(), "{paired:?}");
+    let bag_fill = bag_result.expect("the combo-level execution arrives as a standalone fill");
+    assert_combo_fill(&bag_fill, combo, 1.0);
+    assert!(bag_fill.legs.is_empty(), "{bag_fill:?}");
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn pair_executions_assembles_combo_fills_of_a_reply() {
+    let mut other = leg("0000e1a7.6b06c16e.01.01", ESH7, 1.0);
+    other.execution.perm_id = 1094417381;
+    let rows = vec![
+        Executions::ExecutionData(other),
+        Executions::ExecutionData(bag("0000e1a7.6b0717ad.01.01", 1.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ad.02.01", ESH7, 1.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ad.03.01", ESZ6, 1.0)),
+        Executions::ExecutionData(bag("0000e1a7.6b0717ee.01.01", 1.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ee.02.01", ESH7, 1.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ee.03.01", ESZ6, 1.0)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b06c16e.01.01", 2.24)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ad.02.01", 2.16)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ad.03.01", 2.17)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ee.02.01", 2.18)),
+    ];
+    let mut matcher = combo_matcher(1, 1);
+
+    let (fills, unpaired) = matcher.pair_executions(rows);
+
+    assert_eq!(
+        fill_ids(&fills),
+        vec![("0000e1a7.6b06c16e.01.01", Some(2.24)), ("0000e1a7.6b0717ad.01.01", None)],
+        "execution order; the combo fill stands at its combo-level execution"
+    );
+    assert_eq!(
+        leg_fills(&fills[1]),
+        vec![
+            ("0000e1a7.6b0717ad.02.01", ESH7, 1.0, Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)),
+        ]
+    );
+    assert_eq!(unpaired.fills.len(), 1, "{:?}", unpaired.fills);
+    assert_combo_fill(&unpaired.fills[0], "0000e1a7.6b0717ee.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&unpaired.fills[0]),
+        vec![
+            ("0000e1a7.6b0717ee.02.01", ESH7, 1.0, Some(2.18)),
+            ("0000e1a7.6b0717ee.03.01", ESZ6, 1.0, None),
+        ],
+        "the near leg's report is missing from the reply"
+    );
+    assert!(unpaired.executions.is_empty() && unpaired.reports.is_empty(), "{unpaired:?}");
+    assert_no_combo_parts(&matcher);
+}
+
+/// An `executions` reply as TWS sends it (fills in time order, each combo-level execution
+/// then its legs, then the reports), modelled on the 2026-11-23 replay: a 1x2 calendar filled
+/// 2 + 2, a plain fill of another order, and a 1x1 calendar whose near leg's report is missing.
+fn combo_reply_rows() -> Vec<Executions> {
+    let mut plain = leg("0000e1a7.6b06c16e.01.01", ESH7, 1.0);
+    plain.execution.perm_id = 1094417381;
+    let mut other_bag = bag("0000e1a7.6b0717ee.01.01", 1.0);
+    let mut other_far = leg("0000e1a7.6b0717ee.02.01", ESH7, 1.0);
+    let mut other_near = leg("0000e1a7.6b0717ee.03.01", ESZ6, 1.0);
+    for data in [&mut other_bag, &mut other_far, &mut other_near] {
+        data.execution.perm_id = PERM_ID + 1;
+    }
+    vec![
+        Executions::ExecutionData(bag("0000e1a7.6b0719db.01.01", 2.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0719db.02.01", ESH7, 4.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0719db.03.01", ESZ6, 2.0)),
+        Executions::ExecutionData(plain),
+        Executions::ExecutionData(bag("0000e1a7.6b0719de.01.01", 2.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0719de.02.01", ESH7, 4.0)),
+        Executions::ExecutionData(leg("0000e1a7.6b0719de.03.01", ESZ6, 2.0)),
+        Executions::ExecutionData(other_bag),
+        Executions::ExecutionData(other_far),
+        Executions::ExecutionData(other_near),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0719db.02.01", 8.64)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0719db.03.01", 4.32)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b06c16e.01.01", 2.24)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0719de.02.01", 8.65)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0719de.03.01", 4.33)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ee.02.01", 2.18)),
+    ]
+}
+
+#[test]
+fn pair_executions_assembles_combo_fills_without_add_combo() {
+    let mut matcher = FillMatcher::new();
+
+    let (fills, unpaired) = matcher.pair_executions(combo_reply_rows());
+
+    assert_eq!(
+        fill_ids(&fills),
+        vec![
+            ("0000e1a7.6b0719db.01.01", None),
+            ("0000e1a7.6b06c16e.01.01", Some(2.24)),
+            ("0000e1a7.6b0719de.01.01", None),
+        ],
+        "execution order; each combo fill stands at its combo-level execution"
+    );
+    assert_combo_fill(&fills[0], "0000e1a7.6b0719db.01.01", 2.0);
+    assert_eq!(
+        leg_fills(&fills[0]),
+        vec![
+            ("0000e1a7.6b0719db.02.01", ESH7, 4.0, Some(8.64)),
+            ("0000e1a7.6b0719db.03.01", ESZ6, 2.0, Some(4.32)),
+        ]
+    );
+    assert!(fills[1].legs.is_empty(), "a plain fill has no legs: {:?}", fills[1].legs);
+    assert_combo_fill(&fills[2], "0000e1a7.6b0719de.01.01", 2.0);
+    assert_eq!(
+        leg_fills(&fills[2]),
+        vec![
+            ("0000e1a7.6b0719de.02.01", ESH7, 4.0, Some(8.65)),
+            ("0000e1a7.6b0719de.03.01", ESZ6, 2.0, Some(4.33)),
+        ],
+        "the second fill of the same order joins by its own fill key"
+    );
+    assert_eq!(unpaired.fills.len(), 1, "{:?}", unpaired.fills);
+    assert_combo_fill(&unpaired.fills[0], "0000e1a7.6b0717ee.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&unpaired.fills[0]),
+        vec![
+            ("0000e1a7.6b0717ee.02.01", ESH7, 1.0, Some(2.18)),
+            ("0000e1a7.6b0717ee.03.01", ESZ6, 1.0, None),
+        ],
+        "the near leg's report is missing from the reply"
+    );
+    assert!(unpaired.executions.is_empty() && unpaired.reports.is_empty(), "{unpaired:?}");
+    assert_no_combo_parts(&matcher);
+    assert_late(
+        matcher.push_report(report("0000e1a7.6b0717ee.03.01", 2.19)),
+        "0000e1a7.6b0717ee.03.01",
+        2.19,
+    );
+}
+
+#[test]
+fn pair_executions_leaves_legs_of_another_order_or_fill_alone() {
+    let mut other_order = leg("0000e1a7.6b0717ad.02.01", ESH7, 1.0);
+    other_order.execution.perm_id = PERM_ID + 1;
+    let rows = vec![
+        Executions::ExecutionData(bag("0000e1a7.6b0717ad.01.01", 1.0)),
+        Executions::ExecutionData(other_order),
+        Executions::ExecutionData(leg("0000e1a7.6b0717ae.03.01", ESZ6, 1.0)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ad.02.01", 2.16)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b0717ae.03.01", 2.17)),
+    ];
+
+    let (fills, unpaired) = FillMatcher::new().pair_executions(rows);
+
+    assert_eq!(
+        fill_ids(&fills),
+        vec![
+            ("0000e1a7.6b0717ad.01.01", None),
+            ("0000e1a7.6b0717ad.02.01", Some(2.16)),
+            ("0000e1a7.6b0717ae.03.01", Some(2.17)),
+        ],
+        "a different perm_id or fill key is not a leg"
+    );
+    assert!(fills.iter().all(|fill| fill.legs.is_empty()), "{fills:?}");
+    assert!(unpaired.executions.is_empty() && unpaired.reports.is_empty() && unpaired.fills.is_empty());
+}
+
+/// The live executions of a combo fill whose leg reports have not come yet, then an
+/// `executions` reply listing the fill whole (the race `Unpaired::executions` describes).
+fn live_then_reply(matcher: &mut FillMatcher, now: Instant) -> (Option<Fill>, Vec<Fill>, Unpaired) {
+    let live_combo = matcher.push_execution_at(bag("0000e1a7.6b0717ad.01.01", 1.0), now);
+    assert!(matcher.push_execution_at(leg("0000e1a7.6b0717ad.02.01", ESH7, 1.0), now).is_none());
+    assert!(matcher.push_execution_at(leg("0000e1a7.6b0717ad.03.01", ESZ6, 1.0), now).is_none());
+    let (fills, unpaired) = matcher.pair_executions(calendar_events());
+    (live_combo, fills, unpaired)
+}
+
+#[test]
+fn reply_completes_an_announced_combo_held_from_the_live_stream() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+
+    let (live_combo, fills, unpaired) = live_then_reply(&mut matcher, now);
+
+    assert!(live_combo.is_none(), "the announced combo waits for its legs: {live_combo:?}");
+    assert_eq!(fills.len(), 1, "{fills:?}");
+    assert_combo_fill(&fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&fills[0]),
+        vec![
+            ("0000e1a7.6b0717ad.02.01", ESH7, 1.0, Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)),
+        ]
+    );
+    assert!(
+        unpaired.executions.is_empty() && unpaired.reports.is_empty() && unpaired.fills.is_empty(),
+        "{unpaired:?}"
+    );
+    assert_nothing_waits(&matcher);
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn reply_after_an_unannounced_live_combo_returns_only_the_legs_not_handed_out() {
+    let now = Instant::now();
+    let mut matcher = FillMatcher::new();
+
+    let (live_combo, fills, unpaired) = live_then_reply(&mut matcher, now);
+
+    let live_combo = live_combo.expect("an unannounced combo-level execution is a fill at once");
+    assert_combo_fill(&live_combo, "0000e1a7.6b0717ad.01.01", 1.0);
+    assert!(live_combo.legs.is_empty());
+    assert_eq!(
+        fill_ids(&fills),
+        vec![("0000e1a7.6b0717ad.02.01", Some(2.16)), ("0000e1a7.6b0717ad.03.01", Some(2.17))],
+        "the combo-level execution came out live; the reply hands out each held leg once"
+    );
+    assert!(fills.iter().all(|fill| fill.legs.is_empty()));
+    assert!(
+        unpaired.executions.is_empty() && unpaired.reports.is_empty() && unpaired.fills.is_empty(),
+        "{unpaired:?}"
+    );
+    assert_nothing_waits(&matcher);
+}
+
+#[test]
+fn pair_executions_leaves_combo_parts_from_before_alone() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    assert!(matcher.push_execution_at(bag("0000e1a7.6b0717ad.01.01", 1.0), now).is_none());
+
+    let (fills, unpaired) = matcher.pair_executions(vec![Executions::ExecutionData(execution("e1"))]);
+
+    assert!(fills.is_empty());
+    assert_eq!(ids(&unpaired.executions), vec!["e1"]);
+    assert!(unpaired.fills.is_empty(), "{:?}", unpaired.fills);
+    assert_eq!(matcher.combo_parts.len(), 1);
+}
+
+#[test]
+fn pair_executions_keeps_a_live_combo_when_the_reply_repeats_its_parts() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    let mut live = calendar_events();
+    let final_report = live.pop().expect("near-leg report");
+    let (live_fills, pending) = feed(&mut matcher, live, now);
+    assert!(live_fills.is_empty(), "{live_fills:?}");
+    assert_eq!(pending, 1);
+
+    let (fills, unpaired) = matcher.pair_executions(calendar_events().into_iter().take(3));
+    let (completed, pending) = feed(&mut matcher, vec![final_report], now);
+
+    assert!(fills.is_empty(), "{fills:?}");
+    assert!(
+        unpaired.executions.is_empty() && unpaired.reports.is_empty() && unpaired.fills.is_empty(),
+        "{unpaired:?}"
+    );
+    assert_eq!(completed.len(), 1, "{completed:?}");
+    assert_eq!(pending, 0);
+    assert_combo_fill(&completed[0], "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&completed[0]),
+        vec![
+            ("0000e1a7.6b0717ad.02.01", ESH7, 1.0, Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)),
+        ]
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn pair_executions_leaves_a_new_uncommissioned_leg_with_its_live_combo() {
+    let now = Instant::now();
+    let mut matcher = combo_matcher(1, 1);
+    let mut events = calendar_events();
+    let reply_leg = events.remove(2);
+    let final_report = events.pop().expect("near-leg report");
+    let (live_fills, pending) = feed(&mut matcher, events, now);
+    assert!(live_fills.is_empty(), "{live_fills:?}");
+    assert_eq!(pending, 1);
+
+    let (fills, unpaired) = matcher.pair_executions([reply_leg]);
+    let (completed, pending) = feed(&mut matcher, vec![final_report], now);
+
+    assert!(fills.is_empty(), "{fills:?}");
+    assert!(
+        unpaired.executions.is_empty() && unpaired.reports.is_empty() && unpaired.fills.is_empty(),
+        "{unpaired:?}"
+    );
+    assert_eq!(completed.len(), 1, "{completed:?}");
+    assert_eq!(pending, 0);
+    assert_combo_fill(&completed[0], "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&completed[0]),
+        vec![
+            ("0000e1a7.6b0717ad.02.01", ESH7, 1.0, Some(2.16)),
+            ("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)),
+        ]
+    );
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn pair_executions_uses_a_later_leg_revision_in_an_announced_combo() {
+    let corrected = "0000e1a7.6b0717ad.02.02";
+    for original_has_report in [true, false] {
+        let mut rows = calendar_events();
+        if !original_has_report {
+            rows.remove(3);
+        }
+        rows.push(Executions::ExecutionData(leg(corrected, ESH7, 1.0)));
+        rows.push(Executions::CommissionAndFeesReport(report(corrected, 2.25)));
+        let mut matcher = combo_matcher(1, 1);
+
+        let (fills, unpaired) = matcher.pair_executions(rows);
+
+        assert_eq!(fills.len(), 1, "{fills:?}");
+        assert_combo_fill(&fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+        assert_eq!(
+            leg_fills(&fills[0]),
+            vec![("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)), (corrected, ESH7, 1.0, Some(2.25)),]
+        );
+        assert!(
+            unpaired.executions.is_empty() && unpaired.reports.is_empty() && unpaired.fills.is_empty(),
+            "{unpaired:?}"
+        );
+        let original = "0000e1a7.6b0717ad.02.01";
+        let returned = matcher
+            .put_back(leg(original, ESH7, 1.0))
+            .expect("superseded execution was never handed out");
+        assert_eq!(returned.execution.execution_id, original);
+        assert_duplicate(matcher.push_report(report(original, 2.16)), original);
+        assert_no_combo_parts(&matcher);
+    }
+}
+
+#[test]
+fn pair_executions_suppresses_an_older_revision_in_an_unannounced_combo() {
+    let now = Instant::now();
+    let original = "0000e1a7.6b0717ad.02.01";
+    let corrected = "0000e1a7.6b0717ad.02.02";
+    for original_was_live in [true, false] {
+        let mut matcher = FillMatcher::new();
+        if original_was_live {
+            assert!(matcher.push_execution_at(leg(original, ESH7, 1.0), now).is_none());
+        }
+        let mut rows = calendar_events();
+        rows.retain(|row| !matches!(row, Executions::CommissionAndFeesReport(report) if report.execution_id == original));
+        rows.push(Executions::ExecutionData(leg(corrected, ESH7, 1.0)));
+        rows.push(Executions::CommissionAndFeesReport(report(corrected, 2.25)));
+
+        let (fills, unpaired) = matcher.pair_executions(rows);
+        let returned = matcher
+            .put_back(leg(original, ESH7, 1.0))
+            .expect("superseded execution was never handed out");
+        let old_report = matcher.push_report_at(report(original, 2.16), now);
+
+        assert_eq!(fills.len(), 1, "{fills:?}");
+        assert_combo_fill(&fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+        assert_eq!(
+            leg_fills(&fills[0]),
+            vec![("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)), (corrected, ESH7, 1.0, Some(2.25)),]
+        );
+        assert_eq!(
+            fills[0].combo_legs().iter().map(|leg| (leg.contract_id, leg.ratio)).collect::<Vec<_>>(),
+            vec![(ESZ6, 1), (ESH7, 1)]
+        );
+        assert!(
+            unpaired.executions.is_empty() && unpaired.reports.is_empty() && unpaired.fills.is_empty(),
+            "{unpaired:?}"
+        );
+        assert_eq!(returned.execution.execution_id, original);
+        assert_duplicate(old_report, original);
+        assert_no_combo_parts(&matcher);
+    }
+}
+
+#[test]
+fn pair_executions_uses_a_waiting_live_correction_in_an_unannounced_combo() {
+    let now = Instant::now();
+    let mut matcher = FillMatcher::new();
+    let corrected = "0000e1a7.6b0717ad.02.02";
+    let unrelated = "0000e1a7.6b0717ad.04.01";
+    assert!(matcher.push_execution_at(leg(corrected, ESH7, 0.75), now).is_none());
+    assert!(matcher.push_execution_at(leg(unrelated, ESH7, 3.0), now).is_none());
+    let mut rows = calendar_events();
+    rows.push(Executions::ExecutionData(leg(corrected, ESH7, 0.75)));
+
+    let (fills, unpaired) = matcher.pair_executions(rows);
+    let late = matcher.push_report_at(report(corrected, 2.25), now);
+    let unrelated_report = matcher.push_report_at(report(unrelated, 1.25), now);
+
+    assert!(fills.is_empty(), "{fills:?}");
+    assert_eq!(unpaired.fills.len(), 1, "{unpaired:?}");
+    assert!(unpaired.executions.is_empty() && unpaired.reports.is_empty(), "{unpaired:?}");
+    assert_combo_fill(&unpaired.fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+    assert_eq!(
+        leg_fills(&unpaired.fills[0]),
+        vec![("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)), (corrected, ESH7, 0.75, None),]
+    );
+    assert_late(late, corrected, 2.25);
+    let ReportMatch::Paired(fill) = unrelated_report else {
+        panic!("expected the unrelated live leg to pair, got {unrelated_report:?}");
+    };
+    assert_fill(&fill, unrelated, Some(1.25));
+    assert_no_combo_parts(&matcher);
+}
+
+#[test]
+fn pair_executions_uses_an_unannounced_leg_revision_when_both_revisions_are_waiting() {
+    let now = Instant::now();
+    let original = "0000e1a7.6b0717ad.02.01";
+    let corrected = "0000e1a7.6b0717ad.02.02";
+    let unrelated = "0000e1a7.6b0717ad.04.01";
+    for include_correction in [true, false] {
+        let mut matcher = FillMatcher::new();
+        assert!(matcher.push_execution_at(leg(original, ESH7, 1.0), now).is_none());
+        assert!(matcher.push_execution_at(leg(corrected, ESH7, 0.75), now).is_none());
+        assert!(matcher.push_execution_at(leg(unrelated, ESH7, 3.0), now).is_none());
+        let mut rows = calendar_events();
+        rows.remove(3);
+        if include_correction {
+            rows.push(Executions::ExecutionData(leg(corrected, ESH7, 0.75)));
+        }
+
+        let (fills, unpaired) = matcher.pair_executions(rows);
+        let old_report = matcher.push_report_at(report(original, 2.16), now);
+        let current_report = matcher.push_report_at(report(corrected, 2.25), now);
+        let expiry = matcher.take_expired_at(MAX_WAIT, now);
+        let unrelated_report = matcher.push_report_at(report(unrelated, 1.25), now);
+
+        assert!(fills.is_empty(), "{fills:?}");
+        assert_eq!(unpaired.fills.len(), 1, "{unpaired:?}");
+        assert!(unpaired.executions.is_empty() && unpaired.reports.is_empty(), "{unpaired:?}");
+        assert_combo_fill(&unpaired.fills[0], "0000e1a7.6b0717ad.01.01", 1.0);
+        assert_eq!(
+            leg_fills(&unpaired.fills[0]),
+            vec![("0000e1a7.6b0717ad.03.01", ESZ6, 1.0, Some(2.17)), (corrected, ESH7, 0.75, None),]
+        );
+        assert_duplicate(old_report, original);
+        assert_late(current_report, corrected, 2.25);
+        assert!(
+            expiry.executions.is_empty() && expiry.reports.is_empty() && expiry.fills.is_empty(),
+            "{expiry:?}"
+        );
+        let ReportMatch::Paired(fill) = unrelated_report else {
+            panic!("expected the unrelated live leg to pair, got {unrelated_report:?}");
+        };
+        assert_fill(&fill, unrelated, Some(1.25));
+        assert_no_combo_parts(&matcher);
+    }
+}
+
+#[test]
+fn fill_key_drops_the_last_two_fields() {
+    let cases = [
+        ("0000e1a7.6b0719db.02.01", "0000e1a7.6b0719db"),
+        ("0000e1a7.6b0719db.01.01", "0000e1a7.6b0719db"),
+        ("0000e1a7.0001.01", "0000e1a7"),
+        ("a.b", "a.b"),
+        ("e1", "e1"),
+        ("", ""),
+    ];
+    for (execution_id, expected) in cases {
+        assert_eq!(fill_key(execution_id), expected, "{execution_id}");
+    }
+}
+
+/// One partial fill of a 1x2 ES calendar from an `executions` reply, live shape: 2 combos, the
+/// ratio-2 far leg with 4 contracts, legs on `side` and its opposite as TWS executes them.
+fn calendar_1x2_rows(side: ExecutionSide) -> Vec<Executions> {
+    let opposite = match side {
+        ExecutionSide::Bought => ExecutionSide::Sold,
+        ExecutionSide::Sold => ExecutionSide::Bought,
+    };
+    let mut combo = bag("0000e1a7.6b071816.01.01", 2.0);
+    combo.execution.side = side;
+    let mut far = leg("0000e1a7.6b071816.02.01", ESH7, 4.0);
+    far.execution.side = opposite;
+    far.contract.exchange = "CME".into();
+    let mut near = leg("0000e1a7.6b071816.03.01", ESZ6, 2.0);
+    near.execution.side = side;
+    near.contract.exchange = "CME".into();
+    vec![
+        Executions::ExecutionData(combo),
+        Executions::ExecutionData(far),
+        Executions::ExecutionData(near),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b071816.02.01", 4.32)),
+        Executions::CommissionAndFeesReport(report("0000e1a7.6b071816.03.01", 2.16)),
+    ]
+}
+
+// Live (server 223): the 14 ES combo fills of a 7-day `executions` reply gave the legs TWS
+// echoed on each order, bought or sold, partial or whole: the echo's legs are the order's
+// legs, sorted by contract id, whichever side the combo executed on.
+#[test]
+fn combo_legs_of_a_partial_fill_match_the_order_bought_or_sold() {
+    let expected: Vec<ComboLeg> = combo_legs(1, 2)
+        .into_iter()
+        .map(|leg| ComboLeg {
+            exchange: "CME".to_string(),
+            ..leg
+        })
+        .collect();
+
+    for side in [ExecutionSide::Bought, ExecutionSide::Sold] {
+        let (fills, _) = FillMatcher::new().pair_executions(calendar_1x2_rows(side));
+
+        assert_eq!(fills.len(), 1, "{side:?}: {fills:?}");
+        assert_eq!(fills[0].combo_legs(), expected, "{side:?}");
+    }
+}
+
+fn leg_fill(execution_id: &str, contract_id: i32, side: ExecutionSide, shares: f64, exchange: &str) -> Fill {
+    let mut data = leg(execution_id, contract_id, shares);
+    data.execution.side = side;
+    data.contract.exchange = exchange.into();
+    Fill {
+        execution: data,
+        commission: None,
+        legs: Vec::new(),
+    }
+}
+
+#[test]
+fn combo_legs_sums_a_leg_filled_by_several_executions() {
+    let mut combo = bag("0000e1a7.6b071816.01.01", 2.0);
+    combo.execution.side = ExecutionSide::Bought;
+    let fill = Fill {
+        execution: combo,
+        commission: None,
+        legs: vec![
+            leg_fill("0000e1a7.6b071816.02.01", ESH7, ExecutionSide::Sold, 3.0, "CME"),
+            leg_fill("0000e1a7.6b071816.03.01", ESZ6, ExecutionSide::Bought, 2.0, "CME"),
+            leg_fill("0000e1a7.6b071816.04.01", ESH7, ExecutionSide::Sold, 1.0, "XCME"),
+        ],
+    };
+
+    let legs = fill.combo_legs();
+
+    let expected: Vec<ComboLeg> = combo_legs(1, 2)
+        .into_iter()
+        .map(|leg| ComboLeg {
+            exchange: "CME".to_string(),
+            ..leg
+        })
+        .collect();
+    assert_eq!(
+        legs, expected,
+        "one leg per contract, the far leg's 3 + 1 at ratio 2, its first execution's exchange"
+    );
+}
+
+#[test]
+fn combo_legs_ratio_is_zero_when_the_combo_reports_no_shares() {
+    let fill = Fill {
+        execution: bag("0000e1a7.6b071816.01.01", 0.0),
+        commission: None,
+        legs: vec![leg_fill("0000e1a7.6b071816.02.01", ESH7, ExecutionSide::Sold, 2.0, "CME")],
+    };
+
+    let legs = fill.combo_legs();
+
+    assert_eq!(legs.len(), 1);
+    assert_eq!((legs[0].contract_id, legs[0].ratio), (ESH7, 0));
+}
+
+#[test]
+fn combo_legs_of_a_single_fill_is_empty() {
+    let fill = Fill {
+        execution: execution("e1"),
+        commission: None,
+        legs: Vec::new(),
+    };
+
+    assert_eq!(fill.combo_legs(), Vec::<ComboLeg>::new());
 }
