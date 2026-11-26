@@ -1214,7 +1214,7 @@ got. It is now:
 
 ```rust,ignore
 Error::Parse {
-    field: Option<&'static str>, // the field, when the decoder names it ("action")
+    field: Option<&'static str>, // the protobuf field ("action"), when the decoder names it
     value: String,               // the text that failed; empty when the field was absent
     reason: String,              // what was wrong ("unknown Action", "missing")
 }
@@ -1237,15 +1237,20 @@ Err(Error::ServerVersion { required, actual, feature }) => { /* ... */ }
 `FromStr` for `BarSize`, `Duration` and historical `WhatToShow` returns `Error::Parse`, with the
 input in `value`, as the other wire enums' parsers do. A `?` on one of them in a function returning
 `ibapi::Error` still compiles. Replace any match on `HistoricalParseError::BarSize(..)`, `Duration`,
-`WhatToShow` or `ParseIntError` with `Error::Parse { value, reason, .. }`.
+`WhatToShow` or `ParseIntError` with `Error::Parse { value, reason, .. }`. `HistoricalParseError`
+derived `PartialEq` and `ibapi::Error` does not, so `assert_eq!(s.parse::<BarSize>(), Ok(..))` no
+longer compiles: compare `s.parse::<BarSize>().unwrap()`, or match on the error.
 
 The compiler finds every tuple pattern. It does not catch a changed `Display`, which a caller
 that matches on the text would see:
 
 | Error | 5.x | 6.0 |
 |---|---|---|
-| Unknown wire code | `parse error: 0 - XYZ - unknown Action` | `parse error: "XYZ": unknown Action` |
-| Missing required field | `parse error: 0 -  - missing action` | `parse error: action: missing` |
+| Unknown wire code in a reply | `parse error: 0 - XYZ - unknown Action` | `parse error: action "XYZ": unknown Action` |
+| Missing required enum field | `parse error: 0 -  - missing action` | `parse error: action: missing` |
+| Missing required submessage | `parse error: 0 - contract - missing in Position` | `parse error: contract: missing in Position` |
+| `"XYZ".parse::<Action>()` | `parse error: 0 - XYZ - unknown Action` | `parse error: "XYZ": unknown Action` |
 | `"bogus".parse::<BarSize>()` | `Invalid BarSize input 'bogus'` | `parse error: "bogus": unknown BarSize` |
+| `"1 X".parse::<Duration>()` | `Invalid Duration input '1 X' Unsupported unit` | `parse error: "1 X": Duration unit is not S, D, W, M or Y` |
 
 `ServerVersion`'s `Display` is unchanged.

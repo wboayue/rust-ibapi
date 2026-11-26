@@ -17,20 +17,21 @@ fn what_to_show_to_string() {
 
 #[test]
 fn what_to_show_parse() {
-    assert_eq!("TRADES".parse::<WhatToShow>().ok(), Some(WhatToShow::Trades));
-    assert_eq!("MIDPOINT".parse::<WhatToShow>().ok(), Some(WhatToShow::MidPoint));
-    assert_eq!("BID".parse::<WhatToShow>().ok(), Some(WhatToShow::Bid));
-    assert_eq!("ASK".parse::<WhatToShow>().ok(), Some(WhatToShow::Ask));
-    assert_eq!("BID_ASK".parse::<WhatToShow>().ok(), Some(WhatToShow::BidAsk));
-    assert_eq!("AGGTRADES".parse::<WhatToShow>().ok(), Some(WhatToShow::AggTrades));
-    assert_eq!("HISTORICAL_VOLATILITY".parse::<WhatToShow>().ok(), Some(WhatToShow::HistoricalVolatility));
-    assert_eq!(
-        "OPTION_IMPLIED_VOLATILITY".parse::<WhatToShow>().ok(),
-        Some(WhatToShow::OptionImpliedVolatility)
-    );
-    assert_eq!("FEE_RATE".parse::<WhatToShow>().ok(), Some(WhatToShow::FeeRate));
-    assert_eq!("SCHEDULE".parse::<WhatToShow>().ok(), Some(WhatToShow::Schedule));
-    assert_eq!("ADJUSTED_LAST".parse::<WhatToShow>().ok(), Some(WhatToShow::AdjustedLast));
+    for (text, expected) in [
+        ("TRADES", WhatToShow::Trades),
+        ("MIDPOINT", WhatToShow::MidPoint),
+        ("BID", WhatToShow::Bid),
+        ("ASK", WhatToShow::Ask),
+        ("BID_ASK", WhatToShow::BidAsk),
+        ("AGGTRADES", WhatToShow::AggTrades),
+        ("HISTORICAL_VOLATILITY", WhatToShow::HistoricalVolatility),
+        ("OPTION_IMPLIED_VOLATILITY", WhatToShow::OptionImpliedVolatility),
+        ("FEE_RATE", WhatToShow::FeeRate),
+        ("SCHEDULE", WhatToShow::Schedule),
+        ("ADJUSTED_LAST", WhatToShow::AdjustedLast),
+    ] {
+        assert_eq!(text.parse::<WhatToShow>().unwrap(), expected, "{text}");
+    }
 }
 
 /// `(variant, wire text, 5.x variant name)` for every variant, written independently of the
@@ -112,7 +113,7 @@ fn bar_size_round_trips_its_wire_text() {
             name.to_uppercase(),
             name.to_lowercase(),
         ] {
-            assert_eq!(input.parse::<BarSize>().ok(), Some(bar_size), "FromStr({input})");
+            assert_eq!(input.parse::<BarSize>().unwrap(), bar_size, "FromStr({input})");
         }
         assert_eq!(
             serde_json::from_value::<BarSize>(serde_json::json!(name)).unwrap(),
@@ -151,11 +152,11 @@ fn duration() {
 
 #[test]
 fn duration_parse() {
-    assert_eq!("1 S".parse().ok(), Some(Duration::seconds(1)));
-    assert_eq!("2 D".parse().ok(), Some(Duration::days(2)));
-    assert_eq!("3 W".parse().ok(), Some(Duration::weeks(3)));
-    assert_eq!("4 M".parse().ok(), Some(Duration::months(4)));
-    assert_eq!("5 Y".parse().ok(), Some(Duration::years(5)));
+    assert_eq!("1 S".parse::<Duration>().unwrap(), Duration::seconds(1));
+    assert_eq!("2 D".parse::<Duration>().unwrap(), Duration::days(2));
+    assert_eq!("3 W".parse::<Duration>().unwrap(), Duration::weeks(3));
+    assert_eq!("4 M".parse::<Duration>().unwrap(), Duration::months(4));
+    assert_eq!("5 Y".parse::<Duration>().unwrap(), Duration::years(5));
 
     // Each rejection is an `Error::Parse` carrying the whole input.
     for (input, reason) in [

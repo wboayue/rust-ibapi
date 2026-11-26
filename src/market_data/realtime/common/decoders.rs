@@ -89,7 +89,7 @@ pub(crate) fn decode_realtime_bar_proto(msg: crate::proto::RealTimeBarTick) -> R
 pub(crate) fn decode_trade_tick_proto(msg: crate::proto::TickByTickData) -> Result<TickLast, Error> {
     let tick_type = msg.tick_type.unwrap_or_default();
     if !(tick_type == 1 || tick_type == 2) {
-        return Err(Error::invalid_value(tick_type.to_string(), "Unexpected tick_type"));
+        return Err(Error::invalid_value(tick_type.to_string(), "unexpected tick type").in_field("tick_type"));
     }
     let Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickLast(t)) = msg.tick else {
         return Err(Error::invalid_field("tick", "missing HistoricalTickLast in TickByTickData"));
@@ -100,7 +100,7 @@ pub(crate) fn decode_trade_tick_proto(msg: crate::proto::TickByTickData) -> Resu
 pub(crate) fn decode_bid_ask_tick_proto(msg: crate::proto::TickByTickData) -> Result<TickBidAsk, Error> {
     let tick_type = msg.tick_type.unwrap_or_default();
     if tick_type != 3 {
-        return Err(Error::invalid_value(tick_type.to_string(), "Unexpected tick_type"));
+        return Err(Error::invalid_value(tick_type.to_string(), "unexpected tick type").in_field("tick_type"));
     }
     let Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickBidAsk(t)) = msg.tick else {
         return Err(Error::invalid_field("tick", "missing HistoricalTickBidAsk in TickByTickData"));
@@ -111,7 +111,7 @@ pub(crate) fn decode_bid_ask_tick_proto(msg: crate::proto::TickByTickData) -> Re
 pub(crate) fn decode_mid_point_tick_proto(msg: crate::proto::TickByTickData) -> Result<TickMidpoint, Error> {
     let tick_type = msg.tick_type.unwrap_or_default();
     if tick_type != 4 {
-        return Err(Error::invalid_value(tick_type.to_string(), "Unexpected tick_type"));
+        return Err(Error::invalid_value(tick_type.to_string(), "unexpected tick type").in_field("tick_type"));
     }
     let Some(crate::proto::tick_by_tick_data::Tick::HistoricalTickMidPoint(t)) = msg.tick else {
         return Err(Error::invalid_field("tick", "missing HistoricalTickMidPoint in TickByTickData"));

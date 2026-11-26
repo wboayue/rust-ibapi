@@ -41,8 +41,8 @@ macro_rules! impl_str_partial_eq {
 /// Every form distinguishes the two ways a wire value can be unusable: empty
 /// input is `"empty $name"` (no value at all) and an unrecognized non-empty
 /// value is `"unknown $name"`. `parse_required` reaches the first only when a
-/// caller parses directly — it intercepts empty with its own `"missing
-/// {label}"`, which names the field rather than the type.
+/// caller parses directly — it intercepts empty as `field: Some(label)`, reason
+/// `"missing"`, which names the field rather than the type.
 ///
 /// The `fallback $variant` form is for open enums on inbound stream paths,
 /// where an unrecognized value must not terminate the subscription: a

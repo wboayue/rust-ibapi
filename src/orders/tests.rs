@@ -164,8 +164,9 @@ fn wire_enum_serde_reads_5x_variant_names_as_documented() {
 fn wire_enum_distinguishes_empty_from_unknown() {
     // Both macro arms report the two failures apart: no value at all vs. a
     // value this crate does not model. `parse_required` reaches the first only
-    // when a caller parses directly — it intercepts empty with "missing
-    // {label}", which names the field instead of the type.
+    // when a caller parses directly — it intercepts empty as
+    // `field: Some(label)`, reason "missing", which names the field instead of
+    // the type.
     for (input, reason) in [("", "empty Action"), ("NOTASIDE", "unknown Action")] {
         match input.parse::<Action>() {
             Err(Error::Parse { value: raw, reason: got, .. }) => {

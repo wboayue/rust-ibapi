@@ -137,8 +137,8 @@ fn parse_display_shows_field_and_value_when_present() {
             r#"parse error: action "XYZ": unknown Action"#,
         ),
         (Error::invalid_value("", "empty Action"), "parse error: empty Action"),
-        (Error::invalid_text_field(3, "x", "bad int"), r#"parse error: "x": field 3: bad int"#),
-        (Error::eof_at(2, "int"), "parse error: field 2: expected int and found end of message"),
+        (Error::invalid_text_field(3, "x", "bad int"), r#"parse error: "x": bad int (field 3)"#),
+        (Error::eof_at(2, "int"), "parse error: expected int and found end of message (field 2)"),
     ];
     for (error, expected) in cases {
         assert_eq!(error.to_string(), expected);
@@ -357,4 +357,19 @@ fn is_read_timeout_only_for_no_data_yet() {
     ] {
         assert!(!error.is_read_timeout(), "{error:?} should not count as a read timeout");
     }
+}
+
+#[test]
+fn in_field_names_only_an_unnamed_parse_error() {
+    // A `FromStr` error gains the decoder's field name.
+    let named = Error::invalid_value("XYZ", "unknown Action").in_field("action");
+    assert!(
+        matches!(&named, Error::Parse { field: Some("action"), value, .. } if value == "XYZ"),
+        "{named:?}"
+    );
+    // A field already named is kept.
+    let kept = Error::invalid_field("contract", "missing in OpenOrder").in_field("action");
+    assert!(matches!(kept, Error::Parse { field: Some("contract"), .. }), "{kept:?}");
+    // Any other error passes through.
+    assert!(matches!(Error::Timeout.in_field("action"), Error::Timeout));
 }

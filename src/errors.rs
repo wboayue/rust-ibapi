@@ -29,8 +29,10 @@ pub enum Error {
     /// A value from TWS, or a string passed to a `FromStr`, could not be parsed.
     #[error("parse error: {}", parse_context(*field, value, reason))]
     Parse {
-        /// The field that failed, when the decoder names it (`"action"`,
-        /// `"fa_data_type"`). `None` for a bare `FromStr` input.
+        /// The field that failed, by its protobuf name (`"action"`,
+        /// `"contract"`), when the decoder that read it names it. `None` from a
+        /// `FromStr` called directly, and where a decoder parses a value without
+        /// naming its field.
         field: Option<&'static str>,
         /// The text that failed to parse. Empty when the field was absent.
         value: String,
@@ -286,8 +288,24 @@ impl Error {
     /// Build an [`Error::Parse`] for a text-cursor read: field `i` of the
     /// message held `value` and failed with `reason`. The index goes into the
     /// reason, since only the handshake still reads text fields by position.
+    /// `reason` is `impl Display` rather than `impl Into<String>` so
+    /// [`Error::eof_at`] can pass `format_args!` without allocating twice.
     pub(crate) fn invalid_text_field(i: usize, value: impl Into<String>, reason: impl std::fmt::Display) -> Error {
-        Error::invalid_value(value, format!("field {i}: {reason}"))
+        Error::invalid_value(value, format!("{reason} (field {i})"))
+    }
+
+    /// Name the field of an [`Error::Parse`] that has none, such as one a
+    /// `FromStr` returned to a decoder that knows which field it was reading.
+    /// Any other error, or a `Parse` already naming a field, is unchanged.
+    pub(crate) fn in_field(self, name: &'static str) -> Error {
+        match self {
+            Error::Parse { field: None, value, reason } => Error::Parse {
+                field: Some(name),
+                value,
+                reason,
+            },
+            other => other,
+        }
     }
 
     /// Build an [`Error::Parse`] for cursor EOF: the message ran out of fields

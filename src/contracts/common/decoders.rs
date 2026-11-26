@@ -117,7 +117,7 @@ pub(crate) fn decode_symbol_samples_proto(p: crate::proto::SymbolSamples) -> Res
                 derivative_security_types: d
                     .derivative_sec_types
                     .iter()
-                    .filter_map(|s| parse_optional(Some(s.as_str())).transpose())
+                    .filter_map(|s| parse_optional(Some(s.as_str()), "derivative_sec_types").transpose())
                     .collect::<Result<_, _>>()?,
             })
         })
@@ -236,7 +236,7 @@ pub(crate) fn decode_contract_and_details(
         agg_group: proto_details.agg_group.unwrap_or_default(),
         sec_id_list: tag_values(&proto_details.sec_id_list),
         under_symbol: s(&proto_details.under_symbol),
-        under_security_type: parse_optional(proto_details.under_sec_type.as_deref())?,
+        under_security_type: parse_optional(proto_details.under_sec_type.as_deref(), "under_sec_type")?,
         market_rule_ids: parse_market_rule_ids(proto_details.market_rule_ids.as_deref())?,
         real_expiration_date: s(&proto_details.real_expiration_date),
         stock_type: s(&proto_details.stock_type),
@@ -262,8 +262,11 @@ pub(crate) fn decode_contract_and_details(
         fund_subsequent_minimum_purchase: s(&proto_details.fund_minimum_subsequent_purchase),
         fund_blue_sky_states: s(&proto_details.fund_blue_sky_states),
         fund_blue_sky_territories: s(&proto_details.fund_blue_sky_territories),
-        fund_distribution_policy_indicator: parse_optional(proto_details.fund_distribution_policy_indicator.as_deref())?,
-        fund_asset_type: parse_optional(proto_details.fund_asset_type.as_deref())?,
+        fund_distribution_policy_indicator: parse_optional(
+            proto_details.fund_distribution_policy_indicator.as_deref(),
+            "fund_distribution_policy_indicator",
+        )?,
+        fund_asset_type: parse_optional(proto_details.fund_asset_type.as_deref(), "fund_asset_type")?,
         // bond fields
         cusip: s(&proto_details.cusip),
         ratings: s(&proto_details.ratings),
