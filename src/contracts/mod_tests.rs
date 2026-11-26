@@ -572,3 +572,146 @@ fn combo_leg_json_short_sale_slot_is_wire_code() {
 
     assert_eq!(serde_json::from_value::<ComboLeg>(json).unwrap(), leg);
 }
+
+fn leg_contract(contract_id: i32, symbol: &str, exchange: &str, currency: &str) -> Contract {
+    Contract {
+        contract_id,
+        symbol: symbol.into(),
+        exchange: exchange.into(),
+        currency: currency.into(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn spread_from_legs_takes_symbol_currency_and_leg_exchange_from_legs() {
+    let near = leg_contract(515416632, "ES", "CME", "USD");
+    let far = leg_contract(649180684, "ES", "CME", "USD");
+
+    let calendar = Contract::spread_from_legs([(&near, 1), (&far, -1)]).unwrap();
+
+    let expected = Contract {
+        symbol: "ES".into(),
+        security_type: Some(SecurityType::Spread),
+        exchange: "SMART".into(),
+        currency: "USD".into(),
+        combo_legs: vec![
+            ComboLeg {
+                contract_id: 515416632,
+                ratio: 1,
+                action: LegAction::Buy,
+                exchange: "CME".into(),
+                ..Default::default()
+            },
+            ComboLeg {
+                contract_id: 649180684,
+                ratio: 1,
+                action: LegAction::Sell,
+                exchange: "CME".into(),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    assert_eq!(calendar, expected);
+}
+
+#[test]
+fn spread_from_legs_keeps_leg_order_and_ratio_magnitude() {
+    let lower = leg_contract(11, "AAPL", "SMART", "USD");
+    let middle = leg_contract(12, "AAPL", "SMART", "USD");
+    let upper = leg_contract(13, "AAPL", "SMART", "USD");
+
+    let butterfly = Contract::spread_from_legs([(&lower, 1), (&middle, -2), (&upper, 1)]).unwrap();
+
+    let legs: Vec<(i32, i32, LegAction)> = butterfly.combo_legs.iter().map(|l| (l.contract_id, l.ratio, l.action)).collect();
+    assert_eq!(legs, vec![(11, 1, LegAction::Buy), (12, 2, LegAction::Sell), (13, 1, LegAction::Buy)]);
+}
+
+#[test]
+fn spread_from_legs_joins_sorted_symbols_across_underlyings() {
+    let ibm = leg_contract(8314, "IBM", "SMART", "USD");
+    let aapl = leg_contract(265598, "AAPL", "SMART", "USD");
+    let aapl_option = leg_contract(838697388, "AAPL", "SMART", "USD");
+
+    let pair = Contract::spread_from_legs([(&ibm, -1), (&aapl, 1), (&aapl_option, 1)]).unwrap();
+
+    assert_eq!(pair.symbol, Symbol::from("AAPL,IBM"));
+}
+
+#[test]
+fn spread_from_legs_uses_first_leg_currency() {
+    let first = leg_contract(1, "SAP", "SMART", "EUR");
+    let second = leg_contract(2, "SAP", "SMART", "USD");
+
+    let spread = Contract::spread_from_legs([(&first, 1), (&second, -1)]).unwrap();
+
+    assert_eq!(spread.currency, Currency::from("EUR"));
+}
+
+#[test]
+fn spread_from_legs_leaves_defaults_for_blank_leg_fields() {
+    let leg = leg_contract(7, "AAPL", "", "");
+    let other = leg_contract(8, "AAPL", "", "");
+
+    let spread = Contract::spread_from_legs([(&leg, 1), (&other, -1)]).unwrap();
+
+    assert_eq!(spread.currency, Currency::from("USD"));
+    assert_eq!(spread.combo_legs[0].exchange, "");
+}
+
+#[test]
+fn spread_from_legs_uses_the_nonempty_symbol() {
+    let blank = leg_contract(7, "", "SMART", "USD");
+    let named = leg_contract(8, "AAPL", "SMART", "USD");
+
+    for legs in [[(&blank, 1), (&named, -1)], [(&named, 1), (&blank, -1)]] {
+        let spread = Contract::spread_from_legs(legs).unwrap();
+
+        assert_eq!(spread.symbol, Symbol::from("AAPL"));
+    }
+}
+
+#[test]
+fn spread_from_legs_rejects_all_empty_symbols() {
+    let first = leg_contract(7, "", "SMART", "USD");
+    let second = leg_contract(8, "", "SMART", "USD");
+
+    let error = Contract::spread_from_legs([(&first, 1), (&second, -1)]).unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            Error::Validation(ValidationError::InvalidField {
+                field: "Contract::symbol",
+                ref value,
+                ..
+            }) if value.is_empty()
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn spread_from_legs_rejects_invalid_legs() {
+    let a = leg_contract(1, "AAPL", "SMART", "USD");
+    let b = leg_contract(2, "AAPL", "SMART", "USD");
+    let unresolved = leg_contract(0, "AAPL", "SMART", "USD");
+
+    type Legs<'a> = Vec<(&'a Contract, i32)>;
+    let cases: Vec<(&str, Legs, &str)> = vec![
+        ("no legs", vec![], "at least two distinct legs"),
+        ("single leg", vec![(&a, 1)], "at least two distinct legs"),
+        ("same leg twice", vec![(&a, 1), (&a, -1)], "at least two distinct legs"),
+        ("missing contract id", vec![(&a, 1), (&unresolved, -1)], "needs its contract id"),
+        ("zero ratio", vec![(&a, 1), (&b, 0)], "Invalid ComboLeg::ratio \"0\""),
+        ("overflowing ratio", vec![(&a, i32::MIN)], "needs a nonzero ratio"),
+        ("common factor", vec![(&a, 2), (&b, -2)], "share the factor 2"),
+    ];
+    for (name, legs, message) in cases {
+        match Contract::spread_from_legs(legs) {
+            Err(Error::Validation(error)) => assert!(error.to_string().contains(message), "{name}: {error}"),
+            other => panic!("{name}: expected Validation, got {other:?}"),
+        }
+    }
+}

@@ -4,6 +4,7 @@
 //! including stocks, options, futures, and complex securities. It includes contract
 //! creation helpers, validation, and conversion utilities.
 
+use std::collections::BTreeSet;
 use std::convert::From;
 use std::fmt::Debug;
 use std::string::ToString;
@@ -12,6 +13,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use tick_types::TickType;
 
+use crate::builder::ValidationError;
 use crate::orders::ShortSaleSlot;
 use crate::Error;
 use crate::ToField;
@@ -478,6 +480,143 @@ impl Contract {
         SpreadBuilder::new(symbol)
     }
 
+    /// Creates a combo (BAG) contract from its leg contracts, each with a signed ratio: positive
+    /// buys the leg, negative sells it.
+    ///
+    /// Each leg needs its `contract_id`, as [`contract_details`](crate::client::Client::contract_details)
+    /// returns it. The combo follows what TWS accepts
+    /// (`docs/wire-facts/orders.md#combo-bag-shape-and-identity`, live 2026-11-23):
+    ///
+    /// - **Symbol**: the legs' symbol. Legs on several underlyings get their symbols sorted and
+    ///   joined with a comma (`"AAPL,MSFT"`), the form TWS echoes. TWS rejects a symbol that
+    ///   doesn't match the legs with 478.
+    /// - **Currency**: the first leg's. TWS rejects a SMART combo without one with 321.
+    /// - **Exchange**: `SMART`, with each leg routed to its contract's exchange. A futures combo
+    ///   on SMART needs that leg exchange (200 without it). To route the combo to the legs'
+    ///   exchange instead, set `exchange` on the result (`"CME"` for an ES calendar); combos
+    ///   with a stock leg take only SMART (10125).
+    /// - **Legs**: the ratio's magnitude, with the action from its sign: `Buy` or `Sell`. For a
+    ///   [`SellShort`](LegAction::SellShort) leg, use [`spread`](Self::spread) and set the
+    ///   short-sale fields on the built leg. The general spread builder leaves ratio checks
+    ///   to the caller for compatibility with existing spread construction.
+    ///
+    /// The result's `contract_id` stays 0. TWS echoes one placeholder id per combo exchange for
+    /// every combo (the same id for every SMART combo, whatever the underlying), so the legs
+    /// identify a combo, not that id. Order echoes list the legs sorted by contract id, so
+    /// compare legs in that order. TWS serves no contract details for a BAG (321).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Validation`]: [`InvalidCombination`](ValidationError::InvalidCombination) when
+    /// there are fewer than two distinct legs (by `contract_id`) or the ratios share a common
+    /// factor, and [`InvalidField`](ValidationError::InvalidField) when a leg has no
+    /// `contract_id`, a ratio is zero or out of range, or all leg symbols are empty. The
+    /// empty-symbol error names `Contract::symbol`.
+    ///
+    /// TWS sends no reply within 20 to 40 s for a BAG with one leg at ratio 1 or the same
+    /// leg twice. It rejects 2:2 with 321 "Invalid leg ratio". Send 1:1 and double the order
+    /// quantity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, LegAction};
+    ///
+    /// // Leg contracts as `contract_details` returns them.
+    /// let long_call = Contract { contract_id: 101, symbol: "AAPL".into(), exchange: "SMART".into(), ..Default::default() };
+    /// let short_call = Contract { contract_id: 102, symbol: "AAPL".into(), exchange: "SMART".into(), ..Default::default() };
+    ///
+    /// let vertical = Contract::spread_from_legs([(&long_call, 1), (&short_call, -1)])?;
+    /// assert_eq!(vertical.symbol.as_str(), "AAPL");
+    /// assert_eq!(vertical.combo_legs[1].action, LegAction::Sell);
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    ///
+    /// To use a third-party locate for a short stock leg, set the slot and designated location
+    /// after building the spread:
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, LegAction};
+    /// use ibapi::orders::ShortSaleSlot;
+    ///
+    /// let (stock_id, call_id) = (265598, 102); // Use the IDs from contract_details.
+    /// let locate = "EXAMPLE"; // Use the designated location for your locate.
+    /// let mut spread = Contract::spread("AAPL")
+    ///     .add_leg(stock_id, LegAction::SellShort)
+    ///     .ratio(100)
+    ///     .done()
+    ///     .add_leg(call_id, LegAction::Buy)
+    ///     .done()
+    ///     .build()?;
+    /// let short_leg = &mut spread.combo_legs[0];
+    /// short_leg.short_sale_slot = ShortSaleSlot::ThirdParty;
+    /// short_leg.designated_location = locate.into();
+    /// # assert_eq!(short_leg.action, LegAction::SellShort);
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn spread_from_legs<'a>(legs: impl IntoIterator<Item = (&'a Contract, i32)>) -> Result<Contract, Error> {
+        let mut symbols = BTreeSet::new();
+        let mut common_factor = 0;
+        let mut distinct = BTreeSet::new();
+        let mut checked = Vec::new();
+        for (contract, ratio) in legs {
+            if contract.contract_id == 0 {
+                return Err(Error::Validation(ValidationError::InvalidField {
+                    field: "Contract::contract_id",
+                    value: contract.symbol.to_string(),
+                    reason: "a spread leg needs its contract id, as contract_details returns it".into(),
+                }));
+            }
+            let size = ratio.checked_abs().filter(|size| *size > 0).ok_or_else(|| {
+                Error::Validation(ValidationError::InvalidField {
+                    field: "ComboLeg::ratio",
+                    value: ratio.to_string(),
+                    reason: format!("leg {} needs a nonzero ratio", contract.contract_id),
+                })
+            })?;
+            common_factor = gcd(common_factor, size);
+            distinct.insert(contract.contract_id);
+            if !contract.symbol.as_str().is_empty() {
+                symbols.insert(contract.symbol.as_str());
+            }
+
+            let action = if ratio > 0 { LegAction::Buy } else { LegAction::Sell };
+            checked.push((contract, action, size));
+        }
+        if distinct.len() < 2 {
+            return Err(Error::Validation(ValidationError::InvalidCombination(
+                "spread needs at least two distinct legs; TWS does not answer a one-leg combo".into(),
+            )));
+        }
+        if common_factor > 1 {
+            return Err(Error::Validation(ValidationError::InvalidCombination(format!(
+                "spread leg ratios share the factor {common_factor}; divide them by it and scale the order quantity"
+            ))));
+        }
+
+        let configure = |leg: LegBuilder, contract: &Contract, ratio| {
+            let leg = leg.ratio(ratio);
+            if contract.exchange.as_str().is_empty() {
+                leg.done()
+            } else {
+                leg.on_exchange(contract.exchange.clone()).done()
+            }
+        };
+        let [(first, side, ratio), remaining @ ..] = checked.as_slice() else {
+            unreachable!("the validated spread has at least two legs");
+        };
+        let mut spread = Contract::spread(symbols.into_iter().collect::<Vec<_>>().join(","));
+        if !first.currency.as_str().is_empty() {
+            spread = spread.in_currency(first.currency.clone());
+        }
+        let mut spread = configure(spread.add_leg(first.contract_id, *side), first, *ratio);
+        for (contract, side, ratio) in remaining {
+            spread = configure(spread.add_leg(contract.contract_id, *side), contract, *ratio);
+        }
+
+        Ok(spread.build()?)
+    }
+
     /// Creates a news contract from the specified provider code.
     ///
     /// # Examples
@@ -893,6 +1032,14 @@ impl ContractDetails {
     /// ```
     pub fn liquid_sessions(&self) -> Result<Vec<TradingSession>, Error> {
         parse_sessions(&self.liquid_hours)
+    }
+}
+
+fn gcd(a: i32, b: i32) -> i32 {
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
     }
 }
 

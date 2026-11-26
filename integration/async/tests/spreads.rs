@@ -142,3 +142,32 @@ async fn spread_presets_accepted_by_what_if() {
         failures.join("\n")
     );
 }
+
+/// A vertical built by `Contract::spread_from_legs` from the leg contracts `contract_details`
+/// returns, without naming the combo's symbol, currency or exchange.
+#[tokio::test]
+async fn spread_from_legs_accepted_by_what_if() {
+    let client_id = ClientId::get();
+    let client = connect(&client_id).await;
+
+    let (_, near, _) = underlying_and_expiries(&client).await;
+    let mut calls = client
+        .contract_details(&Contract::option(SYMBOL, near.parse().expect("YYYYMMDD expiry"), 0.0, OptionRight::Call))
+        .await
+        .expect("option contract details failed");
+    calls.retain(|d| d.contract.trading_class == SYMBOL);
+    calls.sort_by(|a, b| a.contract.strike.total_cmp(&b.contract.strike));
+    let mid = calls.len() / 2;
+    let (long, short) = (&calls[mid].contract, &calls[mid + 1].contract);
+    let price = ((short.strike - long.strike) / 2.0).min(1.0);
+
+    let vertical = Contract::spread_from_legs([(long, 1), (short, -1)]).expect("spread_from_legs failed");
+    let state = client
+        .order(&vertical)
+        .buy(1)
+        .limit(price)
+        .analyze()
+        .await
+        .unwrap_or_else(|e| panic!("what-if rejected {}/{} @ {price}: {e}", long.strike, short.strike));
+    eprintln!("spread_from_legs vertical @ {price}: {:?}", state.status);
+}
