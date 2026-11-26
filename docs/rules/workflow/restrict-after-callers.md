@@ -10,7 +10,7 @@ triggers:
   - a plan says a narrowing is "transparent" to callers
 symbols: [non_exhaustive, must_use, private_interfaces, pub(crate)]
 related: [integration-crate-builds, modernize-touched-modules, floor-ratchet-splits]
-precedents: ["#547", "#548", "#581", "#665", "#1081", "#1232", "#1234", "#1251"]
+precedents: ["#547", "#548", "#581", "#665", "#1081", "#1232", "#1234", "#1251", "#1317"]
 ---
 
 A PR that adds a compile-time restriction to a public type — `#[non_exhaustive]`, `#[must_use]`,
@@ -37,8 +37,8 @@ grep for it in:
    `private_interfaces`. Remedy: payload becomes `String`, plus a constructor taking `&T`
    (`Error::unexpected_response(&ResponseMessage)`).
 2. **Public trait method signatures** — same lint, repeated on every impl. Seal the trait if
-   you can; `TickDecoder` instead carries `#[allow(private_interfaces)]` on the trait and each
-   impl (#581).
+   you can; `TickDecoder` instead carried `#[allow(private_interfaces)]` on the trait and each
+   impl (#581) until it became crate-private with `TickSubscription`'s removal (#1317).
 3. **Public fn arguments and return types.**
 4. **Public struct field types.**
 

@@ -38,13 +38,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 1: Get last 100 trades
     println!("=== Historical Trades (last 100) ===");
-    // `filter_data()` drops notices and yields `Result<_, Error>`; `?` propagates
-    // a mid-stream error instead of letting it masquerade as end-of-data.
-    let mut ticks = client.historical_ticks(&contract, 100).last().await?.filter_data();
+    let ticks = client.historical_ticks(&contract, 100).last().await?;
 
     let mut trade_count = 0;
-    while let Some(tick) = ticks.next().await {
-        let tick = tick?;
+    for tick in &ticks {
         trade_count += 1;
         if trade_count <= 5 {
             // Show first 5
@@ -66,21 +63,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let end_time = OffsetDateTime::now_utc();
     let start_time = end_time - Duration::minutes(30); // Last 30 minutes
 
-    let mut ticks = client
+    let ticks = client
         .historical_ticks(&contract, 0) // 0 = get all ticks in range
         .starting(start_time)
         .ending(end_time)
         .last()
-        .await?
-        .filter_data();
+        .await?;
 
     let mut period_trades = 0;
     let mut total_volume = 0.0;
     let mut min_price = f64::MAX;
     let mut max_price = f64::MIN;
 
-    while let Some(tick) = ticks.next().await {
-        let tick = tick?;
+    for tick in &ticks {
         period_trades += 1;
         total_volume += tick.size;
         min_price = min_price.min(tick.price);
@@ -100,13 +95,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 3: Get historical bid/ask quotes
     println!("\n=== Historical Bid/Ask Quotes ===");
-    let mut ticks = client.historical_ticks(&contract, 50).bid_ask(IgnoreSize::No).await?.filter_data();
+    let ticks = client.historical_ticks(&contract, 50).bid_ask(IgnoreSize::No).await?;
 
     let mut quote_count = 0;
     let mut total_spread = 0.0;
 
-    while let Some(tick) = ticks.next().await {
-        let tick = tick?;
+    for tick in &ticks {
         quote_count += 1;
         let spread = tick.price_ask - tick.price_bid;
         total_spread += spread;
@@ -132,11 +126,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 4: Get historical midpoint data
     println!("\n=== Historical Midpoint Data ===");
-    let mut ticks = client.historical_ticks(&contract, 30).mid_point().await?.filter_data();
+    let ticks = client.historical_ticks(&contract, 30).mid_point().await?;
 
     let mut midpoint_count = 0;
-    while let Some(tick) = ticks.next().await {
-        let tick = tick?;
+    for tick in &ticks {
         midpoint_count += 1;
         if midpoint_count <= 5 {
             println!(

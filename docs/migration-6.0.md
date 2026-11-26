@@ -1278,3 +1278,53 @@ that matches on the text would see:
 | `"1 X".parse::<Duration>()` | `Invalid Duration input '1 X' Unsupported unit` | `parse error: "1 X": Duration unit is not S, D, W, M or Y` |
 
 `ServerVersion`'s `Display` is unchanged.
+
+### 50. `historical_ticks` returns the ticks; `TickSubscription` is removed
+
+A historical ticks reply is finite: TWS sends the ticks and marks the reply complete, in one
+frame in every capture taken ([wire facts](wire-facts/market-data.md#historical-ticks-reply)).
+The builder terminals now wait for the complete reply and return it, as
+`historical_data(..).fetch()` does for bars, instead of handing back a `TickSubscription` to
+iterate.
+
+| Item (sync and async) | 5.x | 6.0 |
+|---|---|---|
+| `HistoricalTicksBuilder::last()` (5.x `trade()`, §39) | `TickSubscription<TickLast>` | `Vec<TickLast>` |
+| `HistoricalTicksBuilder::mid_point()` | `TickSubscription<TickMidpoint>` | `Vec<TickMidpoint>` |
+| `HistoricalTicksBuilder::bid_ask(..)` | `TickSubscription<TickBidAsk>` | `Vec<TickBidAsk>` |
+| `TickSubscription`, `TickSubscriptionIter`, `TickSubscriptionOwnedIter`, `TickSubscriptionTryIter`, `TickSubscriptionTimeoutIter`, `TickDecoder` | public | removed |
+| `Client::cancel_historical_ticks(request_id)` | public | removed |
+
+```rust,ignore
+// client: ibapi::client::blocking::Client (the async terminals add `.await`), contract: Contract
+
+// 5.x
+let ticks = client.historical_ticks(&contract, 100).trade()?;
+for tick in ticks.iter_data() {
+    let tick = tick?; // a TWS rejection or a dropped connection surfaced here
+    println!("{tick:?}");
+}
+
+// 6.0
+let ticks = client.historical_ticks(&contract, 100).last()?; // ... and surfaces here now
+for tick in &ticks {
+    println!("{tick:?}");
+}
+```
+
+The compiler finds every use of the removed types and every loop that treated the result as a
+subscription. What it does not show:
+
+- **Errors move to the terminal.** A TWS rejection (`Error::Notice`), a connection that closes
+  before the reply is complete (`Error::UnexpectedEndOfStream`) and a `one_shot_timeout`
+  (`Error::Timeout`) are returned by `last()` / `mid_point()` / `bid_ask(..)`. A reply that
+  stops part-way is an error, never a shorter `Vec`.
+- **Notices are not delivered.** The informational notices TWS sends with the reply (2188) are
+  skipped, as `fetch()` skips them; they were `SubscriptionItem::Notice` items before.
+- **The request is resent after a connection reset**, as the crate's other one-shots are.
+- **There is no handle to cancel.** The blocking terminal returns when the reply is complete
+  and cannot be cancelled from another thread; a `one_shot_timeout` bounds it and cancels the
+  request at TWS. Dropping the async terminal's future before the reply is complete cancels
+  the request at TWS. The cancel is written from server 215, the version
+  `cancel_historical_ticks` required. That is why `cancel_historical_ticks` and
+  `TickSubscription::request_id()` are gone.

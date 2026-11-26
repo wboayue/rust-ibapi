@@ -150,13 +150,11 @@ fn historical_ticks_trade() {
 
     let contract = Contract::stock("AAPL").build();
     let end = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
-    let subscription = client
+    let _ticks = client
         .historical_ticks(&contract, 100)
         .ending(end)
         .last()
         .expect("historical_ticks_trade failed");
-
-    let _tick = subscription.next_timeout(StdDuration::from_secs(10));
 }
 
 #[test]
@@ -167,13 +165,11 @@ fn historical_ticks_bid_ask() {
 
     let contract = Contract::stock("AAPL").build();
     let end = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
-    let subscription = client
+    let _ticks = client
         .historical_ticks(&contract, 100)
         .ending(end)
         .bid_ask(IgnoreSize::No)
         .expect("historical_ticks_bid_ask failed");
-
-    let _tick = subscription.next_timeout(StdDuration::from_secs(10));
 }
 
 #[test]
@@ -184,24 +180,11 @@ fn historical_ticks_mid_point() {
 
     let contract = Contract::stock("AAPL").build();
     let end = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
-    let subscription = client
+    let _ticks = client
         .historical_ticks(&contract, 100)
         .ending(end)
         .mid_point()
         .expect("historical_ticks_mid_point failed");
-
-    let _tick = subscription.next_timeout(StdDuration::from_secs(10));
-}
-
-#[test]
-#[serial(historical)]
-fn cancel_historical_ticks_succeeds() {
-    let client_id = ClientId::get();
-    let client = connect(&client_id);
-
-    // Cancel with an arbitrary request_id - should not error even if no request is pending
-    let result = client.cancel_historical_ticks(99999);
-    assert!(result.is_ok(), "cancel_historical_ticks failed: {:?}", result.err());
 }
 
 #[test]

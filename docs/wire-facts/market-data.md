@@ -301,3 +301,36 @@ server 223.*
   drops size-only updates here too.
 - ES and EUR.USD tick-by-tick sizes, all sent: [Size fields are always sent](#size-fields-are-always-sent).
 - **Not probed:** live stock ticks during RTH, live accounts, TWS rather than the Gateway.
+
+### Historical ticks reply
+
+*Live 2026-11-15 weekend (Sunday 08:27 ET), 2026-11-16 RTH (09:58 ET) and 2026-11-16 after the
+close (17:58-18:05 ET), paper Gateway, server 226; the first two runs AAPL with `ending`
+2026-11-13 20:00 UTC, the third AAPL, SEB, ES, EUR.USD and BTC/PAXOS with `starting` or `ending`;
+#1317.*
+
+- Every answered request (23) got one frame with `is_done` true. With `ending`: 10 trades asked
+  → one `HistoricalTickLast` of 14 ticks; 1000 asked → 1004; 10 midpoints → one `HistoricalTick`
+  of 19; 10 bid/asks → one `HistoricalTickBidAsk` of 17. Notice 2188 preceded each AAPL frame.
+- TWS returns whole seconds, so a reply can be much longer than asked. AAPL trades with
+  `starting` at the open (2026-11-13 14:30:00 UTC): 10 asked → 332 ticks, all in that second;
+  1000 asked → 2058 ticks over three seconds. Ticks arrive oldest first.
+- A midpoint or bid/ask reply holds one tick of its earliest second. That was so in all 10
+  distinct replies with more than a few ticks per second (12 frames, the 20:00 requests being
+  repeated in two runs), where later seconds held up to 385. With `starting`, that tick is
+  stamped before the start (14:29:59 for a 14:30:00 start; 14:28:56 on the thin ES 202712). A
+  trades reply with `starting` returned its first second whole: the open's second held 332 ticks
+  whether 10 or 1000 were asked.
+- A contract with no trades in the window gets one frame with no ticks (ES 202712).
+- 1001 and 5000 trades asked → 10187 "Failed to request historical ticks:Max length exceeded"
+  and no frame. 0 asked → 321 "... Number of ticks must be > 0". IB's historical-ticks page
+  (interactivebrokers.com/docs/tws-api/doc/md/historical-ticks.md) reads "Max is 1000 per
+  request".
+- Trades asked for a forex pair (EUR.USD): no error, and the reply is a `HistoricalTick`
+  (midpoint) frame, not `HistoricalTickLast`. `last()` does not decode that frame, so the call
+  waits until `one_shot_timeout`; use `mid_point()` or `bid_ask(..)` for forex. BTC/PAXOS trades
+  → 10299 "Expected what to show is AGGTRADES".
+- The reply is finite and one frame here, which is why `historical_ticks` returns a `Vec`; the
+  crate still reads frames until `is_done`, so a reply TWS split would be returned whole.
+- **Not probed:** whether the 1000 cap depends on the account or its market data subscriptions
+  (one paper account); a reply of more than one frame, which was not seen; non-US stocks.

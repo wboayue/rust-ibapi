@@ -21,8 +21,7 @@ which table happens to hold the number.
 **Minting a request id** → `Client::mint_request_id()` (or a `RequestBuilder`), which yields a
 `RequestId`. Pass `request_id.raw()` to the encoder and the `RequestId` to the bus. Request ids
 are crate-minted only; callers read a live request's id from `Subscription::request_id()`,
-`TickSubscription::request_id()`, `ContractDetailsBuilder::request_id()` or
-`OptionChainBuilder::request_id()`.
+`ContractDetailsBuilder::request_id()` or `OptionChainBuilder::request_id()`.
 
 **Accepting an order id from a caller** → take `impl Into<OrderId>` (`orders::OrderId`, public;
 `i32` converts), then check at the entry point. Anything that places an order goes through

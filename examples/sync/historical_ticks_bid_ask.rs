@@ -50,16 +50,8 @@ fn main() {
         .bid_ask(IgnoreSize::No)
         .expect("historical data request failed");
 
-    // `iter_data()` filters notices and yields `Result<_, Error>`, so a
-    // mid-stream error surfaces instead of looking like a normal end-of-data.
-    for tick in ticks.iter_data() {
-        match tick {
-            Ok(tick) => println!("{tick:?}"),
-            Err(e) => {
-                eprintln!("error fetching ticks: {e}");
-                break;
-            }
-        }
+    for tick in &ticks {
+        println!("{tick:?}");
     }
 }
 

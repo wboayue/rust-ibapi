@@ -151,9 +151,8 @@ fn check_stream<D: StreamDecoder<D>>(roster: &mut Roster) {
     ));
 }
 
-/// The tick driver (`market_data/historical/common/tick.rs::classify`) filters on
-/// the same const through the same `is_undeclared` helper, so it is subject to
-/// the same contract.
+/// A tick type's const reaches the subscription drivers through `TickFrame`'s
+/// `StreamDecoder` impl, so it is subject to the same contract.
 fn check_tick<T: TickDecoder<T>>(roster: &mut Roster) {
     roster.tick += 1;
     roster
