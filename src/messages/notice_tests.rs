@@ -472,6 +472,32 @@ fn data_farm_reads_kind_status_and_name() {
 }
 
 #[test]
+fn pending_order_ids_reads_1104() {
+    // The first two messages are as paper TWS sent them
+    // (docs/wire-facts/orders.md#orders-tws-names-in-1104); the rest are spacing edge cases.
+    let cases = [
+        ("Pending to create 1 orders: 55", Some(vec![55])),
+        ("Pending to create 2 orders: 55, 57", Some(vec![55, 57])),
+        ("Pending to create 2 orders:55,57", Some(vec![55, 57])),
+        ("Pending to create 3 orders:  60 ,62,  64 ", Some(vec![60, 62, 64])),
+        ("Pending to create 2 orders: 55, 57,", Some(vec![55, 57])),
+        ("Pending to create 2 orders: 55, 57,  ", Some(vec![55, 57])),
+        ("Pending to create 1 orders: 55x", None),
+        ("Pending to create orders", None),
+        ("Pending to create orders:", None),
+        ("Pending to create orders:  ", None),
+        ("Pending to create orders: ,", None),
+        ("Pending to create 2 orders: ,55, 57", None),
+        ("Pending to create 2 orders: 55, ,57", None),
+        ("Pending to create 2 orders: 55, 57,,", None),
+    ];
+    for (message, expected) in cases {
+        assert_eq!(helpers::test_notice(1104, message).pending_order_ids(), expected, "{message:?}");
+    }
+    assert_eq!(helpers::test_notice(1100, "Pending to create 1 orders: 55").pending_order_ids(), None);
+}
+
+#[test]
 fn connectivity_status_delegates() {
     // The accessor is a thin wrapper over from_code; assert delegation without
     // re-asserting the whole table.
