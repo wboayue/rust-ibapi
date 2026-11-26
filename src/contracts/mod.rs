@@ -186,8 +186,8 @@ pub struct Contract {
     pub last_trade_date_or_contract_month: Option<Expiry>,
     /// The option's strike price. For a contract whose
     /// [`price_magnifier`](ContractDetails::price_magnifier) is above 1, TWS expects it in the
-    /// market-data sub-unit (`450` cents for a $4.50 corn option) but reports it in contract
-    /// details in the currency unit (`4.5`).
+    /// market-data sub-unit (`450` cents for a corn option struck at $4.50) but reports it in
+    /// contract details in the currency unit (`4.5`).
     pub strike: f64,
     /// Option type (only meaningful when `security_type == SecurityType::Option`).
     /// `None` on non-option contracts. Wire values are `"C"` (Call) and `"P"` (Put).
@@ -645,10 +645,10 @@ pub struct ContractDetails {
     /// trades in index points with a magnifier of `100` and a multiplier of `1000`.
     ///
     /// IB's documentation says that from TWS 972 the magnifier no longer applies to
-    /// futures-option strikes. Only contract details report the currency unit: a ZC option
-    /// requested with strike `4.5` draws error 200 and needs `450`, and `historical_data`
-    /// rejects the contract details' own contract (strike `4.5` with its contract id) the same
-    /// way. Send the strike multiplied by the magnifier, or `0` with the contract id
+    /// futures-option strikes. Of the strike values, only contract details report the currency
+    /// unit: a ZC option requested with strike `4.5` draws error 200 and needs `450`, and
+    /// `historical_data` rejects the contract details' own contract (strike `4.5` with its
+    /// contract id) the same way. Send the strike multiplied by the magnifier, or `0` with the contract id
     /// (`docs/wire-facts/contracts.md#price-magnifier-units`).
     pub price_magnifier: i32,
     /// Supported order types for this product.
@@ -1087,8 +1087,8 @@ pub struct OptionChain {
     pub expirations: Vec<Expiry>,
     /// A list of the possible strikes for options of this underlying on this exchange, in the
     /// unit TWS expects in a request: the market-data sub-unit for a contract whose
-    /// [`price_magnifier`](ContractDetails::price_magnifier) is above 1 (`450` for a $4.50 corn
-    /// option, which contract details report as `4.5`).
+    /// [`price_magnifier`](ContractDetails::price_magnifier) is above 1 (`450` for a corn option
+    /// struck at $4.50, which contract details report as `4.5`).
     pub strikes: Vec<f64>,
 }
 

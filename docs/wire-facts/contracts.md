@@ -116,7 +116,7 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
 | Value | Unit | ZC future / ZC option | VOD stock / VOD option |
 | --- | --- | --- | --- |
 | Market data bid, ask, last, close | sub-unit | `449` / `7.875` | `102.85` / `6.25` |
-| Historical bar prices | sub-unit | `449` / `7.75` | `103` / 200 with the details strike `1` |
+| Historical bar prices | sub-unit | `449` / `7.75` | `103` / error 200 with the details strike `1` |
 | `option_chain` strikes | sub-unit | `360`, `365`, ... | `50`, `60`, ... |
 | Strike TWS accepts in a request | sub-unit | `450` (`4.5` draws 200) | `120` (`1.2` draws 200) |
 | Strike in contract details | currency | `4.5` | `1.2`, `1` |
