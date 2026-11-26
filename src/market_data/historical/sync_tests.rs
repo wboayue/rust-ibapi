@@ -866,7 +866,7 @@ fn historical_data_streaming_with_updates() {
             assert_eq!(bars.len(), 1, "Should have 1 initial bar");
             assert_eq!(bars[0].open, 185.50, "Wrong open price");
         }
-        _ => panic!("Expected Historical variant"),
+        _ => panic!("Expected Bars variant"),
     }
 
     // Second: receive streaming update

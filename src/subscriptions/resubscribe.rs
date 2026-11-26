@@ -16,8 +16,9 @@ use crate::subscriptions::{StreamDecoder, SubscriptionItem};
 /// would place, cancel or exercise again), and so are requests that end on their
 /// own (contract details, option chains). Historical bars are the exception:
 /// `subscribe` shares [`HistoricalDataFrame`](crate::market_data::historical::HistoricalDataFrame)
-/// with `subscribe_with_updates`, so a `subscribe` cut by a reconnect is sent
-/// again from the start. Display groups are left out: their
+/// with `subscribe_with_updates`, so a `subscribe` cut by a reconnect before
+/// `End` is sent again from the start; the stream ends after `End`. Display
+/// groups are left out: their
 /// `DisplayGroupSubscription` wrapper isn't a `Subscription`.
 #[allow(private_bounds)]
 pub trait Resubscribable: StreamDecoder<Self> + Sized {}
@@ -145,7 +146,12 @@ mod sync_impl {
                             self.state = State::Opening { gap: true };
                         }
                         Some(Ok(item)) => {
-                            self.state = State::Reading(subscription);
+                            // A finished snapshot sends nothing more, and its
+                            // channel stays open: end here rather than wait,
+                            // and resend it after a later reconnect.
+                            if !subscription.snapshot_ended() {
+                                self.state = State::Reading(subscription);
+                            }
                             return Some(Ok(item));
                         }
                         Some(Err(e)) => return Some(Err(e)),
@@ -205,7 +211,15 @@ mod async_impl {
                             }
                             state = State::Opening { gap: true };
                         }
-                        Some(Ok(item)) => return Some((Ok(item), (State::Reading(subscription), open))),
+                        Some(Ok(item)) => {
+                            // As in the sync iterator: a finished snapshot ends the stream.
+                            let next = if subscription.snapshot_ended() {
+                                State::Done
+                            } else {
+                                State::Reading(subscription)
+                            };
+                            return Some((Ok(item), (next, open)));
+                        }
                         Some(Err(e)) => return Some((Err(e), (State::Done, open))),
                         None => return None,
                     },

@@ -697,6 +697,12 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     pub(crate) fn ended_natively(&self) -> bool {
         self.request.ended_natively.load(Ordering::Relaxed)
     }
+
+    /// Whether an item ended the request as a snapshot (`is_snapshot_end`).
+    /// Nothing follows it, though the channel stays open and `next` waits.
+    pub(crate) fn snapshot_ended(&self) -> bool {
+        self.request.snapshot_ended.load(Ordering::Relaxed)
+    }
 }
 
 #[allow(private_bounds)]

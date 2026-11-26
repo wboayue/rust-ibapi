@@ -362,11 +362,13 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
 
     /// Send the request once and return a subscription of its
     /// [`HistoricalDataFrame`]s: [`Bars`](HistoricalDataFrame::Bars), then
-    /// [`End`](HistoricalDataFrame::End), after which the stream ends.
+    /// [`End`](HistoricalDataFrame::End), the last frame. Stop reading on `End`:
+    /// the subscription stays open after it, so a further read waits.
     ///
     /// Unlike [`fetch`](Self::fetch), the caller owns the request: its id is
     /// [`request_id`](Self::request_id), it is never resent (after a connection
-    /// reset, build a new request), and only the caller bounds the wait.
+    /// reset, build a new request, or open it through `Client::resubscribing`),
+    /// and only the caller bounds the wait.
     /// [`ending`](Self::ending), [`between`](Self::between) and
     /// [`buffer_limit`](Self::buffer_limit) all apply. The bars come as TWS sent
     /// them: after `between`, build a [`HistoricalData`] from them and the `End`
@@ -447,7 +449,6 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// Submit a request with IBKR's `keepUpToDate` and return a
     /// [`Subscription`](crate::subscriptions::Subscription) of [`HistoricalDataFrame`]:
     /// `Bars`, `End`, then `Update` for the forming bar until cancelled.
-    /// IBKR sends initial bars, then per-bar updates as they form.
     ///
     /// Rejects builders that called [`ending`](Self::ending) or [`between`](Self::between) —
     /// IBKR requires `end_date = None` for streaming.
@@ -538,11 +539,13 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
 
     /// Send the request once and return a subscription of its
     /// [`HistoricalDataFrame`]s: [`Bars`](HistoricalDataFrame::Bars), then
-    /// [`End`](HistoricalDataFrame::End), after which the stream ends.
+    /// [`End`](HistoricalDataFrame::End), the last frame. Stop reading on `End`:
+    /// the subscription stays open after it, so a further read waits.
     ///
     /// Unlike [`fetch`](Self::fetch), the caller owns the request: its id is
     /// [`request_id`](Self::request_id), it is never resent (after a connection
-    /// reset, build a new request), and only the caller bounds the wait.
+    /// reset, build a new request, or open it through `Client::resubscribing`),
+    /// and only the caller bounds the wait.
     /// [`ending`](Self::ending), [`between`](Self::between) and
     /// [`buffer_limit`](Self::buffer_limit) all apply. The bars come as TWS sent
     /// them: after `between`, build a [`HistoricalData`] from them and the `End`

@@ -769,7 +769,7 @@ async fn historical_data_streaming_with_updates() {
 
     // First: receive initial historical data
     let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(bars)))) = subscription.next().await else {
-        panic!("Expected Historical variant");
+        panic!("Expected Bars variant");
     };
     assert_eq!(bars.len(), 1, "Should have 1 initial bar");
     assert_eq!(bars[0].open, 185.50, "Wrong open price");
@@ -1514,6 +1514,24 @@ async fn historical_data_requires_end_message_type() {
     let (result, bus) = fetch_daily(vec![response.clone(), response]).await;
     assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{result:?}");
     assert_eq!(request_message_count(&bus), 1);
+}
+
+/// An update frame on a request sent without updates is out of protocol:
+/// `fetch` fails rather than treat it as bars or the window, and cancels.
+#[tokio::test]
+async fn historical_data_update_frame_is_unexpected() {
+    let bars = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
+    let update = proto_response(
+        IncomingMessages::HistoricalDataUpdate,
+        historical_data_update_response()
+            .bar(historical_data_bar(1_678_890_000).ohlc(1.0, 2.0, 0.5, 1.5))
+            .encode_proto(),
+    );
+    for (label, responses) in [("in place of bars", vec![update.clone()]), ("in place of the window", vec![bars, update])] {
+        let (result, bus) = fetch_daily(responses).await;
+        assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{label}: {result:?}");
+        assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1), "{label}");
+    }
 }
 
 /// An empty result is valid when the broker explicitly completes the request.

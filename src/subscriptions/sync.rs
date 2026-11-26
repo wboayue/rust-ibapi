@@ -180,6 +180,12 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         self.ended_natively.load(Ordering::Relaxed)
     }
 
+    /// Whether an item ended the request as a snapshot (`is_snapshot_end`).
+    /// Nothing follows it, though the channel stays open and `next` waits.
+    pub(crate) fn snapshot_ended(&self) -> bool {
+        self.snapshot_ended.load(Ordering::Relaxed)
+    }
+
     /// The id a cancel names: the request id, else the order id.
     fn id(&self) -> Option<i32> {
         self.request_id.or(self.order_id)

@@ -599,13 +599,16 @@ impl BarRequest<'_> {
     }
 }
 
+/// `fetch` sends without `keep_up_to_date`, so TWS has no updates to send it.
+const UPDATE_WITHOUT_UPDATES: &str = "historical data: update on a request without updates";
+
 impl HistoricalDataFrame {
     /// The bars, which TWS sends first.
     pub(crate) fn into_bars(self) -> Result<Vec<Bar>, Error> {
         match self {
             Self::Bars(bars) => Ok(bars),
             Self::End { .. } => Err(Error::UnexpectedResponse("historical data: window before bars".into())),
-            Self::Update(_) => Err(Error::UnexpectedResponse("historical data: update on a request without updates".into())),
+            Self::Update(_) => Err(Error::UnexpectedResponse(UPDATE_WITHOUT_UPDATES.into())),
         }
     }
 
@@ -614,7 +617,7 @@ impl HistoricalDataFrame {
         match self {
             Self::End { start, end } => Ok((start, end)),
             Self::Bars(_) => Err(Error::UnexpectedResponse("historical data: second batch of bars before window".into())),
-            Self::Update(_) => Err(Error::UnexpectedResponse("historical data: update on a request without updates".into())),
+            Self::Update(_) => Err(Error::UnexpectedResponse(UPDATE_WITHOUT_UPDATES.into())),
         }
     }
 }

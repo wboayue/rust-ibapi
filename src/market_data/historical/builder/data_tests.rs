@@ -58,7 +58,7 @@ fn assert_trimmed(data: &HistoricalData) {
 // won't compile. These helpers match the Err arm manually for the .subscribe_with_updates() terminals.
 // Sync + async use their own variants because the `Subscription` type differs per feature.
 #[cfg(feature = "sync")]
-fn assert_stream_invalid_argument_sync(
+fn assert_updates_invalid_argument_sync(
     result: Result<crate::subscriptions::sync::Subscription<crate::market_data::historical::HistoricalDataFrame>, crate::Error>,
 ) {
     let Err(err) = result else { panic!("expected InvalidArgument error") };
@@ -66,7 +66,7 @@ fn assert_stream_invalid_argument_sync(
 }
 
 #[cfg(feature = "async")]
-fn assert_stream_invalid_argument_async(
+fn assert_updates_invalid_argument_async(
     result: Result<crate::subscriptions::r#async::Subscription<crate::market_data::historical::HistoricalDataFrame>, crate::Error>,
 ) {
     let Err(err) = result else { panic!("expected InvalidArgument error") };
@@ -307,7 +307,7 @@ mod sync_tests {
             .ending(datetime!(2026-04-15 0:00 UTC))
             .subscribe_with_updates();
 
-        super::assert_stream_invalid_argument_sync(result);
+        super::assert_updates_invalid_argument_sync(result);
     }
 
     #[test]
@@ -320,7 +320,7 @@ mod sync_tests {
             .between(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC))
             .subscribe_with_updates();
 
-        super::assert_stream_invalid_argument_sync(result);
+        super::assert_updates_invalid_argument_sync(result);
     }
 
     // ---- subscribe ----
@@ -678,7 +678,7 @@ mod async_tests {
             .subscribe_with_updates()
             .await;
 
-        super::assert_stream_invalid_argument_async(result);
+        super::assert_updates_invalid_argument_async(result);
     }
 
     #[tokio::test]
@@ -692,7 +692,7 @@ mod async_tests {
             .subscribe_with_updates()
             .await;
 
-        super::assert_stream_invalid_argument_async(result);
+        super::assert_updates_invalid_argument_async(result);
     }
 
     // ---- subscribe ----
