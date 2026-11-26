@@ -1818,6 +1818,39 @@ pub enum OrderOutcome {
     PendingCreation(crate::Notice),
 }
 
+/// What TWS reports about one order, as `Client::find_order` and
+/// `Client::find_order_by_perm_id` return it.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
+pub enum OrderLookup {
+    /// This client's open orders list the order, with a status that is not
+    /// [terminal](OrderStatusKind::is_terminal). Carries the last open-order
+    /// record and the last status they listed for it; at least one is set.
+    Working {
+        /// The open-order record.
+        order: Option<OrderData>,
+        /// The order's status.
+        status: Option<OrderStatus>,
+    },
+    /// Completed orders list the order. `status` is
+    /// [`order.completed_order_status()`](OrderData::completed_order_status):
+    /// its `status` is [`Filled`](OrderStatusKind::Filled) for a filled order
+    /// and [`Cancelled`](OrderStatusKind::Cancelled) for one cancelled or
+    /// rejected (a rejection with error 201 is listed as `Cancelled`, filled
+    /// `0`); `filled` and `remaining` give the fill. TWS's reason is in
+    /// `order.order_state.completed_status`, such as `"Cancelled by Trader"`
+    /// or `"Rejected by System:"` followed by the rejection text.
+    Finished {
+        /// The completed-order record.
+        order: OrderData,
+        /// The order's final status, built from `order`.
+        status: OrderStatus,
+    },
+    /// Neither this client's open orders nor completed orders listed the order.
+    NotFound,
+}
+
 /// Enumerates possible results from cancelling an order.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]

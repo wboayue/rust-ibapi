@@ -2,9 +2,8 @@
 
 use std::time::{Duration, Instant};
 
-use crate::client::ids::OrderId;
 use crate::messages::ORDER_CREATION_PENDING_CODE;
-use crate::orders::{OrderOutcome, OrderStatus, OrderStatusKind, Orders};
+use crate::orders::{OrderOutcome, OrderStatus, OrderStatusKind};
 use crate::{Error, Notice};
 
 /// The least time `wait_for_fill` gives each lookup reply (open orders, then
@@ -17,26 +16,6 @@ pub(crate) const LOOKUP_MIN_WAIT: Duration = Duration::from_secs(1);
 /// [`LOOKUP_MIN_WAIT`].
 pub(crate) fn lookup_wait(deadline: Instant) -> Duration {
     deadline.saturating_duration_since(Instant::now()).max(LOOKUP_MIN_WAIT)
-}
-
-/// Whether an open-orders reply lists `order_id`, so the order is working.
-pub(crate) fn lists_order(rows: &[Orders], order_id: OrderId) -> bool {
-    rows.iter().any(|row| match row {
-        Orders::OrderData(data) => data.order.order_id == order_id.value(),
-        Orders::OrderStatus(status) => status.order_id == order_id.value(),
-    })
-}
-
-/// The status of `order_id`, placed by `client_id`, in a completed-orders
-/// reply; the last match wins. Built by
-/// [`OrderData::completed_order_status`](crate::orders::OrderData::completed_order_status) (#1116).
-pub(crate) fn completed_status(rows: &[Orders], client_id: i32, order_id: OrderId) -> Option<OrderStatus> {
-    rows.iter().rev().find_map(|row| match row {
-        Orders::OrderData(data) if data.order.client_id == client_id && data.order.order_id == order_id.value() => {
-            Some(data.completed_order_status())
-        }
-        _ => None,
-    })
 }
 
 /// The last status seen, and whether a status ends the wait.
@@ -55,7 +34,8 @@ impl FillTracker {
         outcome
     }
 
-    /// Take the status built from a completed-order record ([`completed_status`]).
+    /// Take the status built from a completed-order record
+    /// ([`OrderData::completed_order_status`](crate::orders::OrderData::completed_order_status)).
     /// Its status is final, so the status alone decides: unlike a live status,
     /// nothing remaining after a fill doesn't mean filled here, since a
     /// `totalQuantity` TWS left out decodes as `0`.

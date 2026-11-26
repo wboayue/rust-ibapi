@@ -32,7 +32,7 @@ drift. (Grouping `mod` blocks *inside* a `*_tests.rs` file is fine, as is the te
 in `src/common/test_utils.rs`.)
 
 Residue: three `tests.rs` files remain (`src/tests.rs`, `src/messages/tests.rs`,
-`src/transport/tests.rs`) beside 130 `*_tests.rs` (2026-11-23;
+`src/transport/tests.rs`) beside 131 `*_tests.rs` (2026-11-23;
 `find src -name tests.rs`, `find src -name '*_tests.rs' | wc -l`). Convert one when already
 editing that module — see [modernize touched modules](../workflow/modernize-touched-modules.md) —
 and do not treat them as precedent.

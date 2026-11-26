@@ -1,14 +1,15 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::common::fill::{completed_status, lists_order, lookup_wait, FillTracker};
+use super::common::fill::{lookup_wait, FillTracker};
+use super::common::lookup::{recheck_delay, OrderKey};
 use super::common::{decoders, encoders, verify};
 use super::{
     ApiOnly, AutoBind, CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OcaType, OrderBuilder, OrderCancel,
-    OrderOutcome, OrderStatus, OrderUpdate, Orders, PlaceOrder,
+    OrderLookup, OrderOutcome, OrderStatus, OrderUpdate, Orders, PlaceOrder,
 };
 use crate::client::blocking::Subscription;
-use crate::common::request_helpers::{self, expect_proto};
+use crate::common::request_helpers::{self, expect_proto, ONE_SHOT_TIMEOUT};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::OrderId;
@@ -847,27 +848,161 @@ impl Client {
         }
     }
 
-    /// Look up an order this client has no status for: `None` when this
-    /// client's open orders list it (their statuses reach the order's status
-    /// streams like any other) or neither reply does; otherwise its status
-    /// from completed orders. Each reply is read to its end marker.
+    /// Look up an order this client has no status for: its status from
+    /// completed orders, or `None` when this client's open orders list it
+    /// working (their statuses reach the order's status streams like any
+    /// other) or neither reply does.
     fn find_finished(&self, order_id: OrderId, deadline: Option<Instant>) -> Result<Option<OrderStatus>, Error> {
-        let read = |subscription: Subscription<Orders>| match deadline {
-            Some(deadline) => subscription.collect_to_end_within(lookup_wait(deadline)),
+        let key = OrderKey::Id {
+            client_id: self.client_id(),
+            order_id,
+        };
+        match self.look_up_order(key, Duration::ZERO, || deadline.map(lookup_wait)) {
+            Ok(OrderLookup::Finished { status, .. }) => Ok(Some(status)),
+            Ok(_) => Ok(None),
+            // A reply cut short (deadline, closed channel, TWS error) proves
+            // nothing: keep waiting.
+            Err(Error::Timeout | Error::UnexpectedEndOfStream | Error::Notice(_)) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Looks up one of this client's orders by its API order id: still
+    /// working, finished, or not known to TWS.
+    ///
+    /// Reads this client's [`open_orders`](Self::open_orders): an order they
+    /// list with a status that is not [terminal](crate::orders::OrderStatusKind::is_terminal)
+    /// is [`OrderLookup::Working`]. Otherwise reads
+    /// [`completed_orders`](Self::completed_orders), which list every client's
+    /// orders: a record of this client with this nonzero id is
+    /// [`OrderLookup::Finished`]. Ids are unique only per client, so another
+    /// client's order with the same id never matches. TWS can list a
+    /// completed order with client id and order id `0`; find such an order
+    /// with [`find_order_by_perm_id`](Self::find_order_by_perm_id).
+    ///
+    /// A finished order leaves open orders before it reaches completed
+    /// orders. Live, an order rejected with error 201 was gone from open
+    /// orders within 50 ms of its `Inactive` status, and first listed among
+    /// completed orders 19 to 204 ms after it. When neither reply lists the
+    /// order, completed orders are read again every 100 ms, every second after
+    /// the first second, until `within` has passed since the call, then the
+    /// answer is [`OrderLookup::NotFound`]. Each completed-orders reply holds
+    /// every client's completed orders (230 records on the paper
+    /// account probed), and it has no request id: a concurrent
+    /// [`completed_orders`](Self::completed_orders) call shares the reply.
+    /// With `within` zero each reply is read once. Right after an order's
+    /// last status, pass at least a few hundred milliseconds.
+    ///
+    /// Each reply is read to its end marker, within 30 seconds or the
+    /// [`one_shot_timeout`](crate::client::blocking::ClientBuilder::one_shot_timeout)
+    /// when set; a reply cut short is an error, never `NotFound`. With client
+    /// id 0, the open-orders request also binds manual TWS orders to this client.
+    ///
+    /// Open-orders and completed-orders replies carry no request id: every live
+    /// subscription of the type receives every reply. A lookup that starts while
+    /// another such reply is arriving (a second lookup, a `wait_for_fill`, an
+    /// `open_orders` call of yours) can read the rest of that reply as its own and
+    /// answer `NotFound` for a working order. Avoid overlapping them on one client.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000
+    /// (reserved for request ids), [`Error::Timeout`] if a reply does not end
+    /// in time, [`Error::Reconnecting`] if the send is refused while reconnecting,
+    /// [`Error::ConnectionReset`] if the connection drops during the lookup,
+    /// [`Error::UnexpectedEndOfStream`] if a reply ends
+    /// without its end marker.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    ///
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::orders::{OrderLookup, OrderStatusKind};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// match client.find_order(42, Duration::from_secs(1)).expect("lookup failed") {
+    ///     OrderLookup::Working { status, .. } => println!("working: {status:?}"),
+    ///     OrderLookup::Finished { status, .. } if status.status == OrderStatusKind::Filled => println!("filled {}", status.filled),
+    ///     OrderLookup::Finished { status, .. } => println!("{} after {} filled", status.status, status.filled),
+    ///     OrderLookup::NotFound => println!("unknown to TWS"),
+    /// }
+    /// ```
+    pub fn find_order(&self, order_id: impl Into<OrderId>, within: Duration) -> Result<OrderLookup, Error> {
+        let key = OrderKey::Id {
+            client_id: self.client_id(),
+            order_id: order_id.into().checked()?,
+        };
+        let reply_wait = self.one_shot_timeout().unwrap_or(ONE_SHOT_TIMEOUT);
+        self.look_up_order(key, within, || Some(reply_wait))
+    }
+
+    /// Looks up an order of any client by its TWS permanent id (`perm_id`):
+    /// still working, finished, or not known to TWS.
+    ///
+    /// [`find_order`](Self::find_order) with the order matched by `perm_id`,
+    /// on open orders and completed orders alike. Completed orders list every
+    /// client's orders, so a finished order of another client is found. Open
+    /// orders are this client's only: another client's working order is
+    /// `NotFound`. Use [`all_open_orders`](Self::all_open_orders) to list working
+    /// orders across clients.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Validation`] if `perm_id` is `0` or below (TWS assigns
+    /// positive perm ids; a record without one carries `0`), with nothing
+    /// sent; [`Error::Timeout`] if a reply does not end in time,
+    /// [`Error::Reconnecting`] if the send is refused while reconnecting,
+    /// [`Error::ConnectionReset`] if the connection drops during the lookup,
+    /// [`Error::UnexpectedEndOfStream`] if a reply ends without
+    /// its end marker.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    ///
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::orders::OrderLookup;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// match client.find_order_by_perm_id(1290490951, Duration::ZERO).expect("lookup failed") {
+    ///     OrderLookup::Working { order, .. } => println!("working: {order:?}"),
+    ///     OrderLookup::Finished { order, status } => println!("{} ({})", status.status, order.order_state.completed_status),
+    ///     OrderLookup::NotFound => println!("not listed"),
+    /// }
+    /// ```
+    pub fn find_order_by_perm_id(&self, perm_id: i64, within: Duration) -> Result<OrderLookup, Error> {
+        let key = OrderKey::perm_id(perm_id)?;
+        let reply_wait = self.one_shot_timeout().unwrap_or(ONE_SHOT_TIMEOUT);
+        self.look_up_order(key, within, || Some(reply_wait))
+    }
+
+    /// Reads open orders once, then completed orders until they list the
+    /// order or `within` has passed since the call. `reply_wait` bounds each
+    /// read; `None` reads without a bound.
+    fn look_up_order(&self, key: OrderKey, within: Duration, reply_wait: impl Fn() -> Option<Duration>) -> Result<OrderLookup, Error> {
+        let read = |subscription: Subscription<Orders>| match reply_wait() {
+            Some(wait) => subscription.collect_to_end_within(wait),
             None => subscription.collect_to_end(),
         };
-        // A reply cut short (deadline, dropped connection) proves nothing:
-        // keep waiting; the status stream reports a dropped connection.
-        let Ok(open) = read(self.open_orders()?) else {
-            return Ok(None);
-        };
-        if lists_order(&open, order_id) {
-            return Ok(None);
+        let start = Instant::now();
+        let deadline = start.checked_add(within);
+        if let Some(working) = key.working(read(self.open_orders()?)?) {
+            return Ok(working);
         }
-        let Ok(completed) = read(self.completed_orders(ApiOnly::No)?) else {
-            return Ok(None);
-        };
-        Ok(completed_status(&completed, self.client_id(), order_id))
+        loop {
+            if let Some(finished) = key.finished(read(self.completed_orders(ApiOnly::No)?)?) {
+                return Ok(finished);
+            }
+            match recheck_delay(deadline, start, Instant::now()) {
+                Some(delay) => std::thread::sleep(delay),
+                None => return Ok(OrderLookup::NotFound),
+            }
+        }
     }
 
     /// Exercise or lapse an option position.

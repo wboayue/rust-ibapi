@@ -1425,6 +1425,7 @@ fn order_entry_points_reject_request_range_ids() {
     rejected(client.cancel_order(floor).map(|_| ()), "cancel_order");
     rejected(client.order_status_stream(floor).map(|_| ()), "order_status_stream");
     rejected(client.wait_for_fill(floor, std::time::Duration::ZERO).map(|_| ()), "wait_for_fill");
+    rejected(client.find_order(floor, std::time::Duration::ZERO).map(|_| ()), "find_order");
 
     client.id_manager().raise_order_id(OrderId::from(floor));
     rejected(client.exercise_options(&contract).exercise(1).submit().map(|_| ()), "exercise_options");
@@ -1740,4 +1741,91 @@ fn is_unsent_implies_the_order_call_wrote_nothing() {
         assert!(!err.is_unsent() || written == 0, "{name}: unsent, yet {written} requests written");
         assert_eq!(written, usize::from(matches!(sends, Sends::Fail)), "{name}: requests written");
     }
+}
+
+#[test]
+fn find_order_reports_each_outcome() {
+    for case in crate::orders::common::test_tables::lookup_cases() {
+        let message_bus = Arc::new(MessageBusStub::with_responses_per_request(case.replies));
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+        let result = match case.perm_id {
+            Some(perm_id) => client.find_order_by_perm_id(perm_id, case.within),
+            None => client.find_order(13, case.within),
+        };
+
+        case.expected.check(case.name, result);
+        assert_eq!(request_message_count(&message_bus), case.requests, "{}", case.name);
+        assert_request(&message_bus, 0, &open_orders_request());
+        for index in 1..case.requests {
+            assert_request(&message_bus, index, &completed_orders_request().api_only(false));
+        }
+    }
+}
+
+#[test]
+fn find_order_with_order_id_zero() {
+    for case in crate::orders::common::test_tables::lookup_cases_with_order_id_zero() {
+        let message_bus = Arc::new(MessageBusStub::with_responses_per_request(case.replies));
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES).with_client_id(0);
+
+        let result = match case.perm_id {
+            Some(perm_id) => client.find_order_by_perm_id(perm_id, case.within),
+            None => client.find_order(0, case.within),
+        };
+
+        case.expected.check(case.name, result);
+        assert_eq!(request_message_count(&message_bus), case.requests, "{}", case.name);
+        assert_request(&message_bus, 0, &open_orders_request());
+        if case.requests == 2 {
+            assert_request(&message_bus, 1, &completed_orders_request().api_only(false));
+        }
+    }
+}
+
+/// A perm id of 0 or below would match records that carry none, so it is
+/// refused before anything is sent.
+#[test]
+fn find_order_by_perm_id_rejects_a_perm_id_below_one() {
+    let (client, message_bus) = create_blocking_test_client();
+
+    for perm_id in [0, -1] {
+        let result = client.find_order_by_perm_id(perm_id, std::time::Duration::ZERO);
+
+        assert!(
+            matches!(
+                &result,
+                Err(Error::Validation(crate::builder::ValidationError::InvalidField { field: "perm_id", value, reason }))
+                    if value == &perm_id.to_string() && reason == "permanent order ID must be positive"
+            ),
+            "{perm_id}: {result:?}"
+        );
+    }
+    assert_eq!(request_message_count(&message_bus), 0, "nothing reaches the wire");
+}
+
+/// The bound is a deadline from the call: completed orders are re-read on a
+/// fixed interval until it passes, then the answer is `NotFound`.
+#[test]
+fn find_order_rechecks_completed_orders_until_the_bound() {
+    let open = proto_response(IncomingMessages::OpenOrderEnd, open_order_end().encode_proto());
+    let none = proto_response(IncomingMessages::CompletedOrdersEnd, completed_orders_end().encode_proto());
+    let message_bus = Arc::new(MessageBusStub::with_responses_per_request(
+        std::iter::once(vec![open]).chain(std::iter::repeat_n(vec![none], 20)).collect(),
+    ));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let started = std::time::Instant::now();
+    let result = client.find_order(13, std::time::Duration::from_millis(250)).unwrap();
+    let elapsed = started.elapsed();
+
+    assert_eq!(result, OrderLookup::NotFound);
+    assert!(
+        elapsed >= std::time::Duration::from_millis(250) && elapsed < std::time::Duration::from_secs(2),
+        "{elapsed:?}"
+    );
+    // Completed orders read at 0, 100, 200 and 250 ms; a late wake-up on a
+    // busy machine can merge the last two.
+    let completed_reads = request_message_count(&message_bus) - 1;
+    assert!((3..=4).contains(&completed_reads), "{completed_reads} completed-orders reads");
 }
