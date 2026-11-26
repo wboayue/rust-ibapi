@@ -630,10 +630,10 @@ pub struct VerificationResult {
 pub(crate) mod sync;
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-pub use sync::AccountSummarySnapshots;
+pub use sync::{AccountSummarySnapshots, AccountSummarySnapshotsResubscribing};
 
 #[cfg(feature = "async")]
-pub use r#async::AccountSummarySnapshots;
+pub use r#async::{AccountSummarySnapshots, AccountSummarySnapshotsResubscribing};
 
 #[cfg(feature = "async")]
 mod r#async;

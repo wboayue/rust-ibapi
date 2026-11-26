@@ -1,4 +1,4 @@
-use super::{AccountSummarySnapshot, AccountSummarySnapshots, SnapshotBuilder, Subscription};
+use super::{AccountSummarySnapshot, AccountSummarySnapshots, AccountSummarySnapshotsResubscribing, SnapshotBuilder, Subscription};
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryTags, AccountUpdateMulti, LedgerOnly};
 use crate::client::ids::RequestId;
@@ -948,6 +948,170 @@ fn account_summary_snapshots_cancel_sends_cancel_and_ends() {
     snapshots.cancel();
 
     assert!(snapshots.next().is_none(), "iteration ends after cancel");
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request(&message_bus, 1, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST));
+}
+
+fn resubscribing_bus(stub: MessageBusStub) -> (Client, Arc<MessageBusStub>) {
+    let message_bus = Arc::new(stub.keeping_channels_open());
+    (Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES), message_bus)
+}
+
+fn net_liquidation_dump() -> MessageBusStub {
+    MessageBusStub::with_ordered_responses(vec![
+        proto_response(
+            IncomingMessages::AccountSummary,
+            account_summary().tag("NetLiquidation").value("100.0").currency("USD").encode_proto(),
+        ),
+        proto_response(IncomingMessages::AccountSummaryEnd, account_summary_end().encode_proto()),
+    ])
+}
+
+/// The transport's reset of every open subscription when the socket drops.
+fn drop_connection(message_bus: &MessageBusStub) {
+    message_bus.start_new_session();
+    message_bus.send_to_open_subscriptions(RoutedItem::Error(Error::ConnectionReset));
+}
+
+#[test]
+fn account_summary_snapshots_resubscribing_starts_a_fresh_snapshot_after_reconnect() {
+    let (client, message_bus) = resubscribing_bus(net_liquidation_dump());
+    let group = AccountGroup("All".to_string());
+    let tags = &[AccountSummaryTags::NET_LIQUIDATION, AccountSummaryTags::BUYING_POWER];
+
+    let mut snapshots = client
+        .account_summary_snapshots_resubscribing(&group, tags, Duration::from_millis(50))
+        .expect("request account_summary_snapshots_resubscribing failed");
+    let initial = snapshots.next().unwrap().unwrap();
+    message_bus.send_to_open_subscriptions(summary_frame("BuyingPower", "400.0", "USD"));
+    let pushed = snapshots.next().unwrap().unwrap();
+    drop_connection(&message_bus);
+    let gap = snapshots.next().unwrap();
+    let fresh = snapshots.next().unwrap().unwrap();
+    drop(snapshots);
+
+    assert_eq!(values(&initial), vec![("NetLiquidation", "USD", "100.0")]);
+    assert_eq!(values(&pushed), vec![("BuyingPower", "USD", "400.0"), ("NetLiquidation", "USD", "100.0")]);
+    assert!(
+        matches!(&gap, Err(Error::Notice(n)) if n.code == crate::TRANSPORT_RECONNECT_CODE),
+        "expected the reconnect notice, got {gap:?}"
+    );
+    assert_eq!(values(&fresh), vec![("NetLiquidation", "USD", "100.0")]);
+    let request = |id| {
+        request_account_summary()
+            .request_id(id)
+            .group("All")
+            .tags([AccountSummaryTags::NET_LIQUIDATION, AccountSummaryTags::BUYING_POWER])
+    };
+    assert_eq!(request_message_count(&message_bus), 3);
+    assert_request(&message_bus, 0, &request(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 1, &request(TEST_REQ_ID_FIRST + 1));
+    assert_request(&message_bus, 2, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST + 1));
+}
+
+/// Opened from an `Arc<Client>`, the iterator owns its client handle: it moves into a spawned
+/// thread after the first snapshot and resubscribes there.
+#[test]
+fn account_summary_snapshots_resubscribing_from_arc_runs_in_a_spawned_thread() {
+    let (client, message_bus) = resubscribing_bus(net_liquidation_dump());
+    let client = Arc::new(client);
+    let group = AccountGroup("All".to_string());
+
+    let mut snapshots = AccountSummarySnapshotsResubscribing::subscribe(
+        Arc::clone(&client),
+        &group,
+        &[AccountSummaryTags::NET_LIQUIDATION],
+        Duration::from_millis(50),
+    )
+    .expect("request account_summary_snapshots_resubscribing failed");
+    let initial = snapshots.next().unwrap().unwrap();
+    let thread = std::thread::spawn(move || {
+        let gap = snapshots.next().unwrap();
+        let fresh = snapshots.next().unwrap().unwrap();
+        (gap, fresh)
+    });
+    drop_connection(&message_bus);
+    let (gap, fresh) = thread.join().expect("thread panicked");
+
+    assert_eq!(values(&initial), vec![("NetLiquidation", "USD", "100.0")]);
+    assert!(
+        matches!(&gap, Err(Error::Notice(n)) if n.code == crate::TRANSPORT_RECONNECT_CODE),
+        "expected the reconnect notice, got {gap:?}"
+    );
+    assert_eq!(values(&fresh), vec![("NetLiquidation", "USD", "100.0")]);
+    let request = |id| {
+        request_account_summary()
+            .request_id(id)
+            .group("All")
+            .tags([AccountSummaryTags::NET_LIQUIDATION])
+    };
+    assert_request(&message_bus, 0, &request(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 1, &request(TEST_REQ_ID_FIRST + 1));
+}
+
+#[test]
+fn account_summary_snapshots_resubscribing_ends_when_the_reconnect_gives_up() {
+    let (client, message_bus) = resubscribing_bus(net_liquidation_dump().with_failed_reconnect());
+    let group = AccountGroup("All".to_string());
+
+    let mut snapshots = client
+        .account_summary_snapshots_resubscribing(&group, &[AccountSummaryTags::NET_LIQUIDATION], Duration::from_millis(50))
+        .expect("request account_summary_snapshots_resubscribing failed");
+    snapshots.next().unwrap().unwrap();
+    drop_connection(&message_bus);
+    let failed = snapshots.next();
+    let after = snapshots.next();
+
+    assert!(matches!(failed, Some(Err(Error::ConnectionFailed))), "got {failed:?}");
+    assert!(after.is_none(), "got {after:?}");
+    assert_eq!(request_message_count(&message_bus), 1);
+}
+
+#[test]
+fn account_summary_snapshots_resubscribing_retries_failed_reopen_send() {
+    let (client, message_bus) = resubscribing_bus(net_liquidation_dump());
+    let group = AccountGroup("All".to_string());
+    let tags = &[AccountSummaryTags::NET_LIQUIDATION];
+    let mut snapshots = client
+        .account_summary_snapshots_resubscribing(&group, tags, Duration::from_millis(50))
+        .unwrap();
+    snapshots.next().unwrap().unwrap();
+
+    message_bus.fail_next_request_send();
+    drop_connection(&message_bus);
+    let gap = snapshots.next();
+    let fresh = snapshots.next().unwrap().unwrap();
+
+    assert!(
+        matches!(&gap, Some(Err(Error::Notice(n))) if n.code == crate::TRANSPORT_RECONNECT_CODE),
+        "got {gap:?}"
+    );
+    assert_eq!(values(&fresh), vec![("NetLiquidation", "USD", "100.0")]);
+    assert_eq!(request_message_count(&message_bus), 3);
+    for index in 0..3 {
+        let request = request_account_summary()
+            .request_id(TEST_REQ_ID_FIRST + index as i32)
+            .group("All")
+            .tags(*tags);
+        assert_request(&message_bus, index, &request);
+    }
+}
+
+#[test]
+fn account_summary_snapshots_resubscribing_cancel_sends_cancel_and_ends() {
+    // Not kept open: the stub would hold the channel open after the cancel, where the real bus closes it.
+    let message_bus = Arc::new(net_liquidation_dump());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let group = AccountGroup("All".to_string());
+
+    let mut snapshots = client
+        .account_summary_snapshots_resubscribing(&group, &[AccountSummaryTags::NET_LIQUIDATION], Duration::from_millis(50))
+        .expect("request account_summary_snapshots_resubscribing failed");
+    snapshots.next().unwrap().unwrap();
+    snapshots.cancel();
+    let after = snapshots.next();
+
+    assert!(after.is_none(), "got {after:?}");
     assert_eq!(request_message_count(&message_bus), 2);
     assert_request(&message_bus, 1, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST));
 }

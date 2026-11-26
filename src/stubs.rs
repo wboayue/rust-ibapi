@@ -28,11 +28,17 @@ use {
         AsyncMessageBus,
     },
     async_trait::async_trait,
-    tokio::sync::broadcast,
+    tokio::sync::{broadcast, oneshot},
 };
 
 #[cfg(feature = "async")]
-const TEST_BROADCAST_CAPACITY: usize = 1024;
+pub(crate) const TEST_BROADCAST_CAPACITY: usize = 1024;
+
+#[cfg(feature = "async")]
+struct RequestSendStall {
+    accepted: oneshot::Sender<()>,
+    flushed: oneshot::Receiver<()>,
+}
 
 pub(crate) struct MessageBusStub {
     pub request_messages: RwLock<Vec<Vec<u8>>>,
@@ -47,6 +53,9 @@ pub(crate) struct MessageBusStub {
     /// Requests still to be answered with [`Error::ConnectionReset`] before the
     /// configured responses are served. See [`MessageBusStub::with_connection_resets`].
     connection_resets: AtomicUsize,
+    fail_request_send: AtomicBool,
+    #[cfg(feature = "async")]
+    request_send_stall: Mutex<Option<RequestSendStall>>,
     /// What `session_generation` reports; see [`MessageBusStub::start_new_session`].
     session_generation: AtomicU64,
     /// The runtime the stub was built on, if any; sync-only tests build it
@@ -90,6 +99,26 @@ enum SendMode {
 static ORDER_UPDATE_SUBSCRIPTION_TRACKER: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
 impl MessageBusStub {
+    #[cfg(feature = "async")]
+    pub(crate) fn stall_next_request_send(&self) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        let (accepted, acceptance) = oneshot::channel();
+        let (flush, flushed) = oneshot::channel();
+        *self.request_send_stall.lock().unwrap() = Some(RequestSendStall { accepted, flushed });
+        (acceptance, flush)
+    }
+
+    pub(crate) fn fail_next_request_send(&self) {
+        self.fail_request_send.store(true, Ordering::Relaxed);
+    }
+
+    fn check_request_send(&self, message: &[u8]) -> Result<(), Error> {
+        if self.fail_request_send.swap(false, Ordering::Relaxed) {
+            self.request_messages.write().unwrap().push(message.to_vec());
+            return Err(Error::ConnectionReset);
+        }
+        Ok(())
+    }
+
     /// Simulate a reconnect's reset: subscriptions made before it now belong
     /// to an earlier session.
     pub(crate) fn start_new_session(&self) {
@@ -106,6 +135,9 @@ impl Default for MessageBusStub {
             #[cfg(feature = "async")]
             executions_requests: RwLock::new(vec![]),
             connection_resets: AtomicUsize::new(0),
+            fail_request_send: AtomicBool::new(false),
+            #[cfg(feature = "async")]
+            request_send_stall: Mutex::default(),
             session_generation: AtomicU64::new(0),
             #[cfg(feature = "async")]
             runtime: tokio::runtime::Handle::try_current().ok(),
@@ -172,6 +204,19 @@ impl MessageBusStub {
     pub fn keeping_channels_open(self) -> Self {
         self.keep_open.store(true, Ordering::SeqCst);
         self
+    }
+
+    /// Deliver `item` to every subscription kept open by
+    /// [`Self::keeping_channels_open`], as a frame arriving after the scripted ones.
+    pub(crate) fn send_to_open_subscriptions(&self, item: RoutedItem) {
+        #[cfg(feature = "sync")]
+        for sender in self.open_sync_senders.lock().unwrap().iter() {
+            let _ = sender.send(item.clone());
+        }
+        #[cfg(feature = "async")]
+        for sender in self.open_async_senders.lock().unwrap().iter() {
+            let _ = sender.send(item.clone());
+        }
     }
 
     /// Make each `wait_connected` take `delay`, as a reconnect does; with
@@ -297,6 +342,7 @@ impl MessageBus for MessageBusStub {
         message: &[u8],
         bound: Option<crate::transport::BufferBound>,
     ) -> Result<InternalSubscription, Error> {
+        self.check_request_send(message)?;
         self.record_buffer_limit(bound);
         Ok(mock_request(self, MockRoute::Request(request_id), message))
     }
@@ -450,8 +496,15 @@ impl AsyncMessageBus for MessageBusStub {
         message: Vec<u8>,
         bound: Option<crate::transport::BufferBound>,
     ) -> Result<AsyncInternalSubscription, Error> {
+        self.check_request_send(&message)?;
         self.record_buffer_limit(bound);
-        Ok(self.seeded_subscription(message))
+        let subscription = self.seeded_subscription(message);
+        let stall = self.request_send_stall.lock().unwrap().take();
+        if let Some(stall) = stall {
+            let _ = stall.accepted.send(());
+            let _ = stall.flushed.await;
+        }
+        Ok(subscription)
     }
 
     async fn send_executions_request(&self, request_id: RequestId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
