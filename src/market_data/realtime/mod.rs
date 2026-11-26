@@ -271,8 +271,10 @@ pub struct Reroute {
 /// How a [`MarketDepth`] / [`MarketDepthL2`] row changes the book.
 ///
 /// Rows are fixed slots, not a list that shifts: TWS inserted rows only at the end of a side,
-/// re-priced rows in place with `Update`, and deleted the last rows. Shifting the rows after
-/// `position` on an insert or delete left the book unsorted (live: 2026-11-25, server 223;
+/// re-priced rows in place with `Update`, and almost always deleted the last row (17 of 1,327
+/// deletes in a downstream recording hit a lower row). In that recording, shifting the rows
+/// after `position` on an insert or delete left a side unsorted after 31,049 operations, against
+/// 3,775 transient states for fixed slots (live: 2026-11-25, server 223;
 /// `docs/wire-facts/market-data.md#market-depth-rows-are-fixed-positions`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DepthOperation {

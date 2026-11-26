@@ -145,8 +145,8 @@ connectivity flaps; #1209 (`FARM_CODES`, `Notice::data_farm` in `src/messages/no
   `cashhmds`, `usfarm`, `secdefnj`, `cashfarm`, `usopt` and `uscrypto` broken and then OK again;
   no notice marked the stall itself or its end.
 - New connections took the handshake as usual, except some that timed out after 30 s ("no
-  startup reply from TWS") when made seconds after another connection closed (22:04 twice,
-  01:36, 04:05).
+  startup reply from TWS") when made seconds after another connection closed: at 01:36 and
+  04:05, and twice at 22:04, before the stall began, so these timeouts may not be part of it.
 - A subscription opened during the stall is created normally and then stays silent, which on a
   keep-up-to-date stream looks like a session break, and a one-shot request without a timeout
   waits for good. Only a watchdog on the caller's side detects it.
