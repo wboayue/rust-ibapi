@@ -19,7 +19,9 @@ use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::connection::common::STARTUP_STALL;
 use crate::connection::sync::Connection;
 
-use super::common::{lock, log_orphan, read_lock, report_unroutable_frame, validate_frame_length, write_lock, Lease, LeaseRef};
+use super::common::{
+    lock, log_orphan, read_lock, report_unroutable_frame, validate_frame_length, write_lock, Lease, LeaseRef, OrderFrame, OrderWrites,
+};
 use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::raw_capture::RawFrameTap;
@@ -343,6 +345,8 @@ pub struct TcpMessageBus<S: Stream> {
     /// starts, or is refused: none reaches the socket the reconnect installs
     /// until the handshake on it is done.
     session: RwLock<()>,
+    outbound_writer: Mutex<()>,
+    order_writes: OrderWrites,
 }
 
 impl<S: Stream> TcpMessageBus<S> {
@@ -370,6 +374,8 @@ impl<S: Stream> TcpMessageBus<S> {
             order_taps,
             connection_state: ConnectionSignal::default(),
             session: RwLock::new(()),
+            outbound_writer: Mutex::new(()),
+            order_writes: OrderWrites::default(),
         }
     }
 
@@ -392,18 +398,17 @@ impl<S: Stream> TcpMessageBus<S> {
     fn request_shutdown(&self) {
         debug!("shutdown requested");
 
+        // Release connection waiters and stop reconnect backoff before draining routes.
+        self.connection_state.shutdown();
+        self.shutdown.request();
+
+        self.order_writes.drain(|id, frames| self.drain_order_write(id, frames, true));
         self.requests.fail_all(|| Error::Shutdown.into());
         self.orders.fail_all(|| Error::Shutdown.into());
         self.shared_channels.fail_all(|| Error::Shutdown.into());
         // Aliases of the routes just failed.
         self.executions.clear();
         self.connection.notice_broadcaster.close();
-
-        // Both latch: the connection signal releases every `wait_connected`
-        // with `Error::Shutdown`, and the shutdown signal ends any backoff
-        // wait `Connection::reconnect` is in.
-        self.connection_state.shutdown();
-        self.shutdown.request();
 
         self.order_taps.close();
 
@@ -474,14 +479,21 @@ impl<S: Stream> TcpMessageBus<S> {
     /// progress, whatever the state signal says yet, so the write is refused
     /// as `ensure_connected` would refuse it once the signal catches up.
     fn write_now(&self, message: &[u8]) -> Result<(), Error> {
-        let _session = match self.session.try_read() {
+        let _session = self.session_for_write()?;
+        let _writer = lock(&self.outbound_writer);
+        self.ensure_connected()?;
+        self.connection.write_message(message)
+    }
+
+    fn session_for_write(&self) -> Result<RwLockReadGuard<'_, ()>, Error> {
+        let session = match self.session.try_read() {
             Ok(guard) => guard,
             // Poison recovery, as `common::lock`: the guard holds nothing.
             Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
             Err(TryLockError::WouldBlock) => return Err(self.ended_reason(Error::Reconnecting)),
         };
         self.ensure_connected()?;
-        self.connection.write_message(message)
+        Ok(session)
     }
 
     fn reset(&self) {
@@ -490,6 +502,7 @@ impl<S: Stream> TcpMessageBus<S> {
         // already sees the new generation.
         self.session_generation.fetch_add(1, Ordering::AcqRel);
 
+        self.order_writes.drain(|id, frames| self.drain_order_write(id, frames, true));
         self.requests.fail_all(|| Error::ConnectionReset.into());
         self.orders.fail_all(|| Error::ConnectionReset.into());
         self.shared_channels.fail_all(|| Error::ConnectionReset.into());
@@ -731,7 +744,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 return;
             }
             Some(WireId::Order(order_id)) if self.orders.contains(&order_id) => {
-                let _ = self.orders.deliver(&order_id, message.into());
+                let _ = self.deliver_order(order_id, message.into());
                 return;
             }
             _ => {}
@@ -748,12 +761,77 @@ impl<S: Stream> TcpMessageBus<S> {
     fn deliver(&self, id: WireId, item: RoutedItem, sent_to_update_stream: bool) {
         let unrouted = match id {
             WireId::Request(request_id) => self.requests.deliver(&request_id, item),
-            WireId::Order(order_id) => self.orders.deliver(&order_id, item),
+            WireId::Order(order_id) => self.deliver_order(order_id, item),
         };
         if let Err(item) = unrouted {
             if !sent_to_update_stream {
                 log_orphan(id, &item);
             }
+        }
+    }
+
+    fn deliver_order(&self, order_id: OrderId, item: RoutedItem) -> Result<(), RoutedItem> {
+        self.dispatch_order_frame(order_id, OrderFrame::Direct(item))
+    }
+
+    fn dispatch_order_frame(&self, order_id: OrderId, frame: OrderFrame) -> Result<(), RoutedItem> {
+        self.order_writes.deliver(
+            order_id,
+            frame,
+            || self.orders.leases(&order_id).iter().any(LeaseRef::is_live),
+            |frame, try_order| self.deliver_order_frame(order_id, frame, try_order),
+        )
+    }
+
+    fn deliver_order_frame(&self, order_id: OrderId, frame: OrderFrame, try_order: bool) -> Result<(), RoutedItem> {
+        match frame {
+            OrderFrame::Direct(item) => self.orders.deliver(&order_id, item),
+            OrderFrame::Execution {
+                item,
+                execution_id,
+                request_id,
+            } => {
+                let delivery = if try_order {
+                    self.orders.deliver_aliased(&order_id, item, execution_id.as_ref(), &self.executions)
+                } else {
+                    Err(item)
+                };
+                if let Some(request_id) = request_id {
+                    delivery.or_else(|item| self.requests.deliver_aliased(&request_id, item, execution_id.as_ref(), &self.executions))
+                } else {
+                    delivery
+                }
+            }
+            OrderFrame::Commission { item, execution_id } => {
+                let leases = self.orders.leases(&order_id);
+                let (delivered, _) = self
+                    .executions
+                    .deliver_selected(&execution_id, &item, |lease| leases.iter().any(|order_lease| order_lease.is(lease)));
+                if delivered {
+                    Ok(())
+                } else {
+                    Err(item)
+                }
+            }
+        }
+    }
+
+    fn deliver_order_commission(&self, execution_id: String, item: RoutedItem) -> Result<(), RoutedItem> {
+        self.order_writes
+            .deliver_commission(execution_id, item, |pending_id, execution_id, item| {
+                let leases = pending_id.map_or_else(Vec::new, |id| self.orders.leases(&id));
+                self.executions
+                    .deliver_selected(execution_id, item, |lease| !leases.iter().any(|order_lease| order_lease.is(lease)))
+            })
+    }
+
+    fn drain_order_write(&self, order_id: OrderId, frames: Vec<OrderFrame>, uncertain: bool) {
+        for frame in frames {
+            let frame = match frame {
+                OrderFrame::Direct(item) if uncertain => OrderFrame::Direct(item.for_earlier_subscription()),
+                frame => frame,
+            };
+            let _ = self.deliver_order_frame(order_id, frame, true);
         }
     }
 
@@ -789,7 +867,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 let sent_to_update_stream = self.send_order_update(&message);
                 let shared = self.shared_channels.send_message(message.message_type(), &message);
                 let unrouted = match message_order_id {
-                    Some(order_id) => self.orders.deliver(&order_id, message.into()).err(),
+                    Some(order_id) => self.deliver_order(order_id, message.into()).err(),
                     None => Some(message.into()),
                 };
                 if let Some(item) = unrouted {
@@ -802,7 +880,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 let sent_to_update_stream = self.send_order_update(&message);
 
                 let unrouted = match message.execution_id() {
-                    Some(execution_id) => self.executions.deliver(&execution_id, message.into()),
+                    Some(execution_id) => self.deliver_order_commission(execution_id, message.into()),
                     None => Err(message.into()),
                 };
                 if let Err(item) = unrouted {
@@ -875,14 +953,21 @@ impl<S: Stream> TcpMessageBus<S> {
         item: RoutedItem,
         execution_id: Option<&String>,
     ) -> Result<(), RoutedItem> {
-        match order_id {
-            Some(id) => self.orders.deliver_aliased(&id, item, execution_id, &self.executions),
-            None => Err(item),
+        if let Some(id) = order_id {
+            return self.dispatch_order_frame(
+                id,
+                OrderFrame::Execution {
+                    item,
+                    execution_id: execution_id.cloned(),
+                    request_id,
+                },
+            );
         }
-        .or_else(|item| match request_id {
+
+        match request_id {
             Some(id) => self.requests.deliver_aliased(&id, item, execution_id, &self.executions),
             None => Err(item),
-        })
+        }
     }
 
     // Sends an order update message to the order update stream if it exists.
@@ -997,21 +1082,30 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 
     fn send_order_request(&self, order_id: OrderId, message: &[u8]) -> Result<InternalSubscription, Error> {
-        // See `open_request`.
-        let session = self.session_generation();
         self.ensure_connected()?;
+        self.throttle(message);
+        let _session = self.session_for_write()?;
+        let _writer = lock(&self.outbound_writer);
+        let session = self.session_generation();
 
         let (sender, receiver) = channel::unbounded();
         let lease = Lease::new();
         let lease_ref = lease.downgrade();
 
-        self.orders.insert(order_id, sender.clone(), lease_ref.clone());
-        debug!("Registered order subscription for order_id={}", order_id);
-
-        // See `send_request`: a failed write takes its registration with it.
-        if let Err(e) = self.write_message(message) {
-            self.orders.remove_if_same(order_id, &lease_ref);
-            return Err(e);
+        let write = self.order_writes.begin(
+            order_id,
+            || self.ensure_connected(),
+            |sent, id, frames| {
+                if sent {
+                    self.orders.insert(id, sender.clone(), lease_ref.clone());
+                    self.orders.supersede_earlier(&id, &lease_ref);
+                }
+                self.drain_order_write(id, frames, false);
+            },
+        )?;
+        self.connection.write_message(message)?;
+        if !write.commit() {
+            return Err(self.ended_reason(Error::ConnectionReset));
         }
 
         let subscription = SubscriptionBuilder::new()
@@ -1113,11 +1207,22 @@ struct Entry<V> {
     lease: LeaseRef,
     /// The unread-item cap of a route opened with a `send_request_capped` bound.
     bound: Option<BoundState>,
+    /// Another entry was registered under this entry's key after it and its
+    /// request was written, so an error frame on the key may answer that later
+    /// request: it reaches this entry as
+    /// [`RoutedItem::for_earlier_subscription`], also once the later entry is
+    /// gone.
+    superseded: bool,
 }
 
 impl<V> Entry<V> {
     fn new(sender: Sender<V>, lease: LeaseRef) -> Self {
-        Self { sender, lease, bound: None }
+        Self {
+            sender,
+            lease,
+            bound: None,
+            superseded: false,
+        }
     }
 
     fn closed(&self) -> bool {
@@ -1155,9 +1260,12 @@ impl Entry<RoutedItem> {
     }
 }
 
+/// Routes keyed by request id, order id, or execution id. A key can hold
+/// several entries: every subscription opened on one order id (`place_order`,
+/// a modify, `cancel_order`) receives that order's frames.
 #[derive(Debug)]
 struct SenderHash<K, V> {
-    senders: RwLock<HashMap<K, Entry<V>>>,
+    senders: RwLock<HashMap<K, Vec<Entry<V>>>>,
 }
 
 impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
@@ -1167,11 +1275,11 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         }
     }
 
-    fn read(&self) -> RwLockReadGuard<'_, HashMap<K, Entry<V>>> {
+    fn read(&self) -> RwLockReadGuard<'_, HashMap<K, Vec<Entry<V>>>> {
         read_lock(&self.senders)
     }
 
-    fn write(&self) -> RwLockWriteGuard<'_, HashMap<K, Entry<V>>> {
+    fn write(&self) -> RwLockWriteGuard<'_, HashMap<K, Vec<Entry<V>>>> {
         write_lock(&self.senders)
     }
 
@@ -1185,12 +1293,12 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         self.with_entry(&id, |entry| entry.lease.clone())
     }
 
-    /// Run `f` on `id`'s entry while holding the read lock, so no removal can
-    /// land between the lookup and `f`.
+    /// Run `f` on the newest of `id`'s entries while holding the read lock, so
+    /// no removal can land between the lookup and `f`.
     #[cfg(test)]
     fn with_entry<R>(&self, id: &K, f: impl FnOnce(&Entry<V>) -> R) -> Option<R> {
         let senders = self.read();
-        senders.get(id).map(f)
+        senders.get(id).and_then(|entries| entries.last()).map(f)
     }
 
     pub fn insert(&self, id: K, sender: Sender<V>, lease: LeaseRef) {
@@ -1206,29 +1314,62 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         self.insert_entry(id, entry);
     }
 
+    /// Register `entry` under `id` beside the entries already there. An entry
+    /// with the same lease is replaced, so one subscription never holds two
+    /// entries under a key and never receives a frame twice.
     fn insert_entry(&self, id: K, entry: Entry<V>) {
-        self.write().insert(id, entry);
+        let mut senders = self.write();
+        let registered = senders.entry(id).or_default();
+        registered.retain(|other| !other.lease.is(&entry.lease));
+        registered.push(entry);
     }
 
-    /// Remove the entry for `id` only if it holds `lease`. Returns whether an
-    /// entry was removed. Used by signal cleanup so a stale signal cannot
-    /// remove a newer registration under the same key.
-    pub fn remove_if_same(&self, id: K, lease: &LeaseRef) -> bool {
-        match self.write().entry(id) {
-            hash_map::Entry::Occupied(registered) if registered.get().lease.is(lease) => {
-                registered.remove();
-                true
-            }
-            _ => false,
+    /// Mark the entries registered under `id` before the one holding `lease`
+    /// as superseded, once that entry's request is written. Until then they
+    /// already receive [`RoutedItem::for_earlier_subscription`] as earlier
+    /// entries; the mark keeps it so after the newer entry is gone. A request
+    /// whose write fails marks nothing.
+    pub fn supersede_earlier(&self, id: &K, lease: &LeaseRef) {
+        let mut senders = self.write();
+        let Some(registered) = senders.get_mut(id) else {
+            return;
+        };
+        let Some(position) = registered.iter().position(|entry| entry.lease.is(lease)) else {
+            return;
+        };
+        for entry in &mut registered[..position] {
+            entry.superseded = true;
         }
+    }
+
+    /// Remove `id`'s entry that holds `lease`, and `id` once none is left.
+    /// Returns whether an entry was removed. Used by signal cleanup so a
+    /// stale signal cannot remove another registration under the same key.
+    pub fn remove_if_same(&self, id: K, lease: &LeaseRef) -> bool {
+        let mut senders = self.write();
+        let hash_map::Entry::Occupied(mut registered) = senders.entry(id) else {
+            return false;
+        };
+        let before = registered.get().len();
+        registered.get_mut().retain(|entry| !entry.lease.is(lease));
+        let removed = registered.get().len() < before;
+        if registered.get().is_empty() {
+            registered.remove();
+        }
+        removed
     }
 
     /// Remove every entry holding `lease`. Returns how many were removed.
     pub fn remove_all_same(&self, lease: &LeaseRef) -> usize {
         let mut senders = self.write();
-        let before = senders.len();
-        senders.retain(|_, registered| !registered.lease.is(lease));
-        before - senders.len()
+        let mut removed = 0;
+        senders.retain(|_, registered| {
+            let before = registered.len();
+            registered.retain(|entry| !entry.lease.is(lease));
+            removed += before - registered.len();
+            !registered.is_empty()
+        });
+        removed
     }
 
     pub fn contains(&self, id: &K) -> bool {
@@ -1248,13 +1389,31 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 }
 
 impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
-    /// Deliver `item` to `id`'s route; hands it back when nothing is
+    fn leases(&self, id: &K) -> Vec<LeaseRef> {
+        self.read().get(id).into_iter().flatten().map(|entry| entry.lease.clone()).collect()
+    }
+
+    fn deliver_selected(&self, id: &K, item: &RoutedItem, selected: impl Fn(&LeaseRef) -> bool) -> (bool, bool) {
+        let (mut delivered, mut skipped) = (false, false);
+        let senders = self.read();
+        for entry in senders.get(id).into_iter().flatten().filter(|entry| entry.lease.is_live()) {
+            if selected(&entry.lease) {
+                entry.deliver(id, item.clone());
+                delivered = true;
+            } else {
+                skipped = true;
+            }
+        }
+        (delivered, skipped)
+    }
+
+    /// Deliver `item` to each of `id`'s routes; hands it back when nothing is
     /// registered under `id`.
     pub fn deliver(&self, id: &K, item: RoutedItem) -> Result<(), RoutedItem> {
         self.deliver_then(id, item, |_| {})
     }
 
-    /// Deliver `item` to `id`'s route, then alias that route under `alias`
+    /// Deliver `item` to each of `id`'s routes, then alias each under `alias`
     /// in `aliases` while still holding `id`'s read lock, so a concurrent
     /// cleanup either removes the registration first (no alias is stored) or
     /// prunes the alias after it. Lock order: `self` (read), then `aliases`
@@ -1274,15 +1433,22 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
         })
     }
 
-    /// Deliver `item` to `id`'s route and run `then` on it, both under the
-    /// read lock.
-    fn deliver_then(&self, id: &K, item: RoutedItem, then: impl FnOnce(&Entry<RoutedItem>)) -> Result<(), RoutedItem> {
+    /// Deliver `item` to each of `id`'s routes and run `then` on each, all
+    /// under the read lock. Superseded entries, every one but the newest and
+    /// the newest too once a later entry was removed, receive
+    /// [`RoutedItem::for_earlier_subscription`].
+    fn deliver_then(&self, id: &K, item: RoutedItem, then: impl Fn(&Entry<RoutedItem>)) -> Result<(), RoutedItem> {
         let senders = self.read();
-        let Some(entry) = senders.get(id) else {
+        let Some((newest, earlier)) = senders.get(id).and_then(|registered| registered.split_last()) else {
             return Err(item);
         };
-        entry.deliver(id, item);
-        then(entry);
+        for entry in earlier {
+            entry.deliver(id, item.for_earlier_subscription());
+            then(entry);
+        }
+        let item = if newest.superseded { item.for_earlier_subscription() } else { item };
+        newest.deliver(id, item);
+        then(newest);
         Ok(())
     }
 
@@ -1296,7 +1462,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug> SenderHash<K, RoutedItem> {
         F: Fn() -> RoutedItem,
     {
         let mut senders = self.write();
-        for entry in senders.values().filter(|entry| !entry.closed()) {
+        for entry in senders.values().flatten().filter(|entry| !entry.closed()) {
             let _ = entry.sender.send(message_fn());
         }
         senders.clear();
