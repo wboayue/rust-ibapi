@@ -167,12 +167,14 @@ hours, TRADES.*
 ### Index ticks
 
 *Live 2026-11-24 Tue 09:41-09:44 UTC (Xetra open; CBOE, OSE and HKFE closed), paper, server 223;
-#1284.*
+#1284. US trading hours: live 2026-11-24 16:00-16:02 UTC (CBOE and Nasdaq open), paper TWS,
+server 223.*
 
 - `reqMktData` real-time on SPX (CBOE), DAX and ESTX50 (EUREX), N225 (OSE.JPN) and HSI (HKFE):
-  354 for each; this account has no index subscription. Delayed (type 3) works after 10167.
-- Delayed, on SPX, DAX, N225 and HSI: one `DelayedBid` and one `DelayedAsk` of `-1` with size `0` at the start,
-  never a real one. `DelayedLast` is a real price with size `1`, closed markets included (SPX
+  354 for each; this account has no index subscription. Delayed data (type 3) arrives after a
+  10167 notice.
+- Delayed, on SPX, DAX, N225 and HSI: one `DelayedBid` and one `DelayedAsk` of `-1` with size
+  `0` at the start, never a real one. `DelayedLast` is a real price with size `1`, closed markets included (SPX
   `7236.85`, N225 and HSI their last value), with a `DelayedLastTimestamp`. No `-1` last price
   arrived.
 - `DelayedOpen` is `0` (a price tick, no size) on all four, DAX included while it traded.
@@ -180,16 +182,14 @@ hours, TRADES.*
 - DAX during its session: a new `DelayedLast` every 5 seconds, size `1` each time.
 - Settles that an index's bid and ask are the no-quote placeholder of every other contract
   (`-1` with size `0`, #1284), and that its last price is a value, not a placeholder, even with
-  the market closed. The size `1` is not a traded size.
-- **US trading hours** (*live 2026-11-24 16:00-16:02 UTC, CBOE and Nasdaq open, paper TWS,
-  server 223*): delayed SPX (CBOE), NDX (NASDAQ) and VIX (CBOE) the same way. One `DelayedBid`
+  the market closed. Inferred: the size `1` is not a traded size.
+- **US trading hours**: delayed SPX (CBOE), NDX (NASDAQ) and VIX (CBOE) the same way. One `DelayedBid`
   and one `DelayedAsk` of `-1` with size `0` first, then a `DelayedLast` with size `1` and a
   `DelayedLastTimestamp` every 5 seconds (SPX `7158.43`, `7154.96`, ...). `DelayedOpen` was `0`
   on all three with the session open; `DelayedHigh`, `DelayedLow` and `DelayedClose` (the
   previous close) were real. `DelayedVolume` came as a small count that grew (SPX `4535`, then
   `4565` 10 s later; NDX `4561`; VIX `1776`, then `1778`); what it counts was not
-  established, since an index does not trade. Real-time on SPX
-  and VIX: 354.
+  established, since an index does not trade. Real-time on SPX and VIX: 354.
 - **Not probed:** real-time index data (no subscription); delayed ESTX50; an index before its
   first value of a day; snapshots.
 
