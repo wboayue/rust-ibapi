@@ -70,6 +70,18 @@ impl ConnectionSignal {
         lock(&self.state).check()
     }
 
+    pub(crate) fn wait_until(&self, deadline: Instant) -> Result<(), Error> {
+        let mut state = lock(&self.state);
+        loop {
+            state.check()?;
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Ok(());
+            }
+            state = self.changed.wait_timeout(state, remaining).unwrap_or_else(PoisonError::into_inner).0;
+        }
+    }
+
     /// Block until the session is connected again, returning
     /// [`Error::ConnectionFailed`] or [`Error::Shutdown`] if it never will be,
     /// or [`Error::Timeout`] if `deadline` passes first.

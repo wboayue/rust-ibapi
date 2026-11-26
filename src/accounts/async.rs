@@ -8,6 +8,7 @@ use crate::client::{ClientRequestBuilders, SubscriptionBuilderExt};
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::Subscription;
+use crate::transport::r#async::AccountAdmission;
 use crate::{Client, Error};
 
 use super::common::snapshots::SnapshotBuilder;
@@ -20,6 +21,11 @@ impl Client {
     /// Subscribe to streaming position updates for all accessible accounts.
     ///
     /// The stream first replays the full position list and then sends incremental updates.
+    ///
+    /// Cancelling the last positions subscription clears the count of pending replies. If TWS
+    /// still sends rows and `PositionEnd` for a dump cancelled mid-reply, a replacement
+    /// subscription opened immediately can receive those rows and treat that marker as the end of
+    /// its own initial set.
     ///
     /// # Examples
     ///
@@ -272,11 +278,27 @@ impl Client {
     /// after the drop can still be refused. To stream several accounts at once, use
     /// [`account_updates_multi`](Client::account_updates_multi).
     ///
+    /// TWS answers a repeated subscribe for the same account with nothing, so a
+    /// second subscription is sent as an unsubscribe then a subscribe, which
+    /// TWS answers with the full initial values and [`AccountUpdate::End`]
+    /// again. Every live subscription of the account receives that dump: an
+    /// earlier caller reads the current values and `End` a second time, and
+    /// the notice stream gets TWS's 2100 "API client has been unsubscribed
+    /// from account data". A subscription made while an earlier dump is still
+    /// arriving skips that dump and reads its own whole one.
+    /// Dropping the request future before its first byte keeps it off the
+    /// wire. Once the write starts, the task finishes the request and
+    /// releases any subscription the caller did not receive.
+    ///
     /// # Arguments
     /// * `account` - The account id (i.e. U1234567) for which the information is requested.
     ///
     /// # Errors
     /// [`Error::AccountUpdatesInUse`] while another account's updates are live.
+    /// [`Error::AlreadySubscribed`] if the last subscriber is gone and the client
+    /// is still waiting for an earlier dump's [`AccountUpdate::End`]. The client
+    /// sends no request. Retry after the outstanding ends arrive or after a
+    /// transport reconnect if TWS never sends them.
     ///
     /// # Examples
     ///
@@ -307,16 +329,27 @@ impl Client {
     /// }
     /// ```
     pub async fn account_updates(&self, account: impl Into<AccountId>) -> Result<Subscription<AccountUpdate>, Error> {
-        let account = &account.into();
-        let request = encoders::encode_request_account_updates(true, account)?;
-        let subscription = self.message_bus.send_account_updates_request(account, request).await?;
-        Ok(Subscription::new_from_internal(
-            subscription,
-            self.message_bus.clone(),
-            None,
-            None,
-            self.decoder_context(),
-        ))
+        let account = account.into();
+        let request = encoders::encode_request_account_updates(true, &account)?;
+        let unsubscribe = encoders::encode_request_account_updates(false, &account)?;
+        let bus = self.message_bus.clone();
+        let context = self.decoder_context();
+        let session = bus.session_generation();
+        let (admission, _caller) = AccountAdmission::new();
+        // The replay may have already sent its unsubscribe when the caller
+        // stops waiting. The task completes the pair and owns the resulting
+        // subscription, so an abandoned handle still releases its count.
+        self.message_bus
+            .runtime_handle()
+            .spawn(async move {
+                if session != bus.session_generation() {
+                    return Err(Error::ConnectionReset);
+                }
+                let subscription = bus.send_account_updates_request(&account, request, unsubscribe, &admission).await?;
+                Ok(Subscription::new_from_internal(subscription, bus, None, None, context))
+            })
+            .await
+            .map_err(|_| Error::Shutdown)?
     }
 
     /// Subscribe to account updates scoped by account and model code.

@@ -118,6 +118,21 @@ fn encode_request_account_updates_works() {
     assert_eq!(req.acct_code.as_deref(), Some("DU123"));
 }
 
+/// The unsubscribe a second `account_updates` subscription writes ahead of its subscribe.
+#[test]
+fn encode_request_account_updates_unsubscribe_names_the_account() {
+    let account = AccountId("DU123".to_string());
+    let bytes = super::encode_request_account_updates(false, &account).unwrap();
+    assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountData);
+
+    use prost::Message;
+    let req = crate::proto::AccountDataRequest::decode(&bytes[4..]).unwrap();
+    // `false` goes out as an absent field; TWS answered that frame with 2100 and stopped the
+    // account's updates (docs/wire-facts/accounts.md).
+    assert_eq!(req.subscribe, None);
+    assert_eq!(req.acct_code.as_deref(), Some("DU123"));
+}
+
 #[test]
 fn encode_cancel_account_updates_works() {
     let bytes = super::encode_cancel_account_updates().unwrap();

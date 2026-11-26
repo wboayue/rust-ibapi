@@ -14,9 +14,9 @@ use crate::proto;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{
-    cancel_order_request, commission_and_fees_report, completed_order, completed_orders_end, completed_orders_request, execution_data,
-    execution_data_end, executions_request, global_cancel_request, next_valid_id, next_valid_order_id_request, open_order, open_order_end,
-    open_orders_request, order_bound, order_status, place_order_request,
+    auto_open_orders_request, cancel_order_request, commission_and_fees_report, completed_order, completed_orders_end, completed_orders_request,
+    execution_data, execution_data_end, executions_request, global_cancel_request, next_valid_id, next_valid_order_id_request, open_order,
+    open_order_end, open_orders_request, order_bound, order_status, place_order_request,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use crate::{server_versions, Client};
@@ -294,6 +294,23 @@ async fn open_orders() {
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(&message_bus, 0, &open_orders_request());
+}
+
+#[tokio::test]
+async fn auto_open_orders() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::OpenOrder,
+        open_order().order_id(7).encode_proto(),
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let mut subscription = client.auto_open_orders(AutoBind::Yes).await.expect("auto_open_orders");
+
+    assert_request(&message_bus, 0, &auto_open_orders_request().auto_bind(true));
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Data(Orders::OrderData(order)))) => assert_eq!(order.order.order_id, 7),
+        other => panic!("expected the bound order, got {other:?}"),
+    }
 }
 
 #[tokio::test]

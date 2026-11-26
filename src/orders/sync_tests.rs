@@ -442,8 +442,8 @@ fn all_open_orders() {
 #[test]
 fn auto_open_orders() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
-        IncomingMessages::OpenOrderEnd,
-        open_order_end().encode_proto(),
+        IncomingMessages::OpenOrder,
+        open_order().order_id(7).encode_proto(),
     )]));
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -451,8 +451,10 @@ fn auto_open_orders() {
 
     assert_request(&message_bus, 0, &auto_open_orders_request().auto_bind(true));
     let subscription = results.expect("auto_open_orders");
-    // OpenOrderEnd is terminal for auto_open_orders too: the stream ends rather than waiting for binds.
-    assert!(subscription.next().is_none(), "OpenOrderEnd alone must end the stream with no orders");
+    match subscription.next() {
+        Some(Ok(SubscriptionItem::Data(Orders::OrderData(order)))) => assert_eq!(order.order.order_id, 7),
+        other => panic!("expected the bound order, got {other:?}"),
+    }
 }
 
 #[test]

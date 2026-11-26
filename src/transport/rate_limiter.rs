@@ -104,6 +104,18 @@ impl RateLimiter {
         }
     }
 
+    /// Carry a delayed write into the next reservation. The old permit
+    /// already spent a slot, so compensate by at most one interval even if
+    /// other clients have reused the budget since it was issued.
+    pub(crate) fn observe_account_write(&self, permit: Instant, at: Instant) {
+        let delay = at.saturating_duration_since(permit);
+        if delay.is_zero() {
+            return;
+        }
+        let mut state = self.state();
+        state.tat = state.tat.map(|tat| tat.max(at) + delay.min(state.interval));
+    }
+
     /// Block the calling thread until a slot is free.
     #[cfg(feature = "sync")]
     pub(crate) fn acquire_blocking(&self, is_cancel: bool) {

@@ -68,6 +68,12 @@ impl ConnectionSignal {
         self.sender.borrow().check()
     }
 
+    pub(crate) async fn disconnected(&self) -> Error {
+        let mut state = self.sender.subscribe();
+        let state = state.wait_for(|state| *state != SessionState::Connected).await;
+        state.ok().and_then(|state| state.check().err()).unwrap_or(Error::Shutdown)
+    }
+
     /// Resolve once the session is connected again, returning
     /// [`Error::ConnectionFailed`] or [`Error::Shutdown`] if it never will be,
     /// or [`Error::Timeout`] if `deadline` passes first.

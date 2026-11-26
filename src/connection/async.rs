@@ -14,7 +14,7 @@ use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{encode_raw_length, Notice, ResponseMessage};
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
-use crate::transport::r#async::{AsyncSocket, AsyncStream, NoticeBroadcaster, ShutdownSignal};
+use crate::transport::r#async::{AccountAdmission, AsyncSocket, AsyncStream, NoticeBroadcaster, ShutdownSignal};
 use crate::transport::recorder::MessageRecorder;
 
 type Response = Result<ResponseMessage, Error>;
@@ -246,10 +246,18 @@ impl<S: AsyncStream> AsyncConnection<S> {
 
     /// Write a protobuf message to the connection
     pub(crate) async fn write_message(&self, data: &[u8]) -> Result<(), Error> {
+        self.write_message_tracked(data, &std::sync::atomic::AtomicBool::new(false), None).await
+    }
+
+    pub(crate) async fn write_message_tracked(
+        &self,
+        data: &[u8],
+        started: &std::sync::atomic::AtomicBool,
+        admission: Option<&AccountAdmission>,
+    ) -> Result<(), Error> {
         self.recorder.record_request(data);
         debug!("-> {:?}", data);
-
-        self.write_raw(data).await
+        self.socket.write_all_tracked(&encode_raw_length(data), started, admission).await
     }
 
     /// Read a message from the connection

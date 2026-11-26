@@ -319,6 +319,10 @@ pub(crate) fn unknown_message_type_notice(message: &ResponseMessage) -> Notice {
 /// `Error::Notice` carrying this code. `collect_for` and `collect_until`
 /// stop at the gap and return the rows read before it.
 ///
+/// An async shared subscription also returns a terminal `Error::Notice`
+/// when it lags while skipping an earlier reply. The dropped frames may
+/// contain the end marker that separates the two replies.
+///
 /// - **Market data and other non-order streams** (ticks, bars, depth,
 ///   positions, account updates, PnL, news, contract details): bounded and
 ///   lossy by design — freshness beats completeness, and a feed

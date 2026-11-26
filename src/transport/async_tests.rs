@@ -21,7 +21,7 @@ use crate::common::test_utils::helpers::{
 };
 use crate::connection::common::ConnectionProtocol;
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{encode_raw_length, OutgoingMessages, TRANSPORT_RECONNECT_CODE};
+use crate::messages::{encode_raw_length, IncomingMessages, OutgoingMessages, TRANSPORT_RECONNECT_CODE};
 use crate::server_versions;
 use crate::testdata::builders::contracts::contract_data;
 use crate::testdata::builders::orders::order_bound;
@@ -245,17 +245,25 @@ async fn order_id_correlation_with_interleaved_responses() {
     assert!(sub_b.try_next_routed().is_none(), "sub_b received an extra message");
 }
 
-/// Shared-channel fan-out: `RequestOpenOrders`, `RequestAllOpenOrders`, and
-/// `RequestAutoOpenOrders` all map to `[OpenOrder, OrderStatus, OpenOrderEnd]`
-/// in `CHANNEL_MAPPINGS`. The `OrderAndShared` strategy fans every `OpenOrder`
-/// out to each shared subscriber, with or without an order id.
+/// Shared-channel fan-out: `RequestOpenOrders` and `RequestAllOpenOrders` map
+/// to `[OpenOrder, OrderStatus, OpenOrderEnd]` in `CHANNEL_MAPPINGS`,
+/// `RequestAutoOpenOrders` to `[OpenOrder, OrderStatus]`. The `OrderAndShared`
+/// strategy fans every `OpenOrder` out to each shared subscriber, with or
+/// without an order id, once none is passing over an earlier request's reply.
 #[tokio::test]
 async fn shared_channel_fan_out_for_open_orders() {
+    use crate::messages::IncomingMessages as M;
     let (stream, bus) = make_bus();
 
     let mut sub_open = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
     let mut sub_all = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, vec![]).await.unwrap();
     let mut sub_auto = bus.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, vec![]).await.unwrap();
+
+    // The end of the open-orders reply, which `sub_all` passes over.
+    stream.push_inbound(binary_proto(M::OpenOrderEnd as i32, &crate::proto::OpenOrdersEnd {}));
+    bus.read_and_route_message().await.unwrap();
+    assert_eq!(next_message(&mut sub_open).await.message_type(), M::OpenOrderEnd);
+    assert!(sub_auto.try_next_routed().is_none(), "sub_auto read another request's end marker");
 
     for order_id in [Some(42), None] {
         stream.push_inbound(binary_proto(
@@ -785,15 +793,20 @@ async fn make_order_subscription(order_id: OrderId) -> (MemoryStream, Arc<AsyncT
 
 /// Number of length-prefixed frames in `captured` whose payload is `payload`.
 fn count_frames(captured: &[u8], payload: &[u8]) -> usize {
+    frame_payloads(captured).into_iter().filter(|frame| *frame == payload).count()
+}
+
+/// The payloads of the length-prefixed frames in `captured`, in write order.
+fn frame_payloads(captured: &[u8]) -> Vec<&[u8]> {
     let mut rest = captured;
-    let mut count = 0;
+    let mut frames = Vec::new();
     while rest.len() >= 4 {
         let len = u32::from_be_bytes([rest[0], rest[1], rest[2], rest[3]]) as usize;
         let (frame, tail) = rest[4..].split_at(len);
-        count += usize::from(frame == payload);
+        frames.push(frame);
         rest = tail;
     }
-    count
+    frames
 }
 
 /// Wait until `captured` holds `expected` frames equal to `payload`, or the
@@ -844,11 +857,14 @@ async fn shared_subscription_cancel_waits_for_last_subscriber() {
         "cancel written while a subscription is still live"
     );
 
-    stream.push_inbound(binary_proto(
-        crate::messages::IncomingMessages::PositionEnd as i32,
-        &crate::proto::PositionEnd {},
-    ));
-    bus.read_and_route_message().await.unwrap();
+    // TWS answers each request: the survivor passes over the first reply.
+    for _ in 0..2 {
+        stream.push_inbound(binary_proto(
+            crate::messages::IncomingMessages::PositionEnd as i32,
+            &crate::proto::PositionEnd {},
+        ));
+        bus.read_and_route_message().await.unwrap();
+    }
     let item = next_item(&mut second).await.expect("survivor received nothing").unwrap();
     assert!(matches!(item, SubscriptionItem::Data(PositionUpdate::PositionEnd)), "got: {item:?}");
 
@@ -1014,6 +1030,232 @@ async fn stale_shared_handle_neither_cancels_nor_decrements() {
     assert_eq!(wait_for_positions_live(&bus, 0).await, 0);
 }
 
+/// A data frame and the end frame of a reply to each shared request TWS
+/// answers one request at a time (`ChannelMapping::reply_end`).
+struct ReplyFrames {
+    request: OutgoingMessages,
+    data: (IncomingMessages, Vec<u8>),
+    end: (IncomingMessages, Vec<u8>),
+}
+
+fn reply_frames() -> Vec<ReplyFrames> {
+    use crate::messages::IncomingMessages as M;
+    let open_order = || {
+        (
+            M::OpenOrder,
+            binary_proto(
+                M::OpenOrder as i32,
+                &crate::proto::OpenOrder {
+                    order_id: Some(7),
+                    ..Default::default()
+                },
+            ),
+        )
+    };
+    let open_orders_end = || (M::OpenOrderEnd, binary_proto(M::OpenOrderEnd as i32, &crate::proto::OpenOrdersEnd {}));
+    vec![
+        ReplyFrames {
+            request: OutgoingMessages::RequestOpenOrders,
+            data: open_order(),
+            end: open_orders_end(),
+        },
+        ReplyFrames {
+            request: OutgoingMessages::RequestAllOpenOrders,
+            data: open_order(),
+            end: open_orders_end(),
+        },
+        ReplyFrames {
+            request: OutgoingMessages::RequestCompletedOrders,
+            data: (
+                M::CompletedOrder,
+                binary_proto(M::CompletedOrder as i32, &crate::proto::CompletedOrder::default()),
+            ),
+            end: (
+                M::CompletedOrdersEnd,
+                binary_proto(M::CompletedOrdersEnd as i32, &crate::proto::CompletedOrdersEnd {}),
+            ),
+        },
+        ReplyFrames {
+            request: OutgoingMessages::RequestPositions,
+            data: (M::Position, binary_proto(M::Position as i32, &crate::proto::Position::default())),
+            end: (M::PositionEnd, binary_proto(M::PositionEnd as i32, &crate::proto::PositionEnd {})),
+        },
+    ]
+}
+
+/// A second request made while the first one's reply is arriving reads its
+/// own full reply, not the tail of the first: TWS answers each request with
+/// a full reply and its own end marker, in the order sent.
+#[tokio::test]
+async fn overlapping_shared_request_reads_its_own_reply() {
+    for ReplyFrames {
+        request,
+        data: (data_type, data),
+        end: (end_type, end),
+    } in reply_frames()
+    {
+        let (stream, bus) = make_bus();
+        let mut first = bus.send_shared_request(request, vec![]).await.unwrap();
+        stream.push_inbound(data.clone());
+        bus.read_and_route_message().await.unwrap();
+
+        let mut second = bus.send_shared_request(request, vec![]).await.unwrap();
+        for frame in [end.clone(), data.clone(), end.clone()] {
+            stream.push_inbound(frame);
+            bus.read_and_route_message().await.unwrap();
+        }
+
+        let mut second_reply = Vec::new();
+        for _ in 0..2 {
+            second_reply.push(next_message(&mut second).await.message_type());
+        }
+        assert_eq!(second_reply, [data_type, end_type], "{request:?}: second request read another reply");
+        assert!(second.try_next_routed().is_none(), "{request:?}: second request read past its reply");
+
+        let mut first_reply = Vec::new();
+        for _ in 0..3 {
+            first_reply.push(next_message(&mut first).await.message_type());
+        }
+        assert_eq!(first_reply, [data_type, end_type, data_type], "{request:?}");
+    }
+}
+
+/// `all_open_orders` overlapping `open_orders` reads its own result set:
+/// both replies carry `OpenOrder` frames and `OpenOrderEnd`, and TWS sends
+/// the own-orders reply first.
+#[tokio::test]
+async fn overlapping_open_orders_and_all_open_orders_read_own_result_sets() {
+    use crate::messages::IncomingMessages as M;
+    let (stream, bus) = make_bus();
+    let open_order = |order_id| {
+        binary_proto(
+            M::OpenOrder as i32,
+            &crate::proto::OpenOrder {
+                order_id: Some(order_id),
+                ..Default::default()
+            },
+        )
+    };
+    let end = || binary_proto(M::OpenOrderEnd as i32, &crate::proto::OpenOrdersEnd {});
+
+    let mut own = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+    let mut all = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, vec![]).await.unwrap();
+    for frame in [open_order(1), end(), open_order(1), open_order(2), end()] {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    async fn read(sub: &mut AsyncInternalSubscription, count: usize) -> Vec<(M, Option<i32>)> {
+        let mut reply = Vec::new();
+        for _ in 0..count {
+            let message = next_message(sub).await;
+            reply.push((message.message_type(), message.order_id()));
+        }
+        reply
+    }
+    assert_eq!(read(&mut own, 2).await, [(M::OpenOrder, Some(1)), (M::OpenOrderEnd, None)]);
+    assert_eq!(
+        read(&mut all, 3).await,
+        [(M::OpenOrder, Some(1)), (M::OpenOrder, Some(2)), (M::OpenOrderEnd, None)]
+    );
+    assert!(all.try_next_routed().is_none(), "all_open_orders read past its reply");
+}
+
+/// TWS draws no reply to `reqAutoOpenOrders` and its stream has no end
+/// marker: an `open_orders` reply on the same client ends only that request,
+/// and the auto stream reads on.
+#[tokio::test]
+async fn auto_open_orders_survives_open_orders_reply() {
+    use crate::messages::IncomingMessages as M;
+    let (stream, bus) = make_bus();
+    let open_order = |order_id| {
+        binary_proto(
+            M::OpenOrder as i32,
+            &crate::proto::OpenOrder {
+                order_id: Some(order_id),
+                ..Default::default()
+            },
+        )
+    };
+    let end = || binary_proto(M::OpenOrderEnd as i32, &crate::proto::OpenOrdersEnd {});
+
+    let mut auto = bus.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, vec![]).await.unwrap();
+    let mut own = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+    for frame in [open_order(1), end(), open_order(2)] {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    async fn read(sub: &mut AsyncInternalSubscription, count: usize) -> Vec<(M, Option<i32>)> {
+        let mut items = Vec::new();
+        for _ in 0..count {
+            let message = next_message(sub).await;
+            items.push((message.message_type(), message.order_id()));
+        }
+        items
+    }
+    assert_eq!(read(&mut own, 2).await, [(M::OpenOrder, Some(1)), (M::OpenOrderEnd, None)]);
+    assert_eq!(read(&mut auto, 2).await, [(M::OpenOrder, Some(1)), (M::OpenOrder, Some(2))]);
+    assert!(auto.try_next_routed().is_none(), "auto_open_orders read an end marker");
+}
+
+/// A reset ends every unanswered request with its session: a request made
+/// after it reads the first reply that arrives.
+#[tokio::test]
+async fn reset_forgets_unanswered_replies() {
+    use crate::messages::IncomingMessages as M;
+    let (stream, bus) = make_bus();
+
+    let _unanswered = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+    bus.reset_channels().await;
+    let mut after = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+    stream.push_inbound(binary_proto(M::OpenOrderEnd as i32, &crate::proto::OpenOrdersEnd {}));
+    bus.read_and_route_message().await.unwrap();
+
+    assert_eq!(next_message(&mut after).await.message_type(), M::OpenOrderEnd);
+}
+
+/// TWS never ended a `reqPositions` sent during a connectivity loss. The
+/// cancel written when its last subscription ends uncounts it, so the next
+/// `positions()` reads its own reply instead of passing over it.
+#[tokio::test]
+async fn positions_cancel_uncounts_an_unanswered_request() {
+    use crate::messages::IncomingMessages as M;
+    let (stream, bus) = make_bus();
+
+    let unanswered = bus.send_shared_request(OutgoingMessages::RequestPositions, vec![]).await.unwrap();
+    let ticket = unanswered.shared_ticket().expect("a shared subscription carries its ticket");
+    bus.cancel_shared_subscription(ticket, Some(b"cancel-positions".to_vec())).await.unwrap();
+    drop(unanswered);
+    let mut after = bus.send_shared_request(OutgoingMessages::RequestPositions, vec![]).await.unwrap();
+    stream.push_inbound(binary_proto(M::PositionEnd as i32, &crate::proto::PositionEnd {}));
+    bus.read_and_route_message().await.unwrap();
+
+    assert_eq!(next_message(&mut after).await.message_type(), M::PositionEnd);
+}
+
+/// A shared request without a cancel stays counted when its subscription
+/// ends without a cancel: TWS still sends its reply, and a later request
+/// passes over it.
+#[tokio::test]
+async fn ending_without_a_cancel_keeps_the_request_counted() {
+    use crate::messages::IncomingMessages as M;
+    let (stream, bus) = make_bus();
+
+    let dropped = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+    let ticket = dropped.shared_ticket().expect("a shared subscription carries its ticket");
+    bus.cancel_shared_subscription(ticket, None).await.unwrap();
+    drop(dropped);
+    let mut after = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+    for _ in 0..2 {
+        stream.push_inbound(binary_proto(M::OpenOrderEnd as i32, &crate::proto::OpenOrdersEnd {}));
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    assert_eq!(next_message(&mut after).await.message_type(), M::OpenOrderEnd);
+    assert_eq!(bus.shared_channels.unanswered(M::OpenOrderEnd), 0, "both replies answered");
+}
+
 /// The open-orders channel maps three response types. A reset that walked the
 /// channels by response type failed it three times; it must fail it once.
 #[tokio::test]
@@ -1038,8 +1280,20 @@ fn account_updates_request(name: &str) -> Vec<u8> {
     format!("account-updates {name}").into_bytes()
 }
 
+fn account_updates_unsubscribe(name: &str) -> Vec<u8> {
+    format!("account-updates off {name}").into_bytes()
+}
+
 async fn account_updates_subscription(bus: &Arc<AsyncTcpMessageBus<MemoryStream>>, name: &str) -> Result<AccountUpdatesSubscription, Error> {
-    let internal = bus.send_account_updates_request(&account(name), account_updates_request(name)).await?;
+    let (admission, _caller) = AccountAdmission::new();
+    let internal = bus
+        .send_account_updates_request(
+            &account(name),
+            account_updates_request(name),
+            account_updates_unsubscribe(name),
+            &admission,
+        )
+        .await?;
     Ok(Subscription::new_from_internal(
         internal,
         bus.clone(),
@@ -1059,8 +1313,10 @@ async fn account_updates_slot(bus: &AsyncTcpMessageBus<MemoryStream>) -> Option<
     bus.shared_channels.account_updates().await
 }
 
-/// The same account again shares the one TWS stream: both requests go out,
-/// and only the last cancel frees the slot.
+/// The same account again shares the one TWS stream, and only the last
+/// cancel frees the slot. TWS answers a repeated subscribe with nothing, so
+/// the second goes out as unsubscribe then subscribe, which TWS answers with
+/// the full dump.
 #[tokio::test]
 async fn account_updates_same_account_shares() {
     let (stream, bus) = make_bus();
@@ -1068,7 +1324,8 @@ async fn account_updates_same_account_shares() {
 
     let first = account_updates_subscription(&bus, "DU1").await.unwrap();
     let second = account_updates_subscription(&bus, "DU1").await.unwrap();
-    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 2);
+    let (on, off) = (account_updates_request("DU1"), account_updates_unsubscribe("DU1"));
+    assert_eq!(frame_payloads(&stream.captured()), [&on[..], &off[..], &on[..]]);
     assert_eq!(bus.shared_channels.live(OutgoingMessages::RequestAccountData).await, 2);
 
     first.cancel().await;
@@ -1082,6 +1339,666 @@ async fn account_updates_same_account_shares() {
     second.cancel().await;
     assert_eq!(count_frames(&stream.captured(), &cancel), 1);
     assert_eq!(account_updates_slot(&bus).await, None);
+}
+
+/// The dump TWS sends after the second subscription's resubscribe reaches
+/// both subscriptions, so the second caller gets the initial values and the
+/// end marker too. A second subscription made before the first dump ends
+/// passes over that dump and reads its own whole one, not the first one's
+/// tail.
+#[tokio::test]
+async fn account_updates_second_subscription_reads_the_dump() {
+    use crate::transport::tests::{account_update_dump, account_update_value};
+
+    let (stream, bus) = make_bus();
+    let mut first = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let mut second = account_updates_subscription(&bus, "DU1").await.unwrap();
+    // TWS answers the first subscribe and the second's resubscribe with a
+    // dump each, in the order sent; the second request went out before the
+    // first dump arrived.
+    for frame in account_update_dump("100000").into_iter().chain(account_update_dump("100001")) {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    let mut reads = Vec::new();
+    for (subscription, count) in [(&mut first, 4), (&mut second, 2)] {
+        let mut read = Vec::new();
+        for _ in 0..count {
+            read.push(account_update_value(next_item(subscription).await.expect("dump cut short").unwrap()));
+        }
+        reads.push(read);
+    }
+    assert_eq!(reads[0], [Some("100000".to_string()), None, Some("100001".to_string()), None]);
+    assert_eq!(reads[1], [Some("100001".to_string()), None]);
+}
+
+#[tokio::test]
+async fn account_updates_last_cancel_refuses_until_every_abandoned_end() {
+    use crate::transport::tests::{account_update_dump, account_update_value};
+    use futures::FutureExt;
+
+    let (stream, bus) = make_bus();
+    let first = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let second = account_updates_subscription(&bus, "DU1").await.unwrap();
+    first.cancel().await;
+    second.cancel().await;
+    drop((first, second));
+
+    let refused = account_updates_subscription(&bus, "DU1").await;
+    assert!(matches!(refused, Err(Error::AlreadySubscribed)));
+    for frame in account_update_dump("100000") {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+    let refused = account_updates_subscription(&bus, "DU2").await;
+    assert!(matches!(refused, Err(Error::AlreadySubscribed)));
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 2);
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU2")), 0);
+
+    for frame in account_update_dump("100001")
+        .into_iter()
+        .chain([error_frame(-1, 2100, "API client has been unsubscribed from account data.")])
+    {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    let mut replacement = account_updates_subscription(&bus, "DU1").await.unwrap();
+    for frame in account_update_dump("100002") {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    assert_eq!(count_frames(&stream.captured(), &account_updates_cancel()), 1);
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 3);
+    let reply: Vec<_> = std::iter::from_fn(|| replacement.next().now_or_never().flatten())
+        .map(|item| account_update_value(item.unwrap()))
+        .collect();
+    assert_eq!(reply, [Some("100002".to_string()), None]);
+}
+
+#[tokio::test]
+async fn account_updates_abandoned_reply_without_end_is_cleared_by_reset() {
+    use crate::transport::tests::{account_update_dump, account_update_value};
+    use futures::FutureExt;
+
+    let (stream, bus) = make_bus();
+    let original = account_updates_subscription(&bus, "DU1").await.unwrap();
+    original.cancel().await;
+    drop(original);
+
+    let refused = account_updates_subscription(&bus, "DU1").await;
+    assert!(matches!(refused, Err(Error::AlreadySubscribed)));
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 1);
+
+    bus.reset_channels().await;
+    let mut replacement = account_updates_subscription(&bus, "DU1").await.unwrap();
+    for frame in account_update_dump("100001") {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 2);
+    let reply: Vec<_> = std::iter::from_fn(|| replacement.next().now_or_never().flatten())
+        .map(|item| account_update_value(item.unwrap()))
+        .collect();
+    assert_eq!(reply, [Some("100001".to_string()), None]);
+}
+
+#[tokio::test]
+async fn account_updates_reopen_during_last_cancel_refuses_abandoned_reply() {
+    use futures::FutureExt;
+
+    let (stream, bus) = make_bus();
+    let (admission, _caller) = AccountAdmission::new();
+    let original = bus
+        .send_account_updates_request(
+            &account("DU1"),
+            account_updates_request("DU1"),
+            account_updates_unsubscribe("DU1"),
+            &admission,
+        )
+        .await
+        .unwrap();
+    let ticket = original.shared_ticket().expect("account updates use the shared channel");
+    let (finish_close, can_close) = tokio::sync::oneshot::channel();
+    let mut cancel = std::pin::pin!(bus.shared_channels.unsubscribe(ticket, true, || async {
+        can_close.await.unwrap();
+        Ok(())
+    }));
+    assert!(cancel.as_mut().now_or_never().is_none());
+    let mut reopen = std::pin::pin!(account_updates_subscription(&bus, "DU1"));
+    assert!(reopen.as_mut().now_or_never().is_none());
+
+    finish_close.send(()).unwrap();
+    cancel.await.unwrap();
+
+    assert!(matches!(reopen.await, Err(Error::AlreadySubscribed)));
+    assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 1);
+}
+
+#[tokio::test]
+async fn account_updates_clone_before_old_end_skips_the_old_dump() {
+    assert_account_updates_clone_reply(false).await;
+}
+
+#[tokio::test]
+async fn account_updates_clone_after_old_end_reads_its_dump() {
+    assert_account_updates_clone_reply(true).await;
+}
+
+async fn assert_account_updates_clone_reply(old_end_dispatched: bool) {
+    use crate::transport::tests::{account_update_dump, account_update_value};
+    use futures::FutureExt;
+
+    let (stream, bus) = make_bus();
+    let _first = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let mut second = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let old_dump = account_update_dump("100000");
+    let queued = if old_end_dispatched { old_dump.len() } else { 0 };
+    for frame in &old_dump[..queued] {
+        stream.push_inbound(frame.clone());
+        bus.read_and_route_message().await.unwrap();
+    }
+    let mut clone = second.clone();
+    for frame in old_dump.into_iter().skip(queued).chain(account_update_dump("100001")) {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    for subscriber in [&mut second, &mut clone] {
+        let reply: Vec<_> = std::iter::from_fn(|| subscriber.next().now_or_never().flatten())
+            .map(|item| account_update_value(item.unwrap()))
+            .collect();
+        assert_eq!(reply, [Some("100001".to_string()), None]);
+    }
+}
+
+#[tokio::test]
+async fn account_updates_reset_retires_receivers_without_reply_skip() {
+    assert_account_updates_reset_retires_receivers(false).await;
+}
+
+#[tokio::test]
+async fn account_updates_reset_retires_receivers_with_reply_skip() {
+    assert_account_updates_reset_retires_receivers(true).await;
+}
+
+async fn assert_account_updates_reset_retires_receivers(skip_pending: bool) {
+    use crate::transport::tests::{account_update_dump, account_update_value};
+    use futures::FutureExt;
+
+    let (stream, bus) = make_bus();
+    let first = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let mut old = if skip_pending {
+        account_updates_subscription(&bus, "DU1").await.unwrap()
+    } else {
+        first.clone()
+    };
+    let mut cloned_before_reset = old.clone();
+
+    bus.reset_channels().await;
+    let mut cloned_after_reset = old.clone();
+    let mut fresh = account_updates_subscription(&bus, "DU1").await.unwrap();
+    for frame in account_update_dump("200000") {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    for old_receiver in [&mut old, &mut cloned_before_reset, &mut cloned_after_reset] {
+        assert!(matches!(old_receiver.next().now_or_never(), Some(Some(Err(Error::ConnectionReset)))));
+        assert!(matches!(old_receiver.next().now_or_never(), Some(None)));
+    }
+    let reply: Vec<_> = std::iter::from_fn(|| fresh.next().now_or_never().flatten())
+        .map(|item| account_update_value(item.unwrap()))
+        .collect();
+    assert_eq!(reply, [Some("200000".to_string()), None]);
+}
+
+#[derive(Clone, Default)]
+struct StagedFrameWriter {
+    state: Arc<std::sync::Mutex<FrameWriterState>>,
+    wrote: Arc<tokio::sync::Notify>,
+    flushing: Arc<tokio::sync::Notify>,
+    write_pending: Arc<tokio::sync::Notify>,
+    resume: Arc<futures::task::AtomicWaker>,
+}
+
+#[derive(Default)]
+struct FrameWriterState {
+    accepted: Vec<u8>,
+    send_times: Vec<tokio::time::Instant>,
+    remaining: Option<usize>,
+    hold_flush: bool,
+    flushed: usize,
+}
+
+impl tokio::io::AsyncRead for StagedFrameWriter {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        _context: &mut std::task::Context<'_>,
+        _buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Pending
+    }
+}
+
+impl tokio::io::AsyncWrite for StagedFrameWriter {
+    fn poll_write(self: std::pin::Pin<&mut Self>, context: &mut std::task::Context<'_>, bytes: &[u8]) -> std::task::Poll<std::io::Result<usize>> {
+        self.resume.register(context.waker());
+        let mut state = self.state.lock().unwrap();
+        let len = state.remaining.map_or(bytes.len(), |remaining| bytes.len().min(remaining));
+        if len == 0 {
+            self.write_pending.notify_one();
+            return std::task::Poll::Pending;
+        }
+        state.accepted.extend_from_slice(&bytes[..len]);
+        state.send_times.push(tokio::time::Instant::now());
+        if let Some(remaining) = &mut state.remaining {
+            *remaining -= len;
+        }
+        self.wrote.notify_one();
+        std::task::Poll::Ready(Ok(len))
+    }
+
+    fn poll_flush(self: std::pin::Pin<&mut Self>, context: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+        self.resume.register(context.waker());
+        let mut state = self.state.lock().unwrap();
+        if state.hold_flush {
+            self.flushing.notify_one();
+            return std::task::Poll::Pending;
+        }
+        state.flushed += 1;
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: std::pin::Pin<&mut Self>, _context: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+
+async fn staged_writer_bus(writer: &StagedFrameWriter) -> Arc<AsyncTcpMessageBus<AsyncSocket>> {
+    let writer = writer.clone();
+    let connector = Connector::from_stream(move || std::future::ready(Ok(writer.clone())));
+    let socket = AsyncSocket::connect(connector).await.unwrap();
+    let connection = AsyncConnection::stubbed(socket, CLIENT_ID);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    Arc::new(AsyncTcpMessageBus::new(connection))
+}
+
+#[tokio::test]
+async fn shared_request_dropped_before_write_withdraws_reply() {
+    assert_shared_write_progress(Some(0)).await;
+}
+
+#[tokio::test]
+async fn shared_request_dropped_mid_frame_keeps_reply_until_reset() {
+    assert_shared_write_progress(Some(2)).await;
+}
+
+#[tokio::test]
+async fn shared_request_dropped_during_flush_keeps_reply_until_reset() {
+    assert_shared_write_progress(None).await;
+}
+
+async fn assert_shared_write_progress(limit: Option<usize>) {
+    use futures::FutureExt;
+
+    let writer = StagedFrameWriter::default();
+    {
+        let mut state = writer.state.lock().unwrap();
+        state.remaining = limit;
+        state.hold_flush = true;
+    }
+    let bus = staged_writer_bus(&writer).await;
+    let payload = b"synthetic-open-orders";
+    {
+        let mut request = std::pin::pin!(bus.send_shared_request(OutgoingMessages::RequestOpenOrders, payload.to_vec()));
+        assert!(request.as_mut().now_or_never().is_none());
+    }
+
+    let expected = encode_raw_length(payload);
+    let len = limit.unwrap_or(expected.len());
+    assert_eq!(writer.state.lock().unwrap().accepted, expected[..len]);
+    assert_eq!(bus.shared_channels.unanswered(IncomingMessages::OpenOrderEnd), usize::from(len > 0));
+
+    if len > 0 {
+        assert!(matches!(bus.read_and_route_message().now_or_never(), Some(Err(Error::ConnectionReset))));
+        assert!(matches!(
+            bus.send_shared_request(OutgoingMessages::RequestOpenOrders, payload.to_vec()).await,
+            Err(Error::ConnectionReset)
+        ));
+        bus.reset_channels().await;
+        assert_eq!(bus.shared_channels.unanswered(IncomingMessages::OpenOrderEnd), 0);
+    } else {
+        writer.state.lock().unwrap().remaining = None;
+        writer.state.lock().unwrap().hold_flush = false;
+        let _sub = bus
+            .send_shared_request(OutgoingMessages::RequestOpenOrders, payload.to_vec())
+            .await
+            .unwrap();
+        assert_eq!(writer.state.lock().unwrap().accepted, expected);
+    }
+}
+
+#[tokio::test]
+async fn shared_request_blocked_on_flush_does_not_hold_reset() {
+    use futures::FutureExt;
+
+    let writer = StagedFrameWriter::default();
+    writer.state.lock().unwrap().hold_flush = true;
+    let bus = staged_writer_bus(&writer).await;
+    let request = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, b"pending".to_vec());
+    let mut request = std::pin::pin!(request);
+    assert!(request.as_mut().now_or_never().is_none());
+    assert_eq!(writer.state.lock().unwrap().accepted, encode_raw_length(b"pending"));
+
+    bus.connection_state.set_disconnected();
+    let (result, ()) = tokio::time::timeout(TICK, async { tokio::join!(request, bus.reset_channels()) })
+        .await
+        .unwrap();
+    assert!(matches!(result, Err(Error::ConnectionReset)));
+    assert_eq!(bus.shared_channels.unanswered(IncomingMessages::OpenOrderEnd), 0);
+}
+
+#[tokio::test]
+async fn dropped_positions_cancel_completes_exactly_once() {
+    use futures::FutureExt;
+
+    let writer = StagedFrameWriter::default();
+    let bus = staged_writer_bus(&writer).await;
+    let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let positions = client.positions().await.unwrap();
+    let mut clone = positions.clone();
+    writer.state.lock().unwrap().hold_flush = true;
+    {
+        let mut cancel = std::pin::pin!(positions.cancel());
+        assert!(cancel.as_mut().now_or_never().is_none());
+        tokio::time::timeout(TICK, writer.flushing.notified()).await.unwrap();
+    }
+
+    assert!(matches!(clone.next().now_or_never(), Some(Some(Err(Error::Cancelled)))));
+    assert!(matches!(clone.next().now_or_never(), Some(None)));
+    writer.state.lock().unwrap().hold_flush = false;
+    writer.resume.wake();
+    let _replacement = tokio::time::timeout(TICK, client.positions()).await.unwrap().unwrap();
+    drop((positions, clone));
+
+    let accepted = writer.state.lock().unwrap();
+    let expected = [
+        OutgoingMessages::RequestPositions,
+        OutgoingMessages::CancelPositions,
+        OutgoingMessages::RequestPositions,
+    ];
+    let kinds: Vec<_> = frame_payloads(&accepted.accepted)
+        .into_iter()
+        .map(crate::messages::outgoing_message_type)
+        .collect();
+    assert_eq!(kinds, expected.map(Some));
+    assert_eq!(accepted.flushed, 3);
+    assert_eq!(bus.shared_channels.unanswered(IncomingMessages::PositionEnd), 1);
+}
+
+#[tokio::test]
+async fn dropped_account_cancel_keeps_its_abandoned_end_counted() {
+    use futures::FutureExt;
+
+    let writer = StagedFrameWriter::default();
+    let bus = staged_writer_bus(&writer).await;
+    let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let original = client.account_updates("DU1").await.unwrap();
+    let mut clone = original.clone();
+    writer.state.lock().unwrap().hold_flush = true;
+    {
+        let mut cancel = std::pin::pin!(original.cancel());
+        assert!(cancel.as_mut().now_or_never().is_none());
+        tokio::time::timeout(TICK, writer.flushing.notified()).await.unwrap();
+    }
+    assert!(matches!(clone.next().now_or_never(), Some(Some(Err(Error::Cancelled)))));
+    assert!(matches!(clone.next().now_or_never(), Some(None)));
+    writer.state.lock().unwrap().hold_flush = false;
+    writer.resume.wake();
+
+    let refused = tokio::time::timeout(TICK, client.account_updates("DU1")).await.unwrap();
+    assert!(matches!(refused, Err(Error::AlreadySubscribed)));
+    assert_eq!(writer.state.lock().unwrap().flushed, 2);
+    assert_eq!(bus.shared_channels.unanswered(IncomingMessages::AccountDownloadEnd), 1);
+    drop((original, clone));
+
+    let end = crate::testdata::builders::accounts::account_download_end().encode_proto();
+    let end = helpers::proto_response(IncomingMessages::AccountDownloadEnd, end);
+    bus.shared_channels.send_message(IncomingMessages::AccountDownloadEnd, &end);
+    let _replacement = client.account_updates("DU1").await.unwrap();
+    let state = writer.state.lock().unwrap();
+    let frames = frame_payloads(&state.accepted);
+    assert_eq!(frames.len(), 3);
+    assert_eq!(frames[1], account_updates_cancel());
+}
+
+#[tokio::test(start_paused = true)]
+async fn account_updates_paces_actual_frames_and_completes_abandoned_replay() {
+    let writer = StagedFrameWriter::default();
+    let bus = staged_writer_bus(&writer).await;
+    let limiter = crate::RateLimiter::per_second(1);
+    bus.set_rate_limiter(limiter.clone());
+    let client = Arc::new(crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3));
+    let first = client.account_updates("DU1").await.unwrap();
+    {
+        let state = writer.state.lock().unwrap();
+        assert_eq!(state.send_times.len(), 1);
+        assert_eq!(limiter.reserved_until(), Some((state.send_times[0] + Duration::from_secs(1)).into_std()));
+    }
+
+    let replacement = tokio::spawn({
+        let client = client.clone();
+        async move { client.account_updates("DU1").await }
+    });
+    wait_for_staged_writes(&writer, 2).await;
+    replacement.abort();
+    assert!(matches!(replacement.await, Err(e) if e.is_cancelled()));
+    wait_for_staged_writes(&writer, 3).await;
+
+    let state = writer.state.lock().unwrap();
+    let frames = frame_payloads(&state.accepted);
+    assert_eq!(frames.len(), 3);
+    assert_eq!(frames[0], frames[2]);
+    let body = <crate::proto::AccountDataRequest as prost::Message>::decode(&frames[1][4..]).unwrap();
+    assert_eq!(body.subscribe, None);
+    assert_eq!(body.acct_code.as_deref(), Some("DU1"));
+    assert!(state.send_times[1] - state.send_times[0] >= Duration::from_secs(1));
+    assert!(state.send_times[2] - state.send_times[1] >= Duration::from_secs(1));
+    drop(state);
+    drop(first);
+}
+
+#[tokio::test]
+async fn account_updates_dropped_before_first_poll_or_admission_sends_nothing() {
+    use futures::FutureExt;
+
+    let writer = StagedFrameWriter::default();
+    let bus = staged_writer_bus(&writer).await;
+    let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    drop(client.account_updates("DU1"));
+
+    let gate = bus.shared_channels.counts_for(OutgoingMessages::RequestAccountData).lock().await;
+    {
+        let mut abandoned = std::pin::pin!(client.account_updates("DU1"));
+        assert!(abandoned.as_mut().now_or_never().is_none());
+        tokio::task::yield_now().await;
+    }
+    drop(gate);
+    let _fresh = client.account_updates("DU1").await.unwrap();
+    let state = writer.state.lock().unwrap();
+    assert_eq!(state.send_times.len(), 1);
+}
+
+#[tokio::test]
+async fn account_updates_dropped_while_first_byte_is_pending_sends_nothing() {
+    use futures::FutureExt;
+
+    let writer = StagedFrameWriter::default();
+    writer.state.lock().unwrap().remaining = Some(0);
+    let bus = staged_writer_bus(&writer).await;
+    let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    {
+        let mut abandoned = std::pin::pin!(client.account_updates("DU1"));
+        assert!(abandoned.as_mut().now_or_never().is_none());
+        tokio::time::timeout(TICK, writer.write_pending.notified()).await.unwrap();
+    }
+    writer.state.lock().unwrap().remaining = None;
+    writer.resume.wake();
+    let _fresh = client.account_updates("DU1").await.unwrap();
+    let state = writer.state.lock().unwrap();
+    assert_eq!(state.send_times.len(), 1);
+    assert_eq!(bus.shared_channels.unanswered(IncomingMessages::AccountDownloadEnd), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn positions_cancel_during_account_pacing_does_not_wait_for_the_clock() {
+    use futures::FutureExt;
+
+    let (stream, bus) = make_bus();
+    let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let positions = client.positions().await.unwrap();
+    let limiter = crate::RateLimiter::per_second(1);
+    bus.set_rate_limiter(limiter.clone());
+    let now = tokio::time::Instant::now();
+    assert_eq!(limiter.reserve(now.into_std(), false), Duration::ZERO);
+    let mut account = std::pin::pin!(client.account_updates("DU1"));
+    assert!(account.as_mut().now_or_never().is_none());
+    for _ in 0..10 {
+        if limiter.reserved_until() == Some((now + Duration::from_secs(2)).into_std()) {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(limiter.reserved_until(), Some((now + Duration::from_secs(2)).into_std()));
+    // A blocked cancel reaches this deadline, which requires advancing time.
+    tokio::time::timeout(Duration::from_millis(10), positions.cancel()).await.unwrap();
+    assert_eq!(tokio::time::Instant::now(), now);
+    assert_eq!(count_frames(&stream.captured(), &positions_cancel()), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn account_updates_delayed_writer_preserves_two_per_second_slots() {
+    let writer = StagedFrameWriter::default();
+    writer.state.lock().unwrap().remaining = Some(0);
+    let bus = staged_writer_bus(&writer).await;
+    bus.set_rate_limiter(crate::RateLimiter::per_second(2));
+    let client = Arc::new(crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3));
+    let first = tokio::spawn({
+        let client = client.clone();
+        async move { client.account_updates("DU1").await.unwrap() }
+    });
+    writer.write_pending.notified().await;
+    tokio::time::advance(Duration::from_secs(2)).await;
+    writer.state.lock().unwrap().remaining = None;
+    writer.resume.wake();
+    let _first = first.await.unwrap();
+    let _second = client.account_updates("DU1").await.unwrap();
+    let _third = client.account_updates("DU1").await.unwrap();
+
+    let times = &writer.state.lock().unwrap().send_times;
+    assert_eq!(times.len(), 5);
+    for (index, time) in times.iter().enumerate() {
+        assert_eq!(*time - times[0], Duration::from_millis(500 * index as u64));
+    }
+}
+
+async fn wait_for_staged_writes(writer: &StagedFrameWriter, count: usize) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if writer.state.lock().unwrap().send_times.len() >= count {
+                break;
+            }
+            writer.wrote.notified().await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn account_updates_lag_before_skipped_end_is_terminal() {
+    use crate::transport::tests::{account_update_dump, account_update_value};
+    use futures::FutureExt;
+
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::with_channel_capacity(connection, 2));
+    let _old = account_updates_subscription(&bus, "DU1").await.unwrap();
+    bus.reset_channels().await;
+
+    let mut first = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let mut second = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let mut clone = second.clone();
+    let [_, first_end] = account_update_dump("100000");
+    // The two-slot channel evicts the older End but retains the newer dump.
+    for frame in std::iter::once(first_end).chain(account_update_dump("200000")) {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    for subscriber in [&mut second, &mut clone] {
+        assert!(matches!(
+            subscriber.next().now_or_never(),
+            Some(Some(Err(Error::Notice(notice)))) if notice.code == crate::SUBSCRIPTION_LAG_CODE
+        ));
+        assert!(matches!(subscriber.next().now_or_never(), Some(None)));
+    }
+
+    assert!(matches!(
+        first.next().now_or_never(),
+        Some(Some(Ok(SubscriptionItem::Notice(notice)))) if notice.code == crate::SUBSCRIPTION_LAG_CODE
+    ));
+    let reply: Vec<_> = std::iter::from_fn(|| first.next().now_or_never().flatten())
+        .map(|item| account_update_value(item.unwrap()))
+        .collect();
+    assert_eq!(reply, [Some("200000".to_string()), None]);
+}
+
+#[tokio::test]
+async fn account_updates_reset_retires_receivers_during_pending_write() {
+    use crate::transport::tests::{account_update_dump, account_update_value};
+    use futures::FutureExt;
+
+    let (stream, bus) = make_bus();
+    let mut original = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let (finish_write, can_finish) = tokio::sync::oneshot::channel();
+    let account = account("DU1");
+    let started = AtomicBool::new(false);
+    let mut pending =
+        std::pin::pin!(bus
+            .shared_channels
+            .subscribe(OutgoingMessages::RequestAccountData, Some(&account), None, &started, |_| async {
+                can_finish.await.unwrap();
+                Ok(())
+            }));
+    assert!(pending.as_mut().now_or_never().is_none());
+
+    let mut reset = std::pin::pin!(bus.reset_channels());
+    assert!(reset.as_mut().now_or_never().is_none());
+    let mut clone = original.clone();
+    for subscriber in [&mut original, &mut clone] {
+        assert!(matches!(subscriber.next().now_or_never(), Some(Some(Err(Error::ConnectionReset)))));
+        assert!(matches!(subscriber.next().now_or_never(), Some(None)));
+    }
+
+    finish_write.send(()).unwrap();
+    assert!(matches!(pending.await, Err(Error::ConnectionReset)));
+    reset.await;
+
+    let mut fresh = account_updates_subscription(&bus, "DU1").await.unwrap();
+    for frame in account_update_dump("200000") {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+    let reply: Vec<_> = std::iter::from_fn(|| fresh.next().now_or_never().flatten())
+        .map(|item| account_update_value(item.unwrap()))
+        .collect();
+    assert_eq!(reply, [Some("200000".to_string()), None]);
 }
 
 /// TWS has one account-updates slot: a second account would switch the live
@@ -1125,6 +2042,9 @@ async fn account_updates_other_account_after_cancel() {
     let (stream, bus) = make_bus();
 
     let first = account_updates_subscription(&bus, "DU1").await.unwrap();
+    let [_, end] = crate::transport::tests::account_update_dump("100000");
+    stream.push_inbound(end);
+    bus.read_and_route_message().await.unwrap();
     first.cancel().await;
     assert_eq!(count_frames(&stream.captured(), &account_updates_cancel()), 1);
 
@@ -1943,8 +2863,7 @@ async fn reset_channels_notifies_in_flight_subscriptions() {
     assert!(bus.orders.is_empty());
     assert!(bus.executions.is_empty());
 
-    // A shared subscription created after the reset resubscribes at the
-    // channel's current tail: it must not read the stale ConnectionReset.
+    // A shared subscription created after reset has a fresh channel.
     let mut late = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
     assert!(late.try_next_routed().is_none(), "post-reset shared subscription read a stale reset");
 }
@@ -2546,6 +3465,16 @@ async fn failed_write_leaves_no_registration() {
 
     assert!(mb.send_order_request(OrderId::from(42), b"order-bytes".to_vec()).await.is_err());
     assert!(bus.orders.is_empty(), "a failed write must leave no order registered");
+
+    assert!(mb
+        .send_shared_request(OutgoingMessages::RequestPositions, b"positions".to_vec())
+        .await
+        .is_err());
+    assert_eq!(
+        bus.shared_channels.unanswered(IncomingMessages::PositionEnd),
+        0,
+        "a failed write must leave no request awaiting a reply"
+    );
 }
 
 #[tokio::test]

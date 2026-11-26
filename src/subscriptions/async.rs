@@ -354,7 +354,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Subscription<T> {
     /// | `quiet` passed after a row | `Some(Ok(rows))` |
     /// | Stream ended | `Some(Ok(rows))` if any were read, else `None` |
     /// | Terminal error | `Some(Err(_))`; rows of the partial batch are dropped |
-    /// | Consumer fell behind and frames were dropped | `Some(Err(`[`Error::Notice`]`))` with [`SUBSCRIPTION_LAG_CODE`](crate::SUBSCRIPTION_LAG_CODE); the stream stays open for the next batch |
+    /// | Consumer fell behind and frames were dropped | `Some(Err(`[`Error::Notice`]`))` with [`SUBSCRIPTION_LAG_CODE`](crate::SUBSCRIPTION_LAG_CODE). The stream ends if it was still skipping an earlier shared reply. |
     ///
     /// Notices are logged at `warn!`.
     ///
@@ -666,6 +666,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// next poll yields `Err(Error::Cancelled)`, frames not yet read are
     /// skipped, and the stream ends. A clone already waiting in `next()` is
     /// woken to yield it. Idempotent.
+    /// Shared-channel cancellation keeps running if the caller stops waiting.
     pub async fn cancel(&self) {
         // The route itself is released at drop, by liveness.
         let request = &self.request;
@@ -680,6 +681,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
         let id = request.id();
         let message = request.pending_cancel(id);
+        if request.shared.is_some() {
+            let _ = request.spawn_cancel(id, message).await;
+            return;
+        }
         if let Err(e) = send_cancel(&request.message_bus, id, request.shared, message).await {
             log_cancel_error("subscription", &e);
         }
@@ -703,6 +708,16 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
 #[allow(private_bounds)]
 impl<T: StreamDecoder<T>> RequestState<T> {
+    fn spawn_cancel(&self, id: Option<i32>, message: Option<Vec<u8>>) -> tokio::task::JoinHandle<()> {
+        let message_bus = self.message_bus.clone();
+        let shared = self.shared;
+        self.message_bus.runtime_handle().spawn(async move {
+            if let Err(e) = send_cancel(&message_bus, id, shared, message).await {
+                log_cancel_error("subscription", &e);
+            }
+        })
+    }
+
     /// The id a cancel names: the request id, else the order id.
     fn id(&self) -> Option<i32> {
         self.request_id.or(self.order_id)
@@ -812,12 +827,7 @@ impl<T: StreamDecoder<T>> Drop for RequestState<T> {
         }
         // Drop can't be async; the cancel is spawned on the bus's runtime,
         // which works from any thread, runtime or not.
-        let message_bus = self.message_bus.clone();
-        self.message_bus.runtime_handle().spawn(async move {
-            if let Err(e) = send_cancel(&message_bus, id, shared, message).await {
-                log_cancel_error("subscription", &e);
-            }
-        });
+        self.spawn_cancel(id, message);
     }
 }
 
