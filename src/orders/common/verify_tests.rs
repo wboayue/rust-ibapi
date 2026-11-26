@@ -149,8 +149,11 @@ fn verify_ext_operator_matches_probed_set() {
     ];
     for value in rejected {
         match verify_ext_operator("Order::ext_operator", value) {
-            Err(Error::InvalidArgument(message)) => assert!(message.starts_with("Order::ext_operator"), "{message}"),
-            other => panic!("{value:?}: expected InvalidArgument, got {other:?}"),
+            Err(Error::Validation(ValidationError::InvalidField { field, value: rejected, .. })) => {
+                assert_eq!(field, "Order::ext_operator");
+                assert_eq!(rejected, value);
+            }
+            other => panic!("{value:?}: expected InvalidField, got {other:?}"),
         }
     }
 }
@@ -161,12 +164,18 @@ fn verify_order_and_cancel_ext_operator() {
         ext_operator: "probe-op".to_owned(),
         ..Order::default()
     };
-    assert!(matches!(verify_order_ext_operator(&order), Err(Error::InvalidArgument(_))));
+    assert!(matches!(
+        verify_order_ext_operator(&order),
+        Err(Error::Validation(ValidationError::InvalidField { .. }))
+    ));
     assert!(verify_order_ext_operator(&Order::default()).is_ok());
     let cancel = OrderCancel {
         ext_operator: "probe-cxl".to_owned(),
         ..OrderCancel::default()
     };
-    assert!(matches!(verify_order_cancel(&cancel), Err(Error::InvalidArgument(_))));
+    assert!(matches!(
+        verify_order_cancel(&cancel),
+        Err(Error::Validation(ValidationError::InvalidField { .. }))
+    ));
     assert!(verify_order_cancel(&OrderCancel::default()).is_ok());
 }

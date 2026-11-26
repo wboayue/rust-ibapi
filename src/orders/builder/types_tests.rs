@@ -53,38 +53,6 @@ fn price_validation() {
 }
 
 #[test]
-fn validation_error_display() {
-    let err = ValidationError::InvalidQuantity(0.0);
-    assert_eq!(err.to_string(), "Invalid quantity: 0");
-
-    let err = ValidationError::InvalidPrice(-10.0);
-    assert_eq!(err.to_string(), "Invalid price: -10");
-
-    let err = ValidationError::MissingRequiredField("order_type");
-    assert_eq!(err.to_string(), "Missing required field: order_type");
-
-    let err = ValidationError::InvalidCombination("test".to_string());
-    assert_eq!(err.to_string(), "Invalid combination: test");
-
-    let err = ValidationError::InvalidStopPrice { stop: 100.0, current: 95.0 };
-    assert_eq!(err.to_string(), "Invalid stop price 100 for current price 95");
-
-    let err = ValidationError::InvalidLimitPrice { limit: 90.0, current: 95.0 };
-    assert_eq!(err.to_string(), "Invalid limit price 90 for current price 95");
-
-    let err = ValidationError::InvalidBracketOrder("test".to_string());
-    assert_eq!(err.to_string(), "Invalid bracket order: test");
-
-    let err = ValidationError::InvalidPercentage {
-        field: "max_pct_vol",
-        value: 0.05,
-        min: 0.1,
-        max: 0.5,
-    };
-    assert_eq!(err.to_string(), "Invalid max_pct_vol: 0.05 (must be between 0.1 and 0.5)");
-}
-
-#[test]
 fn bracket_order_ids_wrong_length() {
     for ids in [vec![], vec![100, 101], vec![100, 101, 102, 103]] {
         let expected = Err(ValidationError::InvalidBracketOrder(format!("expected 3 order ids, got {}", ids.len())));

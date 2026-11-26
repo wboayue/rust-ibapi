@@ -1510,7 +1510,7 @@ match result {
 }
 ```
 
-`submit()`, `analyze()` and `build_order()` return this `ValidationError` wrapped in `Error::Validation`.
+`ValidationError` is `ibapi::builder::ValidationError`. `submit()`, `analyze()` and `build_order()` return it wrapped in `Error::Validation`, as do `place_order`, `submit_order`, `cancel_order_with` and `global_cancel_with` for an `ext_operator` TWS would reject (`ValidationError::InvalidField`).
 
 ## Custom Order Construction
 

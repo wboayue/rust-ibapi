@@ -80,6 +80,9 @@ precedents.
   [narrow re-exports](docs/rules/style/narrow-reexports.md)
 - **About to write a `macro_rules!`, or reviewing one** →
   [macros last resort](docs/rules/style/macros-last-resort.md)
+- **Returning an error for a bad input from a builder, constructor, `FromStr` or client method** →
+  [validation vs invalid argument](docs/rules/style/validation-vs-invalid-argument.md): a value
+  the caller can correct is a typed `ValidationError`; a caller bug is `InvalidArgument`
 - **Adding a named builder method that sets an enum, or adding a variant to such an enum** →
   [builder enum coverage](docs/rules/style/builder-enum-coverage.md) — exhaustiveness checking
   does not reach "one setter per variant"

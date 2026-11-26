@@ -1,4 +1,5 @@
 use super::*;
+use crate::builder::ValidationError;
 use crate::contracts::{ContractMonth, ExpirationDate, LegAction};
 
 #[test]
@@ -245,18 +246,22 @@ fn contract_builder_build_futures_option_missing_contract_month() {
     );
 }
 
+/// Same check as `OptionBuilder::build`: zero, negative, NaN and infinite strikes are rejected
+/// when only the symbol identifies the contract.
 #[test]
-fn contract_builder_build_negative_strike() {
-    let err = ContractBuilder::option("AAPL", "SMART", "USD")
-        .strike(-10.0)
-        .right(OptionRight::Call)
-        .last_trade_date_or_contract_month("20231215")
-        .build()
-        .unwrap_err();
-    assert!(
-        matches!(err, Error::InvalidArgument(ref msg) if msg == "Strike price cannot be negative"),
-        "got {err:?}"
-    );
+fn contract_builder_build_rejects_invalid_strike() {
+    for strike in [-10.0, 0.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let err = ContractBuilder::option("AAPL", "SMART", "USD")
+            .strike(strike)
+            .right(OptionRight::Call)
+            .last_trade_date_or_contract_month("20231215")
+            .build()
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::Validation(ValidationError::InvalidPrice(price)) if price == strike || (price.is_nan() && strike.is_nan())),
+            "{strike}: got {err:?}"
+        );
+    }
 }
 
 #[test]
@@ -464,6 +469,34 @@ fn setter_parity_with_contract_fields() {
     assert_eq!(description, "description");
 }
 
+/// Strike 0 is TWS's "unset": allowed when a contract id or local symbol identifies the
+/// option; a negative or NaN strike is still rejected.
+#[test]
+fn contract_builder_build_zero_strike_with_identifier() {
+    let by_id = ContractBuilder::new()
+        .contract_id(896736796)
+        .security_type(SecurityType::FuturesOption)
+        .strike(0.0)
+        .right(OptionRight::Call)
+        .last_trade_date_or_contract_month("202612");
+    assert_eq!(by_id.clone().build().unwrap().strike, 0.0);
+    assert!(matches!(
+        by_id.strike(-1.0).build(),
+        Err(Error::Validation(ValidationError::InvalidPrice(price))) if price == -1.0
+    ));
+
+    let by_local_symbol = ContractBuilder::option("AAPL", "SMART", "USD")
+        .local_symbol("AAPL  261218C00250000")
+        .strike(0.0)
+        .right(OptionRight::Call)
+        .last_trade_date_or_contract_month("20261218");
+    assert_eq!(by_local_symbol.clone().build().unwrap().strike, 0.0);
+    assert!(matches!(
+        by_local_symbol.strike(f64::NAN).build(),
+        Err(Error::Validation(ValidationError::InvalidPrice(price))) if price.is_nan()
+    ));
+}
+
 #[test]
 fn build_parses_last_trade_date_or_contract_month() {
     let future = |text: &str| {
@@ -481,7 +514,7 @@ fn build_parses_last_trade_date_or_contract_month() {
     );
     for bad in ["2026-12", "202613", "20261218 08:30:00 US/Central"] {
         assert!(
-            matches!(future(bad), Err(Error::InvalidArgument(msg)) if msg.contains("last_trade_date_or_contract_month")),
+            matches!(future(bad), Err(Error::Validation(ValidationError::InvalidDate { ref value, .. })) if value == bad),
             "{bad:?}"
         );
     }

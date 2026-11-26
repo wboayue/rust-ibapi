@@ -275,7 +275,7 @@ Serialized, `message_type` is the wire code (§47), the number 5.x wrote, so `Ne
 
 ### 11. `Missing` moves to `ibapi::builder`
 
-`Missing`, the marker a typestate builder carries for a required field it has not been given, was `ibapi::contracts::Missing`. The order condition builders use it too now (§12), so it lives in a shared module, `ibapi::builder`. No other path is kept.
+`Missing`, the marker a typestate builder carries for a required field it has not been given, was `ibapi::contracts::Missing`. The order condition builders use it too now (§12), so it lives in a shared module, `ibapi::builder`. No other path is kept. `ValidationError` moves there too (§18).
 
 ```rust,ignore
 // 5.x
@@ -304,7 +304,7 @@ Each builder now takes a type parameter for its threshold, `Missing` until a com
 
 ### 13. `OptionBuilder::build()` returns `Result`
 
-`Contract::call(..)` / `Contract::put(..)` checked the strike in `strike()` and panicked on one that was not positive and finite (zero, negative, NaN or infinite). `strike()` now takes any `f64`, and `build()` checks it, returning `Result<Contract, Error>`: `Error::InvalidArgument` for a bad strike. This is the shape of `SpreadBuilder::build()` and `ContractBuilder::build()`.
+`Contract::call(..)` / `Contract::put(..)` checked the strike in `strike()` and panicked on one that was not positive and finite (zero, negative, NaN or infinite). `strike()` now takes any `f64`, and `build()` checks it, returning `Result<Contract, Error>`: `Error::Validation(ValidationError::InvalidPrice(strike))` for a bad strike (§18). This is the shape of `SpreadBuilder::build()` and `ContractBuilder::build()`.
 
 ```rust,ignore
 // 5.x
@@ -316,7 +316,7 @@ let option = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build
 
 Every option `build()` call gains `?` (or handling of the error); the compiler finds each one where a `Contract` is expected.
 
-After `strike()`, the builder's strike type parameter is `f64`, where it was the validated `Strike`. Code that names the type writes `OptionBuilder<Symbol, f64, ExpirationDate>`. `Strike` and `Strike::new` are unchanged.
+After `strike()`, the builder's strike type parameter is `f64`, where it was the validated `Strike`. Code that names the type writes `OptionBuilder<Symbol, f64, ExpirationDate>`. `Strike::new` returns `Result<Strike, ValidationError>` (`InvalidPrice`) instead of `Result<Strike, String>`; code that compared the error to its message text matches the variant instead.
 
 ### 14. Bool fields keep the protobuf `is_` prefix
 
@@ -400,9 +400,32 @@ let order = Order {
 
 The compiler finds every use of the three fields. It does not catch the serialized form: a serialized `Order` no longer has the `fa_profile`, `basis_points` and `basis_points_type` keys. `Order` does not use `deny_unknown_fields`, so an `Order` serialized by 5.x still deserializes and the three keys are ignored.
 
-### 18. `Error::Validation` replaces `Error::InvalidArgument` for builder failures
+### 18. `Error::Validation` replaces `Error::InvalidArgument` for bad input values
 
-`OrderBuilder::submit`, `analyze` and `build_order`, the bracket and attached-order submits and `ExerciseOptionsBuilder::submit` check their inputs before sending anything. When that check failed they returned `Error::InvalidArgument` with the message text. They now return `Error::Validation(ValidationError)`, which carries the `ibapi::orders::builder::ValidationError` that `OrderBuilder::build` already returned: `InvalidQuantity`, `InvalidPrice`, `MissingRequiredField`, `InvalidCombination`, `InvalidStopPrice`, `InvalidLimitPrice`, `InvalidBracketOrder` or `InvalidPercentage`. `?` on a `ValidationError` in a function returning `Result<_, ibapi::Error>` gives the same variant.
+A failure is now one of two shapes, by who can fix it:
+
+- **`Error::Validation(ValidationError)`**: a runtime value a caller may correct, such as a quantity, a price or strike, a date from user or file input, or a field on a caller-built `Order`. Match the variant.
+- **`Error::InvalidArgument(String)`**: a caller bug, such as a builder missing a required field (`Contract::spread` without legs, `ContractBuilder` without a symbol or option strike), conflicting `historical_data` settings, or a bad `ClientBuilder` setting. Fix the code; nothing to match. The order builders still report a missing field as `ValidationError::MissingRequiredField`, listed below.
+
+`ValidationError` moves from `ibapi::orders::builder` to `ibapi::builder`, beside `Missing` (§11). No other path is kept:
+
+```rust,ignore
+// 5.x
+use ibapi::orders::builder::ValidationError;
+
+// 6.0
+use ibapi::builder::ValidationError;
+```
+
+It gains two variants: `InvalidField { field, value, reason }` and `InvalidDate { value, expected }`. Code that matches it exhaustively adds arms for them.
+
+These now return `Error::Validation` where they returned `Error::InvalidArgument` with the message text:
+
+- `OrderBuilder::submit`, `analyze` and `build_order`, the bracket and attached-order submits and `ExerciseOptionsBuilder::submit`, with the `ValidationError` that `OrderBuilder::build` already returned: `InvalidQuantity`, `InvalidPrice`, `MissingRequiredField`, `InvalidCombination`, `InvalidStopPrice`, `InvalidLimitPrice`, `InvalidBracketOrder` or `InvalidPercentage`.
+- `place_order`, `submit_order`, `cancel_order_with` and `global_cancel_with` (sync and async), for an `ext_operator` TWS would reject: `InvalidField { field: "Order::ext_operator" | "OrderCancel::ext_operator", .. }`.
+- Option `build()` and `ContractBuilder::build()` for a bad strike (`InvalidPrice`) or expiry (`InvalidDate`); see §13, §30 and §34. `ContractBuilder::build()` rejected only a negative strike; it now also rejects NaN and infinite ones for an option, and zero unless a `contract_id` or `local_symbol` identifies the contract (TWS reads strike 0 as unset).
+
+`?` on a `ValidationError` in a function returning `Result<_, ibapi::Error>` gives `Error::Validation`.
 
 ```rust,ignore
 // 5.x
@@ -413,7 +436,7 @@ match client.order(&contract).buy(0).market().submit() {
 }
 
 // 6.0
-use ibapi::orders::builder::ValidationError;
+use ibapi::builder::ValidationError;
 
 match client.order(&contract).buy(0).market().submit() {
     Ok(order_id) => println!("placed {order_id}"),
@@ -424,7 +447,7 @@ match client.order(&contract).buy(0).market().submit() {
 
 Match `Error::Validation` and its `ValidationError` variant instead of `Error::InvalidArgument` and the message text.
 
-The compiler does not catch any of this. `Error` is `#[non_exhaustive]`, so every match on it already has a wildcard arm: the old `Error::InvalidArgument` arm still compiles, no longer fires for these methods, and their failures fall through to the wildcard. The `Display` text changes from `InvalidArgument: Invalid quantity: 0` to `validation error: Invalid quantity: 0`, which matters to code that compares or parses it. `std::error::Error::source()` returns the `ValidationError`, where it returned `None`.
+The compiler does not catch any of this. `Error` is `#[non_exhaustive]`, so every match on it already has a wildcard arm: the old `Error::InvalidArgument` arm still compiles, no longer fires for these methods, and their failures fall through to the wildcard. The moved import and any exhaustive `match` on `ValidationError` are compile errors. The `Display` text changes from `InvalidArgument: Invalid quantity: 0` to `validation error: Invalid quantity: 0`, which matters to code that compares or parses it. `std::error::Error::source()` returns the `ValidationError`, where it returned `None`.
 
 ### 19. `cancel_and_drain` returns a failed cancel write as `Err`
 
@@ -680,7 +703,7 @@ The field was a `String` that held `YYYYMMDD` (last trading day) or `YYYYMM` (co
 - `Expiry::Unknown(String)` for any other text TWS sends: a bond's `"20430504 16:00 Europe/London"`, or a shape not seen yet. It is sent back to TWS as received. Parsing never produces it; decoding and deserializing do, so a contract in a position or order stream never fails to decode over this field.
 - `None` where the field was `""`: stocks, an open futures query.
 
-`ExpirationDate` and `ContractMonth` gain `FromStr` and `TryFrom<&str>`, which check that the text is a real date or month. `Contract::option` takes an `ExpirationDate` instead of `&str`: it returns a `Contract`, not a `Result`, so it had no way to report a bad string.
+`ExpirationDate`, `ContractMonth` and `Expiry` gain `FromStr` and `TryFrom<&str>`, which check that the text is a real date or month. Their error type is `ValidationError` (`InvalidDate { value, expected }`, with `value` the text); `?` turns it into `Error::Validation`. `Contract::option` takes an `ExpirationDate` instead of `&str`: it returns a `Contract`, not a `Result`, so it had no way to report a bad string.
 
 ```rust,ignore
 // 5.x
@@ -704,7 +727,7 @@ match details.contract.last_trade_date_or_contract_month {
 }
 ```
 
-- `ContractBuilder::last_trade_date_or_contract_month("202612")` still takes a string. `build()` now rejects one that is neither form with `Error::InvalidArgument`, including the zoned `"20261218 08:30:00 US/Central"` form TWS also accepts (send the date alone). `ContractBuilder::expiry(..)` takes a typed value.
+- `ContractBuilder::last_trade_date_or_contract_month("202612")` still takes a string. `build()` now rejects one that is neither form with `Error::Validation(ValidationError::InvalidDate { .. })`, including the zoned `"20261218 08:30:00 US/Central"` form TWS also accepts (send the date alone). `ContractBuilder::expiry(..)` takes a typed value.
 - `""` passed to the string setter still means unset, as in 5.x.
 - `Expiry` is not ordered: a month and a date don't compare. To sort or filter contracts by expiry, use `contract.last_trade_date` (`Option<time::Date>`), or compare `ExpirationDate` / `ContractMonth`, which are `Ord` and `Hash`.
 - A contract sent as a month comes back from TWS as its last trading day: an order on ES `202612` is echoed as `20261218`. Match on the variant you get, not the one you sent.
@@ -786,9 +809,10 @@ The wire value is unchanged (`OrderType::as_str` lists the codes). A code the en
 ### 34. `ExpirationDate::new` and `ContractMonth::new` return `Result`
 
 Both built any value they were given: `ExpirationDate::new(2026, 13, 40)` was sent to TWS as
-`20261340` and surfaced only as TWS error 200. They now return `Result<Self, Error>`, with
-`Error::InvalidArgument` unless the components form a real calendar date (`ExpirationDate`) or
-month 1–12 (`ContractMonth`), with a year of at most 9999. `FromStr` and `TryFrom<&str>` already
+`20261340` and surfaced only as TWS error 200. They now return `Result<Self, ValidationError>`, with
+`ValidationError::InvalidDate` unless the components form a real calendar date (`ExpirationDate`) or
+month 1–12 (`ContractMonth`), with a year of at most 9999 (§18). `?` in a function returning
+`Result<_, ibapi::Error>` converts it. `FromStr` and `TryFrom<&str>` already
 checked text this way.
 
 ```rust,ignore
@@ -802,7 +826,7 @@ let es = Contract::futures("ES").expires_in(ContractMonth::new(2026, 12)?).build
 ```
 
 `OptionBuilder::expires_on(year, month, day)` still chains: `build()`, which already returns
-`Result` (§13), now also returns `Error::InvalidArgument` for a date that isn't real. The
+`Result` (§13), now also returns `Error::Validation(ValidationError::InvalidDate { .. })` for a date that isn't real. The
 compiler finds every `new` call; it does not find an `expires_on` date that used to pass and now
 fails at `build()`. `ExpirationDate::next_friday()`, `third_friday_of_month()`,
 `ContractMonth::front()` and `next_quarter()` are unchanged.

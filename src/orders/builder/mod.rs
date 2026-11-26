@@ -23,4 +23,4 @@ pub use algo_helpers::{
     pct_vol_size, pct_vol_time, twap, vwap,
 };
 pub use condition_helpers::{execution, margin, percent_change, price, time, volume};
-pub use types::{BracketPrices, CompeteAgainstBest, MidOffsets, Price, Quantity, TrailBy, ValidationError};
+pub use types::{BracketPrices, CompeteAgainstBest, MidOffsets, Price, Quantity, TrailBy};

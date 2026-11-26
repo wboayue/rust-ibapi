@@ -207,10 +207,14 @@ impl OptionBuilder<Symbol, f64, ExpirationDate> {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidArgument`] unless the strike is positive and finite and
-    /// the [`expires_on`](OptionBuilder::expires_on) date is a real calendar date.
+    /// [`Error::Validation`] with [`ValidationError::InvalidPrice`] unless the strike is
+    /// positive and finite, or [`ValidationError::InvalidDate`] unless the
+    /// [`expires_on`](OptionBuilder::expires_on) date is a real calendar date.
+    ///
+    /// [`ValidationError::InvalidPrice`]: crate::builder::ValidationError::InvalidPrice
+    /// [`ValidationError::InvalidDate`]: crate::builder::ValidationError::InvalidDate
     pub fn build(self) -> Result<Contract, Error> {
-        let strike = Strike::new(self.strike).map_err(Error::InvalidArgument)?;
+        let strike = Strike::new(self.strike)?;
         let expiry = self.expiry.validated()?;
         Ok(Contract {
             symbol: self.symbol,

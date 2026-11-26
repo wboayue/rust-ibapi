@@ -19,8 +19,9 @@ use crate::testdata::builders::orders::{
 use crate::testdata::builders::ResponseProtoEncoder;
 
 use super::*;
+use crate::builder::ValidationError;
 use crate::client::ids::{OrderId, REQUEST_ID_FLOOR};
-use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
+use crate::orders::builder::{BracketPrices, TrailBy};
 use crate::orders::common::order_builder;
 
 #[test]
@@ -309,7 +310,12 @@ fn invalid_ext_operator_is_rejected_before_sending() {
     let mut order = order_builder::limit_order(Action::Buy, 1.0, 1.0);
     order.ext_operator = "TRADER_7".to_owned();
 
-    let rejected = |result: Result<(), Error>, what: &str| assert!(matches!(result, Err(Error::InvalidArgument(_))), "{what}: {result:?}");
+    let rejected = |result: Result<(), Error>, what: &str| {
+        assert!(
+            matches!(result, Err(Error::Validation(ValidationError::InvalidField { .. }))),
+            "{what}: {result:?}"
+        )
+    };
     rejected(client.cancel_order_with(41, &cancel).map(drop), "cancel_order_with");
     rejected(client.global_cancel_with(&cancel), "global_cancel_with");
     rejected(client.place_order(41, &contract, &order).map(drop), "place_order");

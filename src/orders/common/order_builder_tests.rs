@@ -1,4 +1,5 @@
-use crate::orders::builder::{BracketPrices, TrailBy, ValidationError};
+use crate::builder::ValidationError;
+use crate::orders::builder::{BracketPrices, TrailBy};
 use crate::orders::common::encoders::encode_order;
 use crate::orders::common::order_builder::*;
 use crate::orders::{Action, AdjustableTrailingUnit, Order, OrderType};

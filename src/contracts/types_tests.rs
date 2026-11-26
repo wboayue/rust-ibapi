@@ -380,11 +380,9 @@ fn expiration_date_new_checks_calendar() {
     for (year, month, day, expected) in cases {
         match (ExpirationDate::new(year, month, day), expected) {
             (Ok(date), Some(text)) => assert_eq!(date.to_string(), text),
-            (Err(Error::InvalidArgument(message)), None) => assert_eq!(
-                message,
-                format!("invalid expiration date {year:04}-{month:02}-{day:02}"),
-                "{year}-{month}-{day}"
-            ),
+            (Err(ValidationError::InvalidDate { value, .. }), None) => {
+                assert_eq!(value, format!("{year:04}-{month:02}-{day:02}"), "{year}-{month}-{day}")
+            }
             (other, _) => panic!("{year}-{month}-{day}: got {other:?}"),
         }
     }
@@ -403,9 +401,7 @@ fn contract_month_new_checks_range() {
     for (year, month, expected) in cases {
         match (ContractMonth::new(year, month), expected) {
             (Ok(m), Some(text)) => assert_eq!(m.to_string(), text),
-            (Err(Error::InvalidArgument(message)), None) => {
-                assert_eq!(message, format!("invalid contract month {year:04}-{month:02}"), "{year}-{month}")
-            }
+            (Err(ValidationError::InvalidDate { value, .. }), None) => assert_eq!(value, format!("{year:04}-{month:02}"), "{year}-{month}"),
             (other, _) => panic!("{year}-{month}: got {other:?}"),
         }
     }
@@ -426,7 +422,18 @@ fn expiration_date_from_str() {
         ("", None),
     ];
     for (input, expected) in cases {
-        assert_eq!(input.parse::<ExpirationDate>().ok(), expected, "{input:?}");
+        match (input.parse::<ExpirationDate>(), expected) {
+            (Ok(date), Some(expected)) => assert_eq!(date, expected, "{input:?}"),
+            (Err(err), None) => assert_eq!(
+                err,
+                ValidationError::InvalidDate {
+                    value: input.to_owned(),
+                    expected: "YYYYMMDD"
+                },
+                "{input:?}"
+            ),
+            (other, _) => panic!("{input:?}: got {other:?}"),
+        }
     }
 }
 
@@ -442,7 +449,18 @@ fn contract_month_from_str() {
         ("", None),
     ];
     for (input, expected) in cases {
-        assert_eq!(input.parse::<ContractMonth>().ok(), expected, "{input:?}");
+        match (input.parse::<ContractMonth>(), expected) {
+            (Ok(month), Some(expected)) => assert_eq!(month, expected, "{input:?}"),
+            (Err(err), None) => assert_eq!(
+                err,
+                ValidationError::InvalidDate {
+                    value: input.to_owned(),
+                    expected: "YYYYMM"
+                },
+                "{input:?}"
+            ),
+            (other, _) => panic!("{input:?}: got {other:?}"),
+        }
     }
 }
 
@@ -454,7 +472,10 @@ fn expiry_from_str_is_strict() {
     );
     assert_eq!("202612".parse::<Expiry>().unwrap(), Expiry::Month(ContractMonth::new(2026, 12).unwrap()));
     for bad in ["", "2026", "20261340", "20261218 08:30:00 US/Central", "20430504 16:00 Europe/London"] {
-        assert!(matches!(bad.parse::<Expiry>(), Err(Error::Parse { .. })), "{bad:?}");
+        assert!(
+            matches!(bad.parse::<Expiry>(), Err(ValidationError::InvalidDate { ref value, .. }) if value == bad),
+            "{bad:?}"
+        );
     }
 }
 

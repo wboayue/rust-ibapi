@@ -145,7 +145,7 @@ impl Client {
     ///
     /// # Errors
     /// - [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000 (reserved for request ids).
-    /// - [`Error::InvalidArgument`], with nothing sent, for an [`OrderCancel::ext_operator`] TWS would leave unanswered.
+    /// - [`Error::Validation`], with nothing sent, for an [`OrderCancel::ext_operator`] TWS would leave unanswered.
     ///
     /// # Examples
     ///
@@ -277,7 +277,7 @@ impl Client {
     /// ([`OrderCancel::ext_operator`]) or [`OrderCancel::manual_order_indicator`] with the cancel.
     ///
     /// # Errors
-    /// [`Error::InvalidArgument`], with nothing sent, for an [`OrderCancel::ext_operator`] TWS would leave unanswered.
+    /// [`Error::Validation`], with nothing sent, for an [`OrderCancel::ext_operator`] TWS would leave unanswered.
     ///
     /// # Examples
     ///
@@ -390,7 +390,7 @@ impl Client {
     ///
     /// # Errors
     /// - [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
-    /// - [`Error::InvalidArgument`], with nothing sent, for an [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
+    /// - [`Error::Validation`], with nothing sent, for an [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
     ///
     /// # Examples
     ///
@@ -454,7 +454,7 @@ impl Client {
     ///
     /// # Errors
     /// - [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
-    /// - [`Error::InvalidArgument`], with nothing sent, for an [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
+    /// - [`Error::Validation`], with nothing sent, for an [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
     ///
     /// # Examples
     ///
