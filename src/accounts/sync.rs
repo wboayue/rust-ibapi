@@ -65,6 +65,15 @@ impl Client {
     /// Subscribes to [PositionUpdate]s for all accessible accounts.
     /// All positions sent initially, and then only updates as positions change.
     ///
+    /// During an internet outage (after a 1100) TWS answers a new positions request only with
+    /// the global notice 2151 "Positions info is not available yet." (request id -1, so it
+    /// reaches `notice_stream()`, not this subscription) and then sends nothing, also after
+    /// connectivity returns: live, no `PositionEnd` came in 1554 s and 348 s. Bound the wait
+    /// for `PositionEnd` and request again after the 1102. The subscription does not end on
+    /// 2151: positions share one channel per client, and a request opened before the outage
+    /// resumes on its subscription, so a request-less 2151 could end a live stream
+    /// (`docs/wire-facts/protocol.md#requests-held-during-an-internet-outage`).
+    ///
     /// # Examples
     ///
     /// ```no_run

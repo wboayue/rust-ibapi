@@ -43,6 +43,7 @@ pub(crate) fn classify<T: TickDecoder<T>>(item: RoutedItem) -> TickAction<T> {
         },
         RoutedItem::Notice(notice) => TickAction::Notice(notice),
         RoutedItem::Error(e) => TickAction::Error(e),
+        RoutedItem::FarmDisconnected(notice, _) => TickAction::Error(Error::Notice(notice)),
     }
 }
 

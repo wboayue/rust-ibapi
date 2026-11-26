@@ -531,3 +531,29 @@ connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
 - **Not probed:** a futures or EFP order, where `refFuturesConId` would be set; a filled or
   partially filled order.
 
+### Orders during an internet outage
+
+*Live 2026-11-25 and 2026-11-26, paper TWS, server 223; AAPL BUY 1 LMT 1.00 resting PreSubmitted;
+Wi-Fi off 15 s, 2 min and 20 min, router uplink unplugged 2 min; orders placed 5 s after the cut,
+before TWS reported the loss, and 1.0 s after the 1100; #1300.*
+
+- A resting order stayed PreSubmitted. At the 6-minute restore TWS re-sent `openOrder` and
+  `orderStatus` for every open order 2 s before the 1102, unrequested.
+- An order placed during the outage got ApiPending; with the 1100 TWS sent 1104 "Pending to
+  create 1 orders: <id>". TWS never created it: no status, no error, absent from
+  `reqOpenOrders`, and a later cancel drew 10147 "not found". 4 of 4 runs, the 20-minute one
+  included (absent from all 25 open-order replies).
+- An order placed 1.0 s after the 1100 was named in the next 1104, then rejected with 200 on its
+  order id 1.0 s (20-minute run) and 21.0 s (uplink run) after it was placed; a later cancel drew
+  10147:
+
+  ```text
+  12:01:13.627 code=1104 "Pending to create 2 orders: 55, 57"
+  12:01:14.621 code=200 req=Some(57) category=OrderRejection "No security definition has been found for the request"
+  12:27:13.169 code=10147 req=Some(57) "OrderId 57 that needs to be cancelled is not found."
+  ```
+
+- A cancel sent 5 s later returned ApiCancelled within 1 ms.
+- Resting orders survived two TWS restarts; see
+  [TWS restart and reconnect](protocol.md#tws-restart-and-reconnect).
+- **Not probed:** a fill during the outage; IB Gateway.

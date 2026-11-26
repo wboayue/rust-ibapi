@@ -30,6 +30,7 @@ use tokio::task;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
+use super::farm_watch::async_impl::FarmWatch;
 use crate::accounts::types::AccountId;
 use crate::client::handshake_state::HandshakeState;
 use crate::client::ids::{OrderId, RequestId, WireId};
@@ -112,6 +113,8 @@ impl ChannelClass {
 pub(crate) struct NoticeBroadcaster {
     /// `None` once closed.
     sender: std::sync::Mutex<Option<broadcast::Sender<Notice>>>,
+    /// Fed every notice before the fan-out; reset by the bus on a transport drop.
+    pub(crate) farms: FarmWatch,
 }
 
 impl super::common::NoticeSink for NoticeBroadcaster {
@@ -124,6 +127,7 @@ impl NoticeBroadcaster {
     pub(crate) fn new(sender: broadcast::Sender<Notice>) -> Self {
         Self {
             sender: std::sync::Mutex::new(Some(sender)),
+            farms: FarmWatch::default(),
         }
     }
 
@@ -137,6 +141,7 @@ impl NoticeBroadcaster {
     }
 
     pub(crate) fn broadcast(&self, notice: Notice) {
+        self.farms.observe(&notice);
         if let Some(sender) = lock(&self.sender).as_ref() {
             let _ = sender.send(notice);
         }
@@ -146,6 +151,7 @@ impl NoticeBroadcaster {
     /// every later subscription on arrival.
     pub(crate) fn close(&self) {
         *lock(&self.sender) = None;
+        self.farms.close();
     }
 }
 
@@ -257,6 +263,10 @@ pub trait AsyncMessageBus: Send + Sync {
     /// cleanup here, so it runs even when the drop is on a thread with no
     /// runtime of its own.
     fn runtime_handle(&self) -> &Handle;
+
+    /// Historical-data farm state from the global notices, which
+    /// `Client::resubscribing` waits on after a 10182.
+    fn farm_watch(&self) -> &super::farm_watch::async_impl::FarmWatch;
 }
 
 /// Internal subscription for async implementation.
@@ -887,6 +897,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.shared_channels.notify_all(|| Error::ConnectionReset.into());
         self.shared_channels.reset_counts().await;
         self.order_taps.reset();
+        self.connection.notice_broadcaster.farms.reset();
     }
 
     /// Shut down, then release the socket, which retained clients and
@@ -946,7 +957,10 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// subscription its id names.
     async fn deliver(&self, id: WireId, item: RoutedItem, sent_to_update_stream: bool) {
         let unrouted = match id {
-            WireId::Request(request_id) => self.requests.deliver(&request_id, item),
+            WireId::Request(request_id) => self.requests.deliver(
+                &request_id,
+                item.with_farm_disconnect_mark(|| self.connection.notice_broadcaster.farms.mark()),
+            ),
             WireId::Order(order_id) => self.orders.deliver(&order_id, item),
         };
         if let Err(item) = unrouted {
@@ -1273,6 +1287,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
     fn session_generation(&self) -> u64 {
         self.session_generation.load(Ordering::Acquire)
+    }
+
+    fn farm_watch(&self) -> &super::farm_watch::async_impl::FarmWatch {
+        &self.connection.notice_broadcaster.farms
     }
 
     fn runtime_handle(&self) -> &Handle {

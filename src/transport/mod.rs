@@ -28,6 +28,7 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
+pub(crate) mod farm_watch;
 pub(crate) mod order_taps;
 pub(crate) mod rate_limiter;
 
@@ -126,7 +127,9 @@ impl BoundState {
             return Admit::Discard;
         }
         let terminal = match item {
-            RoutedItem::Error(Error::Notice(notice)) => !(self.bound.continues)(notice, &self.bound.context),
+            RoutedItem::Error(Error::Notice(notice)) | RoutedItem::FarmDisconnected(notice, _) => {
+                !(self.bound.continues)(notice, &self.bound.context)
+            }
             RoutedItem::Error(_) => true,
             RoutedItem::Response(message) => self.bound.end.contains(&message.message_type()),
             RoutedItem::Notice(_) => false,
@@ -314,6 +317,10 @@ pub(crate) trait MessageBus: Send + Sync {
     /// was sent in: once they differ, the request died with an earlier
     /// session and a cancel would name an id the current session never saw.
     fn session_generation(&self) -> u64;
+
+    /// Historical-data farm state from the global notices, which
+    /// `Client::resubscribing` waits on after a 10182.
+    fn farm_watch(&self) -> &farm_watch::sync_impl::FarmWatch;
 }
 
 // InternalSubscription - handles receiving messages for sync subscriptions
@@ -397,6 +404,18 @@ impl InternalSubscription {
     /// `None` if no `RoutedItem` arrives within `timeout`.
     pub(crate) fn next_timeout_routed(&self, timeout: Duration) -> Option<RoutedItem> {
         self.pick_receiver()?.recv_timeout(timeout).ok()
+    }
+
+    /// [`next_routed`](Self::next_routed), or `None` once `wake` receives
+    /// first. Either may win when both are ready.
+    pub(crate) fn next_routed_unless(&self, wake: &Receiver<()>) -> Option<Option<RoutedItem>> {
+        let Some(receiver) = self.pick_receiver() else {
+            return Some(None);
+        };
+        crossbeam::select! {
+            recv(receiver) -> item => Some(item.ok()),
+            recv(wake) -> _ => None,
+        }
     }
 
     pub(crate) fn cancel(&self) {

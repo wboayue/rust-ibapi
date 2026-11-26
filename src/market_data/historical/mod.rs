@@ -26,7 +26,8 @@ use crate::builder::ValidationError;
 use crate::common::error_helpers;
 use crate::common::request_helpers::CancellableOneShot;
 use crate::messages::{
-    IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE, REQUEST_VALIDATION_CODE, WHAT_TO_SHOW_SUBSTITUTED_CODE,
+    IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE, REQUEST_VALIDATION_CODE, SUBSCRIPTION_DISCONNECTED_CODE,
+    WHAT_TO_SHOW_SUBSTITUTED_CODE,
 };
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Error, ToField};
@@ -674,9 +675,15 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
     /// ("Source price not supported with live updates"): no frame followed
     /// either for 65 s, and TWS answered the cancel with 366. 162 still
     /// cancels: four of its texts behaved the same, but a pacing violation,
-    /// also a 162, could not be provoked to check.
+    /// also a 162, could not be provoked to check. And 10182, sent when the
+    /// HMDS farm breaks: no frame followed it for 390 s or more, and TWS
+    /// answered the cancel with 366.
     fn rejection_ends_request(notice: &Notice, context: &DecoderContext) -> bool {
-        !context.keep_up_to_date || matches!(notice.code, NO_SECURITY_DEFINITION_CODE | REQUEST_VALIDATION_CODE)
+        !context.keep_up_to_date
+            || matches!(
+                notice.code,
+                NO_SECURITY_DEFINITION_CODE | REQUEST_VALIDATION_CODE | SUBSCRIPTION_DISCONNECTED_CODE
+            )
     }
 
     /// Live: after 10299 TWS sends the bars of the series the error names
