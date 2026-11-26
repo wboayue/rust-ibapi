@@ -270,21 +270,21 @@ pub struct Reroute {
 
 /// How a [`MarketDepth`] / [`MarketDepthL2`] row changes the book.
 ///
-/// Rows are fixed slots, not a list that shifts: TWS inserted rows only at the end of a side,
-/// re-priced rows in place with `Update`, and almost always deleted the last row (17 of 1,327
-/// deletes in a downstream recording hit a lower row). In that recording, shifting the rows
-/// after `position` on an insert or delete left a side unsorted after 31,049 operations, against
-/// 3,775 transient states for fixed slots (live: 2026-11-25, server 223;
-/// `docs/wire-facts/market-data.md#market-depth-rows-are-fixed-positions`).
+/// On EUR.USD depth from IDEALPRO, rows behaved as fixed slots rather than a list that shifts:
+/// TWS inserted rows only at the end of a side, re-priced rows in place with `Update`, and almost
+/// always deleted the last row (17 of 1,327 deletes in a downstream recording hit a lower row). In
+/// that recording, shifting the rows after `position` on an insert or delete left a side unsorted
+/// after 31,049 operations, against 3,775 transient states for fixed slots. Other instruments and
+/// SMART depth were not probed (live: 2026-11-25, server 223;
+/// `docs/wire-facts/market-data.md#eurusd-depth-rows-are-fixed-positions`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DepthOperation {
-    /// Set the row at `position`, which TWS sent at the end of the side. Wire code `0`. Also the
-    /// value when TWS omits the field.
+    /// Insert a new row at `position`. Wire code `0`. Also the value when TWS omits the field.
     #[default]
     Insert,
-    /// Replace the price and size of the row at `position`. Wire code `1`.
+    /// Update the row at `position`. Wire code `1`.
     Update,
-    /// Remove the row at `position` and any rows after it. TWS sends price and size 0. Wire code `2`.
+    /// Delete the row at `position`. On EUR.USD depth TWS sent price and size 0. Wire code `2`.
     Delete,
     /// Operation code not modeled by this version of the API.
     Unknown(i32),

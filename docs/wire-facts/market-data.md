@@ -343,7 +343,7 @@ December future (HKFE), both with real-time permission.*
   keep-up-to-date historical bars across the same break (historical requests went unanswered
   from 00:55 UTC that night, with no error, while market data kept working).
 
-### Market depth rows are fixed positions
+### EUR.USD depth rows are fixed positions
 
 *Live 2026-11-25 19:16-19:19 UTC, paper TWS, server 223; EUR.USD on IDEALPRO, 5 rows, 150 s.
 Reported downstream the same day: a 3-minute recording with 10 rows.*
@@ -376,6 +376,7 @@ reported downstream the same day.*
 | ES `CONTFUT` TRADES, 1-minute bars, 30 D (downstream) | 107.6 s | 40,877 |
 | ES `CONTFUT` TRADES, 1-hour bars, 5 Y (downstream) | 161.8 s | 16,121 |
 
-- A `one_shot_timeout` of 60 s ends each of these with `Error::Timeout` before the bars arrive.
-  Size the timeout to the longest request, or split the range.
+- Inferred from the times, not run: a `one_shot_timeout` of 60 s would end each of these with
+  `Error::Timeout` before the bars arrive. Size the timeout to the longest request, or split the
+  range.
 - **Not probed:** other bar sizes and instruments; how the time grows with concurrent requests.
