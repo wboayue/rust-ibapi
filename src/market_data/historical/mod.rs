@@ -177,22 +177,24 @@ pub struct Bar {
     pub low: f64,
     /// The bar's close price.
     pub close: f64,
-    /// The bar's traded volume. TWS sends `-1` for bars that aren't
-    /// [`WhatToShow::Trades`] (MIDPOINT, BID, ASK, ...).
-    pub volume: f64,
-    /// The bar's volume-weighted average price; `-1` for bars that aren't
-    /// [`WhatToShow::Trades`].
-    pub wap: f64,
-    /// The number of trades during the bar's timespan; `-1` for bars that aren't
-    /// [`WhatToShow::Trades`].
-    pub count: i32,
+    /// The bar's traded volume.
+    ///
+    /// `None` on a bar type without trade data (MIDPOINT, BID, ASK, BID_ASK, ...), for which
+    /// TWS sends `-1`. It never means nothing traded; a quiet TRADES bar reports `Some(0.0)`.
+    /// [`WhatToShow::HistoricalVolatility`] and [`WhatToShow::OptionImpliedVolatility`] bars
+    /// report `Some(1.0)`, which is not a traded volume.
+    pub volume: Option<f64>,
+    /// The bar's volume-weighted average price. `None` when [`volume`](Self::volume) is.
+    pub wap: Option<f64>,
+    /// The number of trades during the bar's timespan. `None` when TWS sends none or `-1`,
+    /// which it does on a bar type without trade data; a quiet TRADES bar reports `Some(0)`.
+    /// [`WhatToShow::HistoricalVolatility`] and [`WhatToShow::OptionImpliedVolatility`] bars
+    /// report `Some(0)`, which is not a trade count.
+    pub count: Option<i32>,
 }
 
-/// `Bar::count` when TWS sends no bar count, the reference client's default.
-pub(crate) const NO_BAR_COUNT: i32 = -1;
-
 impl Default for Bar {
-    /// A zero bar with `count` `-1`, timestamped at the Unix epoch.
+    /// A zero-price bar with no volume, WAP or count, timestamped at the Unix epoch.
     fn default() -> Self {
         Self {
             date: BarTimestamp::DateTime(OffsetDateTime::UNIX_EPOCH),
@@ -200,9 +202,9 @@ impl Default for Bar {
             high: 0.0,
             low: 0.0,
             close: 0.0,
-            volume: 0.0,
-            wap: 0.0,
-            count: NO_BAR_COUNT,
+            volume: None,
+            wap: None,
+            count: None,
         }
     }
 }

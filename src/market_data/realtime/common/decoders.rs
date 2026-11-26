@@ -3,7 +3,7 @@ use crate::messages::ResponseMessage;
 use crate::proto::decoders::{optional_f64, parse_decimal_or_zero, parse_optional_decimal, required, ts};
 use crate::Error;
 
-use crate::market_data::common::decoders::{decode_tick_bid_ask, decode_tick_last, decode_tick_midpoint};
+use crate::market_data::common::decoders::{decode_bar_trade_fields, decode_tick_bid_ask, decode_tick_last, decode_tick_midpoint, BarTradeFields};
 use crate::market_data::realtime::{
     Bar, DepthMarketDataDescription, MarketDepth, MarketDepthL2, Reroute, TickAttribute, TickBidAsk, TickGeneric, TickLast, TickMidpoint, TickPrice,
     TickPriceSize, TickRequestParameters, TickSize, TickString, TickType, TickTypes,
@@ -73,15 +73,16 @@ pub(crate) fn decode_reroute_market_depth(message: &ResponseMessage) -> Result<R
 // === Protobuf decoders ===
 
 pub(crate) fn decode_realtime_bar_proto(msg: crate::proto::RealTimeBarTick) -> Result<Bar, Error> {
+    let BarTradeFields { volume, wap, count } = decode_bar_trade_fields(msg.volume.as_deref(), msg.wap.as_deref(), msg.count)?;
     Ok(Bar {
         date: ts(msg.time.unwrap_or_default()),
         open: msg.open.unwrap_or_default(),
         high: msg.high.unwrap_or_default(),
         low: msg.low.unwrap_or_default(),
         close: msg.close.unwrap_or_default(),
-        volume: parse_optional_decimal(msg.volume.as_deref())?,
-        wap: parse_optional_decimal(msg.wap.as_deref())?,
-        count: msg.count.unwrap_or_default(),
+        volume,
+        wap,
+        count,
     })
 }
 

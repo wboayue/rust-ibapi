@@ -137,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bar.high,
                 bar.low,
                 bar.close,
-                bar.volume
+                bar.volume.unwrap_or(0.0)
             );
         }
         if historical_data.bars.len() > 10 {
@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bar.high,
                     bar.low,
                     bar.close,
-                    bar.volume
+                    bar.volume.unwrap_or(0.0)
                 );
             }
         }
@@ -176,7 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bar.high,
                 bar.low,
                 bar.close,
-                bar.volume / 1000.0
+                bar.volume.unwrap_or(0.0) / 1000.0
             );
         }
 
@@ -255,14 +255,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Now streaming updates...");
             }
             Ok(HistoricalDataFrame::Update(bar)) => {
+                // MIDPOINT (Forex) bars carry no volume; print it only when present.
+                let volume = bar.volume.map(|v| format!(", V: {v:.0}")).unwrap_or_default();
                 println!(
-                    "UPDATE: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}",
+                    "UPDATE: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}{}",
                     format_time(&bar.date),
                     bar.open,
                     bar.high,
                     bar.low,
                     bar.close,
-                    bar.volume
+                    volume
                 );
             }
             Ok(HistoricalDataFrame::End { start, end }) => {

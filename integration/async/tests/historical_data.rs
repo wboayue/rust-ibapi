@@ -57,7 +57,10 @@ async fn historical_data_daily() {
         .expect("historical_data failed");
 
     assert!(!data.bars.is_empty(), "expected non-empty bars");
-    assert!(data.bars[0].volume >= 0.0, "volume should be non-negative");
+    assert!(
+        data.bars[0].volume.is_some_and(|v| v >= 0.0),
+        "TRADES volume should be present and non-negative"
+    );
 }
 
 #[tokio::test]

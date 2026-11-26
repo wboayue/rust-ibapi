@@ -866,32 +866,42 @@ code. The compiler finds every assignment and comparison that uses an integer. S
 field is the wire code (§47), the number 5.x wrote, so `Order` JSON written by 5.x still
 deserializes it.
 
-### 38. Realtime `Bar::volume` and `wap` are `Option<f64>`
+### 38. `Bar::volume`, `wap` and `count` are `Option`
 
-TWS sends no volume or WAP on a realtime bar that isn't `WhatToShow::Trades`: MIDPOINT, BID
-and ASK bars have no traded volume. 5.x decoded the missing value as `0.0`, the same as a
-TRADES bar in which nothing traded. Both fields are now `Option<f64>`, `None` for a
-non-TRADES bar; a quiet TRADES bar is `Some(0.0)`.
+On both bar types, realtime (`market_data::realtime::Bar`) and historical
+(`market_data::historical::Bar`), `volume` and `wap` are `Option<f64>` and `count` is
+`Option<i32>`. Each is `None` on a bar type without trade data: MIDPOINT, BID, ASK, BID_ASK and
+the like. A TRADES bar in which nothing traded is `Some(0.0)` / `Some(0)`.
+
+5.x had a different "not applicable" per field. A realtime bar decoded the volume and WAP TWS
+leaves out as `0.0`, the same as a quiet TRADES bar, and kept `count` as the `-1` TWS sends.
+A historical bar kept the `-1` TWS sends for all three, so summing `volume` over MIDPOINT
+bars gave a negative total.
+
+The rule goes by value, not by `WhatToShow`: volume and count are `None` when TWS leaves them
+out or sends `-1`, and WAP is `None` whenever volume is. ADJUSTED_LAST and AGGTRADES bars carry
+real trade values. HISTORICAL_VOLATILITY and OPTION_IMPLIED_VOLATILITY bars come through as
+volume `Some(1.0)` and count `Some(0)`, neither a traded quantity.
 
 ```rust,ignore
 // 5.x
-println!("volume {} vwap {:.2}", bar.volume, bar.wap);
+println!("volume {} vwap {:.2} trades {}", bar.volume, bar.wap, bar.count);
+if bar.count != -1 { /* TRADES bar */ }
 
 // 6.0
-if let (Some(volume), Some(wap)) = (bar.volume, bar.wap) {
-    println!("volume {volume} vwap {wap:.2}");
+if let (Some(volume), Some(wap), Some(count)) = (bar.volume, bar.wap, bar.count) {
+    println!("volume {volume} vwap {wap:.2} trades {count}");
 }
-let volume = bar.volume.unwrap_or(0.0); // where the old reading is wanted
+if bar.count.is_some() { /* bar with trade data */ }
+let volume = bar.volume.unwrap_or(0.0); // where a plain number is wanted
 ```
 
-The compiler finds every use as `f64`. It doesn't catch the serialized form: `Bar` derives
-`Serialize` / `Deserialize`, and an absent value now serializes as `null`; the `utoipa` schema
-marks both fields nullable. JSON written by 5.x still deserializes, with a stored `0` read as
-`Some(0.0)`.
-
-`count` stays `i32` and is `-1` on a non-TRADES bar, as TWS sends it. The historical `Bar`
-(`market_data::historical::Bar`) is unchanged: TWS sends `-1` for its volume, WAP and count on
-non-TRADES bars rather than leaving them out, so they stay `f64` and `i32`.
+The compiler finds every use as `f64` or `i32`. It doesn't catch the serialized form: both
+types derive `Serialize` / `Deserialize`, and an absent value now serializes as `null`; the
+`utoipa` schemas mark the three fields nullable. JSON written by 5.x still deserializes, but a
+stored `-1` reads back as `Some(-1.0)` / `Some(-1)`, not `None`, and a realtime bar's stored
+`0` volume as `Some(0.0)`. Re-fetch, or map `-1` to `None` after loading, where the
+distinction matters.
 
 ### 39. Tick-by-tick and historical ticks share `TickLast`, `TickBidAsk` and `TickMidpoint`
 

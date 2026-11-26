@@ -291,9 +291,9 @@ async fn historical_data() {
     assert_eq!(bar.high, 186.00, "Wrong high for first bar");
     assert_eq!(bar.low, 185.25, "Wrong low for first bar");
     assert_eq!(bar.close, 185.75, "Wrong close for first bar");
-    assert_eq!(bar.volume, 1000.0, "Wrong volume for first bar");
-    assert_eq!(bar.wap, 185.70, "Wrong WAP for first bar");
-    assert_eq!(bar.count, 100, "Wrong count for first bar");
+    assert_eq!(bar.volume, Some(1000.0), "Wrong volume for first bar");
+    assert_eq!(bar.wap, Some(185.70), "Wrong WAP for first bar");
+    assert_eq!(bar.count, Some(100), "Wrong count for first bar");
 
     // Verify second bar (daily bar — YYYYMMDD wire format)
     let bar = &data.bars[1];
@@ -302,9 +302,9 @@ async fn historical_data() {
     assert_eq!(bar.high, 186.25, "Wrong high for second bar");
     assert_eq!(bar.low, 185.50, "Wrong low for second bar");
     assert_eq!(bar.close, 186.00, "Wrong close for second bar");
-    assert_eq!(bar.volume, 1500.0, "Wrong volume for second bar");
-    assert_eq!(bar.wap, 185.85, "Wrong WAP for second bar");
-    assert_eq!(bar.count, 150, "Wrong count for second bar");
+    assert_eq!(bar.volume, Some(1500.0), "Wrong volume for second bar");
+    assert_eq!(bar.wap, Some(185.85), "Wrong WAP for second bar");
+    assert_eq!(bar.count, Some(150), "Wrong count for second bar");
 
     assert_eq!(request_message_count(&message_bus), 1);
     assert_request(

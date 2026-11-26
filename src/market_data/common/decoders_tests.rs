@@ -73,3 +73,44 @@ fn tick_midpoint_ignores_size() {
         );
     }
 }
+
+/// Bar trade fields by wire value (live, server 226; #1247). `(label, volume, wap, count)` in,
+/// `BarTradeFields` out.
+#[test]
+fn bar_trade_fields_by_value() {
+    type Case = (
+        &'static str,
+        Option<&'static str>,
+        Option<&'static str>,
+        Option<i32>,
+        (Option<f64>, Option<f64>, Option<i32>),
+    );
+    let cases: [Case; 8] = [
+        ("TRADES", Some("1500"), Some("185.7"), Some(42), (Some(1500.0), Some(185.7), Some(42))),
+        ("TRADES, quiet bar", Some("0"), Some("185.7"), Some(0), (Some(0.0), Some(185.7), Some(0))),
+        ("historical non-TRADES: -1 sentinel", Some("-1"), Some("-1"), Some(-1), (None, None, None)),
+        ("realtime non-TRADES: absent, count -1", None, None, Some(-1), (None, None, None)),
+        ("volatility bar", Some("1"), Some("0.23"), Some(0), (Some(1.0), Some(0.23), Some(0))),
+        ("WAP tied to volume", Some("-1"), Some("185.7"), Some(-1), (None, None, None)),
+        ("count absent", Some("10"), Some("185.7"), None, (Some(10.0), Some(185.7), None)),
+        ("WAP absent, volume present", Some("10"), None, Some(5), (Some(10.0), None, Some(5))),
+    ];
+    for (label, volume, wap, count, (want_volume, want_wap, want_count)) in cases {
+        let fields = decode_bar_trade_fields(volume, wap, count).expect(label);
+        assert_eq!(
+            fields,
+            BarTradeFields {
+                volume: want_volume,
+                wap: want_wap,
+                count: want_count
+            },
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn bar_trade_fields_malformed_is_parse_error() {
+    assert_decimal_parse_error(decode_bar_trade_fields(Some("abc"), Some("1"), Some(1)), "abc");
+    assert_decimal_parse_error(decode_bar_trade_fields(Some("1"), Some("abc"), Some(1)), "abc");
+}
