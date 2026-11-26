@@ -229,6 +229,9 @@ pub struct DecoderContext {
     pub request_type: Option<OutgoingMessages>,
     /// Whether this is a smart depth subscription
     pub is_smart_depth: bool,
+    /// Whether this is a historical bar request with `keepUpToDate`: its
+    /// `End` frame is mid-stream rather than the end of the request.
+    pub keep_up_to_date: bool,
 }
 
 impl DecoderContext {
@@ -238,6 +241,7 @@ impl DecoderContext {
             server_version,
             request_type: None,
             is_smart_depth: false,
+            keep_up_to_date: false,
         }
     }
 
@@ -251,6 +255,12 @@ impl DecoderContext {
     /// Set the smart depth flag
     pub fn with_smart_depth(mut self, is_smart_depth: bool) -> Self {
         self.is_smart_depth = is_smart_depth;
+        self
+    }
+
+    /// Set the historical bar `keepUpToDate` flag
+    pub fn with_keep_up_to_date(mut self, keep_up_to_date: bool) -> Self {
+        self.keep_up_to_date = keep_up_to_date;
         self
     }
 }
@@ -296,8 +306,8 @@ pub(crate) trait StreamDecoder<T> {
     ///
     /// Match the codes verified live, not every error: an unverified terminal
     /// code (10197 on market data) must keep its cancel. A
-    /// one-shot query with nothing to continue (`HistoricalDataFrame`) may
-    /// accept any error.
+    /// one-shot query with nothing to continue (`HistoricalDataFrame` without
+    /// `keep_up_to_date`) may accept any error.
     ///
     /// `context` is the subscription's request context, so a type serving more
     /// than one request mode can answer per request.

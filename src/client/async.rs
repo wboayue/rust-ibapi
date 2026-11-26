@@ -321,7 +321,8 @@ impl Client {
     /// |---|---|
     /// | market data, realtime bars, tick-by-tick, news bulletins | new data only |
     /// | market depth | the book rebuilt from scratch: reset yours on the notice |
-    /// | historical bars with `keep_up_to_date` | the initial bars again (duplicates) |
+    /// | historical bars, `subscribe_with_updates` | the initial bars again (duplicates) |
+    /// | historical bars, `subscribe` | the whole request again, `Bars` then `End`, if cut before `End`; the stream ends after `End` |
     /// | account, position, PnL, account summary | the initial snapshot again |
     /// | scanner | a fresh scan |
     ///

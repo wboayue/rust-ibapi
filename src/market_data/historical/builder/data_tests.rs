@@ -55,19 +55,19 @@ fn assert_trimmed(data: &HistoricalData) {
 }
 
 // `Subscription<T>` doesn't impl Debug, so `{:?}` formatting on `Result<Subscription<_>, _>`
-// won't compile. These helpers match the Err arm manually for the .stream() terminals.
+// won't compile. These helpers match the Err arm manually for the .subscribe_with_updates() terminals.
 // Sync + async use their own variants because the `Subscription` type differs per feature.
 #[cfg(feature = "sync")]
-fn assert_stream_invalid_argument_sync(
-    result: Result<crate::subscriptions::sync::Subscription<crate::market_data::historical::HistoricalBarUpdate>, crate::Error>,
+fn assert_updates_invalid_argument_sync(
+    result: Result<crate::subscriptions::sync::Subscription<crate::market_data::historical::HistoricalDataFrame>, crate::Error>,
 ) {
     let Err(err) = result else { panic!("expected InvalidArgument error") };
     assert!(matches!(err, crate::Error::InvalidArgument(_)), "expected InvalidArgument, got: {err}");
 }
 
 #[cfg(feature = "async")]
-fn assert_stream_invalid_argument_async(
-    result: Result<crate::subscriptions::r#async::Subscription<crate::market_data::historical::HistoricalBarUpdate>, crate::Error>,
+fn assert_updates_invalid_argument_async(
+    result: Result<crate::subscriptions::r#async::Subscription<crate::market_data::historical::HistoricalDataFrame>, crate::Error>,
 ) {
     let Err(err) = result else { panic!("expected InvalidArgument error") };
     assert!(matches!(err, crate::Error::InvalidArgument(_)), "expected InvalidArgument, got: {err}");
@@ -305,9 +305,9 @@ mod sync_tests {
             .historical_data(&contract, BarSize::Hour)
             .duration(1.days())
             .ending(datetime!(2026-04-15 0:00 UTC))
-            .stream();
+            .subscribe_with_updates();
 
-        super::assert_stream_invalid_argument_sync(result);
+        super::assert_updates_invalid_argument_sync(result);
     }
 
     #[test]
@@ -318,9 +318,9 @@ mod sync_tests {
         let result = client
             .historical_data(&contract, BarSize::Hour)
             .between(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC))
-            .stream();
+            .subscribe_with_updates();
 
-        super::assert_stream_invalid_argument_sync(result);
+        super::assert_updates_invalid_argument_sync(result);
     }
 
     // ---- subscribe ----
@@ -415,6 +415,53 @@ mod sync_tests {
 
         assert!(matches!(outcome, Drained::Rejected(notice) if notice.code == 162));
         assert_eq!(cancels(&bus), 0, "the rejection ended the request at TWS");
+    }
+
+    /// With updates, `End` is mid-stream: drop after it must still cancel, or
+    /// the request keeps streaming at TWS.
+    #[test]
+    fn subscribe_with_updates_dropped_after_end_cancels() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+
+        let subscription = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .subscribe_with_updates()
+            .unwrap();
+        assert!(matches!(
+            subscription.next(),
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(_))))
+        ));
+        assert!(matches!(
+            subscription.next(),
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. })))
+        ));
+        drop(subscription);
+
+        assert_eq!(cancels(&bus), 1, "End does not end a keep-up-to-date request");
+    }
+
+    /// With updates, only 200 is verified to end the request; 162 keeps the cancel.
+    #[test]
+    fn subscribe_with_updates_rejection_162_still_cancels() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+            TEST_REQ_ID_FIRST,
+            162,
+            "Historical Market Data Service error message:HMDS query returned no data",
+        )]));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let subscription = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .subscribe_with_updates()
+            .unwrap();
+        assert!(matches!(subscription.next(), Some(Err(Error::Notice(notice))) if notice.code == 162));
+        drop(subscription);
+
+        assert_eq!(cancels(&bus), 1);
     }
 
     #[test]
@@ -628,10 +675,10 @@ mod async_tests {
             .historical_data(&contract, BarSize::Hour)
             .duration(1.days())
             .ending(datetime!(2026-04-15 0:00 UTC))
-            .stream()
+            .subscribe_with_updates()
             .await;
 
-        super::assert_stream_invalid_argument_async(result);
+        super::assert_updates_invalid_argument_async(result);
     }
 
     #[tokio::test]
@@ -642,10 +689,10 @@ mod async_tests {
         let result = client
             .historical_data(&contract, BarSize::Hour)
             .between(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC))
-            .stream()
+            .subscribe_with_updates()
             .await;
 
-        super::assert_stream_invalid_argument_async(result);
+        super::assert_updates_invalid_argument_async(result);
     }
 
     // ---- subscribe ----
@@ -763,6 +810,57 @@ mod async_tests {
         assert!(matches!(outcome, Drained::Rejected(notice) if notice.code == 162));
         settle().await;
         assert_eq!(cancels(&bus), 0, "the rejection ended the request at TWS");
+    }
+
+    /// With updates, `End` is mid-stream: drop after it must still cancel, or
+    /// the request keeps streaming at TWS.
+    #[tokio::test]
+    async fn subscribe_with_updates_dropped_after_end_cancels() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+
+        let mut subscription = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .subscribe_with_updates()
+            .await
+            .unwrap();
+        assert!(matches!(
+            subscription.next().await,
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(_))))
+        ));
+        assert!(matches!(
+            subscription.next().await,
+            Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. })))
+        ));
+        drop(subscription);
+        settle().await;
+
+        assert_eq!(cancels(&bus), 1, "End does not end a keep-up-to-date request");
+    }
+
+    /// With updates, only 200 is verified to end the request; 162 keeps the cancel.
+    #[tokio::test]
+    async fn subscribe_with_updates_rejection_162_still_cancels() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+            TEST_REQ_ID_FIRST,
+            162,
+            "Historical Market Data Service error message:HMDS query returned no data",
+        )]));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::stock("AAPL").build();
+
+        let mut subscription = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .subscribe_with_updates()
+            .await
+            .unwrap();
+        assert!(matches!(subscription.next().await, Some(Err(Error::Notice(notice))) if notice.code == 162));
+        drop(subscription);
+        settle().await;
+
+        assert_eq!(cancels(&bus), 1);
     }
 
     #[tokio::test]

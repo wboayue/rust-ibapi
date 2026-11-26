@@ -52,8 +52,8 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T>,
     {
-        let bound = BufferBound::for_stream::<T>(buffer_limit)?;
-        SubscriptionBuilder::new(self.client).send_with_request_id_capped(self.request_id, message, bound)
+        let context = self.client.decoder_context();
+        self.send_capped_with_context(message, buffer_limit, context)
     }
 
     /// Send the request and create a subscription with context
@@ -61,9 +61,18 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T>,
     {
+        self.send_capped_with_context(message, None, context)
+    }
+
+    /// [`send_capped`](Self::send_capped) with a request-specific `context`.
+    pub fn send_capped_with_context<T>(self, message: Vec<u8>, buffer_limit: Option<usize>, context: DecoderContext) -> Result<Subscription<T>, Error>
+    where
+        T: StreamDecoder<T>,
+    {
+        let bound = BufferBound::for_stream::<T>(buffer_limit)?;
         SubscriptionBuilder::new(self.client)
             .with_context(context)
-            .send_with_request_id(self.request_id, message)
+            .send_with_request_id_capped(self.request_id, message, bound)
     }
 
     /// Send the request without creating a subscription
@@ -121,13 +130,8 @@ where
         Subscription::new(Arc::clone(&self.client.message_bus), subscription, self.context)
     }
 
-    /// Sends a request with a specific request ID and builds the subscription
-    pub fn send_with_request_id(self, request_id: RequestId, message: Vec<u8>) -> Result<Subscription<T>, Error> {
-        self.send_with_request_id_capped(request_id, message, None)
-    }
-
-    /// [`send_with_request_id`](Self::send_with_request_id), capping unread
-    /// items when `bound` is set.
+    /// Sends a request with a specific request ID and builds the subscription,
+    /// capping unread items when `bound` is set.
     pub fn send_with_request_id_capped(self, request_id: RequestId, message: Vec<u8>, bound: Option<BufferBound>) -> Result<Subscription<T>, Error> {
         log::debug!("send_message({request_id:?}), buffer limit {:?}", bound.map(|bound| bound.limit));
         let subscription = self.client.message_bus.send_request_capped(request_id, &message, bound)?;

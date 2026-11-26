@@ -763,19 +763,19 @@ async fn historical_data_streaming_with_updates() {
     let mut subscription = client
         .historical_data(&contract, BarSize::Hour)
         .duration(Duration::days(1))
-        .stream()
+        .subscribe_with_updates()
         .await
         .expect("streaming request should succeed");
 
     // First: receive initial historical data
-    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(bars)))) = subscription.next().await else {
-        panic!("Expected Historical variant");
+    let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(bars)))) = subscription.next().await else {
+        panic!("Expected Bars variant");
     };
     assert_eq!(bars.len(), 1, "Should have 1 initial bar");
     assert_eq!(bars[0].open, 185.50, "Wrong open price");
 
     // Second: receive streaming update
-    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Update(bar)))) = subscription.next().await else {
+    let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Update(bar)))) = subscription.next().await else {
         panic!("Expected Update variant");
     };
     assert_eq!(bar.open, 185.80, "Wrong open price in update");
@@ -811,7 +811,7 @@ async fn historical_data_streaming_error_response() {
     let mut subscription = client
         .historical_data(&contract, BarSize::Hour)
         .duration(Duration::days(1))
-        .stream()
+        .subscribe_with_updates()
         .await
         .expect("streaming request should succeed");
 
@@ -838,7 +838,7 @@ async fn historical_data_streaming_hmds_connected_notice_then_data() {
     let mut subscription = client
         .historical_data(&Contract::stock("SPY").build(), BarSize::Hour)
         .duration(Duration::days(1))
-        .stream()
+        .subscribe_with_updates()
         .await
         .expect("streaming request should succeed");
 
@@ -846,7 +846,7 @@ async fn historical_data_streaming_hmds_connected_notice_then_data() {
         panic!("165 should arrive as a notice");
     };
     assert_eq!((notice.code, notice.message.as_str()), (HMDS_QUERY_MESSAGE_CODE, HMDS_CONNECTED_MESSAGE));
-    let Some(Ok(SubscriptionItem::Data(HistoricalBarUpdate::Historical(bars)))) = subscription.next().await else {
+    let Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(bars)))) = subscription.next().await else {
         panic!("bars should follow the notice");
     };
     assert_eq!(bars.len(), 1);
@@ -1000,7 +1000,7 @@ async fn streaming_subscription_sends_cancel_on_drop() {
         let _subscription = client
             .historical_data(&contract, BarSize::Hour)
             .duration(Duration::days(1))
-            .stream()
+            .subscribe_with_updates()
             .await
             .expect("streaming request should succeed");
     }
@@ -1158,7 +1158,7 @@ async fn streaming_subscription_cancel_prevents_duplicate_on_drop() {
         let subscription = client
             .historical_data(&contract, BarSize::Hour)
             .duration(Duration::days(1))
-            .stream()
+            .subscribe_with_updates()
             .await
             .expect("streaming request should succeed");
 
@@ -1516,6 +1516,24 @@ async fn historical_data_requires_end_message_type() {
     assert_eq!(request_message_count(&bus), 1);
 }
 
+/// An update frame on a request sent without updates is out of protocol:
+/// `fetch` fails rather than treat it as bars or the window, and cancels.
+#[tokio::test]
+async fn historical_data_update_frame_is_unexpected() {
+    let bars = proto_response(IncomingMessages::HistoricalData, historical_data_response().encode_proto());
+    let update = proto_response(
+        IncomingMessages::HistoricalDataUpdate,
+        historical_data_update_response()
+            .bar(historical_data_bar(1_678_890_000).ohlc(1.0, 2.0, 0.5, 1.5))
+            .encode_proto(),
+    );
+    for (label, responses) in [("in place of bars", vec![update.clone()]), ("in place of the window", vec![bars, update])] {
+        let (result, bus) = fetch_daily(responses).await;
+        assert!(matches!(result, Err(Error::UnexpectedResponse(_))), "{label}: {result:?}");
+        assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1), "{label}");
+    }
+}
+
 /// An empty result is valid when the broker explicitly completes the request.
 #[tokio::test]
 async fn historical_data_requires_end_accepts_completed_empty_batch() {
@@ -1548,13 +1566,13 @@ async fn historical_data_stream_buffer_limit_reaches_the_bus() {
         .historical_data(&contract, BarSize::Hour)
         .duration(Duration::days(1))
         .buffer_limit(16)
-        .stream()
+        .subscribe_with_updates()
         .await
         .expect("bounded stream failed");
     let _unbounded = client
         .historical_data(&contract, BarSize::Hour)
         .duration(Duration::days(1))
-        .stream()
+        .subscribe_with_updates()
         .await
         .expect("unbounded stream failed");
 
