@@ -2817,6 +2817,51 @@ fn tws_frame(message: IncomingMessages, proto: &impl prost::Message) -> Vec<u8> 
     encode_raw_length(&helpers::binary_proto(message as i32, proto))
 }
 
+#[tokio::test]
+async fn analyze_order_accepts_top_level_open_order_id() {
+    use crate::contracts::Contract;
+    use crate::orders::{order_builder, Action, OrderStatusKind};
+    use crate::testdata::builders::orders::open_order;
+    use tokio::io::AsyncWriteExt;
+
+    let order_id = 9090;
+    let answer = open_order()
+        .order_id(order_id)
+        .client_id(CLIENT_ID)
+        .status(OrderStatusKind::PreSubmitted)
+        .initial_margin_before(1234.5);
+    let unrelated = answer.clone().order_id(order_id + 1).initial_margin_before(5678.0).to_proto();
+    let later = answer.clone().initial_margin_before(6789.0).to_proto();
+
+    for nested_id in [None, Some(order_id)] {
+        let mut answer = answer.to_proto();
+        answer.order.as_mut().unwrap().order_id = nested_id;
+        let (client, _bus, mut peer) = tcp_client_with_peer().await;
+        let client = client.with_one_shot_timeout(Duration::from_secs(2));
+
+        let frames = [
+            tws_frame(IncomingMessages::OpenOrder, &unrelated),
+            tws_frame(IncomingMessages::OpenOrder, &answer),
+            tws_frame(IncomingMessages::OpenOrder, &later),
+        ];
+        let tws = tokio::spawn(async move {
+            read_frame(&mut peer).await;
+            for frame in frames {
+                peer.write_all(&frame).await.unwrap();
+            }
+            peer
+        });
+
+        let contract = Contract::stock("AAPL").build();
+        let order = order_builder::limit_order(Action::Buy, 1.0, 100.0);
+        let state = client.analyze_order(order_id, &contract, &order).await.unwrap();
+        drop(tws.await.unwrap());
+
+        assert_eq!(state.status, OrderStatusKind::PreSubmitted, "nested id {nested_id:?}");
+        assert_eq!(state.initial_margin_before, Some(1234.5), "nested id {nested_id:?}");
+    }
+}
+
 fn open_orders_end_frame() -> Vec<u8> {
     tws_frame(
         IncomingMessages::OpenOrderEnd,

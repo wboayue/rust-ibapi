@@ -457,13 +457,15 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         if self.stream_ended.load(Ordering::Relaxed) {
             return None;
         }
-        let deadline = Instant::now() + timeout;
+        self.next_before(Instant::now() + timeout)
+    }
+
+    pub(crate) fn next_before(&self, deadline: Instant) -> Option<Result<SubscriptionItem<T>, Error>> {
         loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
+            if self.stream_ended.load(Ordering::Relaxed) || Instant::now() >= deadline {
                 return None;
             }
-            match self.handle_response(self.subscription.next_timeout_routed(remaining)) {
+            match self.handle_response(self.subscription.next_before_routed(deadline)) {
                 NextAction::Return(val) => return val,
                 NextAction::Skip => continue,
             }

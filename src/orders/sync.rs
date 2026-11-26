@@ -2,10 +2,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::common::fill::{completed_status, lists_order, lookup_wait, FillTracker};
+use super::common::what_if::{reply_deadline, WhatIfReply};
 use super::common::{decoders, encoders, verify};
 use super::{
     ApiOnly, AutoBind, CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OcaType, OrderBuilder, OrderCancel,
-    OrderOutcome, OrderStatus, OrderUpdate, Orders, PlaceOrder,
+    OrderOutcome, OrderState, OrderStatus, OrderUpdate, Orders, PlaceOrder,
 };
 use crate::client::blocking::Subscription;
 use crate::common::request_helpers::{self, expect_proto};
@@ -445,6 +446,90 @@ impl Client {
         let subscription = self.send_order(checked_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
+    }
+
+    /// Analyzes `order` for margin and commission (what-if): TWS evaluates it without placing it.
+    ///
+    /// For an order built elsewhere; [`OrderBuilder::analyze`]
+    /// calls this with the client's [`next_order_id`](Client::next_order_id). Sends a copy of
+    /// `order` with [`what_if`](crate::orders::Order::what_if) set and
+    /// [`order_id`](crate::orders::Order::order_id) set to `order_id`, the id it is sent under,
+    /// so `order` itself is not changed and needs neither.
+    ///
+    /// TWS treats `order_id` as used once the what-if is sent: a later order or what-if under the
+    /// same id, or under a lower one, draws 103 "Duplicate order id" (live: 2026-11-24, server
+    /// 223; `docs/wire-facts/orders.md#what-if-order-ids`). Pass an id from the same sequence as
+    /// the ids passed to [`place_order`](Client::place_order).
+    ///
+    /// Returns the order state that carries the margins and commission. TWS answers some orders
+    /// (live: US stock limit orders) with a warning-only frame first; the returned state keeps
+    /// that frame's [`warning_text`](crate::orders::OrderState::warning_text) (live: 2026-11-24,
+    /// server 223; `docs/wire-facts/orders.md#what-if-answer-frames`).
+    ///
+    /// The answer's frames also reach [`order_update_stream`](Client::order_update_stream), as
+    /// every order frame does, with `order.what_if` set; a stream consumer that analyzes through
+    /// this call can skip them.
+    ///
+    /// # Errors
+    /// - [`Error::OrderIdInRequestRange`] if `order_id`, or a `parent_id` or preset attached-order id on `order`, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::Validation`], with nothing sent, for an [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
+    /// - The error TWS returns if it rejects the what-if order, including the 201 for an order the account's margin cannot carry.
+    /// - [`Error::UnexpectedEndOfStream`] if the reply ends without the order's state.
+    /// - [`Error::Timeout`] if the order's state has not come within the client's
+    ///   [`one_shot_timeout`](crate::client::blocking::ClientBuilder::one_shot_timeout),
+    ///   which defaults to 30 seconds. A configured duration outside the clock's range
+    ///   waits without a deadline. TWS sends no end marker for a what-if order, so a
+    ///   warning-only frame or a missing rejection can leave the client waiting for the
+    ///   rest of the reply.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::{order_builder, Action};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    /// let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
+    ///
+    /// let state = client.analyze_order(client.next_order_id(), &contract, &order).expect("analyze failed");
+    /// println!(
+    ///     "initial margin {:?} -> {:?}, commission {:?} {}",
+    ///     state.initial_margin_before, state.initial_margin_after, state.commission_and_fees, state.commission_and_fees_currency
+    /// );
+    /// ```
+    pub fn analyze_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &super::Order) -> Result<OrderState, Error> {
+        let order_id: OrderId = order_id.into();
+        let order = super::Order {
+            order_id: order_id.value(),
+            what_if: true,
+            ..order.clone()
+        };
+
+        let responses = self.place_order(order_id, contract, &order)?;
+
+        // `?` propagates a rejected what-if order (#735), including the 201 that follows the
+        // margins of an order the account cannot carry.
+        let deadline = reply_deadline(Instant::now(), self.one_shot_timeout());
+        let mut reply = WhatIfReply::default();
+        loop {
+            let response = match deadline {
+                Some(deadline) => responses.next_before(deadline),
+                None => responses.next(),
+            };
+            match response {
+                Some(item) => {
+                    if let SubscriptionItem::Data(PlaceOrder::OpenOrder(order_data)) = item? {
+                        if let Some(state) = reply.observe(order_data.order_state) {
+                            return Ok(state);
+                        }
+                    }
+                }
+                None if deadline.is_some_and(|deadline| Instant::now() >= deadline) => return Err(Error::Timeout),
+                None => return Err(Error::UnexpectedEndOfStream),
+            }
+        }
     }
 
     /// Submits or modifies an [`crate::orders::Order`] without returning a subscription.

@@ -378,7 +378,12 @@ impl InternalSubscription {
     }
 
     /// Bounded-wait variant of [`next_routed`](Self::next_routed). Returns
-    /// `None` if no `RoutedItem` arrives within `timeout`.
+    /// `None` if no `RoutedItem` arrives before `deadline`.
+    pub(crate) fn next_before_routed(&self, deadline: std::time::Instant) -> Option<RoutedItem> {
+        self.pick_receiver()?.recv_deadline(deadline).ok()
+    }
+
+    /// Receives a routed item, with a relative timeout.
     pub(crate) fn next_timeout_routed(&self, timeout: Duration) -> Option<RoutedItem> {
         self.pick_receiver()?.recv_timeout(timeout).ok()
     }

@@ -86,6 +86,52 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - `seek_price_improvement` unset → open order reports `Some(false)`: TWS sends an explicit
   false.
 
+### What-if answer frames
+
+*Live 2026-11-24 off-hours (04:15 ET), paper TWS, server 223; raw capture of `openOrder`
+frames; #1289.*
+
+| Order (what-if)                                              | Frames | Margin fields           | Commission             | Then    |
+| ------------------------------------------------------------ | ------ | ----------------------- | ---------------------- | ------- |
+| AAPL BUY 10 LMT 100, SELL 5 LMT 900                          | 2      | 1st absent, 2nd present | 1st `0`, 2nd `1.00003` | nothing |
+| AAPL BUY 5 MKT; ES H7 LMT; EUR.USD LMT and MKT; SAP IBIS LMT | 1      | present                 | present                | nothing |
+| AAPL BUY 10,000,000 LMT 1                                    | 2      | 1st absent, 2nd present | 1st `0`, 2nd absent    | 201     |
+| AAPL BUY 10,000,000 MKT; ES H7 BUY or SELL 100,000           | 1      | present                 | absent                 | 201     |
+
+- The first frame of a two-frame answer carries only `status` (PreSubmitted), `commission_and_fees
+  = 0` and `warning_text` (the limit-price collar warning, "If your order is not immediately
+  executable..."): no margin fields, no currencies. The second, 0 to 80 ms later (three runs),
+  carries the margins, commission and currencies and no `warning_text`. A consumer that
+  takes the first frame reports no margins and a zero commission. A stock market order drew no
+  warning and one frame.
+- An order the account's margin cannot carry: the frame with margins has `suggested_size` set
+  (`"4000"`, `"14"`, `"16"`) and no commission or commission currency; an error 201 "YOUR ORDER
+  IS NOT ACCEPTED. IN ORDER TO OBTAIN THE DESIRED POSITION ... MUST EXCEED ..." follows within
+  1 ms. No accepted what-if carried `suggested_size`.
+- No `orderStatus`, `openOrderEnd` or other end marker follows any what-if answer; the reply
+  stays silent for the 6 to 10 s read.
+- Rejected before any frame: unknown symbol, 200; EUR.USD LMT -1, 110; EUR.USD 500,000,000,
+  201 "Order size is not within the limits".
+- The answer's frames reach `order_update_stream` as well as the place-order reply, each with
+  `order.what_if = true` (live 2026-11-24 10:59 UTC, `Client::analyze_order`: AAPL BUY 10 LMT
+  100 two frames 33 ms apart, EUR.USD BUY 20,000 LMT 1.0 one frame with commission `2`).
+- **Not probed:** RTH (the US stock frames may differ at the open); options, combos and other
+  warnings; Gateway (the 2026-10-27 SPY probe above ran on Gateway 226 and did not count frames).
+
+### What-if order ids
+
+*Live 2026-11-24 21:53 UTC (US stocks closed), paper TWS, server 223; #1289.*
+
+- One connection per step, same client id, AAPL BUY 1 LMT 100: what-if under id 1000 answered
+  with two frames (PreSubmitted, then the margins); a real order under 1000 then drew 103
+  "Duplicate order id: 1000", and so did a second what-if under 1000. A what-if under 1005
+  answered; a second what-if under 1005, a what-if under 1003 and a real order under 1005 each
+  drew 103.
+- Settles that a what-if uses its order id like a placed order: the id and every id below it are
+  spent for that client, although no order is left working. A caller that keeps its own id
+  sequence must take what-if ids from it, or its next order collides.
+- **Not probed:** whether the spent id survives a TWS restart; Gateway.
+
 ### IBKRATS PEG BEST / PEG MID
 
 *Live 2026-10-04 (Sunday), paper Gateway, AAPL on IBKRATS, BUY 100 @ $1; #936.*

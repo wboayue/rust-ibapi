@@ -454,6 +454,10 @@ pub struct OpenOrderResponse {
     pub perm_id: i64,
     pub status: OrderStatusKind,
     pub conditions: Vec<proto::OrderCondition>,
+    pub initial_margin_before: Option<f64>,
+    pub commission_and_fees: Option<f64>,
+    pub suggested_size: Option<String>,
+    pub warning_text: String,
 }
 
 impl Default for OpenOrderResponse {
@@ -483,6 +487,10 @@ impl Default for OpenOrderResponse {
             perm_id: TEST_PERM_ID,
             status: OrderStatusKind::Submitted,
             conditions: Vec::new(),
+            initial_margin_before: None,
+            commission_and_fees: None,
+            suggested_size: None,
+            warning_text: String::new(),
         }
     }
 }
@@ -572,6 +580,22 @@ impl OpenOrderResponse {
         self.conditions = v;
         self
     }
+    pub fn initial_margin_before(mut self, v: f64) -> Self {
+        self.initial_margin_before = Some(v);
+        self
+    }
+    pub fn commission_and_fees(mut self, v: f64) -> Self {
+        self.commission_and_fees = Some(v);
+        self
+    }
+    pub fn suggested_size(mut self, v: impl Into<String>) -> Self {
+        self.suggested_size = Some(v.into());
+        self
+    }
+    pub fn warning_text(mut self, v: impl Into<String>) -> Self {
+        self.warning_text = v.into();
+        self
+    }
 }
 
 impl ResponseProtoEncoder for OpenOrderResponse {
@@ -611,6 +635,10 @@ impl ResponseProtoEncoder for OpenOrderResponse {
             }),
             order_state: Some(proto::OrderState {
                 status: Some(self.status.to_string()),
+                init_margin_before: self.initial_margin_before,
+                commission_and_fees: self.commission_and_fees,
+                suggested_size: self.suggested_size.clone(),
+                warning_text: some_str(&self.warning_text),
                 ..Default::default()
             }),
         }
