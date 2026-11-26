@@ -225,6 +225,28 @@ hours, TRADES.*
 - Not decoded: one stock out of three contracts, with no documented meaning.
 - **Not probed:** options, crypto, non-US stocks.
 
+### Delayed volume is negative or wrong on the wire
+
+*Live 2026-11-24 01:00Z (Monday 20:00 ET, after hours), paper TWS, server 223; raw capture.*
+
+- `reqMktData` for US stocks under market data type 3 (delayed, streaming, generic tick 165)
+  and 4 (delayed frozen, snapshot). `TickSize` tick type 74 (`DelayedVolume`) carried
+  negative decimal strings for MSFT (`"-235087060"`, then `"-234537060"` 10 s later), NVDA,
+  INTC, F, SPY and QQQ, in both modes. The raw frame holds the text: field 3, length 10,
+  `2d 32 33 35 30 38 37 30 36 30` (`-235087060`). The decoder parses that string to the same
+  `f64`; nothing narrows it to 32 bits. An earlier run (snapshot, 23:49Z) saw MSFT
+  `-1232329840`.
+- The values also disagree with the day's volume where they are positive. Daily TRADES bars
+  for 2026-11-23, extended hours: AAPL 41,406,011 against `DelayedVolume` 48,288,217; AMD
+  42,241,724 against 2,119,449,190; IBKR 4,649,304 against 1,226,539,095. Neither the raw
+  value nor a 32-bit unwrap of it (adding 2^32, with or without a factor of 100) matches the
+  bar volumes, so a caller cannot repair the value or tell a bad positive one from a real one.
+- Other size ticks in the same runs were plausible and never negative: `AvgVolume` (21, e.g.
+  MSFT `"596315"`), `DelayedBidSize` (69) and `DelayedAskSize` (70).
+- TSLA drew 10089 and no ticks; SPY and QQQ answered with delayed data.
+- **Not probed:** real-time `Volume` (8) (no real-time US equity permission on this account);
+  delayed volume during regular hours; other markets.
+
 ### Tick-by-tick sizes and `IgnoreSize`
 
 *Live 2026-11-16 03:33Z (Sunday evening ET), paper Gateway, server 226, BTC/PAXOS; #1244.*
