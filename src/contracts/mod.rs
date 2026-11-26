@@ -155,7 +155,10 @@ impl_wire_enum!(SecurityType, fallback Other);
 /// `Contract::bond_cusip`, `Contract::bond_isin`, `Contract::spread`) or the
 /// field-minimal [`ContractBuilder::new`] — they set the correct field types and
 /// sensible defaults for you. A bare struct literal with `..Default::default()` also
-/// works when you need full control over individual fields.
+/// works when you need full control over individual fields. Its defaults are uneven: exchange
+/// `SMART`, security type [`SecurityType::Stock`] and an empty currency (see [`Currency`]),
+/// where the stock, option and futures builders default to USD. [`ContractBuilder::new`]
+/// leaves the exchange empty instead of `SMART`.
 ///
 /// # Examples
 ///
@@ -235,7 +238,7 @@ impl Default for Contract {
             right: None,
             multiplier: String::new(),
             exchange: Exchange::default(), // "SMART"
-            currency: Currency::default(),
+            currency: Currency::default(), // Empty: TWS resolves it
             local_symbol: String::new(),
             primary_exchange: Exchange::from(""), // Empty, not "SMART"
             trading_class: String::new(),

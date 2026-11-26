@@ -97,8 +97,8 @@ fn exchange_is_empty_distinguishes() {
 }
 
 #[test]
-fn currency_default_is_usd() {
-    assert_eq!(Currency::default().as_str(), "USD");
+fn currency_default_is_empty() {
+    assert_eq!(Currency::default().as_str(), "");
 }
 
 #[test]

@@ -1778,3 +1778,39 @@ for update in subscription.iter_data() {
 
 A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
 Check `notice.code` to tell them apart.
+
+### 63. `Currency::default()` is empty
+
+5.x defaulted `Currency` to `"USD"`, so a `Contract` struct literal ending in
+`..Default::default()` that never set `currency`, and `Contract::default()` itself, asked TWS
+for a USD listing. Every non-USD instrument built that way failed with error 200 "No security
+definition has been found": an HSI future or index on HKFE, the DAX index, Tencent (`700`) on
+SEHK. The default is now empty, which leaves the currency to TWS
+(`docs/wire-facts/contracts.md#an-empty-currency-lets-tws-resolve-it`).
+
+The builders are unchanged: `Contract::stock`, `Contract::call`/`put`, `Contract::option`,
+`Contract::futures`, `Contract::continuous_futures`, `Contract::crypto` and `Contract::spread`
+still default to USD, and `Contract::forex` and `Contract::index` set the currency themselves.
+
+What changes for a struct literal that leaves `currency` unset:
+
+- A contract with one listing (a future, an option, a futures option, an index, a stock on a
+  single-currency exchange) now resolves whatever its currency.
+- A stock on `SMART` listed in several currencies (AAPL, SAP, SHEL, VOD) returns every
+  listing from `contract_details`, one per currency, and market data or an order on it fails
+  with error 200 "The contract description specified for AAPL is ambiguous; you must specify
+  the currency". Set the currency, or use `Contract::stock`, which defaults to USD.
+- `Contract::news` sends an empty currency.
+
+```rust
+// 5.x: currency was "USD" without saying so
+let contract = Contract { symbol: "AAPL".into(), security_type: SecurityType::Stock, ..Default::default() };
+
+// 6.0
+let contract = Contract { symbol: "AAPL".into(), security_type: SecurityType::Stock, currency: "USD".into(), ..Default::default() };
+// or
+let contract = Contract::stock("AAPL").build();
+```
+
+Code that compares a contract's currency with `Currency::default()` to mean USD now compares
+with the empty currency.

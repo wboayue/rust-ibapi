@@ -252,3 +252,37 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
 - **Not probed:** equity and index options, bonds, funds, non-US stocks; a contract with a non-zero
   `minAlgoSize`; what the AAPL step governs (sub-penny prices and fractional shares are both
   smaller than its `minTick` 0.01 and `minSize` 0.0001).
+
+### An empty currency lets TWS resolve it
+
+*Live 2026-11-24 off-hours, paper TWS, server 223.*
+
+`contract_details` with the currency empty, then set:
+
+| Contract | Empty | `USD` | Native |
+| --- | --- | --- | --- |
+| FUT HSI HKFE 202612 | 1 row, HKD | 200 | HKD: 1 row |
+| FUT `localSymbol` HSIZ6 HKFE | 1 row, HKD | 200 | not run |
+| FUT ES CME 202612 | 1 row, USD | 1 row | = USD |
+| CONTFUT HSI HKFE / ES CME | 1 row, HKD / USD | 200 / 1 row | HKD: 1 row |
+| FOP HSI HKFE 202612 C | 127 rows, HKD | 200 | HKD: 127 rows |
+| FOP ES CME 20261218 6500 C | 2 rows (ES, EW3), USD | 2 rows | = USD |
+| OPT AAPL SMART 20261218 250 C | 1 row, USD | 1 row | = USD |
+| IND HSI HKFE / DAX EUREX | 1 row, HKD / EUR | 200 | not run |
+| IND SPX CBOE | 1 row, USD | 1 row | = USD |
+| STK 700 SEHK | 1 row, HKD | 200 | HKD: 1 row |
+| STK BP, TM SMART | 1 row, USD | 1 row | = USD |
+| STK AAPL SMART | 3 rows: USD, CHF (EBS), CAD (TSE) | 1 row | = USD |
+| STK SAP, BHP SMART | 4 rows each, one per currency | 1 row | - |
+| STK SHEL, VOD, RY SMART | 2-3 rows, one per currency | 1 row | - |
+| CASH EUR IDEALPRO | 27 rows, one per quote currency | 1 row | - |
+
+- Market data snapshot with an empty currency: HSI future streams (HKD); AAPL, SAP and EUR
+  CASH fail with 200 "The contract description specified for AAPL is ambiguous; you must
+  specify the currency". What-if orders behave the same: HSI future accepted, AAPL, SAP and
+  EUR CASH ambiguous (200), HSI future in USD 200.
+- A contract id resolves whatever the currency: the HSI future's id with `USD` returns the HKD
+  contract.
+- `Contract::futures("HSI").on_exchange("HKFE")` and `Contract::stock("700").on_exchange("SEHK")`
+  keep the builders' USD and draw 200; adding `in_currency("HKD")` resolves them.
+- **Not probed:** RTH, bonds, warrants, combos (BAG), `Contract::news`, and placing a real order.

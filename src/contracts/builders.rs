@@ -34,6 +34,9 @@ impl StockBuilder<Missing> {
 
 impl StockBuilder<Symbol> {
     /// Route the order to the specified exchange instead of the default.
+    ///
+    /// The currency stays USD. For a listing in another currency, also call
+    /// [`in_currency`](Self::in_currency): TWS finds no `700` on SEHK in USD (error 200).
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.exchange = exchange.into();
         self
@@ -310,6 +313,9 @@ impl FuturesBuilder<Symbol, Missing> {
 
 impl<M> FuturesBuilder<Symbol, M> {
     /// Route the futures contract to a specific exchange.
+    ///
+    /// The currency stays USD. For a future quoted in another currency, also call
+    /// [`in_currency`](Self::in_currency): TWS finds no HSI future on HKFE in USD (error 200).
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.exchange = exchange.into();
         self
@@ -393,6 +399,9 @@ impl ContinuousFuturesBuilder<Missing> {
 
 impl ContinuousFuturesBuilder<Symbol> {
     /// Route the continuous future to a specific exchange.
+    ///
+    /// The currency stays USD. For a future quoted in another currency, also call
+    /// [`in_currency`](Self::in_currency).
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.exchange = exchange.into();
         self

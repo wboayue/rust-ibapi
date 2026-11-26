@@ -413,7 +413,7 @@ fn contract_month_formatting() {
 #[test]
 fn default_implementations() {
     assert_eq!(Exchange::default().as_str(), "SMART");
-    assert_eq!(Currency::default().as_str(), "USD");
+    assert_eq!(Currency::default().as_str(), "");
 }
 
 #[test]
