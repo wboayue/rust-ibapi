@@ -9,7 +9,7 @@ triggers:
   - about to write Error::InvalidArgument(format!(..))
 symbols: [Error::Validation, Error::InvalidArgument, ValidationError, ibapi::builder]
 related: [builder-enum-coverage, param-budget]
-precedents: ["#1169", "#1249", "#1331", "#PRB"]
+precedents: ["#1169", "#1249", "#1331", "#1332"]
 ---
 
 Ask who fixes it. A runtime value a caller may correct (a quantity, price or strike, a date from
@@ -68,7 +68,7 @@ fields still pays for typestate only in the setters that change the state.
   caller input. Review caught realtime `WhatToShow`, which shares the wire-enum macro but is never
   decoded; the macro gained a `caller_input` form for it. The decoded wire enums stayed on
   `Error::Parse`. `ValidationError` became `#[non_exhaustive]`.
-- #PRB — `OrderBuilder` (side, order type), `BracketOrderBuilder` (entry,
+- #1332 — `OrderBuilder` (side, order type), `BracketOrderBuilder` (entry,
   take-profit, stop-loss) and `ExerciseOptionsBuilder` (exercise / lapse) became typestate and
   `ValidationError::MissingRequiredField` was removed. What the type can't see stayed a runtime
   check, now `InvalidArgument`: `order_type(..)` without the price its value needs,
