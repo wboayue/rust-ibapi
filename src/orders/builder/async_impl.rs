@@ -5,7 +5,7 @@ use super::types::{AttachedOrderIds, BracketOrderIds};
 use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::orders::PlaceOrder;
-use crate::orders::{Action, OrderType};
+use crate::orders::{Action, OrderId, OrderType};
 use crate::subscriptions::SubscriptionItemStreamExt;
 
 impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
@@ -85,8 +85,16 @@ impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
     /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
-    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
-    /// has reached 1,500,000,000 (reserved for request ids).
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if an allocated id reaches
+    /// 1,500,000,000 (reserved for request ids); [`Error::ServerVersion`] if the order sets a
+    /// field the connected server doesn't support. None of these sends anything: all three
+    /// orders are checked and encoded before the first is sent.
+    ///
+    /// Only a transport error, or dropping the returned future (a timeout, a `select!` branch),
+    /// stops partway. The parent and take-profit sent before that are held at TWS (they transmit
+    /// with the stop-loss). After a reconnect with the same client id TWS still holds them
+    /// without listing them in `open_orders`; only `cancel_order` with their ids reaches them,
+    /// and the error doesn't carry the ids (live: 2026-11-27, paper Gateway, server 226).
     ///
     /// # Examples
     ///
@@ -137,32 +145,11 @@ impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// ```
     pub async fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let ClientBound { client, contract } = self.parent_builder.target;
-        let orders = self.build()?;
-
-        // Reserve all order IDs upfront to prevent collisions
-        let parent_id = client.next_order_id();
-        let tp_id = client.next_order_id();
-        let sl_id = client.next_order_id();
-        let reserved_ids = [parent_id, tp_id, sl_id];
-
-        for (i, mut order) in orders.into_iter().enumerate() {
-            let order_id = reserved_ids[i];
-            order.order_id = order_id;
-
-            // Update parent_id for child orders
-            if i > 0 {
-                order.parent_id = parent_id;
-            }
-
-            // Only transmit the last order
-            if i == 2 {
-                order.transmit = true;
-            }
-
-            client.submit_order(order_id, contract, &order).await?;
-        }
-
-        Ok(BracketOrderIds::new(parent_id, tp_id, sl_id))
+        let (orders, ids) = self.build_with_ids(|| client.next_order_id())?;
+        client
+            .submit_orders(orders.iter().map(|order| (OrderId::from(order.order_id), contract, order)))
+            .await?;
+        Ok(ids)
     }
 }
 

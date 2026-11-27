@@ -2188,4 +2188,20 @@ impl<C> BracketOrderBuilder<'_, C, OrderType, f64, f64> {
 
         Ok(vec![parent, take_profit_order, stop_loss_order])
     }
+
+    /// Builds the bracket, then assigns ids in order parent → take-profit → stop-loss and points
+    /// both children at the parent. Ids are taken only once the build succeeds.
+    pub(crate) fn build_with_ids(self, mut next_id: impl FnMut() -> i32) -> Result<(Vec<Order>, BracketOrderIds), crate::Error> {
+        let mut orders = self.build()?;
+        let parent = next_id();
+        let take_profit = next_id();
+        let stop_loss = next_id();
+        for (order, id) in orders.iter_mut().zip([parent, take_profit, stop_loss]) {
+            order.order_id = id;
+        }
+        for child in &mut orders[1..] {
+            child.parent_id = parent;
+        }
+        Ok((orders, BracketOrderIds::new(parent, take_profit, stop_loss)))
+    }
 }

@@ -1082,41 +1082,107 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
 }
 
 #[tokio::test]
-async fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
+async fn submit_oca_orders_numbers_each_order_and_sets_the_group() {
     let (client, bus) = create_test_client();
     client.id_manager().raise_order_id(OrderId::from(9300));
     let apple = Contract::stock("AAPL").build();
     let microsoft = Contract::stock("MSFT").build();
 
-    let first = client
-        .order(&apple)
-        .buy(100)
-        .limit(50.0)
-        .oca_group("TestOCA", OcaType::CancelWithBlock)
-        .build_order()
-        .expect("order should build");
+    // No group on the first; a different one on the second, which the call overwrites.
+    let first = client.order(&apple).buy(100).limit(50.0).build_order().expect("order should build");
     let second = client
         .order(&microsoft)
         .buy(100)
         .limit(45.0)
-        .oca_group("TestOCA", OcaType::CancelWithBlock)
+        .oca_group("Other", OcaType::ReduceWithBlock)
         .build_order()
         .expect("order should build");
 
     let ids = client
-        .submit_oca_orders(vec![(apple, first), (microsoft, second)])
+        .submit_oca_orders("TestOCA", OcaType::CancelWithBlock, vec![(apple, first), (microsoft, second)])
         .await
         .expect("OCA submission should succeed");
 
     assert_eq!(ids, vec![9300, 9301]);
     assert_eq!(request_message_count(&bus), 2);
 
-    for i in 0..2 {
+    for (i, id) in ids.iter().enumerate() {
         let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, i);
+        assert_eq!(request.order_id, Some(*id));
         let order = request.order.expect("request carries an order");
         assert_eq!(order.oca_group.as_deref(), Some("TestOCA"));
         assert_eq!(order.oca_type, Some(1));
     }
+}
+
+#[tokio::test]
+async fn submit_oca_orders_rejects_an_empty_group() {
+    let (client, bus) = create_test_client();
+    client.id_manager().raise_order_id(OrderId::from(9300));
+    let contract = Contract::stock("AAPL").build();
+    let order = client.order(&contract).buy(100).limit(50.0).build_order().expect("order should build");
+
+    let result = client.submit_oca_orders("", OcaType::CancelWithBlock, vec![(contract, order)]).await;
+
+    assert!(
+        matches!(
+            result,
+            Err(Error::Validation(ValidationError::InvalidField {
+                field: "Order::oca_group",
+                ..
+            }))
+        ),
+        "{result:?}"
+    );
+    assert_eq!(request_message_count(&bus), 0);
+    assert_eq!(client.next_order_id(), 9300, "no id is taken for a rejected group");
+}
+
+/// The second order fails its id check, so neither goes out: the first must not be left live
+/// on its own.
+#[tokio::test]
+async fn submit_oca_orders_sends_nothing_when_a_later_order_fails() {
+    let (client, bus) = create_test_client();
+    client.id_manager().raise_order_id(OrderId::from(REQUEST_ID_FLOOR - 1));
+    let apple = Contract::stock("AAPL").build();
+    let microsoft = Contract::stock("MSFT").build();
+    let first = client.order(&apple).buy(100).limit(50.0).build_order().expect("order should build");
+    let second = client.order(&microsoft).buy(100).limit(45.0).build_order().expect("order should build");
+
+    let result = client
+        .submit_oca_orders("TestOCA", OcaType::CancelWithBlock, vec![(apple, first), (microsoft, second)])
+        .await;
+
+    assert!(
+        matches!(result, Err(Error::OrderIdInRequestRange { order_id }) if order_id == REQUEST_ID_FLOOR),
+        "{result:?}"
+    );
+    assert_eq!(request_message_count(&bus), 0);
+}
+
+/// The take-profit's id fails its check after the parent's passes, so no leg goes out: a held
+/// parent must not be left at TWS.
+#[tokio::test]
+async fn submit_all_sends_nothing_when_a_later_leg_fails() {
+    let (client, bus) = create_test_client();
+    client.id_manager().raise_order_id(OrderId::from(REQUEST_ID_FLOOR - 1));
+    let contract = Contract::stock("AAPL").build();
+
+    let result = client
+        .order(&contract)
+        .buy(100)
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(55.0)
+        .stop_loss(45.0)
+        .submit_all()
+        .await;
+
+    assert!(
+        matches!(result, Err(Error::OrderIdInRequestRange { order_id }) if order_id == REQUEST_ID_FLOOR),
+        "{result:?}"
+    );
+    assert_eq!(request_message_count(&bus), 0);
 }
 
 #[tokio::test]
