@@ -177,15 +177,15 @@ mod sync_tests {
                 Err("Reconnecting"),
             ),
             (
-                "reset, then a refusal: the first attempt was written",
+                "reset, then a refusal: the first attempt may have been written",
                 vec![Error::ConnectionReset, Error::Reconnecting],
                 1,
                 Err("ConnectionReset"),
             ),
             (
-                "refusal, then a reset",
-                vec![Error::Reconnecting, Error::ConnectionReset],
-                1,
+                "reset, then two refusals: the reset is remembered past the next attempt",
+                vec![Error::ConnectionReset, Error::Reconnecting, Error::Reconnecting],
+                2,
                 Err("ConnectionReset"),
             ),
         ];
@@ -419,15 +419,15 @@ mod async_tests {
                 Err("Reconnecting"),
             ),
             (
-                "reset, then a refusal: the first attempt was written",
+                "reset, then a refusal: the first attempt may have been written",
                 vec![Error::ConnectionReset, Error::Reconnecting],
                 1,
                 Err("ConnectionReset"),
             ),
             (
-                "refusal, then a reset",
-                vec![Error::Reconnecting, Error::ConnectionReset],
-                1,
+                "reset, then two refusals: the reset is remembered past the next attempt",
+                vec![Error::ConnectionReset, Error::Reconnecting, Error::Reconnecting],
+                2,
                 Err("ConnectionReset"),
             ),
         ];

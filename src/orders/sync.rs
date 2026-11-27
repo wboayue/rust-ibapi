@@ -531,7 +531,8 @@ impl Client {
     /// Every order is checked and encoded before the first is sent, so only a transport error
     /// stops partway. That returns [`Error::OrdersPartiallySent`]: its `sent` ids may be at TWS
     /// (cancel them by id after reconnecting with the same client id), and its `not_sent` ids were
-    /// never written.
+    /// never written. If the first send is refused while the client reconnects, nothing was
+    /// sent, and the error is [`Error::Reconnecting`].
     ///
     /// # Examples
     ///

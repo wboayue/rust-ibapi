@@ -1622,7 +1622,7 @@ async fn is_unsent_implies_the_order_call_wrote_nothing() {
     fn aapl() -> Contract {
         Contract::stock("AAPL").build()
     }
-    let cases: [(&str, Sends, bool, Call); 14] = [
+    let cases: [(&str, Sends, bool, Call); 15] = [
         ("place_order, id in the request range", Sends::Succeed, true, |client| {
             Box::pin(async move { client.place_order(REQUEST_ID_FLOOR, &aapl(), &limit()).await.map(drop) })
         }),
@@ -1697,6 +1697,17 @@ async fn is_unsent_implies_the_order_call_wrote_nothing() {
         ("submit_order, refused while reconnecting", Sends::Refuse, true, |client| {
             Box::pin(async move { client.submit_order(41, &aapl(), &limit()).await })
         }),
+        (
+            "submit_oca_orders, first send refused while reconnecting",
+            Sends::Refuse,
+            true,
+            |client| {
+                Box::pin(async move {
+                    let orders = vec![(aapl(), limit()), (Contract::stock("MSFT").build(), limit())];
+                    client.submit_oca_orders("G", OcaType::CancelWithBlock, orders).await.map(drop)
+                })
+            },
+        ),
     ];
 
     for (name, sends, unsent, call) in cases {

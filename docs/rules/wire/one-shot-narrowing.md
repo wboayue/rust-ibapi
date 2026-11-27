@@ -84,7 +84,7 @@ parameter, keeping the helper signatures at three and four arguments.
 
 **Why every one-shot retries:** `retry_on_connection_reset` fires on `Error::ConnectionReset` and
 on `Error::Reconnecting` (a send refused while reconnecting), up to `DEFAULT_MAX_RETRIES` (3). A
-last attempt refused after an earlier one was written comes back as `ConnectionReset`, since that
+last attempt refused after an earlier one may have been written comes back as `ConnectionReset`, since that
 earlier one may have reached TWS. Every one-shot is a read, so replaying
 it after a dropped connection costs nothing and loses no server-side state. The removed
 `one_shot_request` was the only helper taking a `ProtocolFeature`, so version-gated sites picked
@@ -110,4 +110,5 @@ axes and callers only care about one, the other axis gets chosen for them.
   another type is now skipped by the typed subscription's `RESPONSE_MESSAGE_IDS` filter rather
   than reported as `UnexpectedResponse`.
 - #1352 — the send gate's refusal while reconnecting became `Error::Reconnecting`; the retry
-  fires on it too, and reports a last refusal after a written attempt as `ConnectionReset`.
+  fires on it too, and reports a last refusal after an attempt that may have been written as
+  `ConnectionReset`.

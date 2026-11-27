@@ -1630,7 +1630,7 @@ fn is_unsent_implies_the_order_call_wrote_nothing() {
     fn limit() -> Order {
         order_builder::limit_order(Action::Buy, 1.0, 1.0)
     }
-    let cases: [(&str, Sends, bool, Call); 14] = [
+    let cases: [(&str, Sends, bool, Call); 15] = [
         ("place_order, id in the request range", Sends::Succeed, true, |client| {
             client.place_order(REQUEST_ID_FLOOR, &Contract::stock("AAPL").build(), &limit()).map(drop)
         }),
@@ -1695,6 +1695,15 @@ fn is_unsent_implies_the_order_call_wrote_nothing() {
         ("submit_order, refused while reconnecting", Sends::Refuse, true, |client| {
             client.submit_order(41, &Contract::stock("AAPL").build(), &limit())
         }),
+        (
+            "submit_oca_orders, first send refused while reconnecting",
+            Sends::Refuse,
+            true,
+            |client| {
+                let orders = vec![(Contract::stock("AAPL").build(), limit()), (Contract::stock("MSFT").build(), limit())];
+                client.submit_oca_orders("G", OcaType::CancelWithBlock, orders).map(drop)
+            },
+        ),
     ];
 
     for (name, sends, unsent, call) in cases {

@@ -226,7 +226,8 @@ impl Client {
     /// Every order is checked and encoded before the first is sent, so only a transport error
     /// stops partway. That returns [`Error::OrdersPartiallySent`]: its `sent` ids may be at TWS
     /// (cancel them by id after reconnecting with the same client id), and its `not_sent` ids were
-    /// never written. Dropping the returned future between sends (a timeout, a `select!` branch)
+    /// never written. If the first send is refused while the client reconnects, nothing was
+    /// sent, and the error is [`Error::Reconnecting`]. Dropping the returned future between sends (a timeout, a `select!` branch)
     /// also stops partway, and returns nothing: after reconnecting with the same client id,
     /// [`open_orders`](Client::open_orders) lists what was sent, unless an order was built with
     /// `transmit` false, which TWS holds without listing.

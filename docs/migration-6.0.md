@@ -1584,7 +1584,9 @@ signature is unchanged.
 Only a transport error can still stop partway. Both methods then return the new
 `Error::OrdersPartiallySent { sent, not_sent, source }` instead of the bare transport error:
 `sent` lists the orders that may be at TWS (the last one's write failed), `not_sent` the ones
-never written, and `source` the transport error. A `match` on `Error::ConnectionReset` or
+never written, and `source` the transport error. A send refused while the client reconnects
+wrote nothing (§55): its order is in `not_sent`, and when it is the first, the method returns
+`Error::Reconnecting` itself. A `match` on `Error::ConnectionReset` or
 `Error::Io` from these two methods must match the new variant instead;
 `Error::is_connection_lost()` answers for `source`, so a check through it keeps working.
 
@@ -1682,7 +1684,9 @@ match client.submit_order(order_id, &contract, &order) {
 ```
 
 One-shot requests (`server_time`, `managed_accounts`, `historical_data`, ...) retry on either
-error. A last attempt refused after an earlier attempt was written still returns
+error. A last attempt refused after an earlier attempt may have been written still returns
 `ConnectionReset`, since the earlier one may have reached TWS. Streams that were open when the
-connection dropped still end with `ConnectionReset`. Refusals after the reconnect gives up
+connection dropped still end with `ConnectionReset`. `submit_oca_orders` and `submit_all` return
+`Reconnecting` when their first send is refused, and otherwise list a refused order in
+`OrdersPartiallySent::not_sent` (§53). Refusals after the reconnect gives up
 (`ConnectionFailed`) or after a shutdown (`Shutdown`) are unchanged.

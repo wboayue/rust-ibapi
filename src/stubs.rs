@@ -200,6 +200,8 @@ impl MessageBusStub {
 
     /// Make each `send_message` fail with [`Error::Reconnecting`] without recording the
     /// message, as a request refused while the client reconnects is: nothing reaches the wire.
+    /// The real bus's refusal is pinned by the transport tests
+    /// `sends_are_refused_while_disconnected` and `sends_are_refused_during_the_reconnect_handshake`.
     pub fn with_refused_sends(mut self) -> Self {
         self.send_mode = SendMode::Refuse;
         self

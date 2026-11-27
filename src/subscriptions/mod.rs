@@ -30,7 +30,7 @@ use crate::errors::Error;
 /// this is not worth a warning. The local registration is cleared either way.
 pub(crate) fn log_cancel_error(what: &str, error: &Error) {
     match error {
-        Error::ConnectionReset | Error::Reconnecting | Error::Shutdown => debug!("{what} cancel not sent, session is down: {error}"),
+        e if e.is_session_interrupted() || matches!(e, Error::Shutdown) => debug!("{what} cancel not sent, session is down: {error}"),
         _ => warn!("error cancelling {what}: {error}"),
     }
 }
