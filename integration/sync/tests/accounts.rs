@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
+use ibapi::accounts::types::{AccountGroup, AccountId};
 use ibapi::accounts::LedgerOnly;
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
@@ -66,7 +66,7 @@ fn positions_receives_data() {
 fn positions_multi_receives_data() {
     let (client, account, _client_id) = connect_and_get_account();
 
-    let subscription = client.positions_multi(Some(&account), None).expect("positions_multi failed");
+    let subscription = client.positions_multi().account(&account).subscribe().expect("positions_multi failed");
 
     let _item = subscription.next_timeout(Duration::from_secs(5));
 }
@@ -76,7 +76,7 @@ fn positions_multi_receives_data() {
 fn pnl_receives_updates() {
     let (client, account, _client_id) = connect_and_get_account();
 
-    let subscription = client.pnl(&account, None).expect("pnl failed");
+    let subscription = client.pnl(&account).subscribe().expect("pnl failed");
 
     let item = subscription.next_timeout(Duration::from_secs(10));
     assert!(item.is_some(), "expected at least one PnL update");
@@ -125,7 +125,9 @@ fn account_updates_multi() {
     let (client, account, _client_id) = connect_and_get_account();
 
     let subscription = client
-        .account_updates_multi(Some(&account), None, LedgerOnly::Yes)
+        .account_updates_multi(LedgerOnly::Yes)
+        .account(&account)
+        .subscribe()
         .expect("account_updates_multi failed");
 
     let _item = subscription.next_timeout(Duration::from_secs(10));
@@ -160,7 +162,7 @@ fn pnl_single_receives_updates() {
     }
 
     // Test pnl_single
-    let pnl_sub = client.pnl_single(&account, ContractId(con_id), None).expect("pnl_single failed");
+    let pnl_sub = client.pnl_single(&account, con_id).subscribe().expect("pnl_single failed");
     let item = pnl_sub.next_timeout(Duration::from_secs(10));
     assert!(item.is_some(), "expected at least one PnL single update");
 

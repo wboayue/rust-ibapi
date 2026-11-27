@@ -221,6 +221,28 @@ pub enum Error {
         order_id: i32,
     },
 
+    /// A multi-order submit (`submit_oca_orders`, a bracket's `submit_all`) stopped partway
+    /// because sending one order failed with `source`. Every order passed its checks before the
+    /// first was sent, so `source` is a transport error, such as [`Error::ConnectionReset`].
+    ///
+    /// The orders in `sent` may be at TWS: the ones written before the failure, and last, the one
+    /// whose write failed, which may still have arrived. Cancel them by id after reconnecting with
+    /// the same client id; a cancel for one that never arrived draws error 10147 and does nothing.
+    /// When `source` is [`Error::Shutdown`] or [`Error::ConnectionFailed`], no reconnect follows
+    /// on this client: cancel them from a new connection with the same client id.
+    /// A bracket's parent and take-profit are held at TWS until the stop-loss transmits, and
+    /// `open_orders` doesn't list held orders, so their ids are the only way to reach them. The
+    /// orders in `not_sent` were never written. Both lists are in submit order.
+    #[error("{} of {} orders may have been sent before the submit stopped: {source}", .sent.len(), .sent.len() + .not_sent.len())]
+    OrdersPartiallySent {
+        /// Ids of the orders that may be at TWS, in submit order; the last one's write failed.
+        sent: Vec<i32>,
+        /// Ids of the orders never written, in submit order.
+        not_sent: Vec<i32>,
+        /// The send failure that stopped the submit.
+        source: Box<Error>,
+    },
+
     /// Failed to decode a protobuf message. The decode detail is in
     /// `Display`; [`source`](std::error::Error::source) is `None`.
     #[error("protobuf decode error: {0}")]
@@ -291,6 +313,19 @@ impl Error {
         }
     }
 
+    /// Build an [`Error::OrdersPartiallySent`] for a multi-order submit whose send of the
+    /// order at index `failed` in `ids` returned `source`: the orders up to and including it are
+    /// `sent` (its write may still have reached TWS), the rest `not_sent`.
+    pub(crate) fn orders_partially_sent(ids: impl IntoIterator<Item = i32>, failed: usize, source: Error) -> Error {
+        let mut sent: Vec<i32> = ids.into_iter().collect();
+        let not_sent = sent.split_off(failed + 1);
+        Error::OrdersPartiallySent {
+            sent,
+            not_sent,
+            source: Box::new(source),
+        }
+    }
+
     /// Build an [`Error::Parse`] naming the field, for a field that is absent
     /// or holds something other than text (a timestamp out of range).
     pub(crate) fn invalid_field(field: &'static str, reason: impl Into<String>) -> Error {
@@ -356,6 +391,8 @@ impl Error {
     /// before resubscribing: it returns once the session is back, or with
     /// `ConnectionFailed` / `Shutdown` if it never will be.
     ///
+    /// [`Error::OrdersPartiallySent`] returns `true` when its `source` does.
+    ///
     /// # Examples
     ///
     /// In a subscription read loop, branch on this predicate to decide whether to
@@ -386,6 +423,7 @@ impl Error {
                 ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe
             ),
             Error::ConnectionReset | Error::InvalidFrame(_) => true,
+            Error::OrdersPartiallySent { source, .. } => source.is_connection_lost(),
             _ => false,
         }
     }
@@ -423,12 +461,14 @@ impl Error {
     /// - [`Io`](Error::Io) is a failed socket write.
     /// - [`Notice`](Error::Notice) and the decode, parse and stream variants report what TWS
     ///   sent back, so the request was sent.
+    /// - [`OrdersPartiallySent`](Error::OrdersPartiallySent) reports a multi-order submit that
+    ///   stopped partway; its `sent` orders may be at TWS.
     ///
-    /// A call that sends several requests reports only on the one that failed: the bracket
-    /// builder's `submit_all` and `submit_oca_orders` send their orders one at a time, so a
-    /// `true` error on a later order leaves the earlier ones sent. Likewise
-    /// `next_valid_order_id` returns `OrderIdInRequestRange` for an id TWS sent back, after its
-    /// id request was written; that request places nothing.
+    /// The bracket builder's `submit_all` and `submit_oca_orders` check every order before
+    /// sending any, so a `true` error from them means none of their orders was sent; a send
+    /// failing partway returns `OrdersPartiallySent`. `next_valid_order_id` returns
+    /// `OrderIdInRequestRange` for an id TWS sent back, after its id request was written; that
+    /// request places nothing.
     ///
     /// # Examples
     ///
@@ -471,7 +511,8 @@ impl Error {
             | Error::BufferLimitExceeded { .. }
             | Error::InvalidFrame(_)
             | Error::Notice(_)
-            | Error::ProtobufDecode(_) => false,
+            | Error::ProtobufDecode(_)
+            | Error::OrdersPartiallySent { .. } => false,
         }
     }
 
@@ -536,6 +577,11 @@ impl Clone for Error {
             },
             Error::OrderIdInRequestRange { order_id } => Error::OrderIdInRequestRange { order_id: *order_id },
             Error::ProtobufDecode(e) => Error::ProtobufDecode(e.clone()),
+            Error::OrdersPartiallySent { sent, not_sent, source } => Error::OrdersPartiallySent {
+                sent: sent.clone(),
+                not_sent: not_sent.clone(),
+                source: source.clone(),
+            },
         }
     }
 }

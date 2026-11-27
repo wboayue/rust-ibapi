@@ -1,8 +1,10 @@
 use super::{AccountSummarySnapshot, AccountSummarySnapshots, SnapshotBuilder, Subscription};
-use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
+use crate::accounts::common::test_tables::{OptionalFilters, OptionalModelCode};
+use crate::accounts::types::{AccountGroup, AccountId, ModelCode};
 use crate::accounts::{AccountSummaryTags, AccountUpdateMulti, LedgerOnly};
 use crate::client::ids::RequestId;
 use crate::common::test_utils::helpers::*;
+use crate::contracts::ContractId;
 use crate::messages::IncomingMessages;
 use crate::subscriptions::common::{DecoderContext, RoutedItem};
 use crate::testdata::builders::accounts::{
@@ -29,8 +31,12 @@ fn pnl() {
 
     let account = AccountId(TEST_ACCOUNT.to_string());
     let model_code = Some(ModelCode(TEST_MODEL_CODE.to_string()));
-    let _ = client.pnl(&account, model_code.as_ref()).expect("request pnl failed");
-    let _ = client.pnl(&account, None).expect("request pnl failed");
+    let _ = client
+        .pnl(&account)
+        .with_model_code(model_code.as_ref())
+        .subscribe()
+        .expect("request pnl failed");
+    let _ = client.pnl(&account).subscribe().expect("request pnl failed");
 
     assert_eq!(request_message_count(&message_bus), 4);
     assert_request(&message_bus, 0, &request_pnl().request_id(TEST_REQ_ID_FIRST));
@@ -46,8 +52,12 @@ fn pnl_single() {
     let account = AccountId(TEST_ACCOUNT.to_string());
     let contract_id = ContractId(TEST_CONTRACT_ID);
     let model_code = Some(ModelCode(TEST_MODEL_CODE.to_string()));
-    let _ = client.pnl_single(&account, contract_id, model_code.as_ref()).expect("request pnl failed");
-    let _ = client.pnl_single(&account, contract_id, None).expect("request pnl failed");
+    let _ = client
+        .pnl_single(&account, contract_id)
+        .with_model_code(model_code.as_ref())
+        .subscribe()
+        .expect("request pnl failed");
+    let _ = client.pnl_single(&account, contract_id).subscribe().expect("request pnl failed");
 
     assert_eq!(request_message_count(&message_bus), 4);
     assert_request(&message_bus, 0, &request_pnl_single().request_id(TEST_REQ_ID_FIRST));
@@ -104,7 +114,9 @@ fn positions_multi() {
     let model_code = Some(ModelCode("TARGET2024".to_string()));
 
     let subscription = client
-        .positions_multi(account.as_ref(), model_code.as_ref())
+        .positions_multi()
+        .with_filters(account.as_ref(), model_code.as_ref())
+        .subscribe()
         .expect("request positions_multi failed");
 
     let first_update = subscription.next_data();
@@ -363,7 +375,9 @@ fn account_updates_multi() {
 
     let account = Some(AccountId(TEST_ACCOUNT.to_string()));
     let subscription = client
-        .account_updates_multi(account.as_ref(), None, LedgerOnly::No)
+        .account_updates_multi(LedgerOnly::No)
+        .with_filters(account.as_ref(), None)
+        .subscribe()
         .expect("request account updates multi failed");
 
     let expected_keys = &["CashBalance", "Currency", "StockMarketValue"];
@@ -476,7 +490,9 @@ fn pnl_comprehensive() {
     for test_case in &test_cases {
         let model_code = test_case.model_code.as_ref().map(|s| ModelCode(s.clone()));
         let sub = client
-            .pnl(&account, model_code.as_ref())
+            .pnl(&account)
+            .with_model_code(model_code.as_ref())
+            .subscribe()
             .unwrap_or_else(|_| panic!("PnL request failed for {}", test_case.description));
         subscriptions.push(sub);
     }
@@ -500,7 +516,8 @@ fn pnl_single_edge_cases() {
     // Create all subscriptions
     for test_case in &test_cases {
         let sub = client
-            .pnl_single(&account, test_case.contract_id, None)
+            .pnl_single(&account, test_case.contract_id)
+            .subscribe()
             .unwrap_or_else(|_| panic!("PnL single failed for {}", test_case.description));
         subscriptions.push(sub);
     }
@@ -530,7 +547,9 @@ fn positions_multi_parameter_combinations() {
         let model_code = test_case.model_code.as_ref().map(|s| ModelCode(s.clone()));
 
         let sub = client
-            .positions_multi(account.as_ref(), model_code.as_ref())
+            .positions_multi()
+            .with_filters(account.as_ref(), model_code.as_ref())
+            .subscribe()
             .unwrap_or_else(|_| panic!("positions_multi failed for {}", test_case.description));
         subscriptions.push(sub);
     }
@@ -556,7 +575,9 @@ fn subscription_lifecycle() {
                 let account_id = AccountId(account.clone());
                 let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
                 let sub = client
-                    .pnl(&account_id, model.as_ref())
+                    .pnl(&account_id)
+                    .with_model_code(model.as_ref())
+                    .subscribe()
                     .unwrap_or_else(|_| panic!("PnL subscription failed for {}", test_case.description));
                 drop(sub);
             }
@@ -578,7 +599,9 @@ fn subscription_lifecycle() {
                 let account_id = account.as_ref().map(|s| AccountId(s.clone()));
                 let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
                 let sub = client
-                    .positions_multi(account_id.as_ref(), model.as_ref())
+                    .positions_multi()
+                    .with_filters(account_id.as_ref(), model.as_ref())
+                    .subscribe()
                     .unwrap_or_else(|_| panic!("Positions Multi subscription failed for {}", test_case.description));
                 drop(sub);
             }
@@ -591,7 +614,9 @@ fn subscription_lifecycle() {
                 let contract = ContractId(*contract_id);
                 let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
                 let sub = client
-                    .pnl_single(&account_id, contract, model.as_ref())
+                    .pnl_single(&account_id, contract)
+                    .with_model_code(model.as_ref())
+                    .subscribe()
                     .unwrap_or_else(|_| panic!("PnL Single subscription failed for {}", test_case.description));
                 drop(sub);
             }

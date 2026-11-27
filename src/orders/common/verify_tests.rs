@@ -70,6 +70,80 @@ fn verify_and_reserve_order_ids_leaves_the_generator_when_a_check_fails() {
     assert_eq!(ids.next_order_id(), OrderId::from(1), "a rejected order reserves nothing");
 }
 
+#[test]
+fn prepare_place_orders_returns_nothing_when_a_later_order_fails() {
+    let ids = ClientIdManager::new(1).unwrap();
+    let contract = Contract::default();
+    let order = Order::default();
+
+    let ok = prepare_place_orders(
+        &ids,
+        server_versions::ATTACHED_ORDERS,
+        [(OrderId::from(1), &contract, &order), (OrderId::from(2), &contract, &order)],
+    );
+    assert_eq!(ok.expect("both orders prepare").len(), 2);
+
+    let result = prepare_place_orders(
+        &ids,
+        server_versions::ATTACHED_ORDERS,
+        [
+            (OrderId::from(3), &contract, &order),
+            (OrderId::from(REQUEST_ID_FLOOR), &contract, &order),
+        ],
+    );
+    assert!(matches!(result, Err(Error::OrderIdInRequestRange { .. })), "{result:?}");
+}
+
+#[test]
+fn number_oca_orders_numbers_and_groups_every_order() {
+    let elsewhere = Order {
+        oca_group: "Other".into(),
+        oca_type: OcaType::ReduceWithBlock,
+        ..Order::default()
+    };
+    let orders = vec![(Contract::default(), Order::default()), (Contract::default(), elsewhere)];
+    let mut next = 100;
+
+    let numbered = number_oca_orders("MyOCA".into(), OcaType::CancelWithBlock, orders, || {
+        next += 1;
+        next - 1
+    })
+    .expect("non-empty group");
+
+    for (i, (_, order)) in numbered.iter().enumerate() {
+        assert_eq!(order.order_id, 100 + i as i32);
+        assert_eq!(order.oca_group, "MyOCA", "order {i}: the given group overwrites any set");
+        assert_eq!(order.oca_type, OcaType::CancelWithBlock);
+    }
+}
+
+#[test]
+fn number_oca_orders_rejects_an_empty_group_before_taking_ids() {
+    let mut calls = 0;
+
+    let result = number_oca_orders(
+        String::new(),
+        OcaType::CancelWithBlock,
+        vec![(Contract::default(), Order::default())],
+        || {
+            calls += 1;
+            calls
+        },
+    );
+
+    assert!(
+        matches!(
+            result,
+            Err(ValidationError::InvalidField {
+                field: "Order::oca_group",
+                ..
+            })
+        ),
+        "{result:?}"
+    );
+    assert_eq!(calls, 0);
+}
+
 /// Every order id an `Order` carries is checked: TWS routes frames for the
 /// attached orders by their ids (#789).
 #[test]

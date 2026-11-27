@@ -111,11 +111,19 @@ pub struct Order {
     /// See [`TimeInForce`] for available options and their behavior.
     pub tif: TimeInForce,
     /// One-Cancels-All group identifier.
+    ///
+    /// On an echoed bracket child (`submit_all`), TWS sets this to the parent's permId, putting the
+    /// take-profit and stop-loss in a group of their own (live: 2026-11-27, paper Gateway, server
+    /// 226; `docs/wire-facts/orders.md#bracket-children-get-an-oca-group-echoed-ocatype-defaults-to-3`).
     pub oca_group: String,
     /// Tells how to handle remaining orders in an OCA group when one order or part of an order executes.
     ///
     /// See [`OcaType`] for available options. "With block" provides overfill protection by ensuring
     /// only one order in the group is routed at a time.
+    ///
+    /// [`OcaType::None`] is not sent, and TWS echoes such an order with
+    /// [`OcaType::ReduceWithoutBlock`]: read an empty [`oca_group`](Self::oca_group) as "not in a
+    /// group", whatever the type says.
     pub oca_type: OcaType,
     /// The order reference.
     /// Intended for institutional customers only, although all customers may use it to identify the API client that sent the order when multiple API clients are running.

@@ -3,10 +3,10 @@
 use super::common::stream_decoders::{ImpliedVolatilityRequest, OptionPriceRequest};
 use super::common::{decoders, encoders};
 use super::*;
-use crate::accounts::types::ContractId;
 use crate::client::ids::RequestId;
 use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
+use crate::contracts::ContractId;
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;

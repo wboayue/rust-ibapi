@@ -1,4 +1,5 @@
 use super::super::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, Expiry, OptionRight, SecurityIdType, SecurityType, Strike, Symbol};
+use crate::contracts::ContractId;
 use crate::Error;
 
 /// Builder for creating and validating [Contract] instances
@@ -135,8 +136,8 @@ impl ContractBuilder {
     /// Sets the contract ID
     ///
     /// The unique IB contract identifier. When specified, other contract details may be optional.
-    pub fn contract_id(mut self, contract_id: i32) -> Self {
-        self.contract_id = Some(contract_id);
+    pub fn contract_id(mut self, contract_id: impl Into<ContractId>) -> Self {
+        self.contract_id = Some(contract_id.into().value());
         self
     }
 

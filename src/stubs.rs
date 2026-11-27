@@ -81,7 +81,8 @@ pub(crate) struct MessageBusStub {
 #[derive(Clone, Copy)]
 enum SendMode {
     Succeed,
-    Fail,
+    /// Succeed until this many messages are recorded, then fail with `ConnectionReset`.
+    FailAfter(usize),
     #[cfg(feature = "async")]
     Stall,
 }
@@ -191,7 +192,15 @@ impl MessageBusStub {
     /// Make each `send_message` fail with [`Error::ConnectionReset`] after
     /// recording it, as a write to a lost connection does.
     pub fn with_failing_sends(mut self) -> Self {
-        self.send_mode = SendMode::Fail;
+        self.send_mode = SendMode::FailAfter(0);
+        self
+    }
+
+    /// Let the first `n` messages send, then make each later `send_message` fail with
+    /// [`Error::ConnectionReset`] after recording it, as a connection lost partway through a
+    /// multi-order submit does.
+    pub fn with_sends_failing_after(mut self, n: usize) -> Self {
+        self.send_mode = SendMode::FailAfter(n);
         self
     }
 
@@ -308,7 +317,7 @@ impl MessageBus for MessageBusStub {
     fn send_message(&self, message: &[u8]) -> Result<(), Error> {
         self.request_messages.write().unwrap().push(message.to_vec());
         match self.send_mode {
-            SendMode::Fail => Err(Error::ConnectionReset),
+            SendMode::FailAfter(n) if self.request_messages.read().unwrap().len() > n => Err(Error::ConnectionReset),
             _ => Ok(()),
         }
     }
@@ -475,7 +484,8 @@ impl AsyncMessageBus for MessageBusStub {
         self.request_messages.write().unwrap().push(message);
         match self.send_mode {
             SendMode::Succeed => Ok(()),
-            SendMode::Fail => Err(Error::ConnectionReset),
+            SendMode::FailAfter(n) if self.request_messages.read().unwrap().len() > n => Err(Error::ConnectionReset),
+            SendMode::FailAfter(_) => Ok(()),
             SendMode::Stall => std::future::pending().await,
         }
     }

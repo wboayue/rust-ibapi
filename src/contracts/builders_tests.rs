@@ -450,9 +450,9 @@ fn spread_presets_set_legs() {
             "butterfly",
             |s| {
                 s.butterfly(ButterflyLegs {
-                    lower: 100.into(),
-                    middle: 105.into(),
-                    upper: 110.into(),
+                    lower: 100,
+                    middle: 105,
+                    upper: 110,
                 })
             },
             vec![(100, LegAction::Buy, 1), (105, LegAction::Sell, 2), (110, LegAction::Buy, 1)],
@@ -461,10 +461,10 @@ fn spread_presets_set_legs() {
             "iron_condor",
             |s| {
                 s.iron_condor(IronCondorLegs {
-                    long_put: 100.into(),
-                    short_put: 105.into(),
-                    short_call: 110.into(),
-                    long_call: 115.into(),
+                    long_put: 100,
+                    short_put: 105,
+                    short_call: 110,
+                    long_call: 115,
                 })
             },
             // Long call before short call: the leg order of two chained `vertical`s,
@@ -480,9 +480,9 @@ fn spread_presets_set_legs() {
             "collar",
             |s| {
                 s.collar(CollarLegs {
-                    stock: 265598.into(),
-                    put: 100.into(),
-                    call: 101.into(),
+                    stock: 265598,
+                    put: 100,
+                    call: 101,
                     shares_per_contract: 100,
                 })
             },
@@ -493,9 +493,9 @@ fn spread_presets_set_legs() {
             "collar_mini",
             |s| {
                 s.collar(CollarLegs {
-                    stock: 76792991.into(),
-                    put: 200.into(),
-                    call: 201.into(),
+                    stock: 76792991,
+                    put: 200,
+                    call: 201,
                     shares_per_contract: 10,
                 })
             },
@@ -512,7 +512,7 @@ fn spread_presets_set_legs() {
 
 #[test]
 fn spread_builder_accepts_contract_id() {
-    use crate::accounts::types::ContractId;
+    use crate::contracts::ContractId;
 
     let spread = Contract::spread("AAPL")
         .vertical(ContractId(11111), ContractId(22222))

@@ -3,8 +3,8 @@
 //! This module provides fluent builder APIs for constructing order conditions
 //! with type safety and validation.
 
-use crate::accounts::types::ContractId;
 use crate::builder::Missing;
+use crate::contracts::ContractId;
 use serde::{Deserialize, Serialize};
 
 /// Price evaluation method for price conditions.

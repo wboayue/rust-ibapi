@@ -12,8 +12,9 @@ use crate::{Client, Error};
 
 use super::common::snapshots::SnapshotBuilder;
 use super::common::{decoders, encoders};
-use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
+use super::types::{AccountGroup, AccountId};
 use super::*;
+use crate::contracts::ContractId;
 
 impl Client {
     /// Subscribe to streaming position updates for all accessible accounts.
@@ -48,40 +49,36 @@ impl Client {
         self.subscription().send_shared(OutgoingMessages::RequestPositions, request).await
     }
 
-    /// Subscribe to streaming position updates scoped by account and model code.
+    /// Subscribe to streaming position updates, optionally narrowed to one account or model.
+    /// TWS sends the current positions, then updates as positions change.
     ///
-    /// # Arguments
-    /// * `account`    - If an account Id is provided, only the account's positions belonging to the specified model will be delivered.
-    /// * `model_code` - The code of the model's positions we are interested in.
+    /// Returns a builder: set [`account`](PositionsMultiBuilder::account) and
+    /// [`model_code`](PositionsMultiBuilder::model_code), then call
+    /// [`subscribe`](PositionsMultiBuilder::subscribe).
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
-    /// use ibapi::accounts::types::AccountId;
-    /// use futures::StreamExt;
+    /// use ibapi::prelude::*;
     ///
     /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///
-    ///     let account = AccountId("U1234567".to_string());
-    ///     let mut subscription = client.positions_multi(Some(&account), None).await.expect("error requesting positions by model");
-    ///
-    ///     while let Some(position) = subscription.next().await {
-    ///         println!("{position:?}")
+    /// async fn main() -> Result<(), ibapi::Error> {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await?;
+    ///     let mut positions = client
+    ///         .positions_multi()
+    ///         .account("DU1234567")
+    ///         .model_code("TARGET2024")
+    ///         .subscribe()
+    ///         .await?
+    ///         .filter_data();
+    ///     while let Some(position) = positions.next().await {
+    ///         println!("{:?}", position?);
     ///     }
+    ///     Ok(())
     /// }
     /// ```
-    pub async fn positions_multi(
-        &self,
-        account: Option<&AccountId>,
-        model_code: Option<&ModelCode>,
-    ) -> Result<Subscription<PositionUpdateMulti>, Error> {
-        let builder = self.request();
-        let request = encoders::encode_request_positions_multi(builder.request_id(), account, model_code)?;
-
-        builder.send::<PositionUpdateMulti>(request).await
+    pub fn positions_multi(&self) -> PositionsMultiBuilder<'_, Self> {
+        PositionsMultiBuilder::new(self)
     }
 
     /// Fetch the account family codes registered with the broker.
@@ -112,72 +109,53 @@ impl Client {
         .or_else(empty_on_end_of_stream)
     }
 
-    /// Subscribe to real-time daily and unrealized PnL updates for an account.
+    /// Subscribe to real-time daily and unrealized PnL updates for `account`.
     ///
-    /// Optionally filter by model code to scope the updates.
-    ///
-    /// # Arguments
-    /// * `account`    - account for which to receive PnL updates
-    /// * `model_code` - specify to request PnL updates for a specific model
+    /// Returns a builder: narrow to one model with [`model_code`](PnLBuilder::model_code), then
+    /// call [`subscribe`](PnLBuilder::subscribe).
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
-    /// use futures::StreamExt;
+    /// use ibapi::prelude::*;
     ///
     /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let mut subscription = client.pnl("DU1234567", None).await.expect("error requesting pnl");
-    ///
-    ///     while let Some(pnl) = subscription.next().await {
-    ///         println!("{pnl:?}")
+    /// async fn main() -> Result<(), ibapi::Error> {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await?;
+    ///     let mut updates = client.pnl("DU1234567").subscribe().await?.filter_data();
+    ///     while let Some(pnl) = updates.next().await {
+    ///         println!("{:?}", pnl?);
     ///     }
+    ///     Ok(())
     /// }
     /// ```
-    pub async fn pnl(&self, account: impl Into<AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        let account = account.into();
-        let builder = self.request();
-        let request = encoders::encode_request_pnl(builder.request_id(), &account, model_code)?;
-        builder.send(request).await
+    pub fn pnl(&self, account: impl Into<AccountId>) -> PnLBuilder<'_, Self> {
+        PnLBuilder::new(self, account)
     }
 
-    /// Subscribe to real-time daily PnL updates for a single contract.
+    /// Subscribe to real-time daily PnL for one position: `contract_id` held in `account`.
     ///
-    /// The stream includes realized and unrealized PnL information for the requested position.
-    ///
-    /// # Arguments
-    /// * `account`     - Account in which position exists
-    /// * `contract_id` - Contract ID of contract to receive daily PnL updates for.
-    /// * `model_code`  - Model in which position exists
+    /// Returns a builder: name the model the position is held in with
+    /// [`model_code`](PnLSingleBuilder::model_code), then call
+    /// [`subscribe`](PnLSingleBuilder::subscribe).
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
-    /// use futures::StreamExt;
+    /// use ibapi::prelude::*;
     ///
     /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///
-    ///     let mut subscription = client.pnl_single("DU1234567", 1001, None).await.expect("error requesting pnl");
-    ///
-    ///     while let Some(pnl) = subscription.next().await {
-    ///         println!("{pnl:?}")
+    /// async fn main() -> Result<(), ibapi::Error> {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await?;
+    ///     let mut updates = client.pnl_single("DU1234567", 265598).subscribe().await?.filter_data(); // AAPL
+    ///     while let Some(pnl) = updates.next().await {
+    ///         println!("{:?}", pnl?);
     ///     }
+    ///     Ok(())
     /// }
     /// ```
-    pub async fn pnl_single(
-        &self,
-        account: impl Into<AccountId>,
-        contract_id: impl Into<ContractId>,
-        model_code: Option<&ModelCode>,
-    ) -> Result<Subscription<PnLSingle>, Error> {
-        let builder = self.request();
-        let request = encoders::encode_request_pnl_single(builder.request_id(), &account.into(), contract_id.into(), model_code)?;
-        builder.send(request).await
+    pub fn pnl_single(&self, account: impl Into<AccountId>, contract_id: impl Into<ContractId>) -> PnLSingleBuilder<'_, Self> {
+        PnLSingleBuilder::new(self, account, contract_id)
     }
 
     /// Subscribe to account summary updates for a group of accounts.
@@ -348,53 +326,41 @@ impl Client {
     /// [`AccountMultiValue::base_key`].
     ///
     /// # Arguments
-    /// * `account`        - Account values can be requested for a particular account.
-    /// * `model_code`     - Account values can also be requested for a model.
-    /// * `ledger_only`    - Which keys arrive: [`LedgerOnly::Yes`] for only the per-currency
+    /// * `ledger_only` - Which keys arrive: [`LedgerOnly::Yes`] for only the per-currency
     ///   ledger keys, [`LedgerOnly::No`] for those plus the account-level keys
     ///   (`NetLiquidation`, `BuyingPower`, ...). See [`LedgerOnly`] for the `$LEDGER-` prefix.
+    ///
+    /// Returns a builder: narrow with [`account`](AccountUpdatesMultiBuilder::account) and
+    /// [`model_code`](AccountUpdatesMultiBuilder::model_code), then call
+    /// [`subscribe`](AccountUpdatesMultiBuilder::subscribe).
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::prelude::*;
     /// use ibapi::accounts::{AccountUpdateMulti, LedgerOnly};
-    /// use ibapi::accounts::types::AccountId;
-    /// use ibapi::subscriptions::SubscriptionItem;
-    /// use futures::StreamExt;
     ///
     /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///
-    ///     let account = AccountId("U1234567".to_string());
-    ///
-    ///     let mut subscription = client.account_updates_multi(Some(&account), None, LedgerOnly::No).await.expect("error requesting account updates multi");
+    /// async fn main() -> Result<(), ibapi::Error> {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await?;
+    ///     let mut subscription = client.account_updates_multi(LedgerOnly::No).account("DU1234567").subscribe().await?;
     ///
     ///     while let Some(item) = subscription.next().await {
-    ///         match item {
-    ///             Ok(SubscriptionItem::Data(update)) => {
+    ///         match item? {
+    ///             SubscriptionItem::Data(update) => {
     ///                 println!("{update:?}");
     ///                 if let AccountUpdateMulti::End = update {
     ///                     break;
     ///                 }
     ///             }
-    ///             Ok(SubscriptionItem::Notice(n)) => eprintln!("notice: {n}"),
-    ///             Err(e) => eprintln!("Error: {e}"),
+    ///             SubscriptionItem::Notice(n) => eprintln!("notice: {n}"),
     ///         }
     ///     }
+    ///     Ok(())
     /// }
     /// ```
-    pub async fn account_updates_multi(
-        &self,
-        account: Option<&AccountId>,
-        model_code: Option<&ModelCode>,
-        ledger_only: LedgerOnly,
-    ) -> Result<Subscription<AccountUpdateMulti>, Error> {
-        let builder = self.request();
-        let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code, ledger_only)?;
-
-        builder.send::<AccountUpdateMulti>(request).await
+    pub fn account_updates_multi(&self, ledger_only: LedgerOnly) -> AccountUpdatesMultiBuilder<'_, Self> {
+        AccountUpdatesMultiBuilder::new(self, ledger_only)
     }
 
     /// Fetch the list of accounts accessible to the current user.

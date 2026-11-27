@@ -37,12 +37,12 @@ impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
     /// let order_id = client.order(&contract).market().submit();
     /// # }
     /// ```
-    pub async fn submit(self) -> Result<OrderId, Error> {
+    pub async fn submit(self) -> Result<i32, Error> {
         let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
         let order = self.build()?;
         client.submit_order(order_id, contract, &order).await?;
-        Ok(OrderId::new(order_id))
+        Ok(order_id)
     }
 
     /// Analyze order for margin/commission (what-if)
@@ -85,8 +85,21 @@ impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
     /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
-    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
-    /// has reached 1,500,000,000 (reserved for request ids).
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if an allocated id reaches
+    /// 1,500,000,000 (reserved for request ids); [`Error::ServerVersion`] if the order sets a
+    /// field the connected server doesn't support. None of these sends anything: all three
+    /// orders are checked and encoded before the first is sent.
+    ///
+    /// Only a transport error stops partway, and returns [`Error::OrdersPartiallySent`] with the
+    /// ids of the legs that may be at TWS. A parent and take-profit sent before the stop-loss are
+    /// held there (they transmit with it). After a reconnect with the same client id TWS still
+    /// holds them without listing them in `open_orders`, so cancel them with `cancel_order` and
+    /// the error's `sent` ids (live: 2026-11-27, paper Gateway, server 226).
+    ///
+    /// Dropping the returned future between sends (a timeout, a `select!` branch) also stops
+    /// partway, and returns nothing, so held legs it sent can't be found by id: avoid racing it
+    /// against a timeout. Without one, a write stalled on a peer that stopped reading blocks the
+    /// call until the client finds the connection lost and severs it, which fails the write.
     ///
     /// # Examples
     ///
@@ -137,32 +150,11 @@ impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// ```
     pub async fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let ClientBound { client, contract } = self.parent_builder.target;
-        let orders = self.build()?;
-
-        // Reserve all order IDs upfront to prevent collisions
-        let parent_id = client.next_order_id();
-        let tp_id = client.next_order_id();
-        let sl_id = client.next_order_id();
-        let reserved_ids = [parent_id, tp_id, sl_id];
-
-        for (i, mut order) in orders.into_iter().enumerate() {
-            let order_id = reserved_ids[i];
-            order.order_id = order_id;
-
-            // Update parent_id for child orders
-            if i > 0 {
-                order.parent_id = parent_id;
-            }
-
-            // Only transmit the last order
-            if i == 2 {
-                order.transmit = true;
-            }
-
-            client.submit_order(order_id, contract, &order).await?;
-        }
-
-        Ok(BracketOrderIds::new(parent_id, tp_id, sl_id))
+        let (orders, ids) = self.build_with_ids(|| client.next_order_id())?;
+        client
+            .submit_orders(orders.iter().map(|order| (OrderId::from(order.order_id), contract, order)))
+            .await?;
+        Ok(ids)
     }
 }
 
