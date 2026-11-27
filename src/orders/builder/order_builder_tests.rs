@@ -13,7 +13,7 @@ use crate::Error;
 fn create_test_contract() -> Contract {
     Contract {
         symbol: Symbol::from("TEST"),
-        security_type: crate::contracts::SecurityType::Stock,
+        security_type: Some(crate::contracts::SecurityType::Stock),
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
         ..Default::default()

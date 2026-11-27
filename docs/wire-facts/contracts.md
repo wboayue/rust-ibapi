@@ -162,6 +162,24 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
 - Settles typing `ContractDetails::under_security_type` as an optional `SecurityType`.
 - **Not probed:** bonds, warrants, CFDs, forex, and futures on other underlyings.
 
+### `secType` is optional with a `conId`, required without one
+
+*Live 2026-11-27 Fri 11:15 ET (US RTH, half day), paper, server 226; #1330.*
+
+- `reqContractDetails` by `conId` alone (exchange and currency empty) for AAPL stock, the ESZ6
+  future, a SPY option, SPX and EUR.USD, with `secType` `STK`, absent, or the contract's own type:
+  each returned the one contract, with its real security type.
+- `reqHeadTimestamp` by `conId` and exchange for the same five, with the same three `secType`
+  values: the same timestamp for each. One EUR.USD call with `STK` returned a different one; the
+  rerun matched.
+- Without a `conId`, an absent `secType` is error 321 "Please enter a valid security type": AAPL
+  (with `SMART`/`USD`, and with neither), ES on `CME`, SPX.
+- None of the 622 contracts these requests returned lacked a `secType`.
+- Settles that an unset `Contract::security_type` sends nothing: TWS resolves a `conId` without
+  it and rejects a symbol lookup loudly, with no silent fallback to `STK`.
+- **Not probed:** orders, market data, scanners; a `conId` with a wrong type other than `STK`;
+  a lookup by `localSymbol` alone; bonds, warrants, CFDs.
+
 ### Matching-symbols `derivativeSecTypes` are security type codes
 
 *Live 2026-11-22 Sun 23:54 ET (markets closed), paper, server 226; #1261.*

@@ -157,7 +157,9 @@ impl ContractBuilder {
     /// Sets the security type
     ///
     /// Defines what type of instrument this contract represents.
-    /// See [SecurityType] for available options.
+    /// See [SecurityType] for available options. Left unset, the contract's
+    /// `security_type` is `None` and no `secType` is sent: fine for a lookup by
+    /// [`contract_id`](Self::contract_id), error 321 from TWS for a lookup by symbol.
     pub fn security_type(mut self, security_type: SecurityType) -> Self {
         self.security_type = Some(security_type);
         self
@@ -490,10 +492,10 @@ impl ContractBuilder {
             return Err(Error::InvalidArgument("Symbol, local_symbol, or contract_id is required".into()));
         }
 
-        let security_type = self.security_type.clone().unwrap_or_default();
+        let security_type = self.security_type;
 
         // Validate option-specific requirements
-        if security_type == SecurityType::Option || security_type == SecurityType::FuturesOption {
+        if matches!(security_type, Some(SecurityType::Option | SecurityType::FuturesOption)) {
             match self.strike {
                 None => return Err(Error::InvalidArgument("Strike price is required for options".into())),
                 // Strike 0 is TWS's "unset": with a contract id or local symbol TWS resolves the
@@ -516,8 +518,7 @@ impl ContractBuilder {
         }
 
         // Validate futures-specific requirements
-        if (security_type == SecurityType::Future || security_type == SecurityType::FuturesOption) && self.last_trade_date_or_contract_month.is_none()
-        {
+        if matches!(security_type, Some(SecurityType::Future | SecurityType::FuturesOption)) && self.last_trade_date_or_contract_month.is_none() {
             return Err(Error::InvalidArgument("Contract month is required for futures".into()));
         }
 

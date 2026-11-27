@@ -66,7 +66,7 @@ fn contract_details_stream_early_drop_leaves_client_usable() {
 fn spy_calls_one_month() -> Contract {
     Contract {
         symbol: Symbol::from("SPY"),
-        security_type: SecurityType::Option,
+        security_type: Some(SecurityType::Option),
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
         last_trade_date_or_contract_month: Some(yyyymm_months_from_now(2).parse().expect("YYYYMM")),
@@ -123,7 +123,7 @@ fn contract_details_bond() {
 
     let bonds = Contract {
         symbol: Symbol::from("AAPL"),
-        security_type: SecurityType::Bond,
+        security_type: Some(SecurityType::Bond),
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
         ..Default::default()
@@ -132,7 +132,7 @@ fn contract_details_bond() {
     let details = client.contract_details(&bonds).expect("contract_details failed");
 
     assert!(!details.is_empty(), "bond query returned no rows");
-    assert!(details.iter().all(|d| d.contract.security_type == SecurityType::Bond));
+    assert!(details.iter().all(|d| d.contract.security_type == Some(SecurityType::Bond)));
 }
 
 #[test]
@@ -168,7 +168,7 @@ fn contract_details_forex() {
     let details = client.contract_details(&contract).expect("contract_details failed");
 
     assert!(!details.is_empty());
-    assert_eq!(details[0].contract.security_type, SecurityType::ForexPair);
+    assert_eq!(details[0].contract.security_type, Some(SecurityType::ForexPair));
 }
 
 #[test]

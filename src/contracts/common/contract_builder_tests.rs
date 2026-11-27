@@ -100,7 +100,7 @@ fn contract_builder_build_stock_success() {
     let contract = ContractBuilder::stock("AAPL", "NASDAQ", "USD").contract_id(12345).build().unwrap();
 
     assert_eq!(contract.symbol, "AAPL");
-    assert_eq!(contract.security_type, SecurityType::Stock);
+    assert_eq!(contract.security_type, Some(SecurityType::Stock));
     assert_eq!(contract.exchange, "NASDAQ");
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.contract_id, 12345);
@@ -120,7 +120,7 @@ fn contract_builder_build_option_success() {
         .unwrap();
 
     assert_eq!(contract.symbol, "AAPL");
-    assert_eq!(contract.security_type, SecurityType::Option);
+    assert_eq!(contract.security_type, Some(SecurityType::Option));
     assert_eq!(contract.exchange, "SMART");
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.strike, 150.0);
@@ -136,7 +136,7 @@ fn contract_builder_build_futures_success() {
         .unwrap();
 
     assert_eq!(contract.symbol, "ES");
-    assert_eq!(contract.security_type, SecurityType::Future);
+    assert_eq!(contract.security_type, Some(SecurityType::Future));
     assert_eq!(contract.exchange, "CME");
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.last_trade_date_or_contract_month, Some("202312".parse().unwrap()));
@@ -165,7 +165,7 @@ fn contract_builder_build_with_local_symbol_only() {
     let contract = result.unwrap();
     assert_eq!(contract.symbol, ""); // Empty symbol is OK when local_symbol is provided
     assert_eq!(contract.local_symbol, "FGBL MAR 23");
-    assert_eq!(contract.security_type, SecurityType::Future);
+    assert_eq!(contract.security_type, Some(SecurityType::Future));
     assert_eq!(contract.exchange, "EUREX");
     assert_eq!(contract.currency, "EUR");
 }
@@ -334,7 +334,7 @@ fn contract_builder_chaining() {
         .unwrap();
 
     assert_eq!(contract.symbol, "TSLA");
-    assert_eq!(contract.security_type, SecurityType::Stock);
+    assert_eq!(contract.security_type, Some(SecurityType::Stock));
     assert_eq!(contract.exchange, "NASDAQ");
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.contract_id, 76792991);
@@ -344,6 +344,17 @@ fn contract_builder_chaining() {
     assert_eq!(contract.description, "Tesla Inc.");
 }
 
+/// A lookup by contract id alone carries no security type to TWS; TWS resolves the
+/// contract from the id (docs/wire-facts/contracts.md).
+#[test]
+fn contract_id_only_build_sends_no_sec_type() {
+    let contract = ContractBuilder::new().contract_id(515416632).build().unwrap();
+
+    let proto = crate::proto::encoders::encode_contract(&contract);
+    assert_eq!(proto.con_id, Some(515416632));
+    assert_eq!(proto.sec_type, None);
+}
+
 #[test]
 fn contract_builder_defaults() {
     // Test that unset fields get proper defaults
@@ -351,7 +362,7 @@ fn contract_builder_defaults() {
 
     assert_eq!(contract.contract_id, 0);
     assert_eq!(contract.symbol, "TEST");
-    assert_eq!(contract.security_type, SecurityType::Stock); // Default
+    assert_eq!(contract.security_type, None);
     assert_eq!(contract.last_trade_date_or_contract_month, None);
     assert_eq!(contract.strike, 0.0);
     assert_eq!(contract.right, None);
@@ -447,7 +458,7 @@ fn setter_parity_with_contract_fields() {
 
     assert_eq!(contract_id, 99);
     assert_eq!(symbol, "X");
-    assert_eq!(security_type, SecurityType::Stock);
+    assert_eq!(security_type, Some(SecurityType::Stock));
     assert_eq!(last_trade_date_or_contract_month, Some("20241220".parse().unwrap()));
     assert_eq!(strike, 150.0);
     assert_eq!(right, Some(OptionRight::Call));

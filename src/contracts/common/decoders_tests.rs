@@ -329,7 +329,7 @@ fn decode_bond_contract_details_live_shape() {
 
     let details = decode_bond_contract_details(&frame).unwrap();
     assert_eq!(details.contract.contract_id, 15960430);
-    assert_eq!(details.contract.security_type, crate::contracts::SecurityType::Bond);
+    assert_eq!(details.contract.security_type, Some(crate::contracts::SecurityType::Bond));
     assert_eq!(details.contract.trading_class, "US-T");
     assert_eq!(details.contract.symbol, crate::contracts::Symbol::from(""));
     assert_eq!(details.cusip, "IBCID15960430");
@@ -341,8 +341,8 @@ fn decode_bond_contract_details_live_shape() {
 
 // === decode_contract_and_details ===
 
-/// A `proto::Contract` carrying a `sec_type`, for tests that are not about the
-/// `Other("")` fallback in `decode_contract`.
+/// A `proto::Contract` carrying a `sec_type`, for tests that are not about an
+/// absent `sec_type` in `decode_contract`.
 fn stk_contract() -> crate::proto::Contract {
     crate::proto::Contract {
         sec_type: Some("STK".into()),

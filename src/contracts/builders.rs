@@ -61,7 +61,7 @@ impl StockBuilder<Symbol> {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Stock,
+            security_type: Some(SecurityType::Stock),
             exchange: self.exchange,
             currency: self.currency,
             primary_exchange: self.primary_exchange.unwrap_or_else(|| Exchange::from("")),
@@ -220,7 +220,7 @@ impl OptionBuilder<Symbol, f64, ExpirationDate> {
         let expiry = self.expiry.validated()?;
         Ok(Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Option,
+            security_type: Some(SecurityType::Option),
             strike: strike.value(),
             right: Some(self.right),
             last_trade_date_or_contract_month: Some(expiry.into()),
@@ -333,7 +333,7 @@ impl FuturesBuilder<Symbol, ContractMonth> {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Future,
+            security_type: Some(SecurityType::Future),
             last_trade_date_or_contract_month: Some(self.contract_month.into()),
             exchange: self.exchange,
             currency: self.currency,
@@ -359,7 +359,7 @@ impl FuturesBuilder<Symbol, AnyMonth> {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Future,
+            security_type: Some(SecurityType::Future),
             // last_trade_date_or_contract_month left empty (open query)
             exchange: self.exchange,
             currency: self.currency,
@@ -414,7 +414,7 @@ impl ContinuousFuturesBuilder<Symbol> {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::ContinuousFuture,
+            security_type: Some(SecurityType::ContinuousFuture),
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier.map(|m| m.to_string()).unwrap_or_default(),
@@ -452,7 +452,7 @@ impl ForexBuilder {
     pub fn build(self) -> Contract {
         Contract {
             symbol: Symbol::new(self.base.0),
-            security_type: SecurityType::ForexPair,
+            security_type: Some(SecurityType::ForexPair),
             exchange: self.exchange,
             currency: self.quote,
             ..Default::default()
@@ -495,7 +495,7 @@ impl CryptoBuilder {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Crypto,
+            security_type: Some(SecurityType::Crypto),
             exchange: self.exchange,
             currency: self.currency,
             ..Default::default()
@@ -779,7 +779,7 @@ impl SpreadBuilder<HasLegs> {
 
         Ok(Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Spread,
+            security_type: Some(SecurityType::Spread),
             currency: self.currency,
             exchange: self.exchange,
             combo_legs,

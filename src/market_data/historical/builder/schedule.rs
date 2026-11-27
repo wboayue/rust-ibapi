@@ -41,7 +41,7 @@ impl<'a, C> HistoricalScheduleBuilder<'a, C> {
 
     /// Reject what TWS is known to reject, before anything is sent.
     fn validate(&self) -> Result<(), Error> {
-        if self.ending.is_some() && self.contract.security_type == SecurityType::ContinuousFuture {
+        if self.ending.is_some() && self.contract.security_type == Some(SecurityType::ContinuousFuture) {
             return Err(Error::InvalidArgument(
                 "historical_schedules: TWS rejects .ending() for a continuous future (error 10339)".to_owned(),
             ));

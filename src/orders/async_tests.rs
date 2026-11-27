@@ -83,7 +83,7 @@ async fn place_order() {
 
     let contract = Contract {
         symbol: Symbol::from("ES"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
         local_symbol: "ESU5".to_string(),
@@ -416,7 +416,7 @@ async fn submit_order() {
 
     let contract = Contract {
         symbol: Symbol::from("ES"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
         local_symbol: "ESU5".to_string(),
@@ -453,7 +453,7 @@ async fn exercise_options() {
 
     let contract = Contract {
         symbol: Symbol::from("ES"),
-        security_type: SecurityType::FuturesOption,
+        security_type: Some(SecurityType::FuturesOption),
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
         last_trade_date_or_contract_month: Some("20250919".parse().unwrap()),
@@ -690,13 +690,13 @@ async fn order_update_stream_survives_unknown_sec_type() {
 
     match stream.next().await {
         Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => {
-            assert_eq!(o.contract.security_type, SecurityType::Other("NOTASECTYPE".into()));
+            assert_eq!(o.contract.security_type, Some(SecurityType::Other("NOTASECTYPE".into())));
         }
         other => panic!("expected OpenOrder with Other sec_type, got {other:?}"),
     }
     match stream.next().await {
         Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => {
-            assert_eq!(o.contract.security_type, SecurityType::Stock);
+            assert_eq!(o.contract.security_type, Some(SecurityType::Stock));
         }
         other => panic!("stream did not survive the unknown sec_type, got {other:?}"),
     }

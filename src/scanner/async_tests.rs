@@ -151,19 +151,19 @@ async fn scanner_subscription() {
     let first = &scanner_data[0];
     assert_eq!(first.rank, 0);
     assert_eq!(first.contract_details.contract.symbol, Symbol::from("SVMH"));
-    assert_eq!(first.contract_details.contract.security_type, SecurityType::Stock);
+    assert_eq!(first.contract_details.contract.security_type, Some(SecurityType::Stock));
     assert_eq!(first.contract_details.contract.exchange, Exchange::from("SMART"));
 
     let second = &scanner_data[1];
     assert_eq!(second.rank, 1);
     assert_eq!(second.contract_details.contract.symbol, Symbol::from("GTI"));
-    assert_eq!(second.contract_details.contract.security_type, SecurityType::Stock);
+    assert_eq!(second.contract_details.contract.security_type, Some(SecurityType::Stock));
     assert_eq!(second.contract_details.contract.exchange, Exchange::from("SMART"));
 
     let third = &scanner_data[2];
     assert_eq!(third.rank, 2);
     assert_eq!(third.contract_details.contract.symbol, Symbol::from("LITM"));
-    assert_eq!(third.contract_details.contract.security_type, SecurityType::Stock);
+    assert_eq!(third.contract_details.contract.security_type, Some(SecurityType::Stock));
     assert_eq!(third.contract_details.contract.exchange, Exchange::from("SMART"));
 
     assert_eq!(request_message_count(&message_bus), 1);
