@@ -1,6 +1,7 @@
-use crate::accounts::types::{AccountGroup, AccountId, ContractId};
+use crate::accounts::types::{AccountGroup, AccountId};
 use crate::accounts::{FaDataType, LedgerOnly, ServerLogLevel};
 use crate::common::test_utils::helpers::assert_proto_msg_id;
+use crate::contracts::ContractId;
 use crate::messages::OutgoingMessages;
 use crate::testdata::builders::accounts::{
     cancel_account_summary, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, request_current_time, request_current_time_in_millis,

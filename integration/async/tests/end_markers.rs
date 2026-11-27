@@ -177,11 +177,18 @@ async fn end_markers_after_initial_dump() {
         .expect("account_summary failed");
     let updates = client.account_updates(&account).await.expect("account_updates failed");
     let updates_multi = client
-        .account_updates_multi(Some(&account), None, LedgerOnly::Yes)
+        .account_updates_multi(LedgerOnly::Yes)
+        .account(&account)
+        .subscribe()
         .await
         .expect("account_updates_multi failed");
     let positions = client.positions().await.expect("positions failed");
-    let positions_multi = client.positions_multi(Some(&account), None).await.expect("positions_multi failed");
+    let positions_multi = client
+        .positions_multi()
+        .account(&account)
+        .subscribe()
+        .await
+        .expect("positions_multi failed");
 
     let mut merged = select_all(vec![
         events("account_summary", summary, |v| matches!(v, AccountSummaryResult::End)),

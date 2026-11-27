@@ -18,7 +18,7 @@ mod tests;
 mod to_field;
 
 pub use notice::*;
-pub(crate) use to_field::{encode_option_field, ToField};
+pub(crate) use to_field::ToField;
 
 /// Offset added to outbound protobuf message IDs. Inbound IDs > this value are protobuf.
 pub(crate) const PROTOBUF_MSG_ID: i32 = 200;

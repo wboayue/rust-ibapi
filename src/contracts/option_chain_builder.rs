@@ -11,8 +11,8 @@
 //! with an empty chain or a rejection. See
 //! [param budget](../../docs/rules/style/param-budget.md).
 
-use crate::accounts::types::ContractId;
 use crate::client::ids::RequestId;
+use crate::contracts::ContractId;
 use crate::contracts::{OptionChain, SecurityType};
 use crate::Error;
 

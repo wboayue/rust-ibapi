@@ -185,17 +185,52 @@ impl Client {
     /// }
     /// ```
     pub async fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<(), Error> {
-        let checked_id = verify::verify_and_reserve_order_ids(self.id_manager(), self.server_version(), order_id.into(), order)?;
+        let (_, request) = verify::prepare_place_order(self.id_manager(), self.server_version(), order_id.into(), contract, order)?;
+        self.send_message(request).await
+    }
 
-        let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
-        self.send_message(request).await?;
-
+    /// Sends a batch of orders, each under the id paired with it, after
+    /// [`verify::prepare_place_orders`] has checked and encoded all of them. A failed send stops
+    /// the loop and returns [`Error::OrdersPartiallySent`] with the ids that may be at TWS. A
+    /// future dropped between sends returns nothing, so its orders aren't reported.
+    pub(crate) async fn submit_orders<'a>(&self, orders: impl IntoIterator<Item = (OrderId, &'a Contract, &'a Order)>) -> Result<(), Error> {
+        let orders: Vec<_> = orders.into_iter().collect();
+        let requests = verify::prepare_place_orders(self.id_manager(), self.server_version(), orders.iter().copied())?;
+        for (i, request) in requests.into_iter().enumerate() {
+            if let Err(source) = self.send_message(request).await {
+                return Err(Error::orders_partially_sent(
+                    orders.iter().map(|(order_id, _, _)| order_id.value()),
+                    i,
+                    source,
+                ));
+            }
+        }
         Ok(())
     }
 
-    /// Submit multiple OCA (One-Cancels-All) orders
+    /// Submits orders as one OCA (One-Cancels-All) group.
     ///
-    /// When one order in the group is filled, all others are automatically cancelled.
+    /// Each order gets the next client order id and is put in `group` with `oca_type`, so a fill
+    /// on one cancels or reduces the others. A group already set on an order, with
+    /// [`oca_group`](OrderBuilder::oca_group) or directly, is
+    /// overwritten. Returns the ids in the order of `orders`.
+    ///
+    /// # Errors
+    /// Nothing is sent when one of these fails, for any order:
+    /// - [`Error::Validation`] if `group` is empty, before any id is allocated, or for an
+    ///   order's [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
+    /// - [`Error::OrderIdInRequestRange`] if an allocated id, or a `parent_id` or preset
+    ///   attached-order id on an order, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::ServerVersion`] if an order sets a field the connected server doesn't support.
+    ///
+    /// Every order is checked and encoded before the first is sent, so only a transport error
+    /// stops partway. That returns [`Error::OrdersPartiallySent`]: its `sent` ids may be at TWS
+    /// (cancel them by id after reconnecting with the same client id), and its `not_sent` ids were
+    /// never written. If the first send is refused while the client reconnects, nothing was
+    /// sent, and the error is [`Error::Reconnecting`]. Dropping the returned future between sends (a timeout, a `select!` branch)
+    /// also stops partway, and returns nothing: after reconnecting with the same client id,
+    /// [`open_orders`](Client::open_orders) lists what was sent, unless an order was built with
+    /// `transmit` false, which TWS holds without listing.
     ///
     /// # Examples
     ///
@@ -207,38 +242,24 @@ impl Client {
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     
+    ///
     ///     let contract1 = Contract::stock("AAPL").build();
     ///     let contract2 = Contract::stock("MSFT").build();
     ///
-    ///     let order1 = client.order(&contract1)
-    ///         .buy(100)
-    ///         .limit(50.0)
-    ///         .oca_group("MyOCA", OcaType::CancelWithBlock)
-    ///         .build_order().expect("order build failed");
-    ///         
-    ///     let order2 = client.order(&contract2)
-    ///         .buy(100)
-    ///         .limit(45.0)
-    ///         .oca_group("MyOCA", OcaType::CancelWithBlock)
-    ///         .build_order().expect("order build failed");
+    ///     let order1 = client.order(&contract1).buy(100).limit(50.0).build_order().expect("order build failed");
+    ///     let order2 = client.order(&contract2).buy(100).limit(45.0).build_order().expect("order build failed");
     ///
-    ///     let order_ids = client.submit_oca_orders(
-    ///         vec![(contract1, order1), (contract2, order2)]
-    ///     ).await.expect("OCA submission failed");
+    ///     let order_ids = client
+    ///         .submit_oca_orders("MyOCA", OcaType::CancelWithBlock, vec![(contract1, order1), (contract2, order2)])
+    ///         .await
+    ///         .expect("OCA submission failed");
     /// }
     /// ```
-    pub async fn submit_oca_orders(&self, orders: Vec<(crate::contracts::Contract, crate::orders::Order)>) -> Result<Vec<OrderId>, Error> {
-        let mut order_ids = Vec::new();
-
-        for (contract, mut order) in orders.into_iter() {
-            let order_id = self.next_order_id();
-            order.order_id = order_id;
-            order_ids.push(OrderId::new(order_id));
-            self.submit_order(order_id, &contract, &order).await?;
-        }
-
-        Ok(order_ids)
+    pub async fn submit_oca_orders(&self, group: impl Into<String>, oca_type: OcaType, orders: Vec<(Contract, Order)>) -> Result<Vec<i32>, Error> {
+        let orders = verify::number_oca_orders(group.into(), oca_type, orders, || self.next_order_id())?;
+        self.submit_orders(orders.iter().map(|(contract, order)| (OrderId::from(order.order_id), contract, order)))
+            .await?;
+        Ok(orders.iter().map(|(_, order)| order.order_id).collect())
     }
 
     /// Places or modifies an [`crate::orders::Order`].
@@ -288,9 +309,7 @@ impl Client {
     /// }
     /// ```
     pub async fn place_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
-        let checked_id = verify::verify_and_reserve_order_ids(self.id_manager(), self.server_version(), order_id.into(), order)?;
-
-        let request = encoders::encode_place_order(checked_id.value(), contract, order)?;
+        let (checked_id, request) = verify::prepare_place_order(self.id_manager(), self.server_version(), order_id.into(), contract, order)?;
         let internal_subscription = self.send_order(checked_id, request).await?;
 
         Ok(Subscription::new_from_internal_simple(
@@ -736,8 +755,9 @@ impl Client {
     /// # Errors
     ///
     /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000
-    /// (reserved for request ids), [`Error::ConnectionReset`] if the connection is
-    /// down or drops during the wait, [`Error::Shutdown`] if the client shuts down.
+    /// (reserved for request ids), [`Error::Reconnecting`] if the connection is down,
+    /// [`Error::ConnectionReset`] if it drops during the wait, [`Error::Shutdown`] if the
+    /// client shuts down.
     ///
     /// # Examples
     ///

@@ -6,7 +6,7 @@ fn v2_builders() {
     // Test stock builder
     let stock = Contract::stock("AAPL").build();
     assert_eq!(stock.symbol, Symbol::from("AAPL"), "stock.symbol");
-    assert_eq!(stock.security_type, SecurityType::Stock, "stock.security_type");
+    assert_eq!(stock.security_type, Some(SecurityType::Stock), "stock.security_type");
     assert_eq!(stock.currency, Currency::from("USD"), "stock.currency");
     assert_eq!(stock.exchange, Exchange::from("SMART"), "stock.exchange");
 
@@ -19,7 +19,7 @@ fn v2_builders() {
     // Test call option builder
     let call = Contract::call("AAPL").strike(150.0).expires_on(2023, 12, 15).build().unwrap();
     assert_eq!(call.symbol, Symbol::from("AAPL"));
-    assert_eq!(call.security_type, SecurityType::Option);
+    assert_eq!(call.security_type, Some(SecurityType::Option));
     assert_eq!(call.strike, 150.0);
     assert_eq!(call.right, Some(OptionRight::Call));
     assert_eq!(call.last_trade_date_or_contract_month, Some("20231215".parse().unwrap()));
@@ -33,27 +33,27 @@ fn v2_builders() {
     // Test crypto builder
     let btc = Contract::crypto("BTC").build();
     assert_eq!(btc.symbol, Symbol::from("BTC"));
-    assert_eq!(btc.security_type, SecurityType::Crypto);
+    assert_eq!(btc.security_type, Some(SecurityType::Crypto));
     assert_eq!(btc.currency, Currency::from("USD"));
     assert_eq!(btc.exchange, Exchange::from("PAXOS"));
 
     // Test index
     let spx = Contract::index("SPX");
     assert_eq!(spx.symbol, Symbol::from("SPX"));
-    assert_eq!(spx.security_type, SecurityType::Index);
+    assert_eq!(spx.security_type, Some(SecurityType::Index));
     assert_eq!(spx.exchange, Exchange::from("CBOE"));
     assert_eq!(spx.currency, Currency::from("USD"));
 
     // Test news constructor (unchanged)
     let news = Contract::news("BZ");
     assert_eq!(news.symbol, Symbol::from("BZ:BZ_ALL"));
-    assert_eq!(news.security_type, SecurityType::News);
+    assert_eq!(news.security_type, Some(SecurityType::News));
     assert_eq!(news.exchange, Exchange::from("BZ"));
 
     // Test backward compatibility with option constructor
     let option = Contract::option("AAPL", ExpirationDate::new(2023, 12, 15).unwrap(), 150.0, OptionRight::Call);
     assert_eq!(option.symbol, Symbol::from("AAPL"));
-    assert_eq!(option.security_type, SecurityType::Option);
+    assert_eq!(option.security_type, Some(SecurityType::Option));
     assert_eq!(option.strike, 150.0);
     assert_eq!(option.right, Some(OptionRight::Call));
 }
@@ -165,17 +165,9 @@ fn security_type_display_all_variants() {
     }
 }
 
-#[test]
-fn option_security_type_to_field() {
-    let some: Option<SecurityType> = Some(SecurityType::Option);
-    assert_eq!(some.to_field(), "OPT");
-    let none: Option<SecurityType> = None;
-    assert_eq!(none.to_field(), "");
-}
-
 fn assert_cusip_bond(bond: Contract, cusip: &str) {
     assert_eq!(bond.symbol, Symbol::from(cusip));
-    assert_eq!(bond.security_type, SecurityType::Bond);
+    assert_eq!(bond.security_type, Some(SecurityType::Bond));
     assert_eq!(bond.security_id_type, Some(SecurityIdType::Cusip));
     assert_eq!(bond.security_id, cusip);
     assert_eq!(bond.exchange, Exchange::from("SMART"));
@@ -202,7 +194,7 @@ fn assert_isin_currency_mapping(make_bond: impl Fn(&str) -> Contract) {
     for (isin, expected_currency) in cases {
         let bond = make_bond(isin);
         assert_eq!(bond.symbol, Symbol::from(isin), "symbol for {isin}");
-        assert_eq!(bond.security_type, SecurityType::Bond);
+        assert_eq!(bond.security_type, Some(SecurityType::Bond));
         assert_eq!(bond.security_id_type, Some(SecurityIdType::Isin));
         assert_eq!(bond.security_id, isin);
         assert_eq!(bond.exchange, Exchange::from("SMART"));
@@ -313,28 +305,28 @@ fn is_bag() {
     // Using the simple factory method for futures that requires adding expiry
     let futures_contract = Contract {
         symbol: Symbol::from("ES"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         ..Default::default()
     };
     assert!(!futures_contract.is_bag(), "Futures contract should not be a bag");
 
     // Test with a contract that is a bag/spread
     let spread_contract = Contract {
-        security_type: SecurityType::Spread,
+        security_type: Some(SecurityType::Spread),
         ..Default::default()
     };
     assert!(spread_contract.is_bag(), "Spread contract should be a bag");
 
     // Test with an explicitly set BAG security type
     let bag_contract = Contract {
-        security_type: "BAG".parse().unwrap(),
+        security_type: Some("BAG".parse().unwrap()),
         ..Default::default()
     };
     assert!(bag_contract.is_bag(), "BAG contract should be a bag");
 
     // Test with combo legs
     let combo_contract = Contract {
-        security_type: SecurityType::Spread,
+        security_type: Some(SecurityType::Spread),
         combo_legs: vec![
             ComboLeg {
                 contract_id: 12345,
@@ -551,6 +543,21 @@ fn contract_details_json_without_event_contract_fields_deserializes() {
 
     let details: ContractDetails = serde_json::from_value(json).unwrap();
     assert_eq!(details, ContractDetails::default());
+}
+
+/// An unset security type is `null` in JSON; a set one is its wire code, as in 5.x.
+#[test]
+fn contract_json_security_type() {
+    let unset = Contract::default();
+    assert_eq!(unset.security_type, None);
+    let json = serde_json::to_value(&unset).unwrap();
+    assert!(json["security_type"].is_null(), "serialized: {json}");
+    assert_eq!(serde_json::from_value::<Contract>(json).unwrap(), unset);
+
+    let stock = Contract::stock("AAPL").build();
+    let json = serde_json::to_value(&stock).unwrap();
+    assert_eq!(json["security_type"], "STK", "serialized: {json}");
+    assert_eq!(serde_json::from_value::<Contract>(json).unwrap(), stock);
 }
 
 /// `short_sale_slot` keeps the number 5.x wrote, so a 5.x leg still deserializes.

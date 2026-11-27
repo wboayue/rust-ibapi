@@ -6,13 +6,23 @@
 //!
 //! A retry waits for the reconnect the reset announces, up to the caller's
 //! deadline, before its next attempt (the bus refuses sends while the
-//! session is down, so retrying straight away would spend every attempt on a
-//! request that never reaches TWS).
+//! session is down, with `Error::Reconnecting`, so retrying straight away
+//! would spend every attempt on a request that never reaches TWS).
 
 use crate::Error;
 
 /// Default maximum number of retry attempts
 pub const DEFAULT_MAX_RETRIES: u32 = 3;
+
+/// The error a retry ends with. A last attempt refused while reconnecting wrote nothing, but an
+/// earlier attempt that ended in a reset may have reached TWS, so the call as a whole reports
+/// [`Error::ConnectionReset`] rather than claim nothing was sent.
+fn final_error(error: Error, earlier_may_have_sent: bool) -> Error {
+    match error {
+        Error::Reconnecting if earlier_may_have_sent => Error::ConnectionReset,
+        other => other,
+    }
+}
 
 // Sync implementations
 #[cfg(feature = "sync")]
@@ -49,16 +59,19 @@ mod sync_impl {
         F: FnMut() -> Result<T, Error>,
     {
         let mut attempts = 0;
+        let mut earlier_may_have_sent = false;
         loop {
             match operation() {
-                Err(Error::ConnectionReset) if attempts < max_retries => {
+                Err(error) if error.is_session_interrupted() && attempts < max_retries => {
                     attempts += 1;
+                    earlier_may_have_sent |= matches!(error, Error::ConnectionReset);
                     // The send gate refuses a retry until the replacement
                     // connection is ready, so wait for it first.
                     waiter.wait_connected(deadline)?;
                     continue;
                 }
-                other => return other,
+                Err(error) => return Err(final_error(error, earlier_may_have_sent)),
+                ok => return ok,
             }
         }
     }
@@ -113,16 +126,19 @@ mod async_impl {
         Fut: Future<Output = Result<T, Error>>,
     {
         let mut attempts = 0;
+        let mut earlier_may_have_sent = false;
         loop {
             match operation().await {
-                Err(Error::ConnectionReset) if attempts < max_retries => {
+                Err(error) if error.is_session_interrupted() && attempts < max_retries => {
                     attempts += 1;
+                    earlier_may_have_sent |= matches!(error, Error::ConnectionReset);
                     // The send gate refuses a retry until the replacement
                     // connection is ready, so wait for it first.
                     waiter.wait_connected(deadline).await?;
                     continue;
                 }
-                other => return other,
+                Err(error) => return Err(final_error(error, earlier_may_have_sent)),
+                ok => return ok,
             }
         }
     }

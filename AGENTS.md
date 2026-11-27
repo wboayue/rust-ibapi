@@ -73,6 +73,8 @@ precedents.
   [domain module layout](docs/rules/style/domain-module-layout.md); porting a request or field
   from the C# client end to end is the `/add-tws-feature` skill
   ([`.claude/skills/add-tws-feature`](.claude/skills/add-tws-feature/SKILL.md))
+- **Adding a public parameter, return value or field that is an id** →
+  [id parameters](docs/rules/style/id-parameters.md): `impl Into<XId>` in, raw `i32` / `String` out
 - **Writing a public function that takes four or more parameters** →
   [param budget](docs/rules/style/param-budget.md) — clippy's `too_many_arguments` only fires
   at eight, so nothing gates this

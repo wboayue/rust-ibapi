@@ -62,7 +62,7 @@ pub(crate) fn drain_outcome<T>(item: Result<SubscriptionItem<T>, Error>) -> Opti
     match item {
         Ok(_) => None,
         Err(Error::Notice(notice)) => Some(Ok(Drained::Rejected(notice))),
-        Err(e @ (Error::ConnectionReset | Error::Shutdown)) => Some(Err(e)),
+        Err(e) if e.is_session_interrupted() || matches!(e, Error::Shutdown) => Some(Err(e)),
         Err(_) => Some(Ok(Drained::Unconfirmed)),
     }
 }

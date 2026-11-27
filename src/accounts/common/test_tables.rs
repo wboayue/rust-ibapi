@@ -1,7 +1,61 @@
 //! Table-driven test data for accounts module tests
 
-#[allow(unused_imports)]
-use crate::accounts::types::*;
+use crate::accounts::types::{AccountId, ModelCode};
+use crate::accounts::{AccountUpdatesMultiBuilder, PnLBuilder, PnLSingleBuilder, PositionsMultiBuilder};
+use crate::contracts::ContractId;
+
+/// Applies a table row's optional filters through the builders' real setters, the
+/// `if let` a caller holding an `Option` writes.
+pub trait OptionalFilters: Sized {
+    fn with_filters(self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Self;
+}
+
+/// Applies a table row's optional model code through the builder's real setter.
+pub trait OptionalModelCode: Sized {
+    fn with_model_code(self, model_code: Option<&ModelCode>) -> Self;
+}
+
+impl<C> OptionalFilters for PositionsMultiBuilder<'_, C> {
+    fn with_filters(mut self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Self {
+        if let Some(account) = account {
+            self = self.account(account);
+        }
+        if let Some(model_code) = model_code {
+            self = self.model_code(model_code);
+        }
+        self
+    }
+}
+
+impl<C> OptionalFilters for AccountUpdatesMultiBuilder<'_, C> {
+    fn with_filters(mut self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Self {
+        if let Some(account) = account {
+            self = self.account(account);
+        }
+        if let Some(model_code) = model_code {
+            self = self.model_code(model_code);
+        }
+        self
+    }
+}
+
+impl<C> OptionalModelCode for PnLBuilder<'_, C> {
+    fn with_model_code(self, model_code: Option<&ModelCode>) -> Self {
+        match model_code {
+            Some(model_code) => self.model_code(model_code),
+            None => self,
+        }
+    }
+}
+
+impl<C> OptionalModelCode for PnLSingleBuilder<'_, C> {
+    fn with_model_code(self, model_code: Option<&ModelCode>) -> Self {
+        match model_code {
+            Some(model_code) => self.model_code(model_code),
+            None => self,
+        }
+    }
+}
 
 /// Test case for contract ID edge cases
 #[derive(Debug, Clone)]

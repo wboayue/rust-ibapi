@@ -63,7 +63,7 @@ async fn realtime_bars() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     let contract = Contract {
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         local_symbol: "FGBL MAR 23".to_owned(),
@@ -143,7 +143,7 @@ async fn tick_by_tick_all_last() {
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
@@ -208,7 +208,7 @@ async fn tick_by_tick_last() {
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
@@ -264,7 +264,7 @@ async fn tick_by_tick_bid_ask() {
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
@@ -322,7 +322,7 @@ async fn tick_by_tick_midpoint() {
     let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
@@ -406,7 +406,7 @@ async fn market_depth() {
     let client = Client::stubbed(message_bus.clone(), server_versions::SMART_DEPTH);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         last_trade_date_or_contract_month: Some("202303".parse().unwrap()),
@@ -603,7 +603,7 @@ async fn market_data_with_combo_legs() {
 
     let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
     let mut contract = Contract::stock("AAPL").build();
-    contract.security_type = SecurityType::Spread;
+    contract.security_type = Some(SecurityType::Spread);
     contract.combo_legs = vec![ComboLeg {
         contract_id: 12345,
         ratio: 1,
@@ -663,7 +663,7 @@ async fn market_data_regulatory_snapshot() {
     let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         last_trade_date_or_contract_month: Some("202303".parse().unwrap()),

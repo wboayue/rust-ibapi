@@ -9,7 +9,7 @@ triggers:
   - adding a FromStr impl for a wire value
 symbols: [parse_required, parse_optional, FromStr, impl_wire_enum, impl_wire_code, Error::Parse, Unknown]
 related: [proto-only-decoding, fixture-builders, modernize-touched-modules]
-precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233", "#1238", "#1245", "#1253", "#1254", "#1258", "#1261", "#1302", "#1303"]
+precedents: ["#518", "#556", "#558", "#559", "#647", "#774", "#822", "#825", "#829", "#832", "#827", "#855", "#1070", "#1071", "#1180", "#1218", "#1220", "#1222", "#1233", "#1238", "#1245", "#1253", "#1254", "#1258", "#1261", "#1302", "#1303", "#1330"]
 ---
 
 Before typing a `String` field as an enum, **verify the wire actually carries enumerated
@@ -31,8 +31,8 @@ parse_optional::<OptionRight>(proto.right.as_deref())?                  // -> Re
 **Missing input is `Error::Parse`, never `T::default()`** — for a field the wire always carries.
 Where the reference client treats an absent field as unset and still delivers the frame (`tif`,
 #822: `EDecoderUtils` assigns it only if `HasTif`; `sec_type`, #855: `decodeContract` only if
-`HasSecType`), absent or empty decodes to the field's unset value (`Order::default().tif`,
-`SecurityType::Other("")`); only a direct `"".parse()` is `Error::Parse`.
+`HasSecType`), absent or empty decodes to the field's unset value (`Order::default().tif`; `None` for
+`Contract::security_type`, #1330); only a direct `"".parse()` is `Error::Parse`.
 
 **An unrecognized value on a streaming path parses as `Unknown(String)`.** A parse failure there
 terminates the subscription, so a value IBKR adds later must not become an outage: use
@@ -183,3 +183,8 @@ Shipped-outcome ledger: `docs/migration-3.0.md` §5, §9–§12, §23, §29, §3
 - #1233 — counter-example to #1070: `ArticleType` reopened with `Unknown(i32)` on
   `impl_wire_code!`. Decoding closed on a one-shot failed `news_article` and discarded the body;
   the one-shot exception to the open shape is retired.
+- #1330 — revises #855's unset value: an absent `sec_type` decodes to `None` on
+  `Contract::security_type: Option<SecurityType>`, not `Other("")`, and `SecurityType` lost its
+  `Default` (`Stock`), which had made a builder with no type send `STK`. The frame still decodes.
+  Live: TWS resolves a `conId` without a `secType` and rejects a symbol lookup without one (321),
+  so `None` on the wire replaces the default with a loud error.

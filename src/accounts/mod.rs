@@ -10,6 +10,9 @@ pub(crate) mod common;
 // Domain types
 pub mod types;
 
+mod builders;
+pub use builders::{AccountUpdatesMultiBuilder, PnLBuilder, PnLSingleBuilder, PositionsMultiBuilder};
+
 use crate::contracts::Contract;
 use crate::Error;
 use serde::{Deserialize, Serialize};

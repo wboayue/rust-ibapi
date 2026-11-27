@@ -363,7 +363,7 @@ The compiler does not catch the serialized form. `PnL` and `PnLSingle` derive `S
 
 ### 16. `account_updates_multi` takes a `LedgerOnly`
 
-`Client::account_updates_multi` (async and blocking) takes a third argument, `ledger_only: accounts::LedgerOnly`, TWS's `ledgerAndNLV` flag for the account-updates-by-model request. `LedgerOnly::Yes` delivers only the per-currency ledger keys (`CashBalance`, `NetLiquidationByCurrency`, ...), TWS's light-weight request; `LedgerOnly::No` delivers those plus the account-level keys (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). The ledger keys carry a `$LEDGER-` prefix (`$LEDGER-CashBalance`) only when the TWS/Gateway API setting "Prepend '$LEDGER-' prefix to per-currency account values" is on. 5.x always sent `Yes`, so the account-level keys could not be requested.
+`Client::account_updates_multi` (async and blocking) takes `ledger_only: accounts::LedgerOnly`, TWS's `ledgerAndNLV` flag for the account-updates-by-model request. `LedgerOnly::Yes` delivers only the per-currency ledger keys (`CashBalance`, `NetLiquidationByCurrency`, ...), TWS's light-weight request; `LedgerOnly::No` delivers those plus the account-level keys (`NetLiquidation`, `BuyingPower`, `AvailableFunds`, ...). The ledger keys carry a `$LEDGER-` prefix (`$LEDGER-CashBalance`) only when the TWS/Gateway API setting "Prepend '$LEDGER-' prefix to per-currency account values" is on. 5.x always sent `Yes`, so the account-level keys could not be requested.
 
 ```rust,ignore
 use ibapi::accounts::LedgerOnly;
@@ -372,12 +372,12 @@ use ibapi::accounts::LedgerOnly;
 let updates = client.account_updates_multi(Some(&account), None)?;
 
 // 6.0: `LedgerOnly::Yes` keeps the 5.x request
-let updates = client.account_updates_multi(Some(&account), None, LedgerOnly::Yes)?;
+let updates = client.account_updates_multi(LedgerOnly::Yes).account(&account).subscribe()?;
 // or ask for the account-level keys as well
-let updates = client.account_updates_multi(Some(&account), None, LedgerOnly::No)?;
+let updates = client.account_updates_multi(LedgerOnly::No).account(&account).subscribe()?;
 ```
 
-Add the argument. The compiler finds every call that lacks it. It does not choose the value for you, and `LedgerOnly` has no default: pass `Yes` to receive what 5.x received, or `No` to receive the account-level keys as well, as verified against a live gateway (`docs/wire-facts/accounts.md`).
+Add the argument. The compiler finds every call that lacks it. It does not choose the value for you, and `LedgerOnly` has no default: pass `Yes` to receive what 5.x received, or `No` to receive the account-level keys as well, as verified against a live gateway (`docs/wire-facts/accounts.md`). The method also returns a builder now; see §27.
 
 ### 17. `Order::fa_profile`, `basis_points` and `basis_points_type` are removed
 
@@ -615,7 +615,7 @@ bound now returns what it asked for.
 
 The compiler reports every call. Nothing it can check depends on which bound you choose.
 
-### 27. Id parameters take `impl Into<ContractId>` and `impl Into<AccountId>`
+### 27. Ids go in as `impl Into<XId>` and come out raw
 
 These id parameters now accept both the raw value and the typed id:
 
@@ -626,7 +626,7 @@ These id parameters now accept both the raw value and the typed id:
 | `pnl`, `pnl_single`, `account_updates` | `account: &AccountId` | `account: impl Into<AccountId>` |
 | `pnl_single` | `contract_id: ContractId` | `contract_id: impl Into<ContractId>` |
 
-The crate hands back raw ids (`managed_accounts()` returns `String`s, `Contract::contract_id` is an `i32`), yet `pnl*` and `account_updates` accepted only the typed ids, while the other inputs accepted only raw ones. Now either passes to all of them. `positions_multi` and `account_updates_multi` keep `Option<&AccountId>`. `AccountId` gains `From<&String>` and `From<&AccountId>`. What goes on the wire is unchanged.
+The crate hands back raw ids (`managed_accounts()` returns `String`s, `Contract::contract_id` is an `i32`), yet `pnl*` and `account_updates` accepted only the typed ids, while the other inputs accepted only raw ones. Now either passes to all of them. `AccountId` gains `From<&String>` and `From<&AccountId>`. What goes on the wire is unchanged.
 
 Integer literals, `i32`, `ContractId`, `&str`, `String`, `&String`, `AccountId` and `&AccountId` compile as before. Two kinds of argument stop compiling:
 
@@ -644,14 +644,91 @@ let single = client.pnl_single(&AccountId(account.clone()), ContractId(contract.
 let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse()?);
 let order = client.order(&contract).buy(100).market().account(cow);
 
-// 6.0: the 5.x pnl / pnl_single lines still compile; these are the shorter forms
-let pnl = client.pnl(&account, None)?;
-let single = client.pnl_single(&account, contract.contract_id, None)?;
+// 6.0 (`pnl` and `pnl_single` are builders; see below)
+let pnl = client.pnl(&account).subscribe()?;
+let single = client.pnl_single(&account, contract.contract_id).subscribe()?;
 let chain = client.option_chain("AAPL", SecurityType::Stock, field.parse::<i32>()?); // was inferred from i32
 let order = client.order(&contract).buy(100).market().account(cow.into_owned());     // Cow<str> isn't Into<AccountId>
 ```
 
 The compiler reports every call that no longer compiles. Nothing changes at runtime.
+
+#### Optional account and model filters are builder setters
+
+`positions_multi`, `account_updates_multi`, `pnl` and `pnl_single` took `Option<&AccountId>` / `Option<&ModelCode>`. An `Option<impl Into<..>>` parameter would make a bare `None` need a type annotation, so each now returns a builder: the optional filters are setters taking `impl Into<AccountId>` / `impl Into<ModelCode>`, and `subscribe()` sends the request.
+
+| Method (sync and async) | 5.x | 6.0 |
+|---|---|---|
+| `positions_multi` | `(account: Option<&AccountId>, model_code: Option<&ModelCode>)` | `()`, then `.account(..)`, `.model_code(..)`, `.subscribe()` |
+| `account_updates_multi` | `(account: Option<&AccountId>, model_code: Option<&ModelCode>, ledger_only)` | `(ledger_only)`, then `.account(..)`, `.model_code(..)`, `.subscribe()` |
+| `pnl` | `(account, model_code: Option<&ModelCode>)` | `(account)`, then `.model_code(..)`, `.subscribe()` |
+| `pnl_single` | `(account, contract_id, model_code: Option<&ModelCode>)` | `(account, contract_id)`, then `.model_code(..)`, `.subscribe()` |
+
+`LedgerOnly` stays a required argument with no default. The builders are `accounts::{PositionsMultiBuilder, AccountUpdatesMultiBuilder, PnLBuilder, PnLSingleBuilder}`; they are `#[must_use]`, so a call without `.subscribe()` warns. What goes on the wire is unchanged.
+
+```rust,ignore
+// 5.x
+let positions = client.positions_multi(Some(&AccountId(account.clone())), None)?;
+let updates = client.account_updates_multi(Some(&account_id), Some(&model), LedgerOnly::No)?;
+let pnl = client.pnl(&account, None)?;
+let single = client.pnl_single(&account, contract_id, Some(&model))?;
+
+// 6.0
+let positions = client.positions_multi().account(&account).subscribe()?;
+let updates = client.account_updates_multi(LedgerOnly::No).account(&account_id).model_code(&model).subscribe()?;
+let pnl = client.pnl(&account).subscribe()?;
+let single = client.pnl_single(&account, contract_id).model_code(&model).subscribe()?;
+```
+
+Async callers move `.await` from the call to after `subscribe()`. A filter held in an `Option` becomes an `if let` around the setter.
+
+#### Contract ids in contract builders
+
+`ContractBuilder::contract_id` takes `impl Into<ContractId>` instead of `i32`; an `i32` still compiles. The `ButterflyLegs`, `IronCondorLegs` and `CollarLegs` fields are `i32` instead of `ContractId`: drop `.into()` and `ContractId(..)` when filling them from `Contract::contract_id`.
+
+```rust,ignore
+// 5.x
+let legs = ButterflyLegs { lower: lower.contract_id.into(), middle: middle.contract_id.into(), upper: upper.contract_id.into() };
+
+// 6.0
+let legs = ButterflyLegs { lower: lower.contract_id, middle: middle.contract_id, upper: upper.contract_id };
+```
+
+#### Returned order ids are `i32`; `ContractId` moves to `contracts`
+
+Ids the crate returns are raw, as `Order::order_id` and `Contract::contract_id` already were:
+
+| Item (sync and async) | 5.x | 6.0 |
+|---|---|---|
+| `OrderBuilder::submit` | `Result<OrderId, Error>` | `Result<i32, Error>` |
+| `submit_oca_orders` | `Result<Vec<OrderId>, Error>` | `Result<Vec<i32>, Error>` |
+| `BracketOrderIds::{parent, take_profit, stop_loss}` | `OrderId` | `i32` |
+| `BracketOrderIds::as_vec` | `Vec<OrderId>` | `Vec<i32>` |
+| `BracketOrderIds::as_i32_vec` | `Vec<i32>` | removed; use `as_vec` |
+| `AttachedOrderIds::parent` / `stop_loss` / `profit_taker` | `OrderId` / `Option<OrderId>` | `i32` / `Option<i32>` |
+| `ContractId` path | `ibapi::accounts::types::ContractId` | `ibapi::contracts::ContractId` |
+
+Passing a returned id back to an order method compiles as before, since those take `impl Into<OrderId>`. Drop `.0` and `.value()` on the returned ids, and `OrderId` annotations on variables holding them. `ibapi::prelude` exports `ContractId` and now also `OrderId`.
+
+Each id newtype gains the missing conversions: `From<&i32>` on `OrderId` and `ContractId`, `From<ContractId> for i32`, `From<AccountId> for String`, and `From<&String>`, `From<&ModelCode>` and `From<ModelCode> for String` on `ModelCode`.
+
+```rust,ignore
+// 5.x
+use ibapi::accounts::types::ContractId;
+let ids = client.order(&contract).buy(100).bracket().entry_limit(50.0).take_profit(55.0).stop_loss(45.0).submit_all()?;
+let parent: i32 = ids.parent.0;
+let all: Vec<i32> = ids.as_i32_vec();
+let id: OrderId = client.order(&contract).buy(100).market().submit()?;
+
+// 6.0
+use ibapi::contracts::ContractId;
+let ids = client.order(&contract).buy(100).bracket().entry_limit(50.0).take_profit(55.0).stop_loss(45.0).submit_all()?;
+let parent: i32 = ids.parent;
+let all: Vec<i32> = ids.as_vec();
+let id: i32 = client.order(&contract).buy(100).market().submit()?;
+```
+
+Serialized `BracketOrderIds` and `AttachedOrderIds` are unchanged: `OrderId` serialized as its inner integer.
 
 ### 28. `last_trade_date_or_contract_month` holds only the date
 
@@ -1472,7 +1549,155 @@ let spread = legs.fold(Contract::spread(symbol).add_leg(id, action).done(), |spr
 let contract = spread.build()?;
 ```
 
-### 61. 10197 continues a `market_data` subscription
+### 53. `submit_oca_orders` takes the group; OCA and bracket submits check every order first and return `Error::OrdersPartiallySent` if a send fails partway
+
+`submit_oca_orders` (sync and async) takes the group name and OCA type and sets them on every
+order:
+
+| 5.x | 6.0 |
+|---|---|
+| `submit_oca_orders(orders)` | `submit_oca_orders(group: impl Into<String>, oca_type: OcaType, orders)` |
+
+In 5.x the method only numbered the orders. One built without `.oca_group(..)` went out as an
+independent order, with no error. Now a group already on an order is overwritten, and an empty
+group is `Error::Validation`, returned before any order id is allocated.
+
+```rust,ignore
+// 5.x
+let order1 = client.order(&aapl).buy(100).limit(50.0).oca_group("MyOCA", OcaType::CancelWithBlock).build_order()?;
+let order2 = client.order(&msft).buy(100).limit(45.0).oca_group("MyOCA", OcaType::CancelWithBlock).build_order()?;
+let ids = client.submit_oca_orders(vec![(aapl, order1), (msft, order2)])?;
+
+// 6.0
+let order1 = client.order(&aapl).buy(100).limit(50.0).build_order()?;
+let order2 = client.order(&msft).buy(100).limit(45.0).build_order()?;
+let ids = client.submit_oca_orders("MyOCA", OcaType::CancelWithBlock, vec![(aapl, order1), (msft, order2)])?;
+```
+
+`submit_oca_orders` and `BracketOrderBuilder::submit_all` now check and encode every order
+before sending the first. In 5.x they sent one order at a time, so if a later order failed its
+checks (an id at or above 1,500,000,000, an `ext_operator` TWS would reject), the earlier
+orders were already live and the error didn't say so. For a bracket, that left the parent and
+take-profit held at TWS. Those errors now send nothing and keep their types; `submit_all`'s
+signature is unchanged.
+
+Only a transport error can still stop partway. Both methods then return the new
+`Error::OrdersPartiallySent { sent, not_sent, source }` instead of the bare transport error:
+`sent` lists the orders that may be at TWS (the last one's write failed), `not_sent` the ones
+never written, and `source` the transport error. A send refused while the client reconnects
+wrote nothing (§55): its order is in `not_sent`, and when it is the first, the method returns
+`Error::Reconnecting` itself. A `match` on `Error::ConnectionReset` or
+`Error::Io` from these two methods must match the new variant instead;
+`Error::is_connection_lost()` answers for `source`, so a check through it keeps working.
+
+```rust,ignore
+// 5.x
+match result {
+    Err(Error::ConnectionReset) => reconnect_and_check_open_orders(),
+    // ...
+}
+
+// 6.0
+match result {
+    Err(Error::OrdersPartiallySent { sent, .. }) => {
+        client.wait_connected()?;
+        for id in sent {
+            // TWS answers 10147 for one that never arrived; harmless.
+            let _cancellation = client.cancel_order(id)?;
+        }
+    }
+    // ...
+}
+```
+
+Cancel by id rather than by listing: a bracket's parent and take-profit are held until the
+stop-loss transmits, and TWS keeps held orders across a reconnect without listing them in
+`open_orders`. On the async client, dropping the future between sends (a timeout or a `select!`
+branch) also stops partway, and returns no error to carry the ids.
+
+### 54. `Contract::security_type` is `Option<SecurityType>`; `SecurityType` has no `Default`
+
+An unset security type had two spellings. A `Contract` built without one, by
+`Contract::default()` or by a `ContractBuilder` with no `.security_type(..)`, held
+`SecurityType::Stock`, the enum's `Default`, and sent `STK`. A contract TWS sent without a
+`secType` decoded as `SecurityType::Other("")`. Both are now `None`, as for
+`ContractDetails::under_security_type` (§41). `SecurityType` no longer implements `Default`.
+
+```rust,ignore
+// 5.x
+if contract.security_type == SecurityType::Option { /* ... */ }
+let contract = Contract { security_type: SecurityType::Future, ..Default::default() };
+let code = contract.security_type.as_str();
+
+// 6.0
+if contract.security_type == Some(SecurityType::Option) { /* ... */ }
+let contract = Contract { security_type: Some(SecurityType::Future), ..Default::default() };
+let code = contract.security_type.as_ref().map_or("", SecurityType::as_str);
+```
+
+The typed entry points (`Contract::stock`, `Contract::call`, `Contract::futures`, ...) set the
+type as before. The compiler finds every comparison and struct-literal field. It doesn't find
+code that relied on the `Stock` default:
+
+- A `ContractBuilder` chain without `.security_type(..)` that names the contract by symbol or
+  local symbol now fails at `build()` with `Error::InvalidArgument`, since TWS would reject it
+  with error 321 ("Please enter a valid security type"). Set the type, or use `Contract::stock`.
+  A chain identified by `contract_id`, or by `security_id_type` plus `security_id`, still builds
+  without a type and sends none: TWS resolves those contracts from the id (live, server 226).
+- A struct literal that leaves `security_type` to `..Default::default()` now sends no `secType`.
+  For a lookup by symbol, TWS answers with error 321 where 5.x found the stock.
+
+`ContractBuilder::build` also accepts a contract identified only by `security_id_type` plus
+`security_id`, which 5.x rejected for lacking a symbol.
+
+`SecurityType::default()` and `unwrap_or_default()` on an `Option<SecurityType>` no longer
+compile. Write `SecurityType::Stock` where that was the intent.
+
+`Contract` derives `Serialize` / `Deserialize`. An unset field serializes as `null`. A set field
+is the wire code (`"STK"`, §47) as in 5.x, so 5.x JSON with a code still deserializes; one with
+`""` doesn't.
+
+### 55. A request refused while the client reconnects is `Error::Reconnecting`
+
+While the connection is down and the client reconnects, every request is refused before anything
+is written. Before 6.0 that refusal was `Error::ConnectionReset`, the same error a write cut off by
+the dropped connection returns, so a caller couldn't tell "not sent" from "may have been sent".
+It is now the new `Error::Reconnecting`:
+
+| Error | Means |
+|---|---|
+| `Error::Reconnecting` | refused before the write while the client reconnects; nothing reached TWS |
+| `Error::ConnectionReset` | the connection dropped: a stream or one-shot open at the time, or a write it cut off, which may have reached TWS |
+
+`is_connection_lost()` and `is_unsent()` both return `true` for `Reconnecting`, so code that
+branches through `is_connection_lost()` (wait with `wait_connected`, then retry or resubscribe)
+needs no change. A `match` on `Error::ConnectionReset` for a request call must also match
+`Error::Reconnecting`:
+
+```rust,ignore
+// before
+match client.submit_order(order_id, &contract, &order) {
+    Err(Error::ConnectionReset) => { /* sent or not? query open orders */ }
+    // ...
+}
+
+// 6.0
+match client.submit_order(order_id, &contract, &order) {
+    Err(Error::Reconnecting) => { /* not sent: wait_connected, then resend */ }
+    Err(Error::ConnectionReset) => { /* may have been sent: query open orders */ }
+    // ...
+}
+```
+
+One-shot requests (`server_time`, `managed_accounts`, `historical_data`, ...) retry on either
+error. A last attempt refused after an earlier attempt may have been written still returns
+`ConnectionReset`, since the earlier one may have reached TWS. Streams that were open when the
+connection dropped still end with `ConnectionReset`. `submit_oca_orders` and `submit_all` return
+`Reconnecting` when their first send is refused, and otherwise list a refused order in
+`OrdersPartiallySent::not_sent` (§53). Refusals after the reconnect gives up
+(`ConnectionFailed`) or after a shutdown (`Shutdown`) are unchanged.
+
+### 56. 10197 continues a `market_data` subscription
 
 During an internet outage TWS sends error 10197 ("No market data during competing live session")
 on a `reqMktData` request and keeps the request: its ticks resume on the same request id once the
@@ -1501,7 +1726,7 @@ The compiler catches none of this. Code that stopped or re-requested on `Err` fo
 notice instead; `iter_data` and `filter_data` drop it. A snapshot reads on after 10197 too, and
 no run showed whether TWS still sends its `SnapshotEnd` then; `snapshot_once` bounds the wait.
 
-### 62. `resubscribing` reopens a stream after 1101
+### 57. `resubscribing` reopens a stream after 1101
 
 TWS sends 1101 ("connectivity restored, data lost") when its link to IB returns and it no longer
 serves the requests opened before the loss. 5.x `Client::resubscribing` did nothing on 1101:

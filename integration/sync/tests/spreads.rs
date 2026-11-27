@@ -92,9 +92,9 @@ fn spread_presets_accepted_by_what_if() {
         (
             "butterfly",
             spread().butterfly(ButterflyLegs {
-                lower: calls[&k[1]].into(),
-                middle: calls[&k[2]].into(),
-                upper: calls[&k[3]].into(),
+                lower: calls[&k[1]],
+                middle: calls[&k[2]],
+                upper: calls[&k[3]],
             }),
             price / 2.0,
         ),
@@ -102,10 +102,10 @@ fn spread_presets_accepted_by_what_if() {
         (
             "iron_condor",
             spread().iron_condor(IronCondorLegs {
-                long_put: puts[&k[0]].into(),
-                short_put: puts[&k[1]].into(),
-                short_call: calls[&k[3]].into(),
-                long_call: calls[&k[4]].into(),
+                long_put: puts[&k[0]],
+                short_put: puts[&k[1]],
+                short_call: calls[&k[3]],
+                long_call: calls[&k[4]],
             }),
             -price,
         ),
@@ -114,9 +114,9 @@ fn spread_presets_accepted_by_what_if() {
         (
             "collar",
             spread().collar(CollarLegs {
-                stock: stock.into(),
-                put: puts[&k[1]].into(),
-                call: calls[&k[3]].into(),
+                stock,
+                put: puts[&k[1]],
+                call: calls[&k[3]],
                 shares_per_contract: SHARES,
             }),
             f64::from(SHARES) * dollars(k[2]),

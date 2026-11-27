@@ -46,6 +46,12 @@ impl From<&AccountId> for AccountId {
     }
 }
 
+impl From<AccountId> for String {
+    fn from(id: AccountId) -> Self {
+        id.0
+    }
+}
+
 /// Model code identifier
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -77,31 +83,23 @@ impl From<&str> for ModelCode {
     }
 }
 
-/// Contract identifier
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ContractId(pub i32);
-
-impl ContractId {
-    /// Get the inner value
-    pub fn value(&self) -> i32 {
-        self.0
+impl From<&String> for ModelCode {
+    fn from(s: &String) -> Self {
+        Self(s.clone())
     }
 }
 
-impl fmt::Display for ContractId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+impl From<&ModelCode> for ModelCode {
+    fn from(code: &ModelCode) -> Self {
+        code.clone()
     }
 }
 
-impl From<i32> for ContractId {
-    fn from(id: i32) -> Self {
-        Self(id)
+impl From<ModelCode> for String {
+    fn from(code: ModelCode) -> Self {
+        code.0
     }
 }
-
-// pub struct ModelCode(pub String);
 
 /// Account group for filtering
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

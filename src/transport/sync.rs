@@ -420,7 +420,7 @@ impl<S: Stream> TcpMessageBus<S> {
 
     /// The send gate: every bus-originated write checks here first, and is
     /// refused unless the session is live and not shutting down - with
-    /// `Error::ConnectionReset` while a reconnect may still bring it back,
+    /// `Error::Reconnecting` while a reconnect may still bring it back,
     /// `Error::ConnectionFailed` once the reconnect gave up, and
     /// `Error::Shutdown` after a shutdown, so a caller can tell "wait" from
     /// "stop".
@@ -479,7 +479,7 @@ impl<S: Stream> TcpMessageBus<S> {
             Ok(guard) => guard,
             // Poison recovery, as `common::lock`: the guard holds nothing.
             Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
-            Err(TryLockError::WouldBlock) => return Err(self.ended_reason(Error::ConnectionReset)),
+            Err(TryLockError::WouldBlock) => return Err(self.ended_reason(Error::Reconnecting)),
         };
         self.ensure_connected()?;
         self.connection.write_message(message, deadline)

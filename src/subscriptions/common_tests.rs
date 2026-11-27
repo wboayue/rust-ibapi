@@ -307,6 +307,19 @@ fn cancel_frame_covers_each_cancel_outcome() {
     assert!(cancel_frame::<OptionChain>(&context, Some(9000)).is_none());
 }
 
+/// Draining stops on a session that is down: a reset ended the request with the session, and a
+/// cancel refused while reconnecting, or after a shutdown, never reached TWS.
+#[test]
+fn drain_outcome_stops_on_a_session_that_is_down() {
+    for error in [Error::ConnectionReset, Error::Reconnecting, Error::Shutdown] {
+        let expected = error.to_string();
+        match drain_outcome::<()>(Err(error)) {
+            Some(Err(e)) => assert_eq!(e.to_string(), expected),
+            other => panic!("{expected}: expected the error back, got {other:?}"),
+        }
+    }
+}
+
 /// Only the historical bar decoders read on after 10299: TWS sends their series anyway. Another
 /// terminal code still ends them, and other decoders still end on 10299.
 #[test]

@@ -28,7 +28,7 @@ use time::macros::{date, datetime};
 fn test_contract() -> Contract {
     Contract {
         symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         last_trade_date_or_contract_month: Some("202303".parse().unwrap()),

@@ -24,11 +24,22 @@ fn encode_contract_sends_expiry_as_wire_text() {
 }
 
 #[test]
+fn encode_contract_omits_unset_or_empty_sec_type() {
+    for security_type in [None, Some(SecurityType::Other(String::new()))] {
+        let contract = Contract {
+            security_type,
+            ..Default::default()
+        };
+        assert_eq!(encode_contract(&contract).sec_type, None);
+    }
+}
+
+#[test]
 fn encode_contract_basic() {
     let contract = Contract {
         contract_id: 265598,
         symbol: Symbol::from("AAPL"),
-        security_type: SecurityType::Stock,
+        security_type: Some(SecurityType::Stock),
         exchange: Exchange::from("SMART"),
         primary_exchange: Exchange::from("NASDAQ"),
         currency: Currency::from("USD"),
