@@ -251,6 +251,32 @@ fn borrowed_lookup_distinguishes_unavailable_replies_and_terminal_open_rows() {
 }
 
 #[test]
+fn borrowed_lookup_requires_an_active_open_status() {
+    use OrderEvidenceMatch::*;
+    let completed = [detail(7, 13, "DU1", 913, OrderStatusKind::Cancelled)];
+    for status in ["ApiPending", "FutureStatus"] {
+        let open = [detail(7, 13, "DU1", 913, status.parse().unwrap())];
+        let open = OrderRows::Complete(&open);
+        assert_eq!(
+            OrderEvidence {
+                open,
+                completed: OrderRows::Complete(&[])
+            }
+            .lookup(BY_ID, None),
+            Incomplete
+        );
+        assert_eq!(
+            OrderEvidence {
+                open,
+                completed: OrderRows::Complete(&completed)
+            }
+            .lookup(BY_ID, None),
+            Finished(&completed[0])
+        );
+    }
+}
+
+#[test]
 fn borrowed_lookup_distinguishes_reused_api_ids_and_allows_repeated_permanent_id() {
     use OrderEvidenceMatch::*;
     use OrderStatusKind::*;

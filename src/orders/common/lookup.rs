@@ -155,7 +155,7 @@ pub struct OrderEvidence<'a> {
 /// The result of looking up an order in the available replies.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum OrderEvidenceMatch<'a> {
-    /// The last matching open-order row has a nonterminal status.
+    /// The last matching open-order row has an active status.
     Working(&'a OrderData),
     /// The last matching completed-order row has a terminal status.
     Finished(&'a OrderData),
@@ -176,10 +176,13 @@ impl<'a> OrderEvidence<'a> {
     ///
     /// A working row in a complete open reply can establish a match without a completed
     /// reply. If both replies are available, a conflicting positive permanent ID makes
-    /// the lookup ambiguous. Otherwise the working row takes precedence. Terminal open
-    /// rows require a completed row before this lookup reports `Finished`.
+    /// the lookup ambiguous. Otherwise the working row takes precedence. A matching open
+    /// row without an active status requires a completed row before the lookup reports
+    /// `Finished`. `ApiPending` and unrecognized status strings do not establish `Working`.
     ///
-    /// The lookup uses order-detail rows. It does not read separate status or execution rows.
+    /// The lookup uses order-detail rows. Pass `Unavailable` if a reply includes only a tail,
+    /// even if that tail ends with a reply marker. Separate statuses and executions are not
+    /// part of this view.
     /// An order can leave open orders before appearing in completed orders. For fill or delivery
     /// decisions reconcile additional evidence.
     ///
@@ -214,7 +217,7 @@ impl<'a> OrderEvidence<'a> {
             OrderRows::Unavailable => None,
         };
         match (open, completed) {
-            (Some(row), _) if !row.order_state.status.is_terminal() => Working(row),
+            (Some(row), _) if row.order_state.status.is_active() => Working(row),
             (_, Some(row)) if row.order_state.status.is_terminal() => Finished(row),
             (None, None) if matches!(self.completed, OrderRows::Complete(_)) => Absent,
             _ => Incomplete,
