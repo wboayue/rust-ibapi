@@ -817,7 +817,7 @@ impl FromStr for WhatToShow {
             "FEE_RATE" => Ok(Self::FeeRate),
             "SCHEDULE" => Ok(Self::Schedule),
             "ADJUSTED_LAST" => Ok(Self::AdjustedLast),
-            _ => Err(invalid_input("WhatToShow", s, "unknown data type")),
+            _ => Err(invalid_input("WhatToShow", s, "expected a wire code such as TRADES or BID_ASK")),
         }
     }
 }

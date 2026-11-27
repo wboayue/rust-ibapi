@@ -30,7 +30,7 @@ macro_rules! impl_str_partial_eq {
     };
 }
 
-/// Generate `Display` / `FromStr<Err = Error>` / `ToField` impls from
+/// Generate `Display` / `FromStr` / `ToField` impls from
 /// hand-written `as_str(&self) -> &'static str` + `from_wire(&str) -> Option<Self>`
 /// methods. The data tables stay in normal Rust (visible to goto-def); only
 /// the boilerplate plumbing — `Display` via `as_str`, `FromStr` via `from_wire`
@@ -65,6 +65,11 @@ macro_rules! impl_str_partial_eq {
 /// with this macro must not derive `Serialize`, `Deserialize` or `ToSchema`;
 /// the impls would conflict.
 ///
+/// The `caller_input` form (`impl_wire_enum!(X as "Schema", caller_input { .. })`) is for a closed
+/// enum no decoder reads, only caller text, such as realtime `WhatToShow`: its `FromStr` returns
+/// `ValidationError::InvalidField` (field = the type name), the error for correctable input, rather
+/// than `Error::Parse`, the decode error (`docs/rules/style/validation-vs-invalid-argument.md`).
+///
 /// The `$name, integer { .. }` form is for a closed enum whose wire value is an
 /// integer code but whose `as_str` table spells it as text (`FaDataType`,
 /// `ServerLogLevel`): serde and the utoipa schema use the integer, read back
@@ -84,6 +89,20 @@ macro_rules! impl_wire_enum {
     };
     ($name:ident as $schema:literal { $($v:ident),+ $(,)? }) => {
         impl_wire_enum!(@closed $name);
+        impl_wire_string_serde!($name as $schema { $($v),+ });
+    };
+    ($name:ident as $schema:literal, caller_input { $($v:ident),+ $(,)? }) => {
+        impl_wire_enum!(@common $name);
+        impl ::std::str::FromStr for $name {
+            type Err = $crate::builder::ValidationError;
+            fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
+                Self::from_wire(s).ok_or_else(|| $crate::builder::ValidationError::InvalidField {
+                    field: stringify!($name),
+                    value: s.to_owned(),
+                    reason: if s.is_empty() { "empty".to_owned() } else { "unknown value".to_owned() },
+                })
+            }
+        }
         impl_wire_string_serde!($name as $schema { $($v),+ });
     };
     ($name:ident, integer { $($v:ident),+ $(,)? }) => {

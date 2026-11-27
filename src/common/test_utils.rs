@@ -493,13 +493,8 @@ pub mod wire_enum {
     /// Serde is the bare wire string both ways.
     pub fn check_wire_enum_round_trip<T>(table: &[(T, &'static str)])
     where
-        T: std::fmt::Display
-            + std::fmt::Debug
-            + PartialEq
-            + std::str::FromStr<Err = crate::Error>
-            + crate::ToField
-            + serde::Serialize
-            + serde::de::DeserializeOwned,
+        T: std::fmt::Display + std::fmt::Debug + PartialEq + std::str::FromStr + crate::ToField + serde::Serialize + serde::de::DeserializeOwned,
+        T::Err: std::fmt::Debug,
     {
         for (variant, wire) in table {
             assert_eq!(variant.to_string(), *wire, "Display for {variant:?}");

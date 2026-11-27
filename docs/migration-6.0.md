@@ -1258,9 +1258,12 @@ Err(Error::ServerVersion { required, actual, feature }) => { /* ... */ }
 ```
 
 `market_data::historical::HistoricalParseError` and `Error::HistoricalParseError` are removed.
-`FromStr` for `BarSize`, `Duration` and historical `WhatToShow` returns
+`FromStr` for `BarSize`, `Duration` and historical and realtime `WhatToShow` returns
 `ibapi::builder::ValidationError::InvalidField { field, value, reason }`, with the type name
-(`"Duration"`) in `field` and the input in `value`: the text is caller input, not a TWS reply. A
+(`"Duration"`) in `field` and the input in `value`: the text is caller input, not a TWS reply.
+Its `Display` reads `Invalid Duration "1 X": unit is not S, D, W, M or Y` (5.x: `Invalid
+Duration input '1 X' Unsupported unit`) and `Invalid BarSize "bogus": expected wire text such as
+"5 mins" or a variant name such as MIN5` (5.x: `Invalid BarSize input 'bogus'`). A
 `?` on one of them in a function returning `ibapi::Error` still compiles, as `Error::Validation`.
 Replace any match on `HistoricalParseError::BarSize(..)`, `Duration`, `WhatToShow` or
 `ParseIntError` with `ValidationError::InvalidField { value, reason, .. }`. `ValidationError`
@@ -1275,8 +1278,6 @@ that matches on the text would see:
 | Missing required enum field | `parse error: 0 -  - missing action` | `parse error: action: missing` |
 | Missing required submessage | `parse error: 0 - contract - missing in Position` | `parse error: contract: missing in Position` |
 | `"XYZ".parse::<Action>()` | `parse error: 0 - XYZ - unknown Action` | `parse error: "XYZ": unknown Action` |
-| `"bogus".parse::<BarSize>()` | `Invalid BarSize input 'bogus'` | `Invalid BarSize "bogus": expected wire text such as "5 mins" or a variant name such as MIN5` |
-| `"1 X".parse::<Duration>()` | `Invalid Duration input '1 X' Unsupported unit` | `Invalid Duration "1 X": unit is not S, D, W, M or Y` |
 
 `ServerVersion`'s `Display` is unchanged.
 

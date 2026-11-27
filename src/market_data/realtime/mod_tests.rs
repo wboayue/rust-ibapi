@@ -30,7 +30,8 @@ fn depth_side_round_trips_every_wire_code() {
 
 #[test]
 fn what_to_show_round_trip() {
-    use crate::common::test_utils::wire_enum::{check_wire_enum_rejects_unknown, check_wire_enum_round_trip};
+    use crate::builder::ValidationError;
+    use crate::common::test_utils::wire_enum::check_wire_enum_round_trip;
 
     check_wire_enum_round_trip(&[
         (WhatToShow::Trades, "TRADES"),
@@ -40,8 +41,20 @@ fn what_to_show_round_trip() {
         (WhatToShow::AggTrades, "AGGTRADES"),
     ]);
     // Historical-only codes and the variant name are not realtime wire values, and matching is
-    // case-sensitive (the historical `WhatToShow` is not).
-    check_wire_enum_rejects_unknown::<WhatToShow>(&["", "BID_ASK", "MidPoint", "trades"]);
+    // case-sensitive (the historical `WhatToShow` is not). Caller input, so `ValidationError`.
+    for (input, reason) in [
+        ("", "empty"),
+        ("BID_ASK", "unknown value"),
+        ("MidPoint", "unknown value"),
+        ("trades", "unknown value"),
+    ] {
+        let expected = ValidationError::InvalidField {
+            field: "WhatToShow",
+            value: input.to_owned(),
+            reason: reason.to_owned(),
+        };
+        assert_eq!(input.parse::<WhatToShow>(), Err(expected), "{input:?}");
+    }
 }
 
 /// Only 317 becomes `Reset`; other notices on a depth stream, including the

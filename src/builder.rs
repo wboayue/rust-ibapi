@@ -75,15 +75,15 @@ pub enum ValidationError {
         /// Maximum allowed value.
         max: f64,
     },
-    /// A field on a caller-built value holds something TWS rejects, such as
-    /// `Order::ext_operator`.
+    /// A caller-supplied value, or a field of one, that TWS would reject: `Order::ext_operator`,
+    /// or text parsed into a request parameter such as a `Duration`.
     InvalidField {
         /// The field, as `Type::field`, or the type name when a whole value was parsed from text
         /// (`"Duration"`).
         field: &'static str,
         /// The rejected value.
         value: String,
-        /// What TWS accepts.
+        /// Why it was rejected, or what is accepted.
         reason: String,
     },
     /// Not a real date or contract month in the expected form.

@@ -183,7 +183,7 @@ fn parameter_parse_errors_name_the_input() {
         ),
         (
             "invalid".parse::<WhatToShow>().unwrap_err(),
-            r#"Invalid WhatToShow "invalid": unknown data type"#,
+            r#"Invalid WhatToShow "invalid": expected a wire code such as TRADES or BID_ASK"#,
         ),
         (
             "1 X".parse::<Duration>().unwrap_err(),
