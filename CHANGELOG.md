@@ -97,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `ContractBuilder::build` accepts a future with no contract month, and an option or futures option with no strike, right or expiry, when a non-zero `contract_id` or a `local_symbol` identifies the contract; TWS resolves those. A contract named by symbol still needs them (#1353).
 - `Client::resubscribing` (sync and async) ends after a market data snapshot's `TickTypes::SnapshotEnd`, as its docs said. Previously it kept waiting on a snapshot TWS had finished, and a later reconnect sent the snapshot request again. The same holds for `historical_data(..).subscribe()`, which it now accepts, after `End` (#1246).
 - Code 10349 "Order TIF was set to DAY based on order preset" is a `NoticeCategory::Warning` on any order. TWS goes on with the order after it. It arrives on every `exercise_options` request, where it ended the subscription with an error before the exercise's open order and executions arrived. It now arrives as a notice and the subscription keeps reading (#1210).
 
