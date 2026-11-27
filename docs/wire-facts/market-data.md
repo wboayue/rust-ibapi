@@ -369,12 +369,12 @@ Reported downstream the same day: a 3-minute recording with 10 rows.*
 *Live 2026-11-25 19:12-19:16 UTC, paper TWS, server 223; one request at a time. ES `CONTFUT`
 reported downstream the same day.*
 
-| Request | Time | Bars |
-| ------- | ---- | ---- |
-| EUR.USD MIDPOINT, 1-minute bars, 30 D | 102.8 s | 42,583 |
-| EUR.USD MIDPOINT, 1-hour bars, 5 Y | 138.0 s | 31,072 |
+| Request                                               | Time    | Bars   |
+| ----------------------------------------------------- | ------- | ------ |
+| EUR.USD MIDPOINT, 1-minute bars, 30 D                 | 102.8 s | 42,583 |
+| EUR.USD MIDPOINT, 1-hour bars, 5 Y                    | 138.0 s | 31,072 |
 | ES `CONTFUT` TRADES, 1-minute bars, 30 D (downstream) | 107.6 s | 40,877 |
-| ES `CONTFUT` TRADES, 1-hour bars, 5 Y (downstream) | 161.8 s | 16,121 |
+| ES `CONTFUT` TRADES, 1-hour bars, 5 Y (downstream)    | 161.8 s | 16,121 |
 
 - Inferred from the times, not run: a `one_shot_timeout` of 60 s would end each of these with
   `Error::Timeout` before the bars arrive. Size the timeout to the longest request, or split the

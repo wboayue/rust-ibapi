@@ -133,12 +133,12 @@ connectivity flaps; #1209 (`FARM_CODES`, `Notice::data_farm` in `src/messages/no
 
 *Live 2026-11-24 23:06 to 2026-11-25 06:19 UTC, paper TWS, server 223; ended by a TWS restart.*
 
-| Request | During the stall | After the restart (06:21) |
-| ------- | ---------------- | ------------------------- |
-| `contract_details` OPT 700 SEHK | 23:06: no reply, no error in 170 s | 139 rows in 1 s |
-| `completed_orders` (`api_only` true and false) | 23:09-23:10: nothing in 10 s, three times | 8 orders at once |
+| Request                                                                   | During the stall                                                                                | After the restart (06:21)    |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------- |
+| `contract_details` OPT 700 SEHK                                           | 23:06: no reply, no error in 170 s                                                              | 139 rows in 1 s              |
+| `completed_orders` (`api_only` true and false)                            | 23:09-23:10: nothing in 10 s, three times                                                       | 8 orders at once             |
 | `historical_data`, keep-up-to-date or not (700 SEHK, HSI future, EUR.USD) | from 00:55: no batch, no update, no error, on new connections too, checked 10 times until 06:19 | batch and updates within 1 s |
-| `reqMktData`, `realtime_bars`, orders and cancels | answered throughout | answered |
+| `reqMktData`, `realtime_bars`, orders and cancels                         | answered throughout                                                                             | answered                     |
 
 - The N225 historical request at 23:30 still answered, so the historical service stopped
   between 23:30 and 00:55. At 00:56:40-00:57:51 the farm notices reported `usfuture`, `ushmds`,

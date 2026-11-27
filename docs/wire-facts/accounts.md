@@ -87,14 +87,14 @@ Positions, PnL and account updates by model. End-marker behavior for account str
 *Live 2026-11-24 21:45-22:10 UTC (US closed), paper TWS, server 223; `positions`,
 `executions` with an empty filter, and order replies.*
 
-| Frame | `contract.exchange` | `contract.primaryExchange` |
-| ----- | ------------------- | -------------------------- |
-| Position, AAPL options (3 contracts) | `AMEX` | empty |
-| Position, AAPL and MSFT stock | `NASDAQ` | empty |
-| Position, SPY | `ARCA` | empty |
-| Position, ES future and futures options | `CME` | empty |
-| Execution (129 of the day's) | the executing venue: `IEX`, `IBKRATS`, `ARCA` for AAPL stock; `MX2`, `BOX`, `PHLX`, `ISE`, `EDGX` for AAPL options | empty |
-| OpenOrder echo | the exchange the order was sent with: `SMART` for AAPL, VOD and 7203; `SEHK`, `HKFE` when sent there | as sent |
+| Frame                                   | `contract.exchange`                                                                                                | `contract.primaryExchange` |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------- |
+| Position, AAPL options (3 contracts)    | `AMEX`                                                                                                             | empty                      |
+| Position, AAPL and MSFT stock           | `NASDAQ`                                                                                                           | empty                      |
+| Position, SPY                           | `ARCA`                                                                                                             | empty                      |
+| Position, ES future and futures options | `CME`                                                                                                              | empty                      |
+| Execution (129 of the day's)            | the executing venue: `IEX`, `IBKRATS`, `ARCA` for AAPL stock; `MX2`, `BOX`, `PHLX`, `ISE`, `EDGX` for AAPL options | empty                      |
+| OpenOrder echo                          | the exchange the order was sent with: `SMART` for AAPL, VOD and 7203; `SEHK`, `HKFE` when sent there               | as sent                    |
 
 - A position names a listing exchange, not where the position traded: AAPL options came back
   with `AMEX` whatever venue filled them, stocks with their primary listing in `exchange` and an
