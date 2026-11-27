@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
+use crate::builder::ValidationError;
 use crate::common::error_helpers;
 use crate::common::request_helpers::CancellableOneShot;
 use crate::messages::{IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE};
@@ -271,8 +272,19 @@ impl Display for BarSize {
     }
 }
 
+/// The rejection for a historical request parameter parsed from caller text. These parsers read
+/// only caller input (TWS never sends a bar size, duration or data type back), so a bad value is
+/// correctable data, not a decode failure.
+fn invalid_input(type_name: &'static str, value: &str, reason: impl Into<String>) -> ValidationError {
+    ValidationError::InvalidField {
+        field: type_name,
+        value: value.to_owned(),
+        reason: reason.into(),
+    }
+}
+
 impl FromStr for BarSize {
-    type Err = Error;
+    type Err = ValidationError;
 
     /// Case-insensitive: the wire text (`"5 mins"`) or the variant name (`"MIN5"`).
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -299,7 +311,11 @@ impl FromStr for BarSize {
             "1 DAY" | "DAY" => Ok(Self::Day),
             "1 WEEK" | "WEEK" => Ok(Self::Week),
             "1 MONTH" | "MONTH" => Ok(Self::Month),
-            _ => Err(Error::invalid_value(s, "unknown BarSize")),
+            _ => Err(invalid_input(
+                "BarSize",
+                s,
+                "expected wire text such as \"5 mins\" or a variant name such as MIN5",
+            )),
         }
     }
 }
@@ -388,26 +404,26 @@ impl Display for Duration {
 }
 
 impl FromStr for Duration {
-    type Err = Error;
-    fn from_str(val: &str) -> Result<Self, Error> {
+    type Err = ValidationError;
+    fn from_str(val: &str) -> Result<Self, ValidationError> {
         if val.is_empty() {
-            return Err(Error::invalid_value(val, "empty Duration"));
+            return Err(invalid_input("Duration", val, "empty"));
         }
         match val.to_uppercase().rsplit_once(' ') {
             Some((value_part, unit_part)) => {
                 let value = value_part
                     .parse::<i32>()
-                    .map_err(|e| Error::invalid_value(val, format!("Duration count: {e}")))?;
+                    .map_err(|e| invalid_input("Duration", val, format!("count: {e}")))?;
                 match unit_part {
                     "S" => Ok(Self::seconds(value)),
                     "D" => Ok(Self::days(value)),
                     "W" => Ok(Self::weeks(value)),
                     "M" => Ok(Self::months(value)),
                     "Y" => Ok(Self::years(value)),
-                    _ => Err(Error::invalid_value(val, "Duration unit is not S, D, W, M or Y")),
+                    _ => Err(invalid_input("Duration", val, "unit is not S, D, W, M or Y")),
                 }
             }
-            None => Err(Error::invalid_value(val, "Duration needs a space between count and unit")),
+            None => Err(invalid_input("Duration", val, "needs a space between count and unit")),
         }
     }
 }
@@ -786,7 +802,7 @@ impl std::fmt::Display for WhatToShow {
 }
 
 impl FromStr for WhatToShow {
-    type Err = Error;
+    type Err = ValidationError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
@@ -801,7 +817,7 @@ impl FromStr for WhatToShow {
             "FEE_RATE" => Ok(Self::FeeRate),
             "SCHEDULE" => Ok(Self::Schedule),
             "ADJUSTED_LAST" => Ok(Self::AdjustedLast),
-            _ => Err(Error::invalid_value(s, "unknown WhatToShow")),
+            _ => Err(invalid_input("WhatToShow", s, "expected a wire code such as TRADES or BID_ASK")),
         }
     }
 }

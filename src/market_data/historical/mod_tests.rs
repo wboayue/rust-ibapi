@@ -158,38 +158,36 @@ fn duration_parse() {
     assert_eq!("4 M".parse::<Duration>().unwrap(), Duration::months(4));
     assert_eq!("5 Y".parse::<Duration>().unwrap(), Duration::years(5));
 
-    // Each rejection is an `Error::Parse` carrying the whole input.
+    // Each rejection is a `ValidationError::InvalidField` carrying the whole input.
     for (input, reason) in [
-        ("", "empty Duration"),
-        ("1S", "Duration needs a space between count and unit"),
-        ("1 X", "Duration unit is not S, D, W, M or Y"),
-        ("abc S", "Duration count: invalid digit found in string"),
+        ("", "empty"),
+        ("1S", "needs a space between count and unit"),
+        ("1 X", "unit is not S, D, W, M or Y"),
+        ("abc S", "count: invalid digit found in string"),
     ] {
-        match input.parse::<Duration>() {
-            Err(Error::Parse {
-                field: None,
-                value,
-                reason: got,
-            }) => {
-                assert_eq!(value, input, "{input:?}");
-                assert_eq!(got, reason, "{input:?}");
-            }
-            other => panic!("{input:?}: expected Error::Parse, got {other:?}"),
-        }
+        let expected = ValidationError::InvalidField {
+            field: "Duration",
+            value: input.to_owned(),
+            reason: reason.to_owned(),
+        };
+        assert_eq!(input.parse::<Duration>(), Err(expected), "{input:?}");
     }
 }
 
 #[test]
 fn parameter_parse_errors_name_the_input() {
     let cases = [
-        ("invalid".parse::<BarSize>().unwrap_err(), r#"parse error: "invalid": unknown BarSize"#),
+        (
+            "invalid".parse::<BarSize>().unwrap_err(),
+            r#"Invalid BarSize "invalid": expected wire text such as "5 mins" or a variant name such as MIN5"#,
+        ),
         (
             "invalid".parse::<WhatToShow>().unwrap_err(),
-            r#"parse error: "invalid": unknown WhatToShow"#,
+            r#"Invalid WhatToShow "invalid": expected a wire code such as TRADES or BID_ASK"#,
         ),
         (
             "1 X".parse::<Duration>().unwrap_err(),
-            r#"parse error: "1 X": Duration unit is not S, D, W, M or Y"#,
+            r#"Invalid Duration "1 X": unit is not S, D, W, M or Y"#,
         ),
     ];
     for (error, expected) in cases {

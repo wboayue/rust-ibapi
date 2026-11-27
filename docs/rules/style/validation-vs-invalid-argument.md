@@ -9,7 +9,7 @@ triggers:
   - about to write Error::InvalidArgument(format!(..))
 symbols: [Error::Validation, Error::InvalidArgument, ValidationError, ibapi::builder]
 related: [builder-enum-coverage, param-budget]
-precedents: ["#1169", "#1249"]
+precedents: ["#1169", "#1249", "#1331"]
 ---
 
 Ask who fixes it. A runtime value a caller may correct (a quantity, price or strike, a date from
@@ -22,10 +22,16 @@ conflicting `historical_data` settings, bad client config, `buffer_limit(0)`) is
 Add a `ValidationError` variant rather than formatting a value into a string. If the type
 already carries type parameters, prefer typestate to either error.
 
+`Error::Parse` is for text that came from TWS: decoders, and the `impl_wire_enum!` and
+`BarTimestamp` parsers they call. A `FromStr` whose text comes from the caller returns
+`ValidationError`: `Duration`, `BarSize`, historical `WhatToShow`, and realtime `WhatToShow`
+through the `impl_wire_enum!` `caller_input` form. Use that form for a new wire enum no decoder
+reads. The expiry types return `ValidationError` too, though `Expiry::from_wire` also parses TWS
+text with them: it turns a failure into `Expiry::Unknown`, so no decode error surfaces.
+`ValidationError` is `#[non_exhaustive]`, so a new variant is not a breaking change.
+
 Not yet aligned, tracked in #1328: the order builders still return
-`ValidationError::MissingRequiredField` for a missing field, and the wire-vocabulary parsers
-(`Duration`, `BarSize`, `WhatToShow`, `impl_wire_enum!` types) return `Error::Parse`, the error
-decoding uses. Don't copy either pattern into new code.
+`ValidationError::MissingRequiredField` for a missing field. Don't copy it into new code.
 
 ## Why
 
@@ -57,3 +63,8 @@ type parameters.
   zero / NaN strikes it used to pass. Review caught that zero was over-reach: TWS reads
   strike 0 as unset and resolves the contract from its id (`docs/wire-facts/contracts.md`),
   so zero still passes with a `contract_id` or `local_symbol`.
+- #1331 — `Duration`, `BarSize` and historical and realtime `WhatToShow` `FromStr` moved from
+  `Error::Parse` to `ValidationError::InvalidField`: no decoder calls them, so the text is always
+  caller input. Review caught realtime `WhatToShow`, which shares the wire-enum macro but is never
+  decoded; the macro gained a `caller_input` form for it. The decoded wire enums stayed on
+  `Error::Parse`. `ValidationError` became `#[non_exhaustive]`.
