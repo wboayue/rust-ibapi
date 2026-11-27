@@ -214,7 +214,7 @@ pub(crate) fn assert_exercise_live_items(items: &[SubscriptionItem<PlaceOrder>],
     let SubscriptionItem::Data(PlaceOrder::ExecutionData(underlying)) = &items[2] else {
         unreachable!()
     };
-    assert_eq!(underlying.contract.security_type, SecurityType::Stock);
+    assert_eq!(underlying.contract.security_type, Some(SecurityType::Stock));
     assert_eq!(underlying.execution.shares, 100.0);
     assert_eq!(underlying.execution.price, EXERCISE_STRIKE);
     assert_eq!(underlying.execution.option_exercise_type, OptionExerciseType::Exercise);
@@ -227,7 +227,7 @@ pub(crate) fn assert_exercise_live_items(items: &[SubscriptionItem<PlaceOrder>],
     let SubscriptionItem::Data(PlaceOrder::ExecutionData(option)) = &items[5] else {
         unreachable!()
     };
-    assert_eq!(option.contract.security_type, SecurityType::Option);
+    assert_eq!(option.contract.security_type, Some(SecurityType::Option));
     assert_eq!(option.execution.shares, 1.0);
     assert_eq!(option.execution.option_exercise_type, OptionExerciseType::Exercise);
 

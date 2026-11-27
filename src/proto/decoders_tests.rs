@@ -268,7 +268,7 @@ fn decode_contract_propagates_bad_combo_leg() {
 // === decode_contract sec_type ===
 
 #[test]
-fn decode_contract_reads_missing_or_empty_sec_type_as_other_empty() {
+fn decode_contract_reads_missing_or_empty_sec_type_as_none() {
     // Upstream sets SecType only `if (HasSecType)` and still delivers the
     // frame, so absence is an unset field, not a malformed frame. Requiring it
     // would end every stream carrying a contract (see #840).
@@ -278,7 +278,7 @@ fn decode_contract_reads_missing_or_empty_sec_type_as_other_empty() {
             ..Default::default()
         };
         let contract = decode_contract(&proto_contract).unwrap();
-        assert_eq!(contract.security_type, crate::contracts::SecurityType::Other(String::new()));
+        assert_eq!(contract.security_type, None);
     }
 }
 
@@ -289,7 +289,7 @@ fn decode_contract_preserves_unknown_sec_type() {
         ..Default::default()
     };
     let contract = decode_contract(&proto_contract).unwrap();
-    assert_eq!(contract.security_type, crate::contracts::SecurityType::Other("NOTASECTYPE".into()));
+    assert_eq!(contract.security_type, Some(crate::contracts::SecurityType::Other("NOTASECTYPE".into())));
 }
 
 #[test]
@@ -321,7 +321,7 @@ fn decode_contract_types_last_trade_date_or_contract_month() {
 }
 
 /// A `proto::Contract` carrying a `sec_type`, for tests that are not about the
-/// `Other("")` fallback above.
+/// absent `sec_type` above.
 fn stk_contract() -> proto::Contract {
     proto::Contract {
         sec_type: Some("STK".into()),

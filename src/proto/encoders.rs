@@ -84,7 +84,7 @@ pub fn encode_contract_with_order(contract: &Contract, order: Option<&Order>) ->
     proto::Contract {
         con_id: some_i32_ne(contract.contract_id, 0),
         symbol: some_str(&contract.symbol.to_string()),
-        sec_type: some_str(&contract.security_type.to_string()),
+        sec_type: contract.security_type.as_ref().and_then(|t| some_str(t.as_str())),
         last_trade_date_or_contract_month: contract
             .last_trade_date_or_contract_month
             .as_ref()

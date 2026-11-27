@@ -91,8 +91,8 @@ Order: types → message ids → registration → encoder → decoder → sync �
   "set only when" conditions exactly.
 - **Field typing** ([wire enum typing](../../../docs/rules/wire/enum-typing.md)):
   - Required (`Error::Parse` when absent) only if C# drops the frame, or a default would
-    fabricate a plausible wrong value. Otherwise tolerate: `Option`, or an open enum's
-    `Unknown`/`Other("")`. A decode error ends a long-lived stream.
+    fabricate a plausible wrong value. Otherwise tolerate: `Option` for absent, an open
+    enum's `Unknown`/`Other` for an unrecognized value. A decode error ends a long-lived stream.
   - Enum only after the fixtures or C# show a fixed vocabulary; on a streaming path, open
     (`fallback Unknown`).
 - **Public API shape**: three parameters or fewer, else a builder

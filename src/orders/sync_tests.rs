@@ -55,7 +55,7 @@ fn place_order() {
 
     let contract = Contract {
         symbol: Symbol::from("TSLA"),
-        security_type: SecurityType::Stock,
+        security_type: Some(SecurityType::Stock),
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
         ..Contract::default()
@@ -390,7 +390,7 @@ fn completed_orders() {
     let results = results.unwrap();
     if let Some(Ok(Orders::OrderData(order_data))) = results.next_data() {
         assert_eq!(order_data.contract.symbol, Symbol::from("AAPL"), "contract.symbol");
-        assert_eq!(order_data.contract.security_type, SecurityType::Stock, "contract.security_type");
+        assert_eq!(order_data.contract.security_type, Some(SecurityType::Stock), "contract.security_type");
         assert_eq!(order_data.order.action, Action::Buy, "order.action");
         assert_eq!(order_data.order.total_quantity, 0.0, "order.total_quantity");
         assert_eq!(order_data.order.trail_stop_price, Some(150.25), "order.trail_stop_price");
@@ -507,7 +507,7 @@ fn encode_limit_order() {
 
     let order_id = 12;
     let contract = Contract {
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("EUREX"),
         currency: Currency::from("EUR"),
         local_symbol: "FGBL MAR 23".to_owned(),
@@ -552,7 +552,7 @@ fn encode_combo_market_order() {
 
         Contract {
             symbol: Symbol::from("WTI"), // WTI,COIL spread. Symbol can be defined as first leg symbol ("WTI") or currency ("USD").
-            security_type: SecurityType::Spread,
+            security_type: Some(SecurityType::Spread),
             currency: Currency::from("USD"),
             exchange: Exchange::from("SMART"),
             combo_legs: vec![leg_1, leg_2],
@@ -594,7 +594,7 @@ fn exercise_options() {
 
     let contract = Contract {
         symbol: Symbol::from("ES"),
-        security_type: SecurityType::FuturesOption,
+        security_type: Some(SecurityType::FuturesOption),
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
         last_trade_date_or_contract_month: Some("20250919".parse().unwrap()),
@@ -652,7 +652,7 @@ fn submit_order() {
 
     let contract = Contract {
         symbol: Symbol::from("AAPL"),
-        security_type: SecurityType::Stock,
+        security_type: Some(SecurityType::Stock),
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
         ..Contract::default()
@@ -820,13 +820,13 @@ fn order_update_stream_survives_unknown_sec_type() {
 
     match stream.next_data() {
         Some(Ok(OrderUpdate::OpenOrder(o))) => {
-            assert_eq!(o.contract.security_type, SecurityType::Other("NOTASECTYPE".into()));
+            assert_eq!(o.contract.security_type, Some(SecurityType::Other("NOTASECTYPE".into())));
         }
         other => panic!("expected OpenOrder with Other sec_type, got {other:?}"),
     }
     match stream.next_data() {
         Some(Ok(OrderUpdate::OpenOrder(o))) => {
-            assert_eq!(o.contract.security_type, SecurityType::Stock);
+            assert_eq!(o.contract.security_type, Some(SecurityType::Stock));
         }
         other => panic!("stream did not survive the unknown sec_type, got {other:?}"),
     }

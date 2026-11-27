@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // SPY calls for one expiry month two months out: hundreds of rows. Read the first few, then stop.
     let contract = Contract {
         symbol: Symbol::from("SPY"),
-        security_type: SecurityType::Option,
+        security_type: Some(SecurityType::Option),
         exchange: Exchange::from("SMART"),
         currency: Currency::from("USD"),
         last_trade_date_or_contract_month: Some(contract_month_from_now(2).into()),

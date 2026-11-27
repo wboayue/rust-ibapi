@@ -1612,3 +1612,39 @@ Cancel by id rather than by listing: a bracket's parent and take-profit are held
 stop-loss transmits, and TWS keeps held orders across a reconnect without listing them in
 `open_orders`. On the async client, dropping the future between sends (a timeout or a `select!`
 branch) also stops partway, and returns no error to carry the ids.
+
+### 54. `Contract::security_type` is `Option<SecurityType>`; `SecurityType` has no `Default`
+
+An unset security type had two spellings. A `Contract` built without one, by
+`Contract::default()` or by a `ContractBuilder` with no `.security_type(..)`, held
+`SecurityType::Stock`, the enum's `Default`, and sent `STK`. A contract TWS sent without a
+`secType` decoded as `SecurityType::Other("")`. Both are now `None`, as for
+`ContractDetails::under_security_type` (§41). `SecurityType` no longer implements `Default`.
+
+```rust,ignore
+// 5.x
+if contract.security_type == SecurityType::Option { /* ... */ }
+let contract = Contract { security_type: SecurityType::Future, ..Default::default() };
+let code = contract.security_type.as_str();
+
+// 6.0
+if contract.security_type == Some(SecurityType::Option) { /* ... */ }
+let contract = Contract { security_type: Some(SecurityType::Future), ..Default::default() };
+let code = contract.security_type.as_ref().map_or("", SecurityType::as_str);
+```
+
+The typed entry points (`Contract::stock`, `Contract::call`, `Contract::futures`, ...) set the
+type as before. The compiler finds every comparison and struct-literal field. It doesn't find
+code that relied on the `Stock` default: a struct literal that leaves `security_type` to
+`..Default::default()`, or a builder chain without `.security_type(..)`, now sends no `secType`.
+For a lookup by symbol, TWS answers that with error 321 ("Please enter a valid security type")
+where 5.x found the stock: set the type, or use `Contract::stock`. A lookup by `contract_id`
+works either way; for contract details and head timestamps TWS takes the type from the id
+(live, server 226).
+
+`SecurityType::default()` and `unwrap_or_default()` on an `Option<SecurityType>` no longer
+compile. Write `SecurityType::Stock` where that was the intent.
+
+`Contract` derives `Serialize` / `Deserialize`. An unset field serializes as `null`. A set field
+is the wire code (`"STK"`, §47) as in 5.x, so 5.x JSON with a code still deserializes; one with
+`""` doesn't.
