@@ -428,6 +428,97 @@ impl Error {
         }
     }
 
+    /// Returns `true` only for errors raised by a check before anything was written, so the
+    /// request certainly did not reach TWS. `false` means it may have: an order call must then ask
+    /// TWS (open orders, executions, the order update stream) what became of it. Some `false`
+    /// errors also come before any write (see [`ConnectionReset`](Error::ConnectionReset) below),
+    /// so `false` is "unknown", not "sent".
+    ///
+    /// Written for the calls that place, modify, cancel or exercise orders: `place_order`,
+    /// `submit_order`, `cancel_order`, `cancel_order_with`, `global_cancel`, `global_cancel_with`,
+    /// the order builder's `submit` and `analyze`, and `exercise_options`. Each runs its checks,
+    /// then encodes, then writes the request once; only the write can fail after bytes left. The
+    /// classification holds for any other call too: no `true` variant is raised after a write.
+    ///
+    /// `true` for the errors only pre-write checks raise:
+    ///
+    /// | Variant | Raised by |
+    /// |---|---|
+    /// | [`Validation`](Error::Validation) | a value check: an order builder's inputs, an `ext_operator` TWS would reject |
+    /// | [`InvalidArgument`](Error::InvalidArgument) | a caller-bug check before the write |
+    /// | [`OrderIdInRequestRange`](Error::OrderIdInRequestRange) | an order id at or above the request-id range |
+    /// | [`ServerVersion`](Error::ServerVersion) | an order field the connected server does not support |
+    /// | [`AlreadySubscribed`](Error::AlreadySubscribed) | a second order update stream (not an order call), which writes nothing |
+    /// | [`AccountUpdatesInUse`](Error::AccountUpdatesInUse) | the account-updates slot check (not an order call), before the request is written |
+    ///
+    /// `false` for every other variant, including those raised both before and after a write:
+    ///
+    /// - [`ConnectionReset`](Error::ConnectionReset) refuses a request while the client
+    ///   reconnects, but is also what a write cut off by a dropped connection returns, when part
+    ///   of the frame may have gone out.
+    /// - [`ConnectionFailed`](Error::ConnectionFailed), [`Shutdown`](Error::Shutdown) and
+    ///   [`Timeout`](Error::Timeout) refuse a request up front, but a closed socket fails a
+    ///   pending write with `Shutdown`, and a one-shot request retried after a reset returns
+    ///   them once its first attempt was written.
+    /// - [`Io`](Error::Io) is a failed socket write.
+    /// - [`Notice`](Error::Notice) and the decode, parse and stream variants report what TWS
+    ///   sent back, so the request was sent.
+    /// - [`OrdersPartiallySent`](Error::OrdersPartiallySent) reports a multi-order submit that
+    ///   stopped partway; its `sent` orders may be at TWS. It is `false` whatever its `source`
+    ///   is, since `sent` always holds at least the order whose write failed.
+    ///
+    /// The bracket builder's `submit_all` and `submit_oca_orders` check every order before
+    /// sending any, so a `true` error from them means none of their orders was sent; a send
+    /// failing partway returns `OrdersPartiallySent`. `next_valid_order_id` returns
+    /// `OrderIdInRequestRange` for an id TWS sent back, after its id request was written; that
+    /// request places nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::Error;
+    ///
+    /// fn report(err: &Error) -> &'static str {
+    ///     if err.is_unsent() {
+    ///         "not sent"
+    ///     } else {
+    ///         "unknown: query the order"
+    ///     }
+    /// }
+    ///
+    /// assert_eq!(report(&Error::InvalidArgument("buffer_limit must be above zero".into())), "not sent");
+    /// assert_eq!(report(&Error::ConnectionReset), "unknown: query the order");
+    /// ```
+    pub fn is_unsent(&self) -> bool {
+        match self {
+            Error::Validation(_)
+            | Error::InvalidArgument(_)
+            | Error::OrderIdInRequestRange { .. }
+            | Error::ServerVersion { .. }
+            | Error::AlreadySubscribed
+            | Error::AccountUpdatesInUse { .. } => true,
+            Error::Io(_)
+            | Error::ParseTime(_)
+            | Error::Parse { .. }
+            | Error::ConnectionFailed
+            | Error::ConnectionRejected(_)
+            | Error::ClientIdInUse { .. }
+            | Error::UnsupportedTimeZone(_)
+            | Error::ConnectionReset
+            | Error::Cancelled
+            | Error::Shutdown
+            | Error::UnexpectedResponse(_)
+            | Error::UnexpectedWireFormat(_)
+            | Error::UnexpectedEndOfStream
+            | Error::Timeout
+            | Error::BufferLimitExceeded { .. }
+            | Error::InvalidFrame(_)
+            | Error::Notice(_)
+            | Error::ProtobufDecode(_)
+            | Error::OrdersPartiallySent { .. } => false,
+        }
+    }
+
     /// Returns `true` if a read timed out before any byte of the next frame
     /// arrived, which both dispatchers treat as "nothing yet" rather than a
     /// failure — the socket is fine and the next poll continues. A timeout
