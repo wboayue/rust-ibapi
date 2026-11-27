@@ -221,6 +221,26 @@ pub enum Error {
         order_id: i32,
     },
 
+    /// A multi-order submit (`submit_oca_orders`, a bracket's `submit_all`) stopped partway
+    /// because sending one order failed with `source`. Every order passed its checks before the
+    /// first was sent, so `source` is a transport error, such as [`Error::ConnectionReset`].
+    ///
+    /// The orders in `sent` may be at TWS: the ones written before the failure, and last, the one
+    /// whose write failed, which may still have arrived. Cancel them by id after reconnecting with
+    /// the same client id; a cancel for one that never arrived draws error 10147 and does nothing.
+    /// A bracket's parent and take-profit are held at TWS until the stop-loss transmits, and
+    /// `open_orders` doesn't list held orders, so their ids are the only way to reach them. The
+    /// orders in `not_sent` were never written. Both lists are in submit order.
+    #[error("{} of {} orders may have been sent before the submit stopped: {source}", .sent.len(), .sent.len() + .not_sent.len())]
+    OrdersPartiallySent {
+        /// Ids of the orders that may be at TWS, in submit order; the last one's write failed.
+        sent: Vec<i32>,
+        /// Ids of the orders never written, in submit order.
+        not_sent: Vec<i32>,
+        /// The send failure that stopped the submit.
+        source: Box<Error>,
+    },
+
     /// Failed to decode a protobuf message. The decode detail is in
     /// `Display`; [`source`](std::error::Error::source) is `None`.
     #[error("protobuf decode error: {0}")]
@@ -356,6 +376,8 @@ impl Error {
     /// before resubscribing: it returns once the session is back, or with
     /// `ConnectionFailed` / `Shutdown` if it never will be.
     ///
+    /// [`Error::OrdersPartiallySent`] answers for the send failure it wraps.
+    ///
     /// # Examples
     ///
     /// In a subscription read loop, branch on this predicate to decide whether to
@@ -386,6 +408,7 @@ impl Error {
                 ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe
             ),
             Error::ConnectionReset | Error::InvalidFrame(_) => true,
+            Error::OrdersPartiallySent { source, .. } => source.is_connection_lost(),
             _ => false,
         }
     }
@@ -451,6 +474,11 @@ impl Clone for Error {
             },
             Error::OrderIdInRequestRange { order_id } => Error::OrderIdInRequestRange { order_id: *order_id },
             Error::ProtobufDecode(e) => Error::ProtobufDecode(e.clone()),
+            Error::OrdersPartiallySent { sent, not_sent, source } => Error::OrdersPartiallySent {
+                sent: sent.clone(),
+                not_sent: not_sent.clone(),
+                source: source.clone(),
+            },
         }
     }
 }

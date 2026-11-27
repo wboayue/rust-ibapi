@@ -65,11 +65,11 @@ impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// field the connected server doesn't support. None of these sends anything: all three
     /// orders are checked and encoded before the first is sent.
     ///
-    /// Only a transport error stops partway. The parent and take-profit sent before it are held
-    /// at TWS (they transmit with the stop-loss). After a reconnect with the same client id TWS
-    /// still holds them without listing them in `open_orders`; only `cancel_order` with their ids
-    /// reaches them, and the error doesn't carry the ids (live: 2026-11-27, paper Gateway,
-    /// server 226).
+    /// Only a transport error stops partway, and returns [`Error::OrdersPartiallySent`] with the
+    /// ids of the legs that may be at TWS. A parent and take-profit sent before the stop-loss are
+    /// held there (they transmit with it). After a reconnect with the same client id TWS still
+    /// holds them without listing them in `open_orders`, so cancel them with `cancel_order` and
+    /// the error's `sent` ids (live: 2026-11-27, paper Gateway, server 226).
     pub fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let ClientBound { client, contract } = self.parent_builder.target;
         let (orders, ids) = self.build_with_ids(|| client.next_order_id())?;

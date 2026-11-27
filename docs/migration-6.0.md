@@ -1581,10 +1581,33 @@ orders were already live and the error didn't say so. For a bracket, that left t
 take-profit held at TWS. Those errors now send nothing; the signatures of `submit_all` and the
 error types are unchanged.
 
-Only a transport error can still stop partway, or, on the async client, dropping the future
-between sends (a timeout or a `select!` branch). The orders sent before that may be at TWS.
-After a reconnect with the same client id, `open_orders` lists the OCA orders, unless one was
-built with `transmit` false. A bracket's parent and take-profit are held until the stop-loss
-transmits, and TWS keeps held orders across that reconnect without listing them in
-`open_orders`; only `cancel_order` with their ids reaches them, and the error doesn't carry the
-ids yet ([#1338](https://github.com/wboayue/rust-ibapi/issues/1338)).
+Only a transport error can still stop partway. Both methods then return the new
+`Error::OrdersPartiallySent { sent, not_sent, source }` instead of the bare transport error:
+`sent` lists the orders that may be at TWS (the last one's write failed), `not_sent` the ones
+never written, and `source` the transport error. A `match` on `Error::ConnectionReset` or
+`Error::Io` from these two methods must match the new variant instead;
+`Error::is_connection_lost()` answers for `source`, so a check through it keeps working.
+
+```rust,ignore
+// 5.x
+match result {
+    Err(Error::ConnectionReset) => reconnect_and_check_open_orders(),
+    // ...
+}
+
+// 6.0
+match result {
+    Err(Error::OrdersPartiallySent { sent, .. }) => {
+        client.wait_connected()?;
+        for id in sent {
+            client.cancel_order(id)?; // 10147 for one that never arrived
+        }
+    }
+    // ...
+}
+```
+
+Cancel by id rather than by listing: a bracket's parent and take-profit are held until the
+stop-loss transmits, and TWS keeps held orders across a reconnect without listing them in
+`open_orders`. On the async client, dropping the future between sends (a timeout or a `select!`
+branch) also stops partway, and returns no error to carry the ids.
