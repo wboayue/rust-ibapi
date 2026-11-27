@@ -885,31 +885,6 @@ pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: Oc
     oca_orders
 }
 
-/// `orders` for `submit_oca_orders` (sync and async): each numbered from
-/// `next_id` and put in `oca_group` with `oca_type`, as [`one_cancels_all`] does, overwriting a
-/// group already set. An empty `oca_group` is [`ValidationError::InvalidField`], returned before
-/// any id is taken: without a group TWS treats the orders as independent.
-pub(crate) fn number_oca_orders(
-    oca_group: String,
-    oca_type: OcaType,
-    mut orders: Vec<(crate::contracts::Contract, Order)>,
-    mut next_id: impl FnMut() -> i32,
-) -> Result<Vec<(crate::contracts::Contract, Order)>, ValidationError> {
-    if oca_group.is_empty() {
-        return Err(ValidationError::InvalidField {
-            field: "Order::oca_group",
-            value: oca_group,
-            reason: "an OCA group needs a name".into(),
-        });
-    }
-    for (_, order) in &mut orders {
-        order.order_id = next_id();
-        order.oca_group = oca_group.clone();
-        order.oca_type = oca_type;
-    }
-    Ok(orders)
-}
-
 /// Specific to US options, investors are able to create and enter Volatility-type orders for options and combinations rather than price orders.
 /// Option traders may wish to trade and position for movements in the price of the option determined by its implied volatility. Because
 /// implied volatility is a key determinant of the premium on an option, traders position in specific contract months in an effort to take

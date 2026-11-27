@@ -3,13 +3,15 @@ use crate::builder::ValidationError;
 use crate::client::id_generator::ClientIdManager;
 use crate::contracts::Contract;
 use crate::orders::OrderId;
-use crate::orders::{Order, OrderCancel};
+use crate::orders::{OcaType, Order, OrderCancel};
 use crate::protocol::{check_version, ProtocolFeature};
 use crate::{server_versions, Error};
 
 /// Checks `order_id` and `order` for sending, then reserves every id the order uses: ids the
 /// client allocates afterwards (`next_order_id`, the order builder's `submit`,
-/// `exercise_options`) start past them. Nothing is reserved when a check fails. The one entry
+/// `exercise_options`) start past them. Nothing is reserved for `order` when one of its checks
+/// fails; in a batch ([`prepare_place_orders`]) the orders checked before it stay reserved,
+/// which is harmless, since their ids came from the client's generator. The one entry
 /// point for an order id from the caller; every place-order path reaches it through
 /// [`prepare_place_order`].
 pub(crate) fn verify_and_reserve_order_ids(ids: &ClientIdManager, server_version: i32, order_id: OrderId, order: &Order) -> Result<OrderId, Error> {
@@ -21,8 +23,8 @@ pub(crate) fn verify_and_reserve_order_ids(ids: &ClientIdManager, server_version
 }
 
 /// [`verify_and_reserve_order_ids`], then encodes the place-order request: the checked id and
-/// the bytes to send. `place_order`, `submit_order` and the batch submits (sync and async) all
-/// call it; a batch prepares every order before sending any, so a failed check sends nothing.
+/// the bytes to send. `place_order` calls it directly; every other place-order path goes through
+/// [`prepare_place_orders`].
 pub(crate) fn prepare_place_order(
     ids: &ClientIdManager,
     server_version: i32,
@@ -33,6 +35,47 @@ pub(crate) fn prepare_place_order(
     let order_id = verify_and_reserve_order_ids(ids, server_version, order_id, order)?;
     let request = encoders::encode_place_order(order_id.value(), contract, order)?;
     Ok((order_id, request))
+}
+
+/// The place-order requests for a batch, each order under the id paired with it, prepared with
+/// [`prepare_place_order`]. Every order is checked and encoded before the caller sends the
+/// first, so an order that fails sends nothing; only sending can then stop partway. `submit_order`
+/// and the OCA and bracket submits (sync and async) send through this.
+pub(crate) fn prepare_place_orders<'a>(
+    ids: &ClientIdManager,
+    server_version: i32,
+    orders: impl IntoIterator<Item = (OrderId, &'a Contract, &'a Order)>,
+) -> Result<Vec<Vec<u8>>, Error> {
+    orders
+        .into_iter()
+        .map(|(order_id, contract, order)| prepare_place_order(ids, server_version, order_id, contract, order).map(|(_, request)| request))
+        .collect()
+}
+
+/// Numbers each order from `next_id` and puts it in `oca_group` with `oca_type`, overwriting a
+/// group already set: the orders for `submit_oca_orders` (sync and async). An empty `oca_group`
+/// is [`ValidationError::InvalidField`], returned before any id is taken, since without a group
+/// TWS treats the orders as independent. A group of only whitespace is sent as given: what TWS
+/// does with it is unprobed.
+pub(crate) fn number_oca_orders(
+    oca_group: String,
+    oca_type: OcaType,
+    mut orders: Vec<(Contract, Order)>,
+    mut next_id: impl FnMut() -> i32,
+) -> Result<Vec<(Contract, Order)>, ValidationError> {
+    if oca_group.is_empty() {
+        return Err(ValidationError::InvalidField {
+            field: "Order::oca_group",
+            value: oca_group,
+            reason: "an OCA group needs a name".into(),
+        });
+    }
+    for (_, order) in &mut orders {
+        order.order_id = next_id();
+        order.oca_group = oca_group.clone();
+        order.oca_type = oca_type;
+    }
+    Ok(orders)
 }
 
 /// The order ids `order` carries besides its own: the preset attached-order ids, which TWS

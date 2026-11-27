@@ -86,11 +86,13 @@ impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
     /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
     /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if an allocated id reaches
-    /// 1,500,000,000 (reserved for request ids). None of these sends anything: all three orders
-    /// are checked and encoded before the first is sent.
+    /// 1,500,000,000 (reserved for request ids); [`Error::ServerVersion`] if the order sets a
+    /// field the connected server doesn't support. None of these sends anything: all three
+    /// orders are checked and encoded before the first is sent.
     ///
-    /// Only a transport error stops partway. The parent and take-profit sent before it are held
-    /// at TWS (they transmit with the stop-loss), and TWS keeps held orders across a reconnect
+    /// Only a transport error, or dropping the returned future (a timeout, a `select!` branch),
+    /// stops partway. The parent and take-profit sent before that are held at TWS (they transmit
+    /// with the stop-loss). After a reconnect with the same client id TWS still holds them
     /// without listing them in `open_orders`; only `cancel_order` with their ids reaches them,
     /// and the error doesn't carry the ids (live: 2026-11-27, paper Gateway, server 226).
     ///

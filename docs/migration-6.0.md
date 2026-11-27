@@ -1540,9 +1540,10 @@ orders were already live and the error didn't say so. For a bracket, that left t
 take-profit held at TWS. Those errors now send nothing; the signatures of `submit_all` and the
 error types are unchanged.
 
-Only a transport error can still stop partway, and the orders sent before it may be at TWS. OCA
-orders are transmitted, so `open_orders` lists them after a reconnect. A bracket's parent and
-take-profit are held until the stop-loss transmits, and TWS keeps held orders across a
-reconnect without listing them in `open_orders`; only `cancel_order` with their ids reaches
-them, and the error doesn't carry the ids yet
-([#1338](https://github.com/wboayue/rust-ibapi/issues/1338)).
+Only a transport error can still stop partway, or, on the async client, dropping the future
+between sends (a timeout or a `select!` branch). The orders sent before that may be at TWS.
+After a reconnect with the same client id, `open_orders` lists the OCA orders, unless one was
+built with `transmit` false. A bracket's parent and take-profit are held until the stop-loss
+transmits, and TWS keeps held orders across that reconnect without listing them in
+`open_orders`; only `cancel_order` with their ids reaches them, and the error doesn't carry the
+ids yet ([#1338](https://github.com/wboayue/rust-ibapi/issues/1338)).

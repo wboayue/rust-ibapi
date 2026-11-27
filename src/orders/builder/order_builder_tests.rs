@@ -1827,6 +1827,50 @@ fn preset_legs_consume_no_ids_for_an_invalid_parent() {
     assert_eq!(calls, 0);
 }
 
+#[test]
+fn bracket_legs_take_ids_after_the_parent_and_point_at_it() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let (orders, ids) = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(55.0)
+        .stop_loss(45.0)
+        .build_with_ids(counter(100))
+        .expect("valid bracket");
+
+    assert_eq!((ids.parent, ids.take_profit, ids.stop_loss), (100, 101, 102));
+    assert_eq!(orders.iter().map(|o| o.order_id).collect::<Vec<_>>(), vec![100, 101, 102]);
+    assert_eq!(orders.iter().map(|o| o.parent_id).collect::<Vec<_>>(), vec![0, 100, 100]);
+    assert_eq!(orders.iter().map(|o| o.transmit).collect::<Vec<_>>(), vec![false, false, true]);
+}
+
+#[test]
+fn bracket_consumes_no_ids_for_an_invalid_leg() {
+    let client = MockClient;
+    let contract = create_test_contract();
+    let mut calls = 0;
+
+    let result = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(f64::NAN)
+        .stop_loss(45.0)
+        .build_with_ids(|| {
+            calls += 1;
+            calls
+        });
+
+    assert!(
+        matches!(result, Err(Error::Validation(ValidationError::InvalidPrice(_)))),
+        "got {result:?}"
+    );
+    assert_eq!(calls, 0);
+}
+
 // === Order::builder() (detached) ===
 
 #[test]

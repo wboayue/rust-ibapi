@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::common::fill::{completed_status, lists_order, lookup_wait, FillTracker};
-use super::common::{decoders, encoders, order_builder, verify};
+use super::common::{decoders, encoders, verify};
 use super::{
     ApiOnly, AutoBind, CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OcaType, OrderBuilder, OrderCancel,
     OrderOutcome, OrderStatus, OrderUpdate, Orders, PlaceOrder,
@@ -494,16 +494,11 @@ impl Client {
         self.submit_orders([(order_id.into(), contract, order)])
     }
 
-    /// Sends a batch of orders, each under the id paired with it. Every order is checked and encoded
-    /// before the first is sent, so a check that fails sends nothing; once sending starts only a
-    /// transport error stops it, with the earlier orders already sent.
+    /// Sends a batch of orders, each under the id paired with it, after
+    /// [`verify::prepare_place_orders`] has checked and encoded all of them. Only a transport
+    /// error stops the send loop, with the earlier orders already sent.
     pub(crate) fn submit_orders<'a>(&self, orders: impl IntoIterator<Item = (OrderId, &'a Contract, &'a super::Order)>) -> Result<(), Error> {
-        let requests = orders
-            .into_iter()
-            .map(|(order_id, contract, order)| {
-                verify::prepare_place_order(self.id_manager(), self.server_version(), order_id, contract, order).map(|(_, request)| request)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let requests = verify::prepare_place_orders(self.id_manager(), self.server_version(), orders)?;
         for request in requests {
             self.send_message(request)?;
         }
@@ -518,15 +513,17 @@ impl Client {
     /// the order of `orders`.
     ///
     /// # Errors
-    /// Nothing is sent when any of these fail:
+    /// Nothing is sent when one of these fails, for any order:
     /// - [`Error::Validation`] if `group` is empty, before any id is allocated, or for an
     ///   order's [`ext_operator`](crate::orders::Order::ext_operator) TWS would reject.
     /// - [`Error::OrderIdInRequestRange`] if an allocated id, or a `parent_id` or preset
     ///   attached-order id on an order, is at or above 1,500,000,000 (reserved for request ids).
+    /// - [`Error::ServerVersion`] if an order sets a field the connected server doesn't support.
     ///
     /// Every order is checked and encoded before the first is sent, so only a transport error
-    /// stops partway. The orders sent before it may be live at TWS, and the error doesn't say
-    /// which: list them with [`open_orders`](Client::open_orders) after reconnecting.
+    /// stops partway. The orders sent before it may be at TWS, and the error doesn't say which:
+    /// after reconnecting with the same client id, [`open_orders`](Client::open_orders) lists
+    /// them, unless an order was built with `transmit` false, which TWS holds without listing.
     ///
     /// # Examples
     ///
@@ -548,7 +545,7 @@ impl Client {
     ///     .expect("OCA submission failed");
     /// ```
     pub fn submit_oca_orders(&self, group: impl Into<String>, oca_type: OcaType, orders: Vec<(Contract, super::Order)>) -> Result<Vec<i32>, Error> {
-        let orders = order_builder::number_oca_orders(group.into(), oca_type, orders, || self.next_order_id())?;
+        let orders = verify::number_oca_orders(group.into(), oca_type, orders, || self.next_order_id())?;
         self.submit_orders(orders.iter().map(|(contract, order)| (OrderId::from(order.order_id), contract, order)))?;
         Ok(orders.iter().map(|(_, order)| order.order_id).collect())
     }
