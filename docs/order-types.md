@@ -1493,9 +1493,14 @@ println!("Commission: {}", analysis.commission_and_fees);
 
 ## Error Handling
 
-The fluent API validates orders at build time:
+An order needs a side (`buy`, `sell`, ...) and an order type (`market`, `limit`, ...). The builder tracks both in its type, so `build()`, `submit()` and `analyze()` without either don't compile; the same goes for a bracket without its entry, take-profit or stop-loss, and `exercise_options` without `exercise` or `lapse`.
+
+Values are checked at build time:
 
 ```rust
+use ibapi::builder::ValidationError;
+use ibapi::Error;
+
 // This will return an error - invalid price (NaN)
 let result = client.order(&contract)
     .buy(100)
@@ -1503,14 +1508,14 @@ let result = client.order(&contract)
     .build();
 
 match result {
-    Err(ValidationError::InvalidPrice(price)) => {
+    Err(Error::Validation(ValidationError::InvalidPrice(price))) => {
         println!("Invalid price: {}", price);
     }
     _ => {}
 }
 ```
 
-`ValidationError` is `ibapi::builder::ValidationError`. `submit()`, `analyze()` and `build_order()` return it wrapped in `Error::Validation`, as do `place_order`, `submit_order`, `cancel_order_with` and `global_cancel_with` for an `ext_operator` TWS would reject (`ValidationError::InvalidField`).
+`build()`, `submit()`, `analyze()` and `build_order()` return a bad value as `Error::Validation(ValidationError)`, as do `place_order`, `submit_order`, `cancel_order_with` and `global_cancel_with` for an `ext_operator` TWS would reject (`ValidationError::InvalidField`). A required input the type can't track is `Error::InvalidArgument`: `.order_type(..)` with a type whose price no earlier setter wrote (`.order_type(OrderType::Limit)` with no limit price), `pegged_to_benchmark` without `reference_contract`, or `time_in_force(TimeInForce::GoodTillDate)` without a date.
 
 ## Custom Order Construction
 

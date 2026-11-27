@@ -79,7 +79,6 @@ fn setters_map_to_the_request() {
 fn rejects_before_allocating_an_order_id() {
     let contract = contract();
     let cases = [
-        (builder(&contract), ValidationError::MissingRequiredField("exercise or lapse")),
         (builder(&contract).exercise(0), ValidationError::InvalidQuantity(0.0)),
         (builder(&contract).lapse(-1), ValidationError::InvalidQuantity(-1.0)),
     ];

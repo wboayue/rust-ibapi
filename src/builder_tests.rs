@@ -13,7 +13,6 @@ fn validation_error_display() {
     let cases = [
         (ValidationError::InvalidQuantity(0.0), "Invalid quantity: 0"),
         (ValidationError::InvalidPrice(-10.0), "Invalid price: -10"),
-        (ValidationError::MissingRequiredField("order_type"), "Missing required field: order_type"),
         (ValidationError::InvalidCombination("test".to_string()), "Invalid combination: test"),
         (
             ValidationError::InvalidStopPrice { stop: 100.0, current: 95.0 },

@@ -12,18 +12,22 @@ use time::OffsetDateTime;
 use super::common::encoders;
 use super::{ExerciseAction, PlaceOrder};
 use crate::accounts::types::AccountId;
-use crate::builder::ValidationError;
+use crate::builder::{Missing, ValidationError};
 use crate::contracts::Contract;
 use crate::orders::OrderId;
 use crate::Error;
 
 /// Builder for an option exercise or lapse request. Start it with `client.exercise_options(&contract)`,
-/// pick [`exercise`](Self::exercise) or [`lapse`](Self::lapse), and [`submit`](Self::submit) it.
+/// pick [`exercise`](Self::exercise) or [`lapse`](Self::lapse), and `submit` it.
+///
+/// `A` is [`Missing`] until [`exercise`](Self::exercise) or [`lapse`](Self::lapse) makes it an
+/// [`ExerciseAction`]; `submit` exists only then. A later call replaces the earlier one.
 #[must_use = "ExerciseOptionsBuilder does nothing until you call .submit()"]
-pub struct ExerciseOptionsBuilder<'a, C> {
+pub struct ExerciseOptionsBuilder<'a, C, A = Missing> {
     client: &'a C,
     contract: &'a Contract,
-    action: Option<(ExerciseAction, i32)>,
+    action: A,
+    quantity: i32,
     account: Option<AccountId>,
     override_natural_action: bool,
     manual_order_time: Option<OffsetDateTime>,
@@ -36,7 +40,8 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
         Self {
             client,
             contract,
-            action: None,
+            action: Missing,
+            quantity: 0,
             account: None,
             override_natural_action: false,
             manual_order_time: None,
@@ -44,17 +49,31 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
             professional_customer: false,
         }
     }
+}
 
+impl<'a, C, A> ExerciseOptionsBuilder<'a, C, A> {
     /// Exercise `quantity` contracts.
-    pub fn exercise(mut self, quantity: i32) -> Self {
-        self.action = Some((ExerciseAction::Exercise, quantity));
-        self
+    pub fn exercise(self, quantity: i32) -> ExerciseOptionsBuilder<'a, C, ExerciseAction> {
+        self.with_action(ExerciseAction::Exercise, quantity)
     }
 
     /// Let `quantity` contracts lapse.
-    pub fn lapse(mut self, quantity: i32) -> Self {
-        self.action = Some((ExerciseAction::Lapse, quantity));
-        self
+    pub fn lapse(self, quantity: i32) -> ExerciseOptionsBuilder<'a, C, ExerciseAction> {
+        self.with_action(ExerciseAction::Lapse, quantity)
+    }
+
+    fn with_action(self, action: ExerciseAction, quantity: i32) -> ExerciseOptionsBuilder<'a, C, ExerciseAction> {
+        ExerciseOptionsBuilder {
+            client: self.client,
+            contract: self.contract,
+            action,
+            quantity,
+            account: self.account,
+            override_natural_action: self.override_natural_action,
+            manual_order_time: self.manual_order_time,
+            customer_account: self.customer_account,
+            professional_customer: self.professional_customer,
+        }
     }
 
     /// Account holding the options. If unset, no account is sent; on a single-account login TWS
@@ -94,11 +113,13 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
         self.professional_customer = true;
         self
     }
+}
 
+impl<C> ExerciseOptionsBuilder<'_, C, ExerciseAction> {
     /// Validate the request and encode it under the next order id. Validation runs first, so a
     /// rejected request doesn't use up an order id.
     fn encode(&self, next_order_id: impl FnOnce() -> i32) -> Result<(OrderId, Vec<u8>), Error> {
-        let (action, quantity) = self.action.ok_or(ValidationError::MissingRequiredField("exercise or lapse"))?;
+        let (action, quantity) = (self.action, self.quantity);
         if quantity <= 0 {
             return Err(ValidationError::InvalidQuantity(f64::from(quantity)).into());
         }
@@ -120,7 +141,7 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
 }
 
 #[cfg(feature = "sync")]
-impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
+impl ExerciseOptionsBuilder<'_, crate::client::sync::Client, ExerciseAction> {
     /// Send the request and return a subscription yielding its order status, open order and
     /// execution updates.
     ///
@@ -138,8 +159,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
     /// Note: a TWS setting decides whether an exercise request must be finalized before it is sent.
     ///
     /// # Errors
-    /// [`Error::Validation`] if neither [`exercise`](Self::exercise) nor [`lapse`](Self::lapse)
-    /// was called, or the quantity is not positive; [`Error::OrderIdInRequestRange`] if the client's
+    /// [`Error::Validation`] if the quantity is not positive; [`Error::OrderIdInRequestRange`] if the client's
     /// next order id has reached 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
@@ -183,7 +203,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::sync::Client> {
 }
 
 #[cfg(feature = "async")]
-impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
+impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client, ExerciseAction> {
     /// Send the request and return a subscription yielding its order status, open order and
     /// execution updates.
     ///
@@ -201,8 +221,7 @@ impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
     /// Note: a TWS setting decides whether an exercise request must be finalized before it is sent.
     ///
     /// # Errors
-    /// [`Error::Validation`] if neither [`exercise`](Self::exercise) nor [`lapse`](Self::lapse)
-    /// was called, or the quantity is not positive; [`Error::OrderIdInRequestRange`] if the client's
+    /// [`Error::Validation`] if the quantity is not positive; [`Error::OrderIdInRequestRange`] if the client's
     /// next order id has reached 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
@@ -235,6 +254,15 @@ impl ExerciseOptionsBuilder<'_, crate::client::r#async::Client> {
     ///         }
     ///     }
     /// }
+    /// ```
+    ///
+    /// `submit` needs [`exercise`](ExerciseOptionsBuilder::exercise) or
+    /// [`lapse`](ExerciseOptionsBuilder::lapse) first:
+    ///
+    /// ```compile_fail,E0599
+    /// # async fn run(client: &ibapi::Client, contract: &ibapi::contracts::Contract) {
+    /// let subscription = client.exercise_options(contract).account("DU000001").submit();
+    /// # }
     /// ```
     pub async fn submit(self) -> Result<crate::subscriptions::r#async::Subscription<PlaceOrder>, Error> {
         let (order_id, request) = self.encode(|| self.client.next_order_id())?;

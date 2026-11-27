@@ -540,7 +540,7 @@ pub fn bracket_order(
     for price in [prices.entry, prices.take_profit, prices.stop_loss] {
         Price::new(price)?;
     }
-    validate_bracket_prices(Some(&action), &prices)?;
+    validate_bracket_prices(&action, &prices)?;
     let parent_order_id = parent_order_id.into().value();
 
     //This will be our main or "parent" order

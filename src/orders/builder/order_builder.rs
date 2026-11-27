@@ -2,7 +2,7 @@ use super::algo_builders::AlgoParams;
 use super::types::*;
 use super::validation;
 use crate::accounts::types::{AccountId, ContractId};
-use crate::builder::ValidationError;
+use crate::builder::Missing;
 use crate::contracts::Contract;
 use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
@@ -20,19 +20,59 @@ mod tests;
 
 /// Builder for creating orders with a fluent interface
 ///
-/// All validation is deferred to the build() method to ensure
-/// no silent failures occur during order construction.
-///
 /// `T` is the builder's target: [`ClientBound`] for a builder from `Client::order`, which can
 /// submit, or [`Detached`] for one from [`Order::builder`], which only builds.
+///
+/// `S` (side) and `K` (kind) track the two choices every order needs. Both start as
+/// [`Missing`]. A side setter ([`buy`](Self::buy), [`sell`](Self::sell),
+/// [`sell_short`](Self::sell_short), [`sell_long`](Self::sell_long)) makes `S` an [`Action`];
+/// an order-type setter ([`market`](Self::market), [`limit`](Self::limit), ...,
+/// [`order_type`](Self::order_type)) makes `K` an [`OrderType`]. They can come in either order,
+/// and a later setter of the same kind replaces the earlier one. `build()`, `submit()`,
+/// `analyze()` and the preset legs exist only on `OrderBuilder<T, Action, OrderType>`, so an
+/// order without a side or a type does not compile. Values (quantity, prices) are checked by
+/// `build()`.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::orders::{Action, Order, OrderType};
+///
+/// let order = Order::builder().limit(150.0).buy(100).build()?;
+/// assert_eq!(order.action, Action::Buy);
+/// assert_eq!(order.order_type, Some(OrderType::Limit));
+/// # Ok::<(), ibapi::Error>(())
+/// ```
+///
+/// Without an order type there is no `build()`:
+///
+/// ```compile_fail,E0599
+/// use ibapi::orders::Order;
+///
+/// let order = Order::builder().buy(100).build();
+/// ```
+///
+/// Nor without a side:
+///
+/// ```compile_fail,E0599
+/// use ibapi::orders::Order;
+///
+/// let order = Order::builder().limit(150.0).build();
+/// ```
 #[must_use = "OrderBuilder does nothing until you call .submit() (place it) or .build() (offline construction)"]
-pub struct OrderBuilder<T> {
+pub struct OrderBuilder<T, S = Missing, K = Missing> {
     pub(crate) target: T,
-    action: Option<Action>,
-    quantity: Option<f64>, // Store raw value, validate in build()
-    order_type: Option<OrderType>,
-    limit_price: Option<f64>, // Store raw value, validate in build()
-    stop_price: Option<f64>,  // Store raw value, validate in build()
+    side: S,
+    kind: K,
+    pub(crate) fields: OrderFields,
+}
+
+/// Everything an [`OrderBuilder`] holds besides its target, side and order type. Raw values,
+/// validated in `build()`.
+pub(crate) struct OrderFields {
+    quantity: f64,
+    limit_price: Option<f64>,
+    stop_price: Option<f64>,
     time_in_force: TimeInForce,
     outside_rth: bool,
     hidden: bool,
@@ -104,135 +144,10 @@ pub struct OrderBuilder<T> {
     starting_price: Option<f64>,
 }
 
-/// Target of an [`OrderBuilder`] from `Client::order`: the client and contract the order is
-/// submitted with.
-pub struct ClientBound<'a, C> {
-    pub(crate) client: &'a C,
-    pub(crate) contract: &'a Contract,
-}
-
-/// Target of an [`OrderBuilder`] from [`Order::builder`]: no client or contract, so the
-/// builder only builds an [`Order`].
-pub struct Detached;
-
-impl<'a, C> OrderBuilder<ClientBound<'a, C>> {
-    /// Creates a builder that submits to `client` for `contract`.
-    pub fn new(client: &'a C, contract: &'a Contract) -> Self {
-        Self::with_target(ClientBound { client, contract })
-    }
-
-    /// Create bracket orders with take profit and stop loss
-    ///
-    /// The prices are the caller's and the three orders are placed by the client. To have TWS
-    /// attach children priced from its order presets instead, see
-    /// [`preset_stop_loss`](Self::preset_stop_loss) / [`preset_profit_taker`](Self::preset_profit_taker).
-    pub fn bracket(self) -> BracketOrderBuilder<'a, C> {
-        BracketOrderBuilder::new(self)
-    }
-
-    /// Ask TWS to attach a stop-loss to this order, priced from its order presets.
-    ///
-    /// No price is sent; see [`Order::preset_stop_loss_order_id`] for how TWS resolves the
-    /// preset and what happens when none is defined. `submit()` doesn't wait for the outcome,
-    /// so watch [`order_update_stream`](crate::Client::order_update_stream).
-    ///
-    /// Call it after the order's own setters: it returns an [`AttachedOrdersBuilder`], which
-    /// only adds the other leg and submits.
-    ///
-    /// For caller-priced children placed by the client, use [`bracket`](Self::bracket).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # #[cfg(feature = "async")]
-    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
-    /// use ibapi::contracts::Contract;
-    ///
-    /// let contract = Contract::stock("AAPL").build();
-    /// let ids = client
-    ///     .order(&contract)
-    ///     .buy(100)
-    ///     .limit(150.0)
-    ///     .preset_stop_loss()
-    ///     .preset_profit_taker()
-    ///     .submit()
-    ///     .await?;
-    /// println!("parent {} stop-loss {:?} profit-taker {:?}", ids.parent, ids.stop_loss, ids.profit_taker);
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn preset_stop_loss(self) -> AttachedOrdersBuilder<'a, C> {
-        AttachedOrdersBuilder::new(self).preset_stop_loss()
-    }
-
-    /// Ask TWS to attach a profit-taker to this order, priced from its order presets.
-    ///
-    /// Same behavior as [`preset_stop_loss`](Self::preset_stop_loss), using the profit-taker
-    /// preset.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # #[cfg(feature = "async")]
-    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
-    /// use ibapi::contracts::Contract;
-    ///
-    /// let contract = Contract::stock("AAPL").build();
-    /// let ids = client.order(&contract).buy(100).limit(150.0).preset_profit_taker().submit().await?;
-    /// assert!(ids.stop_loss.is_none());
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn preset_profit_taker(self) -> AttachedOrdersBuilder<'a, C> {
-        AttachedOrdersBuilder::new(self).preset_profit_taker()
-    }
-
-    /// Build the order and return it without submitting
-    /// Useful for batch operations or custom submission logic
-    ///
-    /// # Errors
-    /// [`Error::Validation`](crate::Error::Validation) if the builder's inputs fail validation.
-    pub fn build_order(self) -> Result<Order, crate::Error> {
-        self.build().map_err(Into::into)
-    }
-}
-
-impl Order {
-    /// Start a fluent [`OrderBuilder`] with no client attached.
-    ///
-    /// `build()` returns the [`Order`], which you place with `place_order` or `submit_order`.
-    /// It's the same builder `Client::order` returns, without `submit()`, `analyze()`, `bracket()` or preset legs: those
-    /// allocate order ids, which only a client can do.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # #[cfg(feature = "async")]
-    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::orders::Order;
-    /// use ibapi::Client;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).await?;
-    /// let contract = Contract::stock("AAPL").build();
-    ///
-    /// let order = Order::builder().buy(100).limit(150.0).build()?;
-    /// let order_id = client.next_order_id();
-    /// client.submit_order(order_id, &contract, &order).await?;
-    /// # Ok(()) }
-    /// ```
-    pub fn builder() -> OrderBuilder<Detached> {
-        OrderBuilder::with_target(Detached)
-    }
-}
-
-impl<T> OrderBuilder<T> {
-    fn with_target(target: T) -> Self {
+impl Default for OrderFields {
+    fn default() -> Self {
         Self {
-            target,
-            action: None,
-            quantity: None,
-            order_type: None,
+            quantity: 0.0,
             limit_price: None,
             stop_price: None,
             time_in_force: TimeInForce::Day,
@@ -288,6 +203,199 @@ impl<T> OrderBuilder<T> {
             starting_price: None,
         }
     }
+}
+
+/// Target of an [`OrderBuilder`] from `Client::order`: the client and contract the order is
+/// submitted with.
+pub struct ClientBound<'a, C> {
+    pub(crate) client: &'a C,
+    pub(crate) contract: &'a Contract,
+}
+
+/// Target of an [`OrderBuilder`] from [`Order::builder`]: no client or contract, so the
+/// builder only builds an [`Order`].
+pub struct Detached;
+
+impl<'a, C> OrderBuilder<ClientBound<'a, C>> {
+    /// Creates a builder that submits to `client` for `contract`.
+    pub fn new(client: &'a C, contract: &'a Contract) -> Self {
+        Self::with_target(ClientBound { client, contract })
+    }
+}
+
+impl<'a, C, K> OrderBuilder<ClientBound<'a, C>, Action, K> {
+    /// Create bracket orders with take profit and stop loss
+    ///
+    /// Needs the side ([`buy`](Self::buy) / [`sell`](Self::sell) / ...); the entry is set on the
+    /// returned builder with [`entry_limit`](BracketOrderBuilder::entry_limit) or
+    /// [`entry_market`](BracketOrderBuilder::entry_market), replacing any order type set here.
+    ///
+    /// The prices are the caller's and the three orders are placed by the client. To have TWS
+    /// attach children priced from its order presets instead, see
+    /// [`preset_stop_loss`](OrderBuilder::preset_stop_loss) / [`preset_profit_taker`](OrderBuilder::preset_profit_taker).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let ids = client
+    ///     .order(&contract)
+    ///     .buy(100)
+    ///     .bracket()
+    ///     .entry_limit(150.0)
+    ///     .take_profit(160.0)
+    ///     .stop_loss(145.0)
+    ///     .submit_all()
+    ///     .await?;
+    /// println!("parent {} take-profit {} stop-loss {}", ids.parent, ids.take_profit, ids.stop_loss);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// A bracket needs the side first:
+    ///
+    /// ```compile_fail,E0599
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::OrderBuilder;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let bracket = OrderBuilder::new(&(), &contract).bracket();
+    /// ```
+    pub fn bracket(self) -> BracketOrderBuilder<'a, C> {
+        BracketOrderBuilder::new(self.without_kind())
+    }
+}
+
+impl<'a, C> OrderBuilder<ClientBound<'a, C>, Action, OrderType> {
+    /// Ask TWS to attach a stop-loss to this order, priced from its order presets.
+    ///
+    /// No price is sent; see [`Order::preset_stop_loss_order_id`] for how TWS resolves the
+    /// preset and what happens when none is defined. `submit()` doesn't wait for the outcome,
+    /// so watch [`order_update_stream`](crate::Client::order_update_stream).
+    ///
+    /// Call it after the order's own setters: it returns an [`AttachedOrdersBuilder`], which
+    /// only adds the other leg and submits.
+    ///
+    /// For caller-priced children placed by the client, use [`bracket`](OrderBuilder::bracket).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let ids = client
+    ///     .order(&contract)
+    ///     .buy(100)
+    ///     .limit(150.0)
+    ///     .preset_stop_loss()
+    ///     .preset_profit_taker()
+    ///     .submit()
+    ///     .await?;
+    /// println!("parent {} stop-loss {:?} profit-taker {:?}", ids.parent, ids.stop_loss, ids.profit_taker);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn preset_stop_loss(self) -> AttachedOrdersBuilder<'a, C> {
+        AttachedOrdersBuilder::new(self).preset_stop_loss()
+    }
+
+    /// Ask TWS to attach a profit-taker to this order, priced from its order presets.
+    ///
+    /// Same behavior as [`preset_stop_loss`](Self::preset_stop_loss), using the profit-taker
+    /// preset.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let ids = client.order(&contract).buy(100).limit(150.0).preset_profit_taker().submit().await?;
+    /// assert!(ids.stop_loss.is_none());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn preset_profit_taker(self) -> AttachedOrdersBuilder<'a, C> {
+        AttachedOrdersBuilder::new(self).preset_profit_taker()
+    }
+
+    /// Build the order and return it without submitting
+    /// Useful for batch operations or custom submission logic
+    ///
+    /// # Errors
+    /// Same as [`build`](OrderBuilder::build).
+    pub fn build_order(self) -> Result<Order, crate::Error> {
+        self.build()
+    }
+}
+
+impl Order {
+    /// Start a fluent [`OrderBuilder`] with no client attached.
+    ///
+    /// `build()` returns the [`Order`], which you place with `place_order` or `submit_order`.
+    /// It's the same builder `Client::order` returns, without `submit()`, `analyze()`, `bracket()` or preset legs: those
+    /// allocate order ids, which only a client can do.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::Order;
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// let order = Order::builder().buy(100).limit(150.0).build()?;
+    /// let order_id = client.next_order_id();
+    /// client.submit_order(order_id, &contract, &order).await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn builder() -> OrderBuilder<Detached> {
+        OrderBuilder::with_target(Detached)
+    }
+}
+
+impl<T> OrderBuilder<T> {
+    fn with_target(target: T) -> Self {
+        Self {
+            target,
+            side: Missing,
+            kind: Missing,
+            fields: OrderFields::default(),
+        }
+    }
+}
+
+impl<T, S, K> OrderBuilder<T, S, K> {
+    fn with_side(self, action: Action) -> OrderBuilder<T, Action, K> {
+        OrderBuilder {
+            target: self.target,
+            side: action,
+            kind: self.kind,
+            fields: self.fields,
+        }
+    }
+
+    fn without_kind(self) -> OrderBuilder<T, S, Missing> {
+        OrderBuilder {
+            target: self.target,
+            side: self.side,
+            kind: Missing,
+            fields: self.fields,
+        }
+    }
 
     // Action methods
 
@@ -306,10 +414,9 @@ impl<T> OrderBuilder<T> {
     /// let _ = client.order(&contract).buy(100).market().submit().await?;
     /// # Ok(()) }
     /// ```
-    pub fn buy(mut self, quantity: impl Into<f64>) -> Self {
-        self.action = Some(Action::Buy);
-        self.quantity = Some(quantity.into());
-        self
+    pub fn buy(mut self, quantity: impl Into<f64>) -> OrderBuilder<T, Action, K> {
+        self.fields.quantity = quantity.into();
+        self.with_side(Action::Buy)
     }
 
     /// Set order to sell the specified quantity.
@@ -326,10 +433,9 @@ impl<T> OrderBuilder<T> {
     /// let _ = client.order(&contract).sell(100).limit(150.0).submit().await?;
     /// # Ok(()) }
     /// ```
-    pub fn sell(mut self, quantity: impl Into<f64>) -> Self {
-        self.action = Some(Action::Sell);
-        self.quantity = Some(quantity.into());
-        self
+    pub fn sell(mut self, quantity: impl Into<f64>) -> OrderBuilder<T, Action, K> {
+        self.fields.quantity = quantity.into();
+        self.with_side(Action::Sell)
     }
 
     /// Set order to sell short (`SSHORT`) the specified quantity.
@@ -349,10 +455,9 @@ impl<T> OrderBuilder<T> {
     /// let _ = client.order(&contract).sell_short(100).limit(150.0).submit().await?;
     /// # Ok(()) }
     /// ```
-    pub fn sell_short(mut self, quantity: impl Into<f64>) -> Self {
-        self.action = Some(Action::SellShort);
-        self.quantity = Some(quantity.into());
-        self
+    pub fn sell_short(mut self, quantity: impl Into<f64>) -> OrderBuilder<T, Action, K> {
+        self.fields.quantity = quantity.into();
+        self.with_side(Action::SellShort)
     }
 
     /// Set order to sell long (`SLONG`) the specified quantity.
@@ -372,40 +477,35 @@ impl<T> OrderBuilder<T> {
     /// let _ = client.order(&contract).sell_long(100).limit(150.0).submit().await?;
     /// # Ok(()) }
     /// ```
-    pub fn sell_long(mut self, quantity: impl Into<f64>) -> Self {
-        self.action = Some(Action::SellLong);
-        self.quantity = Some(quantity.into());
-        self
+    pub fn sell_long(mut self, quantity: impl Into<f64>) -> OrderBuilder<T, Action, K> {
+        self.fields.quantity = quantity.into();
+        self.with_side(Action::SellLong)
     }
 
     // Order type methods
 
     /// Create a market order
-    pub fn market(mut self) -> Self {
-        self.order_type = Some(OrderType::Market);
-        self
+    pub fn market(self) -> OrderBuilder<T, S, OrderType> {
+        self.order_type(OrderType::Market)
     }
 
     /// Create a limit order at the specified price
-    pub fn limit(mut self, price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::Limit);
-        self.limit_price = Some(price.into());
-        self
+    pub fn limit(mut self, price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.limit_price = Some(price.into());
+        self.order_type(OrderType::Limit)
     }
 
     /// Create a stop order at the specified stop price
-    pub fn stop(mut self, stop_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::Stop);
-        self.stop_price = Some(stop_price.into());
-        self
+    pub fn stop(mut self, stop_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.stop_price = Some(stop_price.into());
+        self.order_type(OrderType::Stop)
     }
 
     /// Create a stop-limit order
-    pub fn stop_limit(mut self, stop_price: impl Into<f64>, limit_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::StopLimit);
-        self.stop_price = Some(stop_price.into());
-        self.limit_price = Some(limit_price.into());
-        self
+    pub fn stop_limit(mut self, stop_price: impl Into<f64>, limit_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.stop_price = Some(stop_price.into());
+        self.fields.limit_price = Some(limit_price.into());
+        self.order_type(OrderType::StopLimit)
     }
 
     /// Create a trailing stop order that trails the market by `trail`, starting from `stop_price`.
@@ -421,13 +521,12 @@ impl<T> OrderBuilder<T> {
     ///
     /// let by_percent = Order::builder().sell(100).trailing_stop(TrailBy::Percent(1.5), 148.0).build()?;
     /// assert_eq!(by_percent.trailing_percent, Some(1.5));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn trailing_stop(mut self, trail: TrailBy, stop_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::TrailingStop);
+    pub fn trailing_stop(mut self, trail: TrailBy, stop_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
         self.set_trail(trail);
-        self.trail_stop_price = Some(stop_price.into());
-        self
+        self.fields.trail_stop_price = Some(stop_price.into());
+        self.order_type(OrderType::TrailingStop)
     }
 
     /// Set the order type without setting any price.
@@ -444,6 +543,11 @@ impl<T> OrderBuilder<T> {
     /// with the time in force that makes it; `market_on_open()`, `limit_on_open(..)` and
     /// `at_auction(..)` set both.
     ///
+    /// The type alone satisfies the builder's typestate, but not a type's required prices:
+    /// `build()` fails with [`Error::InvalidArgument`](crate::Error::InvalidArgument) when the
+    /// type needs a price no earlier setter wrote, such as `.order_type(OrderType::Limit)` with
+    /// no limit price.
+    ///
     /// # Examples
     ///
     /// ```
@@ -453,11 +557,18 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(100).limit(150.0).order_type(OrderType::PegBest).build()?;
     /// assert_eq!(order.order_type, Some(OrderType::PegBest));
     /// assert_eq!(order.limit_price, Some(150.0));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    ///
+    /// let no_price = Order::builder().buy(100).order_type(OrderType::Limit).build();
+    /// assert!(matches!(no_price, Err(ibapi::Error::InvalidArgument(_))));
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn order_type(mut self, order_type: OrderType) -> Self {
-        self.order_type = Some(order_type);
-        self
+    pub fn order_type(self, order_type: OrderType) -> OrderBuilder<T, S, OrderType> {
+        OrderBuilder {
+            target: self.target,
+            side: self.side,
+            kind: order_type,
+            fields: self.fields,
+        }
     }
 
     /// Create a trailing stop limit order that trails the market by `trail`, starting from
@@ -474,97 +585,87 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::TrailingStopLimit));
     /// assert_eq!(order.aux_price, Some(2.0));
     /// assert_eq!(order.limit_price_offset, Some(0.5));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn trailing_stop_limit(mut self, trail: TrailBy, stop_price: impl Into<f64>, limit_offset: f64) -> Self {
-        self.order_type = Some(OrderType::TrailingStopLimit);
+    pub fn trailing_stop_limit(mut self, trail: TrailBy, stop_price: impl Into<f64>, limit_offset: f64) -> OrderBuilder<T, S, OrderType> {
         self.set_trail(trail);
-        self.trail_stop_price = Some(stop_price.into());
-        self.limit_price_offset = Some(limit_offset);
-        self
+        self.fields.trail_stop_price = Some(stop_price.into());
+        self.fields.limit_price_offset = Some(limit_offset);
+        self.order_type(OrderType::TrailingStopLimit)
     }
 
     fn set_trail(&mut self, trail: TrailBy) {
         match trail {
             TrailBy::Amount(amount) => {
-                self.aux_price = Some(amount);
-                self.trailing_percent = None;
+                self.fields.aux_price = Some(amount);
+                self.fields.trailing_percent = None;
             }
             TrailBy::Percent(percent) => {
-                self.trailing_percent = Some(percent);
-                self.aux_price = None;
+                self.fields.trailing_percent = Some(percent);
+                self.fields.aux_price = None;
             }
         }
     }
 
     /// Market if Touched - triggers market order when price is touched
-    pub fn market_if_touched(mut self, trigger_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::MarketIfTouched);
-        self.aux_price = Some(trigger_price.into());
-        self
+    pub fn market_if_touched(mut self, trigger_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.aux_price = Some(trigger_price.into());
+        self.order_type(OrderType::MarketIfTouched)
     }
 
     /// Limit if Touched - triggers limit order when price is touched
-    pub fn limit_if_touched(mut self, trigger_price: impl Into<f64>, limit_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::LimitIfTouched);
-        self.aux_price = Some(trigger_price.into());
-        self.limit_price = Some(limit_price.into());
-        self
+    pub fn limit_if_touched(mut self, trigger_price: impl Into<f64>, limit_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.aux_price = Some(trigger_price.into());
+        self.fields.limit_price = Some(limit_price.into());
+        self.order_type(OrderType::LimitIfTouched)
     }
 
     /// Market to Limit - starts as market order, remainder becomes limit
-    pub fn market_to_limit(mut self) -> Self {
-        self.order_type = Some(OrderType::MarketToLimit);
+    pub fn market_to_limit(mut self) -> OrderBuilder<T, S, OrderType> {
         // `build()` sends `limit_price` for MTL (an auction order carries one), so clear one an
         // earlier setter wrote; C# `OrderSamples.MarketToLimit` sets none.
-        self.limit_price = None;
-        self
+        self.fields.limit_price = None;
+        self.order_type(OrderType::MarketToLimit)
     }
 
     /// Discretionary order - limit order with hidden discretionary amount
-    pub fn discretionary(mut self, limit_price: impl Into<f64>, discretionary_amt: f64) -> Self {
-        self.order_type = Some(OrderType::Limit);
-        self.limit_price = Some(limit_price.into());
-        self.discretionary_amt = Some(discretionary_amt);
-        self
+    pub fn discretionary(mut self, limit_price: impl Into<f64>, discretionary_amt: f64) -> OrderBuilder<T, S, OrderType> {
+        self.fields.limit_price = Some(limit_price.into());
+        self.fields.discretionary_amt = Some(discretionary_amt);
+        self.order_type(OrderType::Limit)
     }
 
     /// Sweep to Fill - prioritizes speed of execution over price
-    pub fn sweep_to_fill(mut self, limit_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::Limit);
-        self.limit_price = Some(limit_price.into());
-        self.sweep_to_fill = true;
-        self
+    pub fn sweep_to_fill(mut self, limit_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.limit_price = Some(limit_price.into());
+        self.fields.sweep_to_fill = true;
+        self.order_type(OrderType::Limit)
     }
 
     /// Block order - for large volume option orders (min 50 contracts)
-    pub fn block(mut self, limit_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::Limit);
-        self.limit_price = Some(limit_price.into());
-        self.block_order = true;
-        self
+    pub fn block(mut self, limit_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.limit_price = Some(limit_price.into());
+        self.fields.block_order = true;
+        self.order_type(OrderType::Limit)
     }
 
     /// Midprice order - fills at midpoint between bid/ask or better
-    pub fn midprice(mut self, price_cap: Option<f64>) -> Self {
-        self.order_type = Some(OrderType::Midprice);
-        self.limit_price = price_cap;
-        self
+    pub fn midprice(mut self, price_cap: Option<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.limit_price = price_cap;
+        self.order_type(OrderType::Midprice)
     }
 
     /// Relative/Pegged-to-Primary - seeks more aggressive price than NBBO
-    pub fn relative(mut self, offset: f64, price_cap: Option<f64>) -> Self {
-        self.order_type = Some(OrderType::Relative);
-        self.aux_price = Some(offset);
-        self.limit_price = price_cap;
-        self
+    pub fn relative(mut self, offset: f64, price_cap: Option<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.aux_price = Some(offset);
+        self.fields.limit_price = price_cap;
+        self.order_type(OrderType::Relative)
     }
 
     /// Passive Relative - seeks less aggressive price than NBBO
-    pub fn passive_relative(mut self, offset: f64) -> Self {
-        self.order_type = Some(OrderType::PassiveRelative);
-        self.aux_price = Some(offset);
-        self
+    pub fn passive_relative(mut self, offset: f64) -> OrderBuilder<T, S, OrderType> {
+        self.fields.aux_price = Some(offset);
+        self.order_type(OrderType::PassiveRelative)
     }
 
     /// Relative + Limit combo (`REL + LMT`); `limit_price` caps the combo
@@ -577,13 +678,13 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(1).relative_limit_combo(2.5).non_guaranteed().build()?;
     /// assert_eq!(order.order_type, Some(OrderType::RelativeLimitCombo));
     /// assert_eq!(order.limit_price, Some(2.5));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn relative_limit_combo(mut self, limit_price: impl Into<f64>) -> Self {
-        self.limit_price = Some(limit_price.into());
+    pub fn relative_limit_combo(mut self, limit_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.limit_price = Some(limit_price.into());
         // `build()` sends `aux_price` for the REL combos, so clear any an earlier setter wrote;
         // C# `OrderSamples` sets none.
-        self.aux_price = None;
+        self.fields.aux_price = None;
         self.order_type(OrderType::RelativeLimitCombo)
     }
 
@@ -596,47 +697,42 @@ impl<T> OrderBuilder<T> {
     ///
     /// let order = Order::builder().buy(1).relative_market_combo().build()?;
     /// assert_eq!(order.order_type, Some(OrderType::RelativeMarketCombo));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn relative_market_combo(mut self) -> Self {
-        self.aux_price = None;
+    pub fn relative_market_combo(mut self) -> OrderBuilder<T, S, OrderType> {
+        self.fields.aux_price = None;
         self.order_type(OrderType::RelativeMarketCombo)
     }
 
     /// At Auction - for pre-market opening period execution: `MTL` with `TimeInForce::Auction`
-    pub fn at_auction(mut self, price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::MarketToLimit);
-        self.time_in_force = TimeInForce::Auction;
-        self.limit_price = Some(price.into());
-        self
+    pub fn at_auction(mut self, price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.time_in_force = TimeInForce::Auction;
+        self.fields.limit_price = Some(price.into());
+        self.order_type(OrderType::MarketToLimit)
     }
 
     /// Market on Close - executes as market order at or near closing price
-    pub fn market_on_close(mut self) -> Self {
-        self.order_type = Some(OrderType::MarketOnClose);
-        self
+    pub fn market_on_close(self) -> OrderBuilder<T, S, OrderType> {
+        self.order_type(OrderType::MarketOnClose)
     }
 
     /// Limit on Close - executes as limit order at close if price is met
-    pub fn limit_on_close(mut self, limit_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::LimitOnClose);
-        self.limit_price = Some(limit_price.into());
-        self
+    pub fn limit_on_close(mut self, limit_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.limit_price = Some(limit_price.into());
+        self.order_type(OrderType::LimitOnClose)
     }
 
     /// Market on Open - executes as market order at market open: `MKT` with `TimeInForce::OnOpen`
-    pub fn market_on_open(mut self) -> Self {
-        self.order_type = Some(OrderType::Market);
-        self.time_in_force = TimeInForce::OnOpen;
-        self
+    pub fn market_on_open(mut self) -> OrderBuilder<T, S, OrderType> {
+        self.fields.time_in_force = TimeInForce::OnOpen;
+        self.order_type(OrderType::Market)
     }
 
     /// Limit on Open - executes as limit order at market open: `LMT` with `TimeInForce::OnOpen`
-    pub fn limit_on_open(mut self, limit_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::Limit);
-        self.time_in_force = TimeInForce::OnOpen;
-        self.limit_price = Some(limit_price.into());
-        self
+    pub fn limit_on_open(mut self, limit_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.time_in_force = TimeInForce::OnOpen;
+        self.fields.limit_price = Some(limit_price.into());
+        self.order_type(OrderType::Limit)
     }
 
     /// Volatility order (`VOL`) - TWS derives the limit price from `volatility` (options and futures options)
@@ -652,75 +748,73 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::Volatility));
     /// assert_eq!(order.volatility, Some(40.0));
     /// assert_eq!(order.volatility_type, Some(VolatilityType::Annual));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn volatility_order(mut self, volatility: f64, volatility_type: VolatilityType) -> Self {
-        self.volatility = Some(volatility);
-        self.volatility_type = Some(volatility_type);
+    pub fn volatility_order(mut self, volatility: f64, volatility_type: VolatilityType) -> OrderBuilder<T, S, OrderType> {
+        self.fields.volatility = Some(volatility);
+        self.fields.volatility_type = Some(volatility_type);
         self.order_type(OrderType::Volatility)
     }
 
     /// Market with Protection - market order with protection against extreme price movements (futures only)
-    pub fn market_with_protection(mut self) -> Self {
-        self.order_type = Some(OrderType::MarketWithProtection);
-        self
+    pub fn market_with_protection(self) -> OrderBuilder<T, S, OrderType> {
+        self.order_type(OrderType::MarketWithProtection)
     }
 
     /// Stop with Protection - stop order with protection against extreme price movements (futures only)
-    pub fn stop_with_protection(mut self, stop_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::StopWithProtection);
-        self.stop_price = Some(stop_price.into());
-        self
+    pub fn stop_with_protection(mut self, stop_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.stop_price = Some(stop_price.into());
+        self.order_type(OrderType::StopWithProtection)
     }
 
     // Time in force methods
 
     /// Set time in force for the order
     pub fn time_in_force(mut self, tif: TimeInForce) -> Self {
-        self.time_in_force = tif;
+        self.fields.time_in_force = tif;
         self
     }
 
     /// Order valid for the day only
     pub fn day_order(mut self) -> Self {
-        self.time_in_force = TimeInForce::Day;
+        self.fields.time_in_force = TimeInForce::Day;
         self
     }
 
     /// Good till canceled order
     pub fn good_till_canceled(mut self) -> Self {
-        self.time_in_force = TimeInForce::GoodTillCanceled;
+        self.fields.time_in_force = TimeInForce::GoodTillCanceled;
         self
     }
 
     /// Good till specific date
     pub fn good_till_date(mut self, date: impl Into<String>) -> Self {
-        self.time_in_force = TimeInForce::GoodTillDate;
-        self.good_till_date = Some(date.into());
+        self.fields.time_in_force = TimeInForce::GoodTillDate;
+        self.fields.good_till_date = Some(date.into());
         self
     }
 
     /// Good till crossing order
     pub fn good_till_crossing(mut self) -> Self {
-        self.time_in_force = TimeInForce::GoodTillCrossing;
+        self.fields.time_in_force = TimeInForce::GoodTillCrossing;
         self
     }
 
     /// Day till canceled order
     pub fn day_till_canceled(mut self) -> Self {
-        self.time_in_force = TimeInForce::DayTillCanceled;
+        self.fields.time_in_force = TimeInForce::DayTillCanceled;
         self
     }
 
     /// Fill or kill order
     pub fn fill_or_kill(mut self) -> Self {
-        self.time_in_force = TimeInForce::FillOrKill;
+        self.fields.time_in_force = TimeInForce::FillOrKill;
         self
     }
 
     /// Immediate or cancel order
     pub fn immediate_or_cancel(mut self) -> Self {
-        self.time_in_force = TimeInForce::ImmediateOrCancel;
+        self.fields.time_in_force = TimeInForce::ImmediateOrCancel;
         self
     }
 
@@ -728,19 +822,19 @@ impl<T> OrderBuilder<T> {
 
     /// Allow order execution outside regular trading hours
     pub fn outside_rth(mut self) -> Self {
-        self.outside_rth = true;
+        self.fields.outside_rth = true;
         self
     }
 
     /// Restrict order to regular trading hours only
     pub fn regular_hours_only(mut self) -> Self {
-        self.outside_rth = false;
+        self.fields.outside_rth = false;
         self
     }
 
     /// Set trading hours preference
     pub fn trading_hours(mut self, hours: TradingHours) -> Self {
-        self.outside_rth = matches!(hours, TradingHours::Extended);
+        self.fields.outside_rth = matches!(hours, TradingHours::Extended);
         self
     }
 
@@ -748,19 +842,19 @@ impl<T> OrderBuilder<T> {
 
     /// Hide order from market depth (only works for NASDAQ-routed orders)
     pub fn hidden(mut self) -> Self {
-        self.hidden = true;
+        self.fields.hidden = true;
         self
     }
 
     /// Set account for order
     pub fn account(mut self, account: impl Into<AccountId>) -> Self {
-        self.account = Some(account.into().0);
+        self.fields.account = Some(account.into().0);
         self
     }
 
     /// Set parent order ID for attached orders
     pub fn parent(mut self, parent_id: impl Into<OrderId>) -> Self {
-        self.parent_id = Some(parent_id.into().value());
+        self.fields.parent_id = Some(parent_id.into().value());
         self
     }
 
@@ -790,8 +884,8 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn oca_group(mut self, group: impl Into<String>, oca_type: OcaType) -> Self {
-        self.oca_group = Some(group.into());
-        self.oca_type = oca_type;
+        self.fields.oca_group = Some(group.into());
+        self.fields.oca_type = oca_type;
         self
     }
 
@@ -821,7 +915,7 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn trigger_method(mut self, method: TriggerMethod) -> Self {
-        self.trigger_method = method;
+        self.fields.trigger_method = method;
         self
     }
 
@@ -848,7 +942,7 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn origin(mut self, origin: OrderOrigin) -> Self {
-        self.origin = origin;
+        self.fields.origin = origin;
         self
     }
 
@@ -877,7 +971,7 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn short_sale_slot(mut self, slot: ShortSaleSlot) -> Self {
-        self.short_sale_slot = slot;
+        self.fields.short_sale_slot = slot;
         self
     }
 
@@ -907,7 +1001,7 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn designated_location(mut self, location: impl Into<String>) -> Self {
-        self.designated_location = Some(location.into());
+        self.fields.designated_location = Some(location.into());
         self
     }
 
@@ -936,7 +1030,7 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn rule_80_a(mut self, rule: Rule80A) -> Self {
-        self.rule_80_a = Some(rule);
+        self.fields.rule_80_a = Some(rule);
         self
     }
 
@@ -967,13 +1061,13 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn open_close(mut self, open_close: OrderOpenClose) -> Self {
-        self.open_close = Some(open_close);
+        self.fields.open_close = Some(open_close);
         self
     }
 
     /// Do not transmit order immediately
     pub fn do_not_transmit(mut self) -> Self {
-        self.transmit = false;
+        self.fields.transmit = false;
         self
     }
 
@@ -1014,7 +1108,7 @@ impl<T> OrderBuilder<T> {
     pub fn condition(mut self, condition: impl Into<OrderCondition>) -> Self {
         let mut cond = condition.into();
         set_conjunction(&mut cond, true);
-        self.conditions.push(cond);
+        self.fields.conditions.push(cond);
         self
     }
 
@@ -1040,10 +1134,10 @@ impl<T> OrderBuilder<T> {
     /// # }
     /// ```
     pub fn and_condition(mut self, condition: impl Into<OrderCondition>) -> Self {
-        if let Some(prev) = self.conditions.last_mut() {
+        if let Some(prev) = self.fields.conditions.last_mut() {
             set_conjunction(prev, true);
         }
-        self.conditions.push(condition.into());
+        self.fields.conditions.push(condition.into());
         self
     }
 
@@ -1069,10 +1163,10 @@ impl<T> OrderBuilder<T> {
     /// # }
     /// ```
     pub fn or_condition(mut self, condition: impl Into<OrderCondition>) -> Self {
-        if let Some(prev) = self.conditions.last_mut() {
+        if let Some(prev) = self.fields.conditions.last_mut() {
             set_conjunction(prev, false);
         }
-        self.conditions.push(condition.into());
+        self.fields.conditions.push(condition.into());
         self
     }
 
@@ -1124,8 +1218,8 @@ impl<T> OrderBuilder<T> {
     /// ```
     pub fn algo(mut self, algo: impl Into<AlgoParams>) -> Self {
         let params = algo.into();
-        self.algo_strategy = Some(params.strategy);
-        self.algo_params.extend(params.params);
+        self.fields.algo_strategy = Some(params.strategy);
+        self.fields.algo_params.extend(params.params);
         self
     }
 
@@ -1134,7 +1228,7 @@ impl<T> OrderBuilder<T> {
     /// Use this to add individual parameters when using a strategy name string.
     /// When using algo builders, parameters are set via the builder methods.
     pub fn algo_param(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.algo_params.push(TagValue {
+        self.fields.algo_params.push(TagValue {
             tag: key.into(),
             value: value.into(),
         });
@@ -1145,7 +1239,7 @@ impl<T> OrderBuilder<T> {
 
     /// Mark as what-if order for margin/commission calculation
     pub fn what_if(mut self) -> Self {
-        self.what_if = true;
+        self.fields.what_if = true;
         self
     }
 
@@ -1178,7 +1272,7 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn what_if_type(mut self, what_if_type: WhatIfType) -> Self {
-        self.what_if_type = Some(what_if_type);
+        self.fields.what_if_type = Some(what_if_type);
         self
     }
 
@@ -1189,7 +1283,7 @@ impl<T> OrderBuilder<T> {
     /// Sets the figure only, not the order type; [`volatility_order`](Self::volatility_order)
     /// builds a VOL order in one call.
     pub fn volatility(mut self, volatility: f64) -> Self {
-        self.volatility = Some(volatility);
+        self.fields.volatility = Some(volatility);
         self
     }
 
@@ -1220,7 +1314,7 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn volatility_type(mut self, volatility_type: VolatilityType) -> Self {
-        self.volatility_type = Some(volatility_type);
+        self.fields.volatility_type = Some(volatility_type);
         self
     }
 
@@ -1249,31 +1343,31 @@ impl<T> OrderBuilder<T> {
     /// # Ok(()) }
     /// ```
     pub fn reference_price_type(mut self, reference_price_type: ReferencePriceType) -> Self {
-        self.reference_price_type = Some(reference_price_type);
+        self.fields.reference_price_type = Some(reference_price_type);
         self
     }
 
     /// Mark order as not held
     pub fn not_held(mut self) -> Self {
-        self.not_held = true;
+        self.fields.not_held = true;
         self
     }
 
     /// Mark order as all or none
     pub fn all_or_none(mut self) -> Self {
-        self.all_or_none = true;
+        self.fields.all_or_none = true;
         self
     }
 
     /// Set good after time
     pub fn good_after_time(mut self, time: impl Into<String>) -> Self {
-        self.good_after_time = Some(time.into());
+        self.fields.good_after_time = Some(time.into());
         self
     }
 
     /// Set good till time (stored in good_till_date field)
     pub fn good_till_time(mut self, time: impl Into<String>) -> Self {
-        self.good_till_date = Some(time.into());
+        self.fields.good_till_date = Some(time.into());
         self
     }
 
@@ -1282,13 +1376,13 @@ impl<T> OrderBuilder<T> {
     /// Set the minimum quantity per fill, for IBKRATS orders. TWS may reject it with error 10302
     /// ("not allowed for this order"), as it did on a paper account.
     pub fn min_trade_qty(mut self, qty: i32) -> Self {
-        self.min_trade_qty = Some(qty);
+        self.fields.min_trade_qty = Some(qty);
         self
     }
 
     /// Set the minimum size of the quotes a [`peg_best`](Self::peg_best) order competes against.
     pub fn min_compete_size(mut self, size: i32) -> Self {
-        self.min_compete_size = Some(size);
+        self.fields.min_compete_size = Some(size);
         self
     }
 
@@ -1320,14 +1414,13 @@ impl<T> OrderBuilder<T> {
     ///     .peg_best(150.0, CompeteAgainstBest::UpToMid(MidOffsets { at_whole: 0.02, at_half: 0.025 }))
     ///     .build()?;
     /// assert_eq!(up_to_mid.mid_offset_at_whole, Some(0.02));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn peg_best(mut self, limit_price: impl Into<f64>, compete: CompeteAgainstBest) -> Self {
-        self.order_type = Some(OrderType::PegBest);
-        self.limit_price = Some(limit_price.into());
-        self.not_held = true;
-        self.compete = Some(compete);
-        self
+    pub fn peg_best(mut self, limit_price: impl Into<f64>, compete: CompeteAgainstBest) -> OrderBuilder<T, S, OrderType> {
+        self.fields.limit_price = Some(limit_price.into());
+        self.fields.not_held = true;
+        self.fields.compete = Some(compete);
+        self.order_type(OrderType::PegBest)
     }
 
     /// Pegged to Midpoint, IBKRATS form - pegs to the midpoint, offset by `offsets`, never beyond
@@ -1348,17 +1441,16 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToMidpoint));
     /// assert_eq!(order.mid_offset_at_half, Some(0.025));
     /// assert_eq!(order.aux_price, None);
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn peg_mid(mut self, limit_price: impl Into<f64>, offsets: MidOffsets) -> Self {
-        self.order_type = Some(OrderType::PeggedToMidpoint);
-        self.limit_price = Some(limit_price.into());
+    pub fn peg_mid(mut self, limit_price: impl Into<f64>, offsets: MidOffsets) -> OrderBuilder<T, S, OrderType> {
+        self.fields.limit_price = Some(limit_price.into());
         // Both PEG MID forms share one order type, so `build()` can't tell them apart: each
         // setter clears the other form's field.
-        self.aux_price = None;
-        self.not_held = true;
-        self.mid_offsets = Some(offsets);
-        self
+        self.fields.aux_price = None;
+        self.fields.not_held = true;
+        self.fields.mid_offsets = Some(offsets);
+        self.order_type(OrderType::PeggedToMidpoint)
     }
 
     /// Pegged to Market - pegs to the national best offer minus `offset` for a buy, or the
@@ -1372,12 +1464,11 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(100).pegged_to_market(0.05).build()?;
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToMarket));
     /// assert_eq!(order.aux_price, Some(0.05));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn pegged_to_market(mut self, offset: f64) -> Self {
-        self.order_type = Some(OrderType::PeggedToMarket);
-        self.aux_price = Some(offset);
-        self
+    pub fn pegged_to_market(mut self, offset: f64) -> OrderBuilder<T, S, OrderType> {
+        self.fields.aux_price = Some(offset);
+        self.order_type(OrderType::PeggedToMarket)
     }
 
     /// Pegged to Midpoint - pegs to the NBBO midpoint, offset by `offset`, never beyond
@@ -1394,15 +1485,14 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToMidpoint));
     /// assert_eq!(order.aux_price, Some(0.01));
     /// assert_eq!(order.limit_price, Some(150.0));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn pegged_to_midpoint(mut self, offset: f64, limit_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::PeggedToMidpoint);
-        self.aux_price = Some(offset);
-        self.limit_price = Some(limit_price.into());
+    pub fn pegged_to_midpoint(mut self, offset: f64, limit_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.aux_price = Some(offset);
+        self.fields.limit_price = Some(limit_price.into());
         // Clears `peg_mid`'s offsets; see there.
-        self.mid_offsets = None;
-        self
+        self.fields.mid_offsets = None;
+        self.order_type(OrderType::PeggedToMidpoint)
     }
 
     /// Box Top - executes as a market order at the best price; any unfilled remainder becomes
@@ -1415,11 +1505,10 @@ impl<T> OrderBuilder<T> {
     ///
     /// let order = Order::builder().buy(10).box_top().build()?;
     /// assert_eq!(order.order_type, Some(OrderType::BoxTop));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn box_top(mut self) -> Self {
-        self.order_type = Some(OrderType::BoxTop);
-        self
+    pub fn box_top(self) -> OrderBuilder<T, S, OrderType> {
+        self.order_type(OrderType::BoxTop)
     }
 
     /// Pegged to Stock - an option order whose price moves by `delta` times the change in the
@@ -1449,19 +1538,18 @@ impl<T> OrderBuilder<T> {
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToStock));
     /// assert_eq!(order.delta, Some(0.5));
     /// assert_eq!(order.starting_price, Some(2.10));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn pegged_to_stock(mut self, delta: f64, starting_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::PeggedToStock);
-        self.delta = Some(delta);
-        self.starting_price = Some(starting_price.into());
-        self
+    pub fn pegged_to_stock(mut self, delta: f64, starting_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.delta = Some(delta);
+        self.fields.starting_price = Some(starting_price.into());
+        self.order_type(OrderType::PeggedToStock)
     }
 
     /// Set the stock reference price a pegged-to-stock or pegged-to-benchmark order measures
     /// price changes from.
     pub fn stock_reference_price(mut self, price: impl Into<f64>) -> Self {
-        self.stock_ref_price = Some(price.into());
+        self.fields.stock_ref_price = Some(price.into());
         self
     }
 
@@ -1469,8 +1557,8 @@ impl<T> OrderBuilder<T> {
     ///
     /// Writes the same `Order` fields as [`reference_range`](Self::reference_range).
     pub fn stock_range(mut self, lower: impl Into<f64>, upper: impl Into<f64>) -> Self {
-        self.stock_range_lower = Some(lower.into());
-        self.stock_range_upper = Some(upper.into());
+        self.fields.stock_range_lower = Some(lower.into());
+        self.fields.stock_range_upper = Some(upper.into());
         self
     }
 
@@ -1498,38 +1586,37 @@ impl<T> OrderBuilder<T> {
     ///     .build()?;
     /// assert_eq!(order.order_type, Some(OrderType::PeggedToBenchmark));
     /// assert_eq!(order.reference_contract_id, 12345);
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn pegged_to_benchmark(mut self, starting_price: impl Into<f64>) -> Self {
-        self.order_type = Some(OrderType::PeggedToBenchmark);
-        self.starting_price = Some(starting_price.into());
-        self
+    pub fn pegged_to_benchmark(mut self, starting_price: impl Into<f64>) -> OrderBuilder<T, S, OrderType> {
+        self.fields.starting_price = Some(starting_price.into());
+        self.order_type(OrderType::PeggedToBenchmark)
     }
 
     /// Set the contract a pegged-to-benchmark order tracks, by contract id and exchange.
     pub fn reference_contract(mut self, contract_id: impl Into<ContractId>, exchange: impl Into<String>) -> Self {
-        self.reference_contract_id = Some(contract_id.into().0);
-        self.reference_exchange = Some(exchange.into());
+        self.fields.reference_contract_id = Some(contract_id.into().0);
+        self.fields.reference_exchange = Some(exchange.into());
         self
     }
 
     /// Set how much a pegged-to-benchmark order's price moves per
     /// [`reference_change_amount`](Self::reference_change_amount) of reference-contract movement.
     pub fn pegged_change_amount(mut self, amount: f64) -> Self {
-        self.pegged_change_amount = Some(amount);
+        self.fields.pegged_change_amount = Some(amount);
         self
     }
 
     /// Move a pegged-to-benchmark order's price opposite the reference contract.
     pub fn pegged_change_amount_decrease(mut self) -> Self {
-        self.is_pegged_change_amount_decrease = true;
+        self.fields.is_pegged_change_amount_decrease = true;
         self
     }
 
     /// Set the reference-contract price change that triggers a
     /// [`pegged_change_amount`](Self::pegged_change_amount) adjustment.
     pub fn reference_change_amount(mut self, amount: f64) -> Self {
-        self.reference_change_amount = Some(amount);
+        self.fields.reference_change_amount = Some(amount);
         self
     }
 
@@ -1551,10 +1638,10 @@ impl<T> OrderBuilder<T> {
     ///
     /// let order = Order::builder().buy(1).limit(2.5).non_guaranteed().build()?;
     /// assert_eq!(order.smart_combo_routing_params[0].tag, "NonGuaranteed");
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn non_guaranteed(mut self) -> Self {
-        self.smart_combo_routing_params = non_guaranteed_params();
+        self.fields.smart_combo_routing_params = non_guaranteed_params();
         self
     }
 
@@ -1568,17 +1655,17 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(1).market().combo_leg_prices([1.10, 2.25]).build()?;
     /// assert_eq!(order.order_combo_legs.len(), 2);
     /// assert_eq!(order.order_combo_legs[1].price, Some(2.25));
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn combo_leg_prices(mut self, prices: impl IntoIterator<Item = f64>) -> Self {
-        self.order_combo_legs = prices.into_iter().map(|price| OrderComboLeg { price: Some(price) }).collect();
+        self.fields.order_combo_legs = prices.into_iter().map(|price| OrderComboLeg { price: Some(price) }).collect();
         self
     }
 
     /// Set the manual order time, the time an order was received from a customer, as
     /// `yyyymmdd hh:mm:ss`.
     pub fn manual_order_time(mut self, time: impl Into<String>) -> Self {
-        self.manual_order_time = Some(time.into());
+        self.fields.manual_order_time = Some(time.into());
         self
     }
 
@@ -1594,24 +1681,36 @@ impl<T> OrderBuilder<T> {
     /// let order = Order::builder().buy(0).limit(1.10).cash_qty(20_000.0).build()?;
     /// assert_eq!(order.cash_qty, Some(20_000.0));
     /// assert_eq!(order.total_quantity, 0.0);
-    /// # Ok::<(), ibapi::builder::ValidationError>(())
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn cash_qty(mut self, cash_qty: f64) -> Self {
-        self.cash_qty = Some(cash_qty);
+        self.fields.cash_qty = Some(cash_qty);
         self
     }
+}
 
-    // Build methods
-
-    /// Build the Order struct with full validation
-    pub fn build(self) -> Result<Order, ValidationError> {
-        // Validate required fields
-        let action = self.action.ok_or(ValidationError::MissingRequiredField("action"))?;
-        let quantity_raw = self.quantity.ok_or(ValidationError::MissingRequiredField("quantity"))?;
-        let order_type = self.order_type.ok_or(ValidationError::MissingRequiredField("order_type"))?;
+impl<T> OrderBuilder<T, Action, OrderType> {
+    /// Build the [`Order`], validating its values.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Validation`](crate::Error::Validation) for a value a caller may correct: a
+    /// quantity or price that is not positive and finite ([`ValidationError::InvalidQuantity`](crate::builder::ValidationError::InvalidQuantity),
+    /// [`ValidationError::InvalidPrice`](crate::builder::ValidationError::InvalidPrice)).
+    ///
+    /// [`Error::InvalidArgument`](crate::Error::InvalidArgument) for a required input the
+    /// builder was never given, which the typestate can't see: a type set with
+    /// [`order_type`](OrderBuilder::order_type) whose price no earlier setter wrote,
+    /// [`pegged_to_benchmark`](OrderBuilder::pegged_to_benchmark) without
+    /// [`reference_contract`](OrderBuilder::reference_contract), or
+    /// `time_in_force(TimeInForce::GoodTillDate)` without a date.
+    pub fn build(self) -> Result<Order, crate::Error> {
+        let action = self.side;
+        let order_type = self.kind;
+        let quantity_raw = self.fields.quantity;
 
         // Validate quantity. A cash-quantity order may leave the quantity at 0.
-        let total_quantity = match self.cash_qty {
+        let total_quantity = match self.fields.cash_qty {
             Some(cash_qty) => {
                 Quantity::new(cash_qty)?;
                 if quantity_raw == 0.0 {
@@ -1629,10 +1728,10 @@ impl<T> OrderBuilder<T> {
         // crate can't know which it takes, and dropping them silently is worse than TWS rejecting.
         let unlisted = matches!(order_type, OrderType::Unknown(_));
         let limit_price = if order_type.requires_limit_price() {
-            let price_raw = self.limit_price.ok_or(ValidationError::MissingRequiredField("limit_price"))?;
+            let price_raw = self.fields.limit_price.ok_or_else(|| missing_input(&order_type, "a limit price"))?;
             Some(Price::new(price_raw)?.value())
         } else if order_type.uses_limit_price() || unlisted {
-            self.limit_price.map(Price::new).transpose()?.map(|price| price.value())
+            self.fields.limit_price.map(Price::new).transpose()?.map(|price| price.value())
         } else {
             None
         };
@@ -1640,58 +1739,62 @@ impl<T> OrderBuilder<T> {
         // Stop types send the stop price as `aux_price`; the others send the trigger, offset or
         // trail amount their setter wrote.
         let aux_price = if order_type.uses_stop_price() {
-            let price_raw = self.stop_price.ok_or(ValidationError::MissingRequiredField("stop_price"))?;
+            let price_raw = self.fields.stop_price.ok_or_else(|| missing_input(&order_type, "a stop price"))?;
             Some(Price::new(price_raw)?.value())
         } else if order_type.uses_aux_price() {
-            self.aux_price
+            self.fields.aux_price
         } else if unlisted {
-            self.aux_price.or(self.stop_price)
+            self.fields.aux_price.or(self.fields.stop_price)
         } else {
             None
         };
 
         let (trailing_percent, trail_stop_price) = if order_type.uses_trail() {
-            if self.trailing_percent.is_none() && aux_price.is_none() {
-                return Err(ValidationError::MissingRequiredField("trailing amount or percent"));
+            if self.fields.trailing_percent.is_none() && aux_price.is_none() {
+                return Err(missing_input(&order_type, "trailing amount or percent"));
             }
-            let trail_stop_price = self.trail_stop_price.map(Price::new).transpose()?.map(|price| price.value());
-            (self.trailing_percent, trail_stop_price)
+            let trail_stop_price = self.fields.trail_stop_price.map(Price::new).transpose()?.map(|price| price.value());
+            (self.fields.trailing_percent, trail_stop_price)
         } else if unlisted {
-            let trail_stop_price = self.trail_stop_price.map(Price::new).transpose()?.map(|price| price.value());
-            (self.trailing_percent, trail_stop_price)
+            let trail_stop_price = self.fields.trail_stop_price.map(Price::new).transpose()?.map(|price| price.value());
+            (self.fields.trailing_percent, trail_stop_price)
         } else {
             (None, None)
         };
 
         if order_type.requires_aux_price() && !order_type.uses_trail() && aux_price.is_none() {
-            return Err(ValidationError::MissingRequiredField("aux_price"));
+            return Err(missing_input(&order_type, "aux price (trigger price or offset)"));
         }
 
         let limit_price_offset = match order_type {
-            OrderType::TrailingStopLimit | OrderType::Unknown(_) => self.limit_price_offset,
+            OrderType::TrailingStopLimit | OrderType::Unknown(_) => self.fields.limit_price_offset,
             _ => None,
         };
 
         // Validate volatility for volatility orders
-        if order_type == OrderType::Volatility && self.volatility.is_none() {
-            return Err(ValidationError::MissingRequiredField("volatility"));
+        if order_type == OrderType::Volatility && self.fields.volatility.is_none() {
+            return Err(missing_input(&order_type, "volatility"));
         }
 
         if order_type == OrderType::PeggedToStock {
-            self.delta.ok_or(ValidationError::MissingRequiredField("delta"))?;
-            self.starting_price.ok_or(ValidationError::MissingRequiredField("starting_price"))?;
+            self.fields.delta.ok_or_else(|| missing_input(&order_type, "delta"))?;
+            self.fields.starting_price.ok_or_else(|| missing_input(&order_type, "starting price"))?;
         }
 
         if order_type == OrderType::PeggedToBenchmark {
-            self.starting_price.ok_or(ValidationError::MissingRequiredField("starting_price"))?;
-            if self.reference_contract_id.is_none() || self.reference_exchange.is_none() {
-                return Err(ValidationError::MissingRequiredField("reference_contract"));
+            self.fields.starting_price.ok_or_else(|| missing_input(&order_type, "starting price"))?;
+            if self.fields.reference_contract_id.is_none() || self.fields.reference_exchange.is_none() {
+                return Err(crate::Error::InvalidArgument(
+                    "a pegged-to-benchmark order needs the contract it tracks: call .reference_contract(contract_id, exchange)".into(),
+                ));
             }
         }
 
         // Validate time in force specific requirements
-        if self.time_in_force == TimeInForce::GoodTillDate && self.good_till_date.is_none() {
-            return Err(ValidationError::MissingRequiredField("good_till_date"));
+        if self.fields.time_in_force == TimeInForce::GoodTillDate && self.fields.good_till_date.is_none() {
+            return Err(crate::Error::InvalidArgument(
+                "TimeInForce::GoodTillDate needs a date: use .good_till_date(date) or .good_till_time(time)".into(),
+            ));
         }
 
         // Build the order
@@ -1708,77 +1811,77 @@ impl<T> OrderBuilder<T> {
         };
 
         // Set time in force
-        order.tif = self.time_in_force;
+        order.tif = self.fields.time_in_force;
 
         // Set other fields
-        order.outside_rth = self.outside_rth;
-        order.hidden = self.hidden;
-        order.transmit = self.transmit;
+        order.outside_rth = self.fields.outside_rth;
+        order.hidden = self.fields.hidden;
+        order.transmit = self.fields.transmit;
 
-        if let Some(parent_id) = self.parent_id {
+        if let Some(parent_id) = self.fields.parent_id {
             order.parent_id = parent_id;
         }
 
-        if let Some(group) = self.oca_group {
+        if let Some(group) = self.fields.oca_group {
             order.oca_group = group;
-            order.oca_type = self.oca_type;
+            order.oca_type = self.fields.oca_type;
         }
 
-        if let Some(account) = self.account {
+        if let Some(account) = self.fields.account {
             order.account = account;
         }
 
-        if let Some(time) = self.good_after_time {
+        if let Some(time) = self.fields.good_after_time {
             order.good_after_time = time;
         }
 
-        if let Some(date_time) = self.good_till_date {
+        if let Some(date_time) = self.fields.good_till_date {
             order.good_till_date = date_time;
         }
 
-        if let Some(strategy) = self.algo_strategy {
+        if let Some(strategy) = self.fields.algo_strategy {
             order.algo_strategy = strategy;
-            order.algo_params = self.algo_params;
+            order.algo_params = self.fields.algo_params;
         }
 
-        order.what_if = self.what_if;
-        order.what_if_type = self.what_if_type;
+        order.what_if = self.fields.what_if;
+        order.what_if_type = self.fields.what_if_type;
 
         // Set advanced fields
-        if let Some(amt) = self.discretionary_amt {
+        if let Some(amt) = self.fields.discretionary_amt {
             order.discretionary_amt = amt;
         }
 
-        if let Some(vol) = self.volatility {
+        if let Some(vol) = self.fields.volatility {
             order.volatility = Some(vol);
         }
 
-        order.volatility_type = self.volatility_type;
-        order.reference_price_type = self.reference_price_type;
+        order.volatility_type = self.fields.volatility_type;
+        order.reference_price_type = self.fields.reference_price_type;
 
-        order.trigger_method = self.trigger_method;
-        order.origin = self.origin;
-        order.short_sale_slot = self.short_sale_slot;
+        order.trigger_method = self.fields.trigger_method;
+        order.origin = self.fields.origin;
+        order.short_sale_slot = self.fields.short_sale_slot;
 
-        if let Some(location) = self.designated_location {
+        if let Some(location) = self.fields.designated_location {
             order.designated_location = location;
         }
 
-        order.rule_80_a = self.rule_80_a;
-        order.open_close = self.open_close;
+        order.rule_80_a = self.fields.rule_80_a;
+        order.open_close = self.fields.open_close;
 
-        if let Some(delta) = self.delta {
+        if let Some(delta) = self.fields.delta {
             order.delta = Some(delta);
         }
 
         // Set special flags
-        order.sweep_to_fill = self.sweep_to_fill;
-        order.block_order = self.block_order;
-        order.not_held = self.not_held;
-        order.all_or_none = self.all_or_none;
+        order.sweep_to_fill = self.fields.sweep_to_fill;
+        order.block_order = self.fields.block_order;
+        order.not_held = self.fields.not_held;
+        order.all_or_none = self.fields.all_or_none;
 
         // Set pegged order fields
-        if let Some(qty) = self.min_trade_qty {
+        if let Some(qty) = self.fields.min_trade_qty {
             order.min_trade_qty = Some(qty);
         }
 
@@ -1787,8 +1890,8 @@ impl<T> OrderBuilder<T> {
         // `OrderType::uses_*`: each applies to one type, and up-to-mid depends on the value.
         let mid_offsets = match order.order_type {
             Some(OrderType::PegBest) => {
-                order.min_compete_size = self.min_compete_size;
-                match self.compete {
+                order.min_compete_size = self.fields.min_compete_size;
+                match self.fields.compete {
                     Some(CompeteAgainstBest::Offset(offset)) => {
                         order.compete_against_best_offset = Some(Price::new(offset)?.value());
                         None
@@ -1800,7 +1903,7 @@ impl<T> OrderBuilder<T> {
                     None => None,
                 }
             }
-            Some(OrderType::PeggedToMidpoint) => self.mid_offsets,
+            Some(OrderType::PeggedToMidpoint) => self.fields.mid_offsets,
             _ => None,
         };
         if let Some(offsets) = mid_offsets {
@@ -1809,69 +1912,77 @@ impl<T> OrderBuilder<T> {
         }
 
         // Set conditions
-        if !self.conditions.is_empty() {
-            order.conditions = self.conditions;
+        if !self.fields.conditions.is_empty() {
+            order.conditions = self.fields.conditions;
         }
 
         // Set reference contract fields for pegged to benchmark orders
-        if let Some(id) = self.reference_contract_id {
+        if let Some(id) = self.fields.reference_contract_id {
             order.reference_contract_id = id;
         }
 
-        if let Some(exchange) = self.reference_exchange {
+        if let Some(exchange) = self.fields.reference_exchange {
             order.reference_exchange = exchange;
         }
 
-        if let Some(price) = self.stock_ref_price {
+        if let Some(price) = self.fields.stock_ref_price {
             order.stock_ref_price = Some(price);
         }
 
-        if let Some(lower) = self.stock_range_lower {
+        if let Some(lower) = self.fields.stock_range_lower {
             order.stock_range_lower = Some(lower);
         }
 
-        if let Some(upper) = self.stock_range_upper {
+        if let Some(upper) = self.fields.stock_range_upper {
             order.stock_range_upper = Some(upper);
         }
 
-        if let Some(amount) = self.reference_change_amount {
+        if let Some(amount) = self.fields.reference_change_amount {
             order.reference_change_amount = Some(amount);
         }
 
-        if let Some(amount) = self.pegged_change_amount {
+        if let Some(amount) = self.fields.pegged_change_amount {
             order.pegged_change_amount = Some(amount);
         }
 
-        if self.is_pegged_change_amount_decrease {
+        if self.fields.is_pegged_change_amount_decrease {
             order.is_pegged_change_amount_decrease = true;
         }
 
         // Set combo order fields
-        if !self.order_combo_legs.is_empty() {
-            order.order_combo_legs = self.order_combo_legs;
+        if !self.fields.order_combo_legs.is_empty() {
+            order.order_combo_legs = self.fields.order_combo_legs;
         }
 
-        if !self.smart_combo_routing_params.is_empty() {
-            order.smart_combo_routing_params = self.smart_combo_routing_params;
+        if !self.fields.smart_combo_routing_params.is_empty() {
+            order.smart_combo_routing_params = self.fields.smart_combo_routing_params;
         }
 
         // Set cash quantity for FX orders
-        if let Some(qty) = self.cash_qty {
+        if let Some(qty) = self.fields.cash_qty {
             order.cash_qty = Some(qty);
         }
 
         // Set manual order time
-        if let Some(time) = self.manual_order_time {
+        if let Some(time) = self.fields.manual_order_time {
             order.manual_order_time = time;
         }
 
         // Set starting price
-        if let Some(price) = self.starting_price {
+        if let Some(price) = self.fields.starting_price {
             order.starting_price = Some(price);
         }
 
         Ok(order)
     }
+}
+
+/// The error for a price or parameter an order type needs that no setter wrote. Only reachable
+/// through [`OrderBuilder::order_type`]: each named setter takes its type's required inputs.
+fn missing_input(order_type: &OrderType, what: &str) -> crate::Error {
+    crate::Error::InvalidArgument(format!(
+        "{order_type:?} order has no {what}: .order_type(..) sets the type alone; use the type's named setter, which takes it"
+    ))
 }
 
 /// Helper function to set conjunction flag on OrderCondition enum
@@ -1894,13 +2005,13 @@ fn set_conjunction(condition: &mut OrderCondition, is_conjunction: bool) {
 /// Set everything else on the [`OrderBuilder`] first; this builder only adds legs.
 #[must_use = "AttachedOrdersBuilder does nothing until you call .submit()"]
 pub struct AttachedOrdersBuilder<'a, C> {
-    pub(crate) parent_builder: OrderBuilder<ClientBound<'a, C>>,
+    pub(crate) parent_builder: OrderBuilder<ClientBound<'a, C>, Action, OrderType>,
     stop_loss: bool,
     profit_taker: bool,
 }
 
 impl<'a, C> AttachedOrdersBuilder<'a, C> {
-    fn new(parent_builder: OrderBuilder<ClientBound<'a, C>>) -> Self {
+    fn new(parent_builder: OrderBuilder<ClientBound<'a, C>, Action, OrderType>) -> Self {
         Self {
             parent_builder,
             stop_loss: false,
@@ -1949,7 +2060,7 @@ impl<'a, C> AttachedOrdersBuilder<'a, C> {
     }
 
     /// Builds the parent order and assigns ids in order parent → stop-loss → profit-taker.
-    pub(crate) fn build_with_ids(self, mut next_id: impl FnMut() -> i32) -> Result<(Order, AttachedOrderIds), ValidationError> {
+    pub(crate) fn build_with_ids(self, mut next_id: impl FnMut() -> i32) -> Result<(Order, AttachedOrderIds), crate::Error> {
         let mut order = self.parent_builder.build()?;
         let parent = next_id();
         order.order_id = parent;
@@ -1964,93 +2075,88 @@ impl<'a, C> AttachedOrdersBuilder<'a, C> {
     }
 }
 
-/// Entry order type for bracket orders
-#[derive(Default)]
-enum BracketEntryType {
-    #[default]
-    None,
-    Limit(f64),
-    Market,
-}
-
-/// Builder for bracket orders
+/// Builder for bracket orders: an entry, a take-profit limit and a stop-loss stop.
+///
+/// Created by [`OrderBuilder::bracket`]. `E` (entry), `P` (take-profit price) and `L` (stop-loss
+/// price) start as [`Missing`]; [`entry_limit`](Self::entry_limit) or
+/// [`entry_market`](Self::entry_market) makes `E` an [`OrderType`], and
+/// [`take_profit`](Self::take_profit) / [`stop_loss`](Self::stop_loss) make `P` / `L` an `f64`.
+/// `submit_all()` exists only once all three are set, in any order; a second call of a setter
+/// replaces the first.
 #[must_use = "BracketOrderBuilder does nothing until you call .submit_all()"]
-pub struct BracketOrderBuilder<'a, C> {
-    pub(crate) parent_builder: OrderBuilder<ClientBound<'a, C>>,
-    entry_type: BracketEntryType,
-    take_profit_price: Option<f64>,
-    stop_loss_price: Option<f64>,
+pub struct BracketOrderBuilder<'a, C, E = Missing, P = Missing, L = Missing> {
+    pub(crate) parent_builder: OrderBuilder<ClientBound<'a, C>, Action, E>,
+    take_profit: P,
+    stop_loss: L,
 }
 
 impl<'a, C> BracketOrderBuilder<'a, C> {
-    fn new(parent_builder: OrderBuilder<ClientBound<'a, C>>) -> Self {
+    fn new(parent_builder: OrderBuilder<ClientBound<'a, C>, Action, Missing>) -> Self {
         Self {
             parent_builder,
-            entry_type: BracketEntryType::None,
-            take_profit_price: None,
-            stop_loss_price: None,
+            take_profit: Missing,
+            stop_loss: Missing,
         }
     }
+}
 
+impl<'a, C, E, P, L> BracketOrderBuilder<'a, C, E, P, L> {
     /// Set entry as market order (immediate execution)
-    pub fn entry_market(mut self) -> Self {
-        self.entry_type = BracketEntryType::Market;
-        self
+    pub fn entry_market(self) -> BracketOrderBuilder<'a, C, OrderType, P, L> {
+        BracketOrderBuilder {
+            parent_builder: self.parent_builder.market(),
+            take_profit: self.take_profit,
+            stop_loss: self.stop_loss,
+        }
     }
 
     /// Set entry limit price
-    pub fn entry_limit(mut self, price: impl Into<f64>) -> Self {
-        self.entry_type = BracketEntryType::Limit(price.into());
-        self
+    pub fn entry_limit(self, price: impl Into<f64>) -> BracketOrderBuilder<'a, C, OrderType, P, L> {
+        BracketOrderBuilder {
+            parent_builder: self.parent_builder.limit(price),
+            take_profit: self.take_profit,
+            stop_loss: self.stop_loss,
+        }
     }
 
     /// Set take profit price
-    pub fn take_profit(mut self, price: impl Into<f64>) -> Self {
-        self.take_profit_price = Some(price.into());
-        self
+    pub fn take_profit(self, price: impl Into<f64>) -> BracketOrderBuilder<'a, C, E, f64, L> {
+        BracketOrderBuilder {
+            parent_builder: self.parent_builder,
+            take_profit: price.into(),
+            stop_loss: self.stop_loss,
+        }
     }
 
     /// Set stop loss price
-    pub fn stop_loss(mut self, price: impl Into<f64>) -> Self {
-        self.stop_loss_price = Some(price.into());
-        self
-    }
-
-    /// Build bracket orders with full validation
-    pub(crate) fn build(mut self) -> Result<Vec<Order>, ValidationError> {
-        // Validate and convert take profit and stop loss prices
-        let take_profit_raw = self.take_profit_price.ok_or(ValidationError::MissingRequiredField("take_profit"))?;
-        let stop_loss_raw = self.stop_loss_price.ok_or(ValidationError::MissingRequiredField("stop_loss"))?;
-
-        let take_profit = Price::new(take_profit_raw)?;
-        let stop_loss = Price::new(stop_loss_raw)?;
-
-        // Set order type based on entry type
-        match self.entry_type {
-            BracketEntryType::None => {
-                return Err(ValidationError::MissingRequiredField("entry (use entry_limit() or entry_market())"));
-            }
-            BracketEntryType::Limit(price) => {
-                let entry_price = Price::new(price)?;
-                // Validate bracket order prices
-                let prices = BracketPrices {
-                    entry: entry_price.value(),
-                    take_profit: take_profit.value(),
-                    stop_loss: stop_loss.value(),
-                };
-                validation::validate_bracket_prices(self.parent_builder.action.as_ref(), &prices)?;
-                self.parent_builder.order_type = Some(OrderType::Limit);
-                self.parent_builder.limit_price = Some(entry_price.value());
-            }
-            BracketEntryType::Market => {
-                // Skip price relationship validation for market orders
-                self.parent_builder.order_type = Some(OrderType::Market);
-            }
+    pub fn stop_loss(self, price: impl Into<f64>) -> BracketOrderBuilder<'a, C, E, P, f64> {
+        BracketOrderBuilder {
+            parent_builder: self.parent_builder,
+            take_profit: self.take_profit,
+            stop_loss: price.into(),
         }
+    }
+}
 
-        // Build parent order
+impl<C> BracketOrderBuilder<'_, C, OrderType, f64, f64> {
+    /// Build bracket orders with full validation
+    pub(crate) fn build(self) -> Result<Vec<Order>, crate::Error> {
+        let take_profit = Price::new(self.take_profit)?;
+        let stop_loss = Price::new(self.stop_loss)?;
+
+        // Build parent order; this validates the quantity and the entry limit price.
         let mut parent = self.parent_builder.build()?;
         parent.transmit = false;
+
+        // A market entry has no price to check the children against.
+        if let (Some(OrderType::Limit), Some(entry)) = (&parent.order_type, parent.limit_price) {
+            let prices = BracketPrices {
+                entry,
+                take_profit: take_profit.value(),
+                stop_loss: stop_loss.value(),
+            };
+            validation::validate_bracket_prices(&parent.action, &prices)?;
+        }
 
         // Build take profit order
         let take_profit_order = Order {

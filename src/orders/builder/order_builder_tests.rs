@@ -1,4 +1,5 @@
 use super::*;
+use crate::builder::ValidationError;
 use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::market_data::TradingHours;
 use crate::orders::common::encoders::encode_order;
@@ -7,6 +8,7 @@ use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
     Action, OcaType, OrderOpenClose, OrderOrigin, ReferencePriceType, Rule80A, ShortSaleSlot, TimeInForce, VolatilityType, WhatIfType,
 };
+use crate::Error;
 
 fn create_test_contract() -> Contract {
     Contract {
@@ -19,6 +21,23 @@ fn create_test_contract() -> Contract {
 }
 
 struct MockClient;
+
+#[track_caller]
+fn assert_validation(err: Error, expected: ValidationError) {
+    match err {
+        Error::Validation(inner) => assert_eq!(inner, expected),
+        other => panic!("expected Validation({expected:?}), got {other:?}"),
+    }
+}
+
+/// A required input the typestate can't see: an `InvalidArgument` naming it.
+#[track_caller]
+fn assert_missing_input(err: Error, what: &str) {
+    match err {
+        Error::InvalidArgument(message) => assert!(message.contains(what), "{message:?} doesn't mention {what:?}"),
+        other => panic!("expected InvalidArgument about {what:?}, got {other:?}"),
+    }
+}
 
 #[test]
 fn stop_order() {
@@ -359,7 +378,7 @@ fn good_till_date_without_a_date_fails_validation() {
         .time_in_force(TimeInForce::GoodTillDate)
         .build()
         .unwrap_err();
-    assert_eq!(err, ValidationError::MissingRequiredField("good_till_date"));
+    assert_missing_input(err, "GoodTillDate");
 }
 
 #[test]
@@ -855,19 +874,13 @@ fn validation_errors() {
     let builder = OrderBuilder::new(&client, &contract).buy(0).market();
 
     let result = builder.build();
-    assert!(matches!(result, Err(ValidationError::InvalidQuantity(0.0))));
-
-    // Test missing order type
-    let builder = OrderBuilder::new(&client, &contract).buy(100);
-
-    let result = builder.build();
-    assert!(matches!(result, Err(ValidationError::MissingRequiredField("order_type"))));
+    assert!(matches!(result, Err(Error::Validation(ValidationError::InvalidQuantity(0.0)))));
 
     // Test invalid stop price (NaN)
     let builder = OrderBuilder::new(&client, &contract).buy(100).stop(f64::NAN);
 
     let result = builder.build();
-    assert!(matches!(result, Err(ValidationError::InvalidPrice(_))));
+    assert!(matches!(result, Err(Error::Validation(ValidationError::InvalidPrice(_)))));
 }
 
 #[test]
@@ -971,46 +984,6 @@ fn bracket_order_validation_buy() {
         .stop_loss(45.0);
 
     assert!(bracket.build().is_ok());
-}
-
-#[test]
-fn bracket_order_missing_entry() {
-    let client = MockClient;
-    let contract = create_test_contract();
-
-    let bracket = OrderBuilder::new(&client, &contract).buy(100).bracket().take_profit(55.0).stop_loss(45.0);
-
-    let result = bracket.build();
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("entry"));
-}
-
-#[test]
-fn bracket_order_missing_take_profit() {
-    let client = MockClient;
-    let contract = create_test_contract();
-
-    let bracket = OrderBuilder::new(&client, &contract).buy(100).bracket().entry_limit(50.0).stop_loss(45.0);
-
-    let result = bracket.build();
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("take_profit"));
-}
-
-#[test]
-fn bracket_order_missing_stop_loss() {
-    let client = MockClient;
-    let contract = create_test_contract();
-
-    let bracket = OrderBuilder::new(&client, &contract)
-        .buy(100)
-        .bracket()
-        .entry_limit(50.0)
-        .take_profit(55.0);
-
-    let result = bracket.build();
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("stop_loss"));
 }
 
 #[test]
@@ -1213,22 +1186,6 @@ fn bracket_order_inherits_outside_rth() {
     assert!(!orders[0].outside_rth);
     assert!(!orders[1].outside_rth);
     assert!(!orders[2].outside_rth);
-}
-
-#[test]
-fn bracket_order_with_missing_action() {
-    let client = MockClient;
-    let contract = create_test_contract();
-
-    // Create builder without setting action
-    let mut builder = OrderBuilder::new(&client, &contract);
-    builder.quantity = Some(100.0);
-
-    let bracket = builder.bracket();
-
-    let result = bracket.entry_limit(50.0).take_profit(55.0).stop_loss(45.0).build();
-
-    assert!(result.is_err());
 }
 
 // ===== Market Entry Bracket Order Tests =====
@@ -1681,7 +1638,7 @@ fn condition_with_existing_order_conditions() {
         .condition(price(265598, "SMART").greater_than(150.0));
 
     // Manually add another condition
-    builder.conditions.push(OrderCondition::Margin(MarginCondition {
+    builder.fields.conditions.push(OrderCondition::Margin(MarginCondition {
         percent: 25,
         is_more: false,
         is_conjunction: true,
@@ -1844,7 +1801,10 @@ fn preset_legs_consume_no_ids_for_an_invalid_parent() {
             calls
         });
 
-    assert!(matches!(result, Err(ValidationError::InvalidQuantity(_))), "got {result:?}");
+    assert!(
+        matches!(result, Err(Error::Validation(ValidationError::InvalidQuantity(_)))),
+        "got {result:?}"
+    );
     assert_eq!(calls, 0);
 }
 
@@ -1873,12 +1833,6 @@ fn detached_builder_matches_bound_builder() {
         .unwrap();
 
     assert_eq!(bound, detached);
-}
-
-#[test]
-fn detached_builder_validates() {
-    let err = Order::builder().buy(100).build().unwrap_err();
-    assert_eq!(err, ValidationError::MissingRequiredField("order_type"));
 }
 
 // === Trailing stops: TrailBy ===
@@ -1959,13 +1913,13 @@ fn market_if_touched_ignores_an_earlier_stop_price() {
 #[test]
 fn stop_with_protection_requires_stop_price() {
     let err = Order::builder().buy(1).order_type(OrderType::StopWithProtection).build().unwrap_err();
-    assert_eq!(err, ValidationError::MissingRequiredField("stop_price"));
+    assert_missing_input(err, "stop price");
 }
 
 #[test]
 fn trailing_stop_without_trail_fails_validation() {
     let err = Order::builder().sell(100).order_type(OrderType::TrailingStop).build().unwrap_err();
-    assert_eq!(err, ValidationError::MissingRequiredField("trailing amount or percent"));
+    assert_missing_input(err, "trailing amount or percent");
 }
 
 // === Price fields from an earlier order-type setter ===
@@ -2025,7 +1979,7 @@ fn aux_types_require_aux_price() {
         OrderType::PeggedToMarket,
     ] {
         let err = Order::builder().buy(100).order_type(order_type.clone()).build().unwrap_err();
-        assert_eq!(err, ValidationError::MissingRequiredField("aux_price"), "{order_type:?}");
+        assert_missing_input(err, "aux price");
     }
 
     let err = Order::builder()
@@ -2034,7 +1988,7 @@ fn aux_types_require_aux_price() {
         .order_type(OrderType::LimitIfTouched)
         .build()
         .unwrap_err();
-    assert_eq!(err, ValidationError::MissingRequiredField("aux_price"));
+    assert_missing_input(err, "aux price");
 }
 
 #[test]
@@ -2045,7 +1999,7 @@ fn stop_price_does_not_stand_in_for_a_trigger() {
         .order_type(OrderType::MarketIfTouched)
         .build()
         .unwrap_err();
-    assert_eq!(err, ValidationError::MissingRequiredField("aux_price"));
+    assert_missing_input(err, "aux price");
 }
 
 #[test]
@@ -2113,7 +2067,7 @@ fn peg_best_rejects_a_non_finite_offset() {
             .peg_best(111.11, CompeteAgainstBest::Offset(offset))
             .build()
             .unwrap_err();
-        assert!(matches!(err, ValidationError::InvalidPrice(_)), "{offset}");
+        assert!(matches!(err, Error::Validation(ValidationError::InvalidPrice(_))), "{offset}");
     }
 }
 
@@ -2185,7 +2139,7 @@ fn peg_mid_forms_replace_each_other() {
 
 /// A builder that sets every price field and every field a type requires, then switches to
 /// `order_type`.
-fn every_price_field(order_type: OrderType) -> OrderBuilder<Detached> {
+fn every_price_field(order_type: OrderType) -> OrderBuilder<Detached, Action, OrderType> {
     Order::builder()
         .buy(1)
         .peg_best(1.0, CompeteAgainstBest::UpToMid(UP_TO_MID))
@@ -2395,14 +2349,14 @@ fn stock_range_sets_bounds() {
 #[test]
 fn pegged_to_stock_requires_delta() {
     let err = Order::builder().buy(1).order_type(OrderType::PeggedToStock).build().unwrap_err();
-    assert_eq!(err, ValidationError::MissingRequiredField("delta"));
+    assert_missing_input(err, "delta");
 }
 
 #[test]
 fn pegged_to_stock_requires_starting_price() {
     let mut builder = Order::builder().buy(1).order_type(OrderType::PeggedToStock);
-    builder.delta = Some(0.5);
-    assert_eq!(builder.build().unwrap_err(), ValidationError::MissingRequiredField("starting_price"));
+    builder.fields.delta = Some(0.5);
+    assert_missing_input(builder.build().unwrap_err(), "starting price");
 }
 
 #[test]
@@ -2452,7 +2406,7 @@ fn reference_contract_accepts_contract_id() {
 #[test]
 fn pegged_to_benchmark_requires_reference_contract() {
     let err = Order::builder().buy(100).pegged_to_benchmark(50.0).build().unwrap_err();
-    assert_eq!(err, ValidationError::MissingRequiredField("reference_contract"));
+    assert_missing_input(err, "reference_contract");
 }
 
 #[test]
@@ -2463,7 +2417,7 @@ fn pegged_to_benchmark_requires_starting_price() {
         .reference_contract(12345, "ISLAND")
         .build()
         .unwrap_err();
-    assert_eq!(err, ValidationError::MissingRequiredField("starting_price"));
+    assert_missing_input(err, "starting price");
 }
 
 // === Combo, manual time, cash quantity ===
@@ -2534,11 +2488,11 @@ fn cash_qty_keeps_a_nonzero_quantity() {
 #[test]
 fn cash_qty_must_be_positive() {
     let err = Order::builder().buy(0).limit(1.10).cash_qty(0.0).build().unwrap_err();
-    assert_eq!(err, ValidationError::InvalidQuantity(0.0));
+    assert_validation(err, ValidationError::InvalidQuantity(0.0));
 }
 
 #[test]
 fn zero_quantity_without_cash_qty_still_fails() {
     let err = Order::builder().buy(0).limit(1.10).build().unwrap_err();
-    assert_eq!(err, ValidationError::InvalidQuantity(0.0));
+    assert_validation(err, ValidationError::InvalidQuantity(0.0));
 }
