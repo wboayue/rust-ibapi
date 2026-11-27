@@ -115,10 +115,9 @@ pub(crate) enum ExpiryInput {
 impl ContractBuilder {
     /// Creates a new [ContractBuilder]
     ///
-    /// A field left unset builds empty or zero: security type [`SecurityType::Stock`], and an
-    /// empty exchange and currency. A `Contract` struct literal ending in `..Default::default()`
-    /// differs in one of these: its exchange is `SMART`. Set [`exchange`](Self::exchange) for
-    /// smart routing.
+    /// The exchange and currency start empty. Set [`exchange`](Self::exchange) for smart
+    /// routing. A `Contract` struct literal with `..Default::default()` defaults to `SMART`.
+    /// Set [`security_type`](Self::security_type) unless an ID identifies the contract.
     ///
     /// # Examples
     ///

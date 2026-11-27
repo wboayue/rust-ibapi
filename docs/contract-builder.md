@@ -371,8 +371,8 @@ IBKR supports trading in many currencies. The Currency type provides constants f
 listed in several currencies is ambiguous without one; market data and orders on it fail with
 error 200. The stock, option and futures builders default to USD.
 
-A `..Default::default()` literal also takes exchange `SMART` and security type `Stock`, while
-`ContractBuilder::new()` builds an empty exchange unless `.exchange(..)` sets one.
+A `..Default::default()` literal also takes exchange `SMART` and leaves the security type unset.
+`ContractBuilder::new()` leaves the exchange empty unless `.exchange(..)` sets one.
 
 ```rust
 use ibapi::contracts::Currency;

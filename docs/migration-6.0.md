@@ -1807,7 +1807,12 @@ What changes for a struct literal that leaves `currency` unset:
 let contract = Contract { symbol: "AAPL".into(), security_type: SecurityType::Stock, ..Default::default() };
 
 // 6.0
-let contract = Contract { symbol: "AAPL".into(), security_type: SecurityType::Stock, currency: "USD".into(), ..Default::default() };
+let contract = Contract {
+    symbol: "AAPL".into(),
+    security_type: Some(SecurityType::Stock),
+    currency: "USD".into(),
+    ..Default::default()
+};
 // or
 let contract = Contract::stock("AAPL").build();
 ```
