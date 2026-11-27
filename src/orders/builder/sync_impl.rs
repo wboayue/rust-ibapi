@@ -2,16 +2,17 @@ use super::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBou
 use super::types::{AttachedOrderIds, BracketOrderIds};
 use crate::client::sync::Client;
 use crate::errors::Error;
-use crate::orders::OrderId;
 use crate::orders::PlaceOrder;
-impl OrderBuilder<ClientBound<'_, Client>> {
+use crate::orders::{Action, OrderId, OrderType};
+impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
     /// Submit the order synchronously
     /// Returns the order ID assigned to the submitted order
     ///
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
-    /// (reserved for request ids).
+    /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
+    /// has reached 1,500,000,000 (reserved for request ids).
     pub fn submit(self) -> Result<OrderId, Error> {
         let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
@@ -24,11 +25,12 @@ impl OrderBuilder<ClientBound<'_, Client>> {
     ///
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
-    /// (reserved for request ids); the error TWS returns if it rejects the what-if order;
+    /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
+    /// has reached 1,500,000,000 (reserved for request ids); the error TWS returns if it rejects the what-if order;
     /// [`Error::UnexpectedEndOfStream`] if the reply ends without the order's state.
     pub fn analyze(mut self) -> Result<crate::orders::OrderState, Error> {
-        self.what_if = true;
+        self.fields.what_if = true;
         let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
         let order = self.build()?;
@@ -51,14 +53,15 @@ impl OrderBuilder<ClientBound<'_, Client>> {
     }
 }
 
-impl BracketOrderBuilder<'_, Client> {
+impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// Submit bracket orders synchronously
     /// Returns BracketOrderIds containing all three order IDs
     ///
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
-    /// (reserved for request ids).
+    /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
+    /// has reached 1,500,000,000 (reserved for request ids).
     pub fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let ClientBound { client, contract } = self.parent_builder.target;
         let orders = self.build()?;
@@ -99,8 +102,9 @@ impl AttachedOrdersBuilder<'_, Client> {
     ///
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
-    /// (reserved for request ids).
+    /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
+    /// has reached 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
     ///

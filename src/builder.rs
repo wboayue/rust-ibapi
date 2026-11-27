@@ -4,7 +4,9 @@
 //! A typestate builder carries a required field as a type parameter that starts
 //! as [`Missing`] and becomes the field's value once it is set. The terminal
 //! (`build()`) exists only on the complete state, so a builder missing a required
-//! field fails to compile instead of failing at runtime.
+//! field fails to compile instead of failing at runtime. `OrderBuilder` (side
+//! and order type), its bracket builder and `ExerciseOptionsBuilder` work this
+//! way, as do the contract and order-condition builders.
 //!
 //! A value that can only be checked at runtime fails with a [`ValidationError`]
 //! when it is data a caller may correct: a quantity, a price or strike, a date
@@ -19,8 +21,9 @@ pub struct Missing;
 /// A runtime input the client rejected before sending anything.
 ///
 /// Returned on its own by input constructors (`Quantity::new`, `ExpirationDate::new`,
-/// `"20261218".parse::<ExpirationDate>()`, `OrderBuilder::build`) and inside
-/// [`Error::Validation`](crate::Error::Validation) by client methods. `?` converts
+/// `"20261218".parse::<ExpirationDate>()`) and inside
+/// [`Error::Validation`](crate::Error::Validation) by builders' `build()` and client
+/// methods. `?` converts
 /// one into the other.
 ///
 /// # Examples
@@ -44,8 +47,6 @@ pub enum ValidationError {
     InvalidQuantity(f64),
     /// Price must be finite (not NaN or infinity); a strike must also be positive.
     InvalidPrice(f64),
-    /// Required builder field was not supplied.
-    MissingRequiredField(&'static str),
     /// Combination of inputs violates broker rules.
     InvalidCombination(String),
     /// Stop price conflicts with current market context.
@@ -100,7 +101,6 @@ impl fmt::Display for ValidationError {
         match self {
             Self::InvalidQuantity(q) => write!(f, "Invalid quantity: {}", q),
             Self::InvalidPrice(p) => write!(f, "Invalid price: {}", p),
-            Self::MissingRequiredField(field) => write!(f, "Missing required field: {}", field),
             Self::InvalidCombination(msg) => write!(f, "Invalid combination: {}", msg),
             Self::InvalidStopPrice { stop, current } => {
                 write!(f, "Invalid stop price {} for current price {}", stop, current)

@@ -405,7 +405,7 @@ The compiler finds every use of the three fields. It does not catch the serializ
 A failure is now one of two shapes, by who can fix it:
 
 - **`Error::Validation(ValidationError)`**: a runtime value a caller may correct, such as a quantity, a price or strike, a date from user or file input, or a field on a caller-built `Order`. Match the variant.
-- **`Error::InvalidArgument(String)`**: a caller bug, such as a builder missing a required field (`Contract::spread` without legs, `ContractBuilder` without a symbol or option strike), conflicting `historical_data` settings, or a bad `ClientBuilder` setting. Fix the code; nothing to match. The order builders still report a missing field as `ValidationError::MissingRequiredField`, listed below.
+- **`Error::InvalidArgument(String)`**: a caller bug, such as a builder missing a required field (`Contract::spread` without legs, `ContractBuilder` without a symbol or option strike), conflicting `historical_data` settings, or a bad `ClientBuilder` setting. Fix the code; nothing to match. The order builders track their required fields in their type instead (§51).
 
 `ValidationError` moves from `ibapi::orders::builder` to `ibapi::builder`, beside `Missing` (§11). No other path is kept:
 
@@ -421,7 +421,7 @@ It gains two variants: `InvalidField { field, value, reason }` and `InvalidDate 
 
 These now return `Error::Validation` where they returned `Error::InvalidArgument` with the message text:
 
-- `OrderBuilder::submit`, `analyze` and `build_order`, the bracket and attached-order submits and `ExerciseOptionsBuilder::submit`, with the `ValidationError` that `OrderBuilder::build` already returned: `InvalidQuantity`, `InvalidPrice`, `MissingRequiredField`, `InvalidCombination`, `InvalidStopPrice`, `InvalidLimitPrice`, `InvalidBracketOrder` or `InvalidPercentage`.
+- `OrderBuilder::submit`, `analyze` and `build_order`, the bracket and attached-order submits and `ExerciseOptionsBuilder::submit`, with the `ValidationError` that `OrderBuilder::build` already returned: `InvalidQuantity`, `InvalidPrice`, `InvalidCombination`, `InvalidStopPrice`, `InvalidLimitPrice`, `InvalidBracketOrder` or `InvalidPercentage`.
 - `place_order`, `submit_order`, `cancel_order_with` and `global_cancel_with` (sync and async), for an `ext_operator` TWS would reject: `InvalidField { field: "Order::ext_operator" | "OrderCancel::ext_operator", .. }`.
 - Option `build()` and `ContractBuilder::build()` for a bad strike (`InvalidPrice`) or expiry (`InvalidDate`); see §13, §30 and §34. `ContractBuilder::build()` rejected only a negative strike; it now also rejects NaN and infinite ones for an option, and zero unless a `contract_id` or `local_symbol` identifies the contract (TWS reads strike 0 as unset).
 
@@ -1302,3 +1302,67 @@ match err {
     other => eprintln!("rejected: {other}"),
 }
 ```
+
+### 51. Order builders require a side, an order type and bracket legs at compile time
+
+`OrderBuilder`, `BracketOrderBuilder` and `ExerciseOptionsBuilder` returned
+`ValidationError::MissingRequiredField` at runtime for a missing side, order type, bracket leg or
+exercise action. They are now typestate builders, and `MissingRequiredField` is removed:
+
+| Builder | Required, tracked in the type | Terminals that need it |
+|---|---|---|
+| `OrderBuilder<T, S, O>` | side `S`: `buy` / `sell` / `sell_short` / `sell_long` make it `Action`; order type `O`: `market`, `limit`, ..., `order_type(..)` make it `OrderType` | `build`, `build_order`, `submit`, `analyze`, `preset_stop_loss`, `preset_profit_taker` need both; `bracket` needs the side and no order type |
+| `BracketOrderBuilder<'a, C, E, P, L>` | entry `E` (`entry_limit` / `entry_market`), `take_profit` `P`, `stop_loss` `L` | `submit_all` |
+| `ExerciseOptionsBuilder<'a, C, A>` | `exercise` / `lapse` make `A` an `ExerciseAction` | `submit` |
+
+Each parameter starts as `ibapi::builder::Missing`. Setters still come in any order
+(`.limit(150.0).buy(100)` works), and a later order-type setter still replaces an earlier one.
+
+```rust,ignore
+let order = Order::builder().buy(100).limit(150.0).build()?; // 5.x and 6.0
+let order = Order::builder().buy(100).build();               // 5.x: Err(MissingRequiredField("order_type")); 6.0: does not compile
+client.order(&contract).buy(100).bracket().take_profit(160.0).stop_loss(145.0).submit_all(); // 5.x: Err; 6.0: does not compile
+client.exercise_options(&contract).account("DU123").submit(); // 5.x: Err; 6.0: does not compile
+```
+
+`OrderBuilder::build()` returns `Result<Order, ibapi::Error>`, where it returned
+`Result<Order, ValidationError>`. A bad quantity or price is still a `ValidationError`, now
+wrapped in `Error::Validation`. A required input the type can't track is `Error::InvalidArgument`
+with a message naming it:
+
+- `.order_type(..)` with a type whose price or parameter no earlier setter wrote: the limit price
+  for `Limit`, `StopLimit`, `LimitOnClose`, `LimitIfTouched` and `RelativeLimitCombo`; the stop
+  price for `Stop`, `StopLimit` and `StopWithProtection`; the trail for `TrailingStop` and
+  `TrailingStopLimit`; the trigger or offset for `MarketIfTouched`, `LimitIfTouched`, `Relative`,
+  `PassiveRelative` and `PeggedToMarket`; the volatility for `Volatility`; the delta and starting
+  price for `PeggedToStock`; the starting price for `PeggedToBenchmark`. The named setters
+  (`.limit(..)`, `.pegged_to_stock(..)`, ...) take these, so only `order_type(..)` reaches it.
+- `pegged_to_benchmark(..)` without `reference_contract(..)`.
+- `time_in_force(TimeInForce::GoodTillDate)` without `good_till_date(..)` or `good_till_time(..)`.
+
+```rust,ignore
+// 5.x
+match Order::builder().buy(100).order_type(OrderType::Limit).build() {
+    Err(ValidationError::MissingRequiredField(field)) => { /* ... */ }
+    Err(ValidationError::InvalidPrice(price)) => { /* ... */ }
+    // ...
+}
+
+// 6.0
+match Order::builder().buy(100).order_type(OrderType::Limit).build() {
+    Err(Error::InvalidArgument(message)) => { /* fix the code */ }
+    Err(Error::Validation(ValidationError::InvalidPrice(price))) => { /* ... */ }
+    // ...
+}
+```
+
+The compiler finds every missing setter, every match on `MissingRequiredField`, and every
+`build()` whose error is used as a `ValidationError`; `?` into `ibapi::Error` compiles unchanged.
+From `submit()` / `analyze()`, the cases above were `Error::InvalidArgument` in 5.x and still are;
+only `build()`'s error type changes, and the compiler finds that.
+
+`bracket()` needs a side and no order type: the entry setter picks the type, so
+`.limit(150.0).bracket()` no longer compiles, where 5.x let the entry replace it.
+
+Code that names a builder's type writes the state: `OrderBuilder<Detached, Action, OrderType>` for
+a builder ready to `build()`; the bare name `OrderBuilder<T>` means one with neither set.

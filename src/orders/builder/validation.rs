@@ -3,8 +3,7 @@ use crate::builder::ValidationError;
 use crate::orders::Action;
 
 /// Validates bracket order prices
-pub(crate) fn validate_bracket_prices(action: Option<&Action>, prices: &BracketPrices) -> Result<(), ValidationError> {
-    let action = action.ok_or(ValidationError::MissingRequiredField("action"))?;
+pub(crate) fn validate_bracket_prices(action: &Action, prices: &BracketPrices) -> Result<(), ValidationError> {
     let BracketPrices {
         entry,
         take_profit,

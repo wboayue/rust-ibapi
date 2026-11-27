@@ -210,7 +210,6 @@ fn from_validation_error_keeps_the_variant() {
     let cases = [
         ValidationError::InvalidQuantity(-1.0),
         ValidationError::InvalidPrice(f64::INFINITY),
-        ValidationError::MissingRequiredField("contract"),
         ValidationError::InvalidCombination("opposing legs".to_string()),
         ValidationError::InvalidStopPrice { stop: 99.0, current: 100.0 },
         ValidationError::InvalidLimitPrice {
@@ -266,7 +265,7 @@ fn clone_preserves_payloaded_variants() {
             feature: "feat".into(),
         },
         Error::InvalidArgument("a".into()),
-        Error::Validation(ValidationError::MissingRequiredField("action")),
+        Error::Validation(ValidationError::InvalidQuantity(0.0)),
         Error::UnsupportedTimeZone("US/Foo".into()),
         Error::unexpected_response(&response),
         Error::unexpected_wire_format(&response),

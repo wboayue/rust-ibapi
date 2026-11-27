@@ -4,18 +4,39 @@ use super::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBou
 use super::types::{AttachedOrderIds, BracketOrderIds};
 use crate::client::r#async::Client;
 use crate::errors::Error;
-use crate::orders::OrderId;
 use crate::orders::PlaceOrder;
+use crate::orders::{Action, OrderId, OrderType};
 use crate::subscriptions::SubscriptionItemStreamExt;
 
-impl OrderBuilder<ClientBound<'_, Client>> {
+impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
     /// Submit the order asynchronously
     /// Returns the order ID assigned to the submitted order
     ///
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
-    /// (reserved for request ids).
+    /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
+    /// has reached 1,500,000,000 (reserved for request ids).
+    ///
+    /// # Examples
+    ///
+    /// `submit` needs a side and an order type. Without the order type:
+    ///
+    /// ```compile_fail,E0599
+    /// # async fn run(client: &ibapi::Client) {
+    /// # let contract = ibapi::contracts::Contract::stock("AAPL").build();
+    /// let order_id = client.order(&contract).buy(100).submit();
+    /// # }
+    /// ```
+    ///
+    /// Without the side:
+    ///
+    /// ```compile_fail,E0599
+    /// # async fn run(client: &ibapi::Client) {
+    /// # let contract = ibapi::contracts::Contract::stock("AAPL").build();
+    /// let order_id = client.order(&contract).market().submit();
+    /// # }
+    /// ```
     pub async fn submit(self) -> Result<OrderId, Error> {
         let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
@@ -28,11 +49,12 @@ impl OrderBuilder<ClientBound<'_, Client>> {
     ///
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
-    /// (reserved for request ids); the error TWS returns if it rejects the what-if order;
+    /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
+    /// has reached 1,500,000,000 (reserved for request ids); the error TWS returns if it rejects the what-if order;
     /// [`Error::UnexpectedEndOfStream`] if the reply ends without the order's state.
     pub async fn analyze(mut self) -> Result<crate::orders::OrderState, Error> {
-        self.what_if = true;
+        self.fields.what_if = true;
         let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
         let order = self.build()?;
@@ -56,14 +78,63 @@ impl OrderBuilder<ClientBound<'_, Client>> {
     }
 }
 
-impl BracketOrderBuilder<'_, Client> {
+impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// Submit bracket orders asynchronously
     /// Returns BracketOrderIds containing all three order IDs
     ///
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
-    /// (reserved for request ids).
+    /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
+    /// has reached 1,500,000,000 (reserved for request ids).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run(client: &ibapi::Client) -> Result<(), ibapi::Error> {
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let contract = Contract::stock("AAPL").build();
+    /// let ids = client
+    ///     .order(&contract)
+    ///     .buy(100)
+    ///     .bracket()
+    ///     .entry_limit(150.0)
+    ///     .take_profit(160.0)
+    ///     .stop_loss(145.0)
+    ///     .submit_all()
+    ///     .await?;
+    /// println!("parent {} take-profit {} stop-loss {}", ids.parent, ids.take_profit, ids.stop_loss);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// `submit_all` needs the entry, the take-profit and the stop-loss. Without the entry:
+    ///
+    /// ```compile_fail,E0599
+    /// # async fn run(client: &ibapi::Client) {
+    /// # let contract = ibapi::contracts::Contract::stock("AAPL").build();
+    /// let ids = client.order(&contract).buy(100).bracket().take_profit(160.0).stop_loss(145.0).submit_all();
+    /// # }
+    /// ```
+    ///
+    /// Without the take-profit:
+    ///
+    /// ```compile_fail,E0599
+    /// # async fn run(client: &ibapi::Client) {
+    /// # let contract = ibapi::contracts::Contract::stock("AAPL").build();
+    /// let ids = client.order(&contract).buy(100).bracket().entry_limit(150.0).stop_loss(145.0).submit_all();
+    /// # }
+    /// ```
+    ///
+    /// Without the stop-loss:
+    ///
+    /// ```compile_fail,E0599
+    /// # async fn run(client: &ibapi::Client) {
+    /// # let contract = ibapi::contracts::Contract::stock("AAPL").build();
+    /// let ids = client.order(&contract).buy(100).bracket().entry_market().take_profit(160.0).submit_all();
+    /// # }
+    /// ```
     pub async fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let ClientBound { client, contract } = self.parent_builder.target;
         let orders = self.build()?;
@@ -104,8 +175,9 @@ impl AttachedOrdersBuilder<'_, Client> {
     ///
     /// # Errors
     /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
-    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
-    /// (reserved for request ids).
+    /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
+    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
+    /// has reached 1,500,000,000 (reserved for request ids).
     ///
     /// # Examples
     ///

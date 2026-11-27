@@ -9,7 +9,7 @@ triggers:
   - about to write Error::InvalidArgument(format!(..))
 symbols: [Error::Validation, Error::InvalidArgument, ValidationError, ibapi::builder]
 related: [builder-enum-coverage, param-budget]
-precedents: ["#1169", "#1249", "#1331"]
+precedents: ["#1169", "#1249", "#1331", "#1332"]
 ---
 
 Ask who fixes it. A runtime value a caller may correct (a quantity, price or strike, a date from
@@ -19,8 +19,10 @@ user or file input, a field on a caller-built `Order`) fails with a typed
 `ibapi::Error`. A caller bug no one recovers from at runtime (a builder missing a required field,
 conflicting `historical_data` settings, bad client config, `buffer_limit(0)`) is
 `Error::InvalidArgument(String)`.
-Add a `ValidationError` variant rather than formatting a value into a string. If the type
-already carries type parameters, prefer typestate to either error.
+Add a `ValidationError` variant rather than formatting a value into a string. For a required
+builder field, prefer typestate (`ibapi::builder::Missing`) to either error; `InvalidArgument`
+is for what the type can't track, such as a price that depends on the `OrderType` value passed
+to `OrderBuilder::order_type(..)`. `ValidationError` has no missing-field variant.
 
 `Error::Parse` is for text that came from TWS: decoders, and the `impl_wire_enum!` and
 `BarTimestamp` parsers they call. A `FromStr` whose text comes from the caller returns
@@ -29,9 +31,6 @@ through the `impl_wire_enum!` `caller_input` form. Use that form for a new wire 
 reads. The expiry types return `ValidationError` too, though `Expiry::from_wire` also parses TWS
 text with them: it turns a failure into `Expiry::Unknown`, so no decode error surfaces.
 `ValidationError` is `#[non_exhaustive]`, so a new variant is not a breaking change.
-
-Not yet aligned, tracked in #1328: the order builders still return
-`ValidationError::MissingRequiredField` for a missing field. Don't copy it into new code.
 
 ## Why
 
@@ -48,8 +47,9 @@ the crate-wide `Error::Validation` and contracts use it too. A constructor that 
 `#[from]`, so callers that return `ibapi::Error` see no difference.
 
 Typestate removes the error path entirely, as the condition builders did for a missing
-comparison (`docs/migration-6.0.md` §12). It's the better fix where a builder already has
-type parameters.
+comparison (`docs/migration-6.0.md` §12) and the order builders for a side, an order type or a
+bracket leg (§51). `OrderBuilder` gained two parameters for it: a builder with dozens of optional
+fields still pays for typestate only in the setters that change the state.
 
 ## Precedents
 
@@ -68,3 +68,9 @@ type parameters.
   caller input. Review caught realtime `WhatToShow`, which shares the wire-enum macro but is never
   decoded; the macro gained a `caller_input` form for it. The decoded wire enums stayed on
   `Error::Parse`. `ValidationError` became `#[non_exhaustive]`.
+- #1332 — `OrderBuilder` (side, order type), `BracketOrderBuilder` (entry,
+  take-profit, stop-loss) and `ExerciseOptionsBuilder` (exercise / lapse) became typestate and
+  `ValidationError::MissingRequiredField` was removed. What the type can't see stayed a runtime
+  check, now `InvalidArgument`: `order_type(..)` without the price its value needs,
+  `pegged_to_benchmark` without `reference_contract`, `GoodTillDate` without a date.
+  `OrderBuilder::build()` moved from `ValidationError` to `ibapi::Error` to carry both.

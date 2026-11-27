@@ -5,7 +5,7 @@ use crate::orders::Action;
 #[test]
 fn valid_buy_bracket() {
     let result = validate_bracket_prices(
-        Some(&Action::Buy),
+        &Action::Buy,
         &BracketPrices {
             entry: 50.0,
             take_profit: 55.0,
@@ -18,7 +18,7 @@ fn valid_buy_bracket() {
 #[test]
 fn valid_sell_bracket() {
     let result = validate_bracket_prices(
-        Some(&Action::Sell),
+        &Action::Sell,
         &BracketPrices {
             entry: 50.0,
             take_profit: 45.0,
@@ -31,7 +31,7 @@ fn valid_sell_bracket() {
 #[test]
 fn invalid_buy_bracket_take_profit() {
     let result = validate_bracket_prices(
-        Some(&Action::Buy),
+        &Action::Buy,
         &BracketPrices {
             entry: 50.0,
             take_profit: 45.0,
@@ -44,7 +44,7 @@ fn invalid_buy_bracket_take_profit() {
 #[test]
 fn invalid_buy_bracket_stop_loss() {
     let result = validate_bracket_prices(
-        Some(&Action::Buy),
+        &Action::Buy,
         &BracketPrices {
             entry: 50.0,
             take_profit: 55.0,
@@ -57,7 +57,7 @@ fn invalid_buy_bracket_stop_loss() {
 #[test]
 fn invalid_sell_bracket() {
     let result = validate_bracket_prices(
-        Some(&Action::Sell),
+        &Action::Sell,
         &BracketPrices {
             entry: 50.0,
             take_profit: 55.0,
@@ -89,23 +89,9 @@ fn stop_price_no_current_price() {
 }
 
 #[test]
-fn missing_action_validation() {
-    let result = validate_bracket_prices(
-        None,
-        &BracketPrices {
-            entry: 50.0,
-            take_profit: 55.0,
-            stop_loss: 45.0,
-        },
-    );
-    assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), ValidationError::MissingRequiredField("action")));
-}
-
-#[test]
 fn sell_short_bracket() {
     let result = validate_bracket_prices(
-        Some(&Action::SellShort),
+        &Action::SellShort,
         &BracketPrices {
             entry: 50.0,
             take_profit: 45.0,
@@ -119,7 +105,7 @@ fn sell_short_bracket() {
 fn edge_case_equal_prices() {
     // Test when take profit equals entry (invalid)
     let result = validate_bracket_prices(
-        Some(&Action::Buy),
+        &Action::Buy,
         &BracketPrices {
             entry: 50.0,
             take_profit: 50.0,
@@ -130,7 +116,7 @@ fn edge_case_equal_prices() {
 
     // Test when stop loss equals entry (invalid)
     let result = validate_bracket_prices(
-        Some(&Action::Buy),
+        &Action::Buy,
         &BracketPrices {
             entry: 50.0,
             take_profit: 55.0,
@@ -154,7 +140,7 @@ fn stop_price_edge_cases() {
 #[test]
 fn bracket_validation_error_messages() {
     let result = validate_bracket_prices(
-        Some(&Action::Buy),
+        &Action::Buy,
         &BracketPrices {
             entry: 50.0,
             take_profit: 45.0,
@@ -166,7 +152,7 @@ fn bracket_validation_error_messages() {
     assert!(err.to_string().contains("Take profit (45) must be above entry (50)"));
 
     let result = validate_bracket_prices(
-        Some(&Action::Sell),
+        &Action::Sell,
         &BracketPrices {
             entry: 50.0,
             take_profit: 55.0,
