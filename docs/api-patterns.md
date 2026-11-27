@@ -689,10 +689,10 @@ impl<T> Drop for Subscription<T> { /* ... */ }
 
 ### Newtype Wrappers for Domain Ids
 ```rust
-// Bad: the signature does not say which i32 is which
-fn lookup(contract_id: i32, order_id: i32) -> Contract { /* ... */ }  // easy to swap args
+// Plain: only the parameter name says which i32 is which
+fn lookup(contract_id: i32, order_id: i32) -> Contract { /* ... */ }
 
-// Good: the parameter names which id it wants
+// Preferred: the type in rustdoc and IDE hints names the id
 // The crate's id newtypes (ContractId, OrderId, AccountId, ModelCode) are transparent:
 // a public field, From impls both ways and Display. Construction does not validate the
 // value (an OrderId in the request-id range is rejected when an order uses it).
@@ -705,5 +705,5 @@ impl From<i32> for ContractId {
 }
 
 fn lookup(contract_id: impl Into<ContractId>) -> Contract { /* ... */ }
-// Self-documenting, not type-checked: any i32, including an order id, converts.
+// Names the id; does not stop a swap: any i32, including an order id, converts.
 ```

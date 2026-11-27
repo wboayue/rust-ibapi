@@ -85,3 +85,7 @@ pub use crate::subscriptions::{Drained, NoticeStream, Subscription, Subscription
 // Async-specific imports
 #[cfg(feature = "async")]
 pub use futures::StreamExt;
+
+#[cfg(test)]
+#[path = "prelude_tests.rs"]
+mod tests;

@@ -615,7 +615,7 @@ bound now returns what it asked for.
 
 The compiler reports every call. Nothing it can check depends on which bound you choose.
 
-### 27. Id parameters take `impl Into<ContractId>` and `impl Into<AccountId>`
+### 27. Id parameters take `impl Into<XId>`; returned order ids are `i32`; `ContractId` moves to `contracts`
 
 These id parameters now accept both the raw value and the typed id:
 

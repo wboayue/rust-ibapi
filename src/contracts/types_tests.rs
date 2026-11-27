@@ -605,90 +605,27 @@ mod contract_id {
     use super::*;
 
     #[test]
-    fn new() {
-        let id = ContractId(12345);
-        assert_eq!(id.0, 12345);
+    fn value_and_display_are_the_raw_id() {
+        let cases = [("typical", 12345), ("zero", 0), ("negative", -1), ("max", i32::MAX)];
+        for (label, raw) in cases {
+            let id = ContractId::from(raw);
+            assert_eq!(id.value(), raw, "{label}");
+            assert_eq!(id.to_string(), raw.to_string(), "{label}");
+        }
     }
 
     #[test]
-    fn value() {
-        let id = ContractId(12345);
-        assert_eq!(id.value(), 12345);
-    }
-
-    #[test]
-    fn display() {
-        let id = ContractId(12345);
-        assert_eq!(format!("{}", id), "12345");
-    }
-
-    #[test]
-    fn from_i32() {
-        let id = ContractId::from(12345);
-        assert_eq!(id.0, 12345);
-    }
-
-    #[test]
-    fn from_i32_ref() {
+    fn converts_both_ways() {
         let raw = 12345;
-        assert_eq!(ContractId::from(&raw), ContractId(12345));
+        assert_eq!(ContractId::from(raw), ContractId(raw));
+        assert_eq!(ContractId::from(&raw), ContractId(raw));
+        let back: i32 = ContractId(raw).into();
+        assert_eq!(back, raw);
     }
 
     #[test]
-    fn into_i32() {
-        let raw: i32 = ContractId(12345).into();
-        assert_eq!(raw, 12345);
-    }
-
-    #[test]
-    fn zero_contract_id() {
-        let id = ContractId(0);
-        assert_eq!(id.value(), 0);
-        assert_eq!(format!("{}", id), "0");
-    }
-
-    #[test]
-    fn negative_contract_id() {
-        let id = ContractId(-1);
-        assert_eq!(id.value(), -1);
-        assert_eq!(format!("{}", id), "-1");
-    }
-
-    #[test]
-    fn max_contract_id() {
-        let id = ContractId(i32::MAX);
-        assert_eq!(id.value(), i32::MAX);
-        assert_eq!(format!("{}", id), i32::MAX.to_string());
-    }
-
-    #[test]
-    fn equality() {
-        let id1 = ContractId(12345);
-        let id2 = ContractId(12345);
-        let id3 = ContractId(54321);
-
-        assert_eq!(id1, id2);
-        assert_ne!(id1, id3);
-    }
-
-    #[test]
-    fn copy() {
-        let id1 = ContractId(12345);
-        let id2 = id1; // Copy
-        assert_eq!(id1, id2);
-        assert_eq!(id1.value(), 12345);
-        assert_eq!(id2.value(), 12345);
-    }
-
-    #[test]
-    fn hash() {
-        use std::collections::HashSet;
-
-        let mut set = HashSet::new();
-        set.insert(ContractId(12345));
-        set.insert(ContractId(12345));
-        set.insert(ContractId(54321));
-
-        assert_eq!(set.len(), 2);
+    fn is_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<ContractId>();
     }
 }

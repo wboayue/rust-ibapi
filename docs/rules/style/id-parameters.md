@@ -9,39 +9,42 @@ triggers:
   - adding an id newtype, or a conversion on one
 symbols: [AccountId, ModelCode, ContractId, OrderId, BracketOrderIds, AttachedOrderIds]
 related: [id-partition, param-budget, validation-vs-invalid-argument]
-precedents: ["#1204", "#1250"]
+precedents: ["#1204", "#1337"]
 ---
 
-**Parameters** take `impl Into<XId>`: `account: impl Into<AccountId>`,
-`contract_id: impl Into<ContractId>`, `order_id: impl Into<OrderId>`. Never `&XId`, never the raw
-type. An optional id goes on a builder setter (`.account(a)`), not `Option<impl Into<XId>>`,
-which makes a bare `None` need a type annotation.
+Id **parameters** take `impl Into<XId>`, never `&XId` or the raw type; an optional id is a
+builder setter, not `Option<impl Into<XId>>`. Id **returns and public struct fields** are raw:
+`i32` for order and contract ids, `String` for account ids and model codes. Every newtype
+converts `From<raw>`, `From<&raw>` and `From<XId> for raw`, and implements `Display`
+(`id_newtypes_convert_both_ways` in `src/prelude_tests.rs` pins the set).
 
-**Returns and struct fields** are raw: `i32` for order and contract ids, `String` for account ids
-and model codes. `OrderBuilder::submit` returns `i32`, `BracketOrderIds` and `AttachedOrderIds`
-hold `i32`, `Contract::contract_id` is `i32`, `managed_accounts()` returns `Vec<String>`. What
-comes out feeds straight back into a typed parameter, and into the caller's own `HashMap<i32, _>`
-or `let id: i32` without unwrapping. Crate internals may carry the newtype up to the public
-boundary.
+## Detail
 
-**Each newtype converts** `From<raw>`, `From<&raw>`, `From<XId> for raw`, and has `Display`.
-`AccountId` and `ModelCode` also convert from `&str` and `&Self`. Homes: `accounts::{AccountId,
-ModelCode}`, `contracts::ContractId`, `orders::OrderId`; all four are in the prelude.
+`account: impl Into<AccountId>`, `contract_id: impl Into<ContractId>`,
+`order_id: impl Into<OrderId>`. `Option<impl Into<XId>>` makes a bare `None` need a type
+annotation, so an optional id goes on a builder (`.account(a)`).
 
-Not yet conforming (#1250 moves them): `positions_multi` and `account_updates_multi` take
-`Option<&AccountId>, Option<&ModelCode>`, `pnl`/`pnl_single` take `Option<&ModelCode>`,
-`ContractBuilder::contract_id` takes `i32`, and the `ButterflyLegs`/`IronCondorLegs`/`CollarLegs`
-fields are `ContractId`. Check: `grep -n "Option<&\(AccountId\|ModelCode\)>" src/accounts/{sync,async}.rs | grep -v ///`
-(11 lines at #1250's first PR; zero when done).
+`OrderBuilder::submit` returns `i32`, `BracketOrderIds` and `AttachedOrderIds` hold `i32`,
+`Contract::contract_id` is `i32`, `managed_accounts()` returns `Vec<String>`. Crate internals may
+carry the newtype up to the public boundary.
 
-Out of scope: ids with no newtype (`market_rule_id`, `article_id`, group ids). Don't add a
-newtype just to apply this rule.
+`AccountId` and `ModelCode` also convert from `&str` and `&Self`. Homes:
+`accounts::{AccountId, ModelCode}`, `contracts::ContractId`, `orders::OrderId`; all four are in
+the prelude.
+
+Out of scope:
+- Ids with no newtype (`market_rule_id`, `article_id`, group ids). Don't add a newtype just to
+  apply this rule.
+- A lookup key over data the crate returned: `AccountSummarySnapshot::get(account: &str, ..)`
+  searches raw `String` fields.
+- An account that is not the caller's: `ExerciseOptionsBuilder::customer_account` names a
+  customer's account, which `AccountId` does not model.
 
 ## Why
 
-Typed parameters document the signature: `pnl_single(account, contract_id)` reads as which id
-goes where. Raw outputs keep callers' code free of `.0` and `.value()`, and both directions meet
-in the middle because every newtype converts from its raw value.
+Typed parameters document the signature: the type in rustdoc and IDE hints names which id goes
+where. Raw outputs keep callers' code free of `.0` and `.value()`, and what comes out feeds
+straight back into a typed parameter, a `HashMap<i32, _>` or a `let id: i32`.
 
 **This is not type safety.** `impl Into<ContractId>` accepts any `i32`, so passing an order id as
 a contract id still compiles. Don't "fix" that by removing `From<i32>`: every value the crate
@@ -53,11 +56,25 @@ Before #1250 it held only in parts: `pnl*` took `&AccountId` while `option_chain
 (#1204 aligned those), and `submit`/`submit_oca_orders`/`BracketOrderIds` returned `OrderId`,
 so callers wrote `ids.parent.0`.
 
+## Not yet conforming
+
+#1250's second PR moves these; delete this section when it lands.
+
+- `positions_multi`, `account_updates_multi`: `Option<&AccountId>, Option<&ModelCode>`.
+- `pnl`, `pnl_single`: `Option<&ModelCode>`.
+  Check: `grep -n "Option<&\(AccountId\|ModelCode\)>" src/accounts/{sync,async}.rs | grep -v ///`
+  (11 lines now).
+- `ContractBuilder::contract_id` takes `i32`.
+  Check: `grep -n "pub fn contract_id(mut self, contract_id: i32)" src/contracts/common/contract_builder.rs`
+  (1 line now).
+- `ButterflyLegs` / `IronCondorLegs` / `CollarLegs` fields are `ContractId`.
+  Check: `grep -n "pub [a-z_]*: ContractId" src/contracts/builders.rs` (10 lines now).
+
 ## Precedents
 
 - #1204 — id parameters across `option_chain`, `wsh_event_data_by_contract`, `historical_news`,
   `pnl*`, `account_updates` and `OrderBuilder::account` moved to `impl Into<XId>`.
-- #1250 — returned order ids raw (`submit`, `submit_oca_orders`, `BracketOrderIds`,
+- #1337 — returned order ids raw (`submit`, `submit_oca_orders`, `BracketOrderIds`,
   `AttachedOrderIds`; `as_i32_vec` dropped as a duplicate of `as_vec`); `ContractId` moved to
-  `contracts`; conversion set completed on all four newtypes. Integration crates held the only
-  callers that unwrapped with `.0`.
+  `contracts`; conversion set completed on all four newtypes and pinned by a test. Integration
+  crates held the only callers that unwrapped with `.0`.

@@ -1,7 +1,5 @@
 //! Table-driven test data for accounts module tests
 
-#[allow(unused_imports)]
-use crate::accounts::types::*;
 use crate::contracts::ContractId;
 
 /// Test case for contract ID edge cases
