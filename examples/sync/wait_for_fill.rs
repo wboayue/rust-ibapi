@@ -23,6 +23,7 @@ fn report(outcome: &OrderOutcome) {
         ),
         OrderOutcome::TimedOut(None) => println!("timed out, no status seen"),
         OrderOutcome::Rejected(notice) => println!("rejected: {notice}"),
+        OrderOutcome::PendingCreation(notice) => println!("not created yet, reconcile after reconnect: {notice}"),
     }
 }
 

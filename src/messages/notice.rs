@@ -881,16 +881,18 @@ impl Notice {
     /// TWS sends 1104 with request id -1 alongside a 1100 (connectivity lost), and again as
     /// the list grows. In paper-account probes, named orders placed before 1100 received
     /// no further status, were absent from open orders, and returned 10147 on cancellation.
-    /// Named orders placed after 1100 received error 200
+    /// An order placed just after the 1100 was later rejected with 200 on its own id
     /// (`docs/wire-facts/orders.md#orders-tws-names-in-1104`).
     ///
     /// After connectivity returns, reconcile each named order with open orders, completed
     /// orders, executions, and order status updates before deciding whether it is safe to retry.
     ///
     /// Besides the notice stream, the client delivers a request-less 1104 to the `place_order`
-    /// subscription of each order it names, and once to `order_update_stream`, as a
-    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem) that does not end
-    /// either. It is a [`NoticeCategory::SystemMessage`], so it does not fail requests in
+    /// subscription and `order_status_stream`s of each order it names, and once to
+    /// `order_update_stream`, as a
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem) that ends none of
+    /// them; `wait_for_fill` returns
+    /// [`OrderOutcome::PendingCreation`](crate::orders::OrderOutcome::PendingCreation). It is a [`NoticeCategory::SystemMessage`], so it does not fail requests in
     /// flight.
     ///
     /// The ids come from the message text, which TWS writes in English on the paper account

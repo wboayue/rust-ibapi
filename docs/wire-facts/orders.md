@@ -456,8 +456,9 @@ for 15 s, 2 min, 20 min (Wi-Fi) and 2 min (router uplink); AAPL BUY 1 LMT 1.00; 
 - The ids follow `": "` and are separated by `", "`, in English message text; the frame carries
   them nowhere else.
 - `Notice::pending_order_ids` reads the ids from that text. The client delivers the 1104 to
-  each named order's `place_order` subscription and once to `order_update_stream`, as a notice
-  that ends neither, and it fails no in-flight request (#1322).
+  each named order's `place_order` subscription and status streams and once to
+  `order_update_stream`, as a notice that ends none of them; `wait_for_fill` returns
+  `OrderOutcome::PendingCreation`. It fails no in-flight request (#1322).
 - The 10147 is the probe's own cancel at the end, not part of the loss. Nothing else arrives
   for a never-created order, so a caller learns of it only from the 1104.
 - **Not probed:** a 1104 without a 1100; an outage that ends in 1101; a named order TWS creates

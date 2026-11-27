@@ -385,9 +385,12 @@ impl Client {
     /// placed around then can stop at `ApiPending` with no further status, even after
     /// connectivity returns. TWS then sends notice 1104, "Pending to create N orders: …", and
     /// the subscription of each order it names yields that notice as a
-    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem). It does not end
-    /// the subscription: TWS has neither created nor refused the order, and in paper probes a
-    /// named order was rejected later on its own id (error 200). Nor is the order unsent
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem);
+    /// [`wait_for_fill`](Self::wait_for_fill) returns
+    /// [`OrderOutcome::PendingCreation`]. It does
+    /// not end the subscription: TWS has neither created nor refused the order, and in the
+    /// probes an order placed just after the 1100 was later rejected with 200 on its own id.
+    /// Nor is the order unsent
     /// ([`Error::is_unsent`]): it was written. After connectivity returns (1101 or 1102),
     /// look the order up in `open_orders`, `completed_orders` and `executions` before
     /// re-sending it. In the paper probes, an order placed before the 1100 never appeared
@@ -653,9 +656,10 @@ impl Client {
     ///   appears in the stream. Watch [`Self::notice_stream`] for the
     ///   connectivity notices (codes 1100 connectivity lost, 1101 restored
     ///   with data lost, 1102 restored with data maintained, 1300 socket reset).
-    ///   A 1104 that names orders TWS has not created yet also arrives on this stream, once
-    ///   per frame; [`Notice::pending_order_ids`](crate::Notice::pending_order_ids)
-    ///   reads its ids.
+    ///   During an IB outage the socket stays up, and a 1104 naming orders
+    ///   TWS has not created yet also arrives on `order_update_stream` itself,
+    ///   one copy per 1104 frame;
+    ///   [`Notice::pending_order_ids`](crate::Notice::pending_order_ids) reads its ids.
     /// - **Error.** An `Err` item ends the stream; every later call returns
     ///   `None`. A frame that fails to decode is a bug in TWS or this crate,
     ///   so it is surfaced rather than skipped.
@@ -701,8 +705,12 @@ impl Client {
     /// status. If TWS refuses the
     /// order with an error before any status (e.g. 110, a price off the
     /// minimum tick), the stream yields that error as [`Error::Notice`] and
-    /// ends; a stream opened later starts with it. Otherwise the stream does
-    /// not end on its own when the order does; stop reading, or see
+    /// ends; a stream opened later starts with it. A 1104 naming the order
+    /// (TWS lost its connection to IB and has not created it yet) arrives as
+    /// a [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem)
+    /// and ends nothing; a stream opened later starts with it, until the
+    /// order's next status.
+    /// Otherwise the stream does not end on its own when the order does; stop reading, or see
     /// [`wait_for_fill`](Self::wait_for_fill) for the common case.
     ///
     /// Takes nothing from [`order_update_stream`](Self::order_update_stream) or
@@ -742,7 +750,9 @@ impl Client {
     /// Returns [`OrderOutcome::Filled`] when the order filled completely,
     /// [`OrderOutcome::Ended`] when it was cancelled or became inactive first,
     /// [`OrderOutcome::Rejected`] with TWS's error when TWS refused the order
-    /// without a status (e.g. 110, a price off the minimum tick), and
+    /// without a status (e.g. 110, a price off the minimum tick),
+    /// [`OrderOutcome::PendingCreation`] with the 1104 notice when TWS, having
+    /// lost its connection to IB, names the order as not created yet, and
     /// [`OrderOutcome::TimedOut`] with the last status seen when time runs
     /// out. A timeout leaves the order working; cancel it yourself if needed.
     ///
@@ -785,6 +795,7 @@ impl Client {
     ///     OrderOutcome::Ended(status) => println!("ended {:?} after {} filled", status.status, status.filled),
     ///     OrderOutcome::TimedOut(status) => println!("still working: {status:?}"),
     ///     OrderOutcome::Rejected(notice) => println!("rejected: {notice}"),
+    ///     OrderOutcome::PendingCreation(notice) => println!("not created yet: {notice}"),
     /// }
     /// ```
     pub fn wait_for_fill(&self, order_id: impl Into<OrderId>, timeout: Duration) -> Result<OrderOutcome, Error> {
@@ -815,7 +826,11 @@ impl Client {
                         return Ok(outcome);
                     }
                 }
-                Some(Ok(SubscriptionItem::Notice(_))) => {}
+                Some(Ok(SubscriptionItem::Notice(notice))) => {
+                    if let Some(outcome) = FillTracker::notice(notice) {
+                        return Ok(outcome);
+                    }
+                }
                 Some(Err(error)) => return FillTracker::error(error),
                 // `next_timeout` gives `None` at the deadline; before it, the
                 // stream ended.

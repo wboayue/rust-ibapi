@@ -1740,7 +1740,8 @@ impl OrderStatus {
 /// [`TimedOut`](Self::TimedOut) carry the order's last [`OrderStatus`]:
 /// `filled`, `remaining` and `average_fill_price` give the fill, which may be
 /// partial for `Ended` and `TimedOut`. [`Rejected`](Self::Rejected) carries
-/// TWS's error instead, since the order never got a status.
+/// TWS's error instead, since the order never got a status, and
+/// [`PendingCreation`](Self::PendingCreation) the 1104 notice that named it.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum OrderOutcome {
@@ -1762,6 +1763,14 @@ pub enum OrderOutcome {
     /// reports with an [`Inactive`](OrderStatusKind::Inactive) status, such as
     /// 201 for insufficient margin, is [`Ended`](Self::Ended).
     Rejected(crate::Notice),
+    /// TWS lost its connection to IB (notice 1100) and named the order in a
+    /// 1104, "Pending to create N orders: …": it has neither created nor
+    /// refused it. In paper probes, an order placed before the 1100 was never
+    /// created, even after connectivity returned (live: 2026-11-26). Once
+    /// connectivity returns (1101 or 1102), look the order up in open orders,
+    /// completed orders and executions before re-sending it. The order is left
+    /// alone; cancel it by id if you no longer want it.
+    PendingCreation(crate::Notice),
 }
 
 /// Enumerates possible results from cancelling an order.

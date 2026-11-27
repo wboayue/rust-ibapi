@@ -33,6 +33,7 @@ fn outcome_of_each_status() {
             Some(OrderOutcome::Ended(s)) => Some(("Ended", s)),
             Some(OrderOutcome::TimedOut(_)) => panic!("{name}: observe never times out"),
             Some(OrderOutcome::Rejected(_)) => panic!("{name}: a status is never a rejection"),
+            Some(OrderOutcome::PendingCreation(_)) => panic!("{name}: a status is never a 1104"),
             None => None,
         };
         assert_eq!(got.map(|(variant, _)| variant), expected, "{name}");
@@ -68,6 +69,23 @@ fn error_of_a_notice_is_a_rejection() {
 
     assert_eq!(FillTracker::error(Error::Notice(notice.clone())).unwrap(), OrderOutcome::Rejected(notice));
     assert!(matches!(FillTracker::error(Error::ConnectionReset), Err(Error::ConnectionReset)));
+}
+
+#[test]
+fn notice_ends_the_wait_only_for_1104() {
+    let notice = |code: i32| Notice {
+        code,
+        message: format!("notice {code}"),
+        request_id: None,
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    };
+    let pending = notice(crate::messages::ORDER_CREATION_PENDING_CODE);
+
+    assert_eq!(FillTracker::notice(pending.clone()), Some(OrderOutcome::PendingCreation(pending)));
+    for code in [399, 2109, 1100, 1102] {
+        assert_eq!(FillTracker::notice(notice(code)), None, "{code}");
+    }
 }
 
 fn order_row(client_id: i32, order_id: i32, kind: OrderStatusKind, filled: f64) -> Orders {
@@ -173,6 +191,7 @@ fn observe_completed_goes_by_status() {
             OrderOutcome::Ended(_) => "Ended",
             OrderOutcome::TimedOut(_) => "TimedOut",
             OrderOutcome::Rejected(_) => "Rejected",
+            OrderOutcome::PendingCreation(_) => "PendingCreation",
         });
         assert_eq!(variant, expected, "{name}");
     }

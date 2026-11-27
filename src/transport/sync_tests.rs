@@ -4676,8 +4676,9 @@ fn reset_starts_new_session_generation() {
 
 const PENDING_ORDERS_MSG: &str = "Pending to create 2 orders: 55, 57";
 
-/// A request-less 1104 reaches the subscription of each order it names, one
-/// copy reaches the order-update stream, and the notice stream gets it. It is
+/// A request-less 1104 reaches the subscription and status streams of each
+/// order it names, one copy reaches the order-update stream, and the notice
+/// stream gets it. It is
 /// a system message, so an in-flight one-shot is not failed.
 #[test]
 fn pending_orders_notice_reaches_named_orders() -> Result<(), Error> {
@@ -4690,6 +4691,7 @@ fn pending_orders_notice_reaches_named_orders() -> Result<(), Error> {
     let order_55 = bus.send_order_request(OrderId::from(55), &[])?;
     let order_57 = bus.send_order_request(OrderId::from(57), &[])?;
     let order_60 = bus.send_order_request(OrderId::from(60), &[])?;
+    let statuses_57 = bus.create_order_status_subscription(OrderId::from(57))?;
 
     stream.push_inbound(error_frame(-1, ORDER_CREATION_PENDING_CODE, PENDING_ORDERS_MSG));
     bus.dispatch()?;
@@ -4701,6 +4703,10 @@ fn pending_orders_notice_reaches_named_orders() -> Result<(), Error> {
         }
     }
     assert!(order_60.try_next_routed().is_none(), "an order the 1104 doesn't name got it");
+    assert!(
+        matches!(statuses_57.next_timeout_routed(TICK), Some(RoutedItem::Notice(n)) if n.code == ORDER_CREATION_PENDING_CODE),
+        "status stream missed the 1104"
+    );
 
     match updates.next_timeout_routed(TICK) {
         Some(RoutedItem::Notice(notice)) => assert_eq!(notice.pending_order_ids(), Some(vec![55, 57])),

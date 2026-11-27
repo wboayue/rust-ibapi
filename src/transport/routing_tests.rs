@@ -780,7 +780,8 @@ fn classify_error_pending_orders_names_order_ids() {
         }
         other => panic!("expected NoticeAndOrders, got {other:?}"),
     }
-    assert_eq!(order_update_notice(&payload).map(|notice| notice.code), Some(payload.error_code));
+    // The disposition carries the order-update copy, not `order_update_notice`.
+    assert!(order_update_notice(&payload).is_none());
 }
 
 /// A 1104 without readable ids, or any other request-less notice, names no

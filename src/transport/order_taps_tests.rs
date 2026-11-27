@@ -321,3 +321,80 @@ fn update_stream_is_exclusive_until_released() {
     assert!(!taps.release_updates(&lease_ref), "a stale release leaves the replacement");
     assert!(taps.updates_lease().is_some());
 }
+
+// ---- 1104 naming the order (#1322) ----
+
+fn pending_notice(order_id: i32) -> Notice {
+    Notice {
+        request_id: None,
+        code: crate::messages::ORDER_CREATION_PENDING_CODE,
+        message: format!("Pending to create 1 orders: {order_id}"),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }
+}
+
+fn pending(taps: &Taps, order_id: i32) {
+    taps.publish_pending(OrderId::from(order_id), &pending_notice(order_id));
+}
+
+fn next_pending(receiver: &Receiver<RoutedItem>) -> Notice {
+    match receiver.try_recv() {
+        Ok(RoutedItem::Notice(notice)) => notice,
+        other => panic!("expected the 1104 notice, got {other:?}"),
+    }
+}
+
+#[test]
+fn pending_reaches_open_streams_and_starts_later_ones() {
+    let taps = taps();
+    publish(&taps, 7, OrderStatusKind::ApiPending);
+    let (open, _lease) = status_stream(&taps, 7);
+    next_response(&open);
+
+    pending(&taps, 7);
+
+    assert_eq!(next_pending(&open).code, crate::messages::ORDER_CREATION_PENDING_CODE);
+    assert_eq!(next_pending(&status_stream(&taps, 7).0), pending_notice(7), "later stream starts with it");
+    assert_eq!(taps.recent_len(), 1, "replacing a latest status adds no recent entry");
+}
+
+/// The 1104 holds only until the order's next frame: a status or a
+/// rejection (TWS rejected a named order with 200, live 2026-11-26) replaces it.
+#[test]
+fn status_or_rejection_after_pending_replaces_it() {
+    let taps = taps();
+    pending(&taps, 7);
+    publish(&taps, 7, OrderStatusKind::Submitted);
+    assert_eq!(next_response(&status_stream(&taps, 7).0).order_id(), Some(7), "status replaced it");
+
+    pending(&taps, 8);
+    reject(&taps, 8, 200);
+    assert_eq!(next_rejection(&status_stream(&taps, 8).0).code, 200, "rejection replaced it");
+}
+
+/// A final latest stays: a 1104 can't make an ended or refused order pending.
+#[test]
+fn pending_does_not_replace_a_final_latest() {
+    let taps = taps();
+    publish(&taps, 7, OrderStatusKind::Filled);
+    reject(&taps, 8, 110);
+
+    pending(&taps, 7);
+    pending(&taps, 8);
+
+    assert!(matches!(status_stream(&taps, 7).0.try_recv(), Ok(RoutedItem::Response(_))));
+    assert_eq!(next_rejection(&status_stream(&taps, 8).0).code, 110);
+}
+
+/// A reconnect drops a 1104: what TWS did with the order meanwhile is unknown.
+#[test]
+fn reset_drops_pending() {
+    let taps = taps();
+    pending(&taps, 7);
+
+    taps.reset();
+
+    assert!(status_stream(&taps, 7).0.try_recv().is_err());
+    assert_eq!(taps.recent_len(), 0);
+}

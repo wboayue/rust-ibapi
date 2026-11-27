@@ -106,6 +106,9 @@ enum Latest {
     /// An error TWS sent for the order before any status: it never accepted
     /// the order (e.g. 110, price off the tick), so no status will follow.
     Rejected(Notice),
+    /// A 1104 naming the order: TWS lost its connection to IB and has not
+    /// created it. Replaced by the order's next status or rejection.
+    Pending(Notice),
 }
 
 impl Latest {
@@ -113,6 +116,17 @@ impl Latest {
         match self {
             Latest::Status(message) => message.clone().into(),
             Latest::Rejected(notice) => Error::Notice(notice.clone()).into(),
+            Latest::Pending(notice) => RoutedItem::Notice(notice.clone()),
+        }
+    }
+
+    /// Whether no later frame can change this: a rejection, or a status
+    /// reporting how the order ended.
+    fn is_final(&self) -> bool {
+        match self {
+            Latest::Status(message) => is_final(message),
+            Latest::Rejected(_) => true,
+            Latest::Pending(_) => false,
         }
     }
 }
@@ -274,14 +288,37 @@ impl<S: TapSender> OrderTaps<S> {
         };
         let mut state = self.lock();
         let slot = state.statuses.entry(order_id).or_default();
-        if slot.latest.is_some() {
+        // A 1104 doesn't mean TWS has the order: it can still refuse it
+        // (200 after a 1104, live 2026-11-26).
+        if slot.latest.as_ref().is_some_and(|latest| !matches!(latest, Latest::Pending(_))) {
             return;
         }
         let latest = Latest::Rejected(notice.clone());
         slot.streams.retain(|tap| tap.sender.send_item(latest.item(), STATUS));
-        slot.latest = Some(latest);
-        state.recent.push_back(order_id);
-        Self::evict_oldest(&mut state);
+        if slot.latest.replace(latest).is_none() {
+            state.recent.push_back(order_id);
+            Self::evict_oldest(&mut state);
+        }
+    }
+
+    /// Copy a 1104 naming `order_id` to the order's status streams, as a
+    /// notice that ends none of them, and keep it as the order's latest, so a
+    /// stream opened later (a `wait_for_fill` started after the 1104) starts
+    /// with it. It is not kept over a final latest (a rejection, or a status
+    /// reporting how the order ended), and the order's next status or
+    /// rejection replaces it. Streams whose receiver has gone are dropped.
+    pub(crate) fn publish_pending(&self, order_id: OrderId, notice: &Notice) {
+        let mut state = self.lock();
+        let slot = state.statuses.entry(order_id).or_default();
+        let latest = Latest::Pending(notice.clone());
+        slot.streams.retain(|tap| tap.sender.send_item(latest.item(), STATUS));
+        if slot.latest.as_ref().is_some_and(Latest::is_final) {
+            return;
+        }
+        if slot.latest.replace(latest).is_none() {
+            state.recent.push_back(order_id);
+            Self::evict_oldest(&mut state);
+        }
     }
 
     /// Drop the oldest latest statuses past [`LATEST_STATUS_CAPACITY`].
@@ -302,13 +339,13 @@ impl<S: TapSender> OrderTaps<S> {
     /// End every status stream with [`Error::ConnectionReset`]. The
     /// order-update stream survives a reconnect, and so do latest statuses
     /// that cannot change (an order that ended, or a rejection). TWS does not
-    /// replay what happened while disconnected, so any other status may be
-    /// stale and is dropped: a stream opened later starts empty, and
+    /// replay what happened while disconnected, so any other status or 1104
+    /// may be stale and is dropped: a stream opened later starts empty, and
     /// `wait_for_fill` looks the order up (#1031).
     pub(crate) fn reset(&self) {
         let mut state = self.lock();
         for slot in state.statuses.values_mut() {
-            if matches!(&slot.latest, Some(Latest::Status(message)) if !is_final(message)) {
+            if slot.latest.as_ref().is_some_and(|latest| !latest.is_final()) {
                 slot.latest = None;
             }
         }

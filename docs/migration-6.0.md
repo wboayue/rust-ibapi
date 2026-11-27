@@ -1655,7 +1655,7 @@ compile. Write `SecurityType::Stock` where that was the intent.
 is the wire code (`"STK"`, §47) as in 5.x, so 5.x JSON with a code still deserializes; one with
 `""` doesn't.
 
-### 55. Notice 1104 is a system message and reaches the orders it names
+### 55. Notice 1104 is a system message and reaches the orders it names; `OrderOutcome::PendingCreation`
 
 After a 1100 (connectivity between TWS and IB lost) TWS sends 1104, "Pending to create 2
 orders: 55, 57", with no request id. In 5.x it classified as `NoticeCategory::Error`, so it
@@ -1669,13 +1669,25 @@ In 6.0:
 - 1104 is in `SYSTEM_MESSAGE_CODES` (now `[i32; 5]`), so `Notice::category()` is
   `NoticeCategory::SystemMessage`, `is_system_message()` is `true` and `is_error()` is `false`.
   It fails no request.
-- The `place_order` subscription of each order it names yields it as
-  `SubscriptionItem::Notice`, and `order_update_stream` yields it once. Neither ends.
+- The `place_order` subscription and `order_status_stream`s of each order it names yield it
+  as `SubscriptionItem::Notice`, and `order_update_stream` yields it once. None of them ends.
   `Notice::pending_order_ids()` reads the ids.
+- `wait_for_fill` returns the new `OrderOutcome::PendingCreation(notice)` for an order a 1104
+  names, where 5.x waited out the timeout. An exhaustive `match` on `OrderOutcome` needs the
+  arm:
+
+  ```rust,ignore
+  match client.wait_for_fill(order_id, timeout)? {
+      // ... Filled, Ended, TimedOut, Rejected as before
+      OrderOutcome::PendingCreation(notice) => {
+          // after 1101/1102, look the order up before re-sending it
+      }
+  }
+  ```
 
 ```rust,ignore
 // 5.x: watch the notice stream and parse the text yourself
-if notice.code == 1104 && notice.is_error() { /* ... */ }
+if notice.code == 1104 { /* ... */ }
 
 // 6.0: on the order's own subscription
 match item? {
