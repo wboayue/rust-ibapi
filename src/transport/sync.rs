@@ -20,8 +20,8 @@ use crate::connection::common::STARTUP_STALL;
 use crate::connection::sync::Connection;
 
 use super::common::{
-    lock, log_orphan, read_lock, record_commission, report_unroutable_frame, validate_frame_length, write_lock, Lease, LeaseRef, LiveExecutions,
-    OrderFrame, OrderWrites,
+    lock, log_orphan, order_has_lease, read_lock, record_commission, report_unroutable_frame, validate_frame_length, write_lock, Lease, LeaseRef,
+    LiveExecutions, OrderFrame, OrderWrites,
 };
 use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
@@ -794,28 +794,15 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn deliver_order_frame(&self, order_id: OrderId, frame: OrderFrame) -> Result<(), RoutedItem> {
-        match frame {
-            OrderFrame::Direct(item) => self.orders.deliver(&order_id, item),
-            OrderFrame::Execution {
-                item,
-                execution_id,
-                request_id,
-            } => {
-                debug_assert!(request_id.is_none());
-                self.orders.deliver_aliased(&order_id, item, execution_id.as_ref(), &self.executions)
-            }
-            OrderFrame::Commission { item, execution_id } => {
+        frame.deliver(
+            |item, alias| self.orders.deliver_aliased(&order_id, item, alias, &self.executions),
+            |execution_id, item| {
                 let leases = self.orders.leases(&order_id);
-                let (delivered, _) = self
-                    .executions
-                    .deliver_selected(&execution_id, &item, |lease| leases.iter().any(|order_lease| order_lease.is(lease)));
-                if delivered {
-                    Ok(())
-                } else {
-                    Err(item)
-                }
-            }
-        }
+                self.executions
+                    .deliver_selected(execution_id, item, |lease| order_has_lease(&leases, lease))
+                    .0
+            },
+        )
     }
 
     fn deliver_order_commission(&self, execution_id: String, item: RoutedItem) -> Result<(), RoutedItem> {
@@ -823,17 +810,13 @@ impl<S: Stream> TcpMessageBus<S> {
             .deliver_commission(execution_id, item, |pending_id, execution_id, item| {
                 let leases = pending_id.map_or_else(Vec::new, |id| self.orders.leases(&id));
                 self.executions
-                    .deliver_selected(execution_id, item, |lease| !leases.iter().any(|order_lease| order_lease.is(lease)))
+                    .deliver_selected(execution_id, item, |lease| !order_has_lease(&leases, lease))
             })
     }
 
     fn drain_order_write(&self, order_id: OrderId, frames: Vec<OrderFrame>, uncertain: bool) {
         for frame in frames {
-            let frame = match frame {
-                OrderFrame::Direct(item) if uncertain => OrderFrame::Direct(item.for_earlier_subscription()),
-                frame => frame,
-            };
-            let _ = self.deliver_order_frame(order_id, frame);
+            let _ = self.deliver_order_frame(order_id, frame.for_replay(uncertain));
         }
     }
 

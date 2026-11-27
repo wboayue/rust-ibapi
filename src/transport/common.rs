@@ -89,6 +89,47 @@ pub(crate) enum OrderFrame {
     },
 }
 
+impl OrderFrame {
+    /// Dispatches a frame after the pending-write gate, leaving the registry
+    /// and lock ordering to the runtime's delivery callbacks.
+    pub(crate) fn deliver(
+        self,
+        order: impl FnOnce(RoutedItem, Option<&String>) -> Result<(), RoutedItem>,
+        commission: impl FnOnce(&String, &RoutedItem) -> bool,
+    ) -> Result<(), RoutedItem> {
+        match self {
+            Self::Direct(item) => order(item, None),
+            Self::Execution {
+                item,
+                execution_id,
+                request_id,
+            } => {
+                debug_assert!(request_id.is_none());
+                order(item, execution_id.as_ref())
+            }
+            Self::Commission { item, execution_id } => {
+                if commission(&execution_id, &item) {
+                    Ok(())
+                } else {
+                    Err(item)
+                }
+            }
+        }
+    }
+
+    pub(crate) fn for_replay(self, uncertain: bool) -> Self {
+        match self {
+            Self::Direct(item) if uncertain => Self::Direct(item.for_earlier_subscription()),
+            frame => frame,
+        }
+    }
+}
+
+/// Whether a commission recipient is attached to the order being written.
+pub(crate) fn order_has_lease(order_leases: &[LeaseRef], lease: &LeaseRef) -> bool {
+    order_leases.iter().any(|candidate| candidate.is(lease))
+}
+
 /// Capacity floor for order-class request routes: one per order
 /// (`place_order`, `cancel_order`, `exercise_options`) and `executions`.
 /// Their traffic is per order or per request and ends, so this floor only
