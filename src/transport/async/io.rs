@@ -5,9 +5,10 @@
 //! already-unframed body so callers don't repeat the length-prefix dance.
 
 use std::fmt;
-use std::future::Future;
+use std::future::{poll_fn, Future};
 use std::io;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -22,16 +23,57 @@ use crate::transport::common::validate_frame_length;
 use crate::transport::r#async::ShutdownSignal;
 use crate::transport::raw_capture::RawFrameTap;
 
+/// The caller can abandon the account operation until its first byte.
+pub(crate) struct AccountAdmission(watch::Receiver<bool>);
+
+pub(crate) struct AbandonAccountWrite(watch::Sender<bool>);
+
+impl Drop for AbandonAccountWrite {
+    fn drop(&mut self) {
+        self.0.send_replace(true);
+    }
+}
+
+impl AccountAdmission {
+    pub(crate) fn new() -> (Self, AbandonAccountWrite) {
+        let (caller, receiver) = watch::channel(false);
+        (Self(receiver), AbandonAccountWrite(caller))
+    }
+
+    pub(super) async fn cancelled(&self) {
+        let mut receiver = self.0.clone();
+        let _ = receiver.wait_for(|abandoned| *abandoned).await;
+    }
+
+    pub(crate) fn check(&self) -> Result<(), Error> {
+        self.open().map(drop)
+    }
+
+    fn open(&self) -> Result<watch::Ref<'_, bool>, Error> {
+        let guard = self.0.borrow();
+        if *guard {
+            return Err(Error::Cancelled);
+        }
+        Ok(guard)
+    }
+}
+
 #[async_trait]
 pub(crate) trait AsyncIo {
     async fn read_message(&self) -> Result<Vec<u8>, Error>;
     /// Write `buf` whole. A caller dropped before any byte is written sends
-    /// nothing. A write that stops partway (its caller dropped, or a failure)
-    /// leaves the connection unusable, since TWS would read any later frame
-    /// from the middle of the cut-off one: later writes must fail, and reads
-    /// must fail with a connection-lost error (pending ones included), because
-    /// only a read error makes the dispatcher reconnect. `reconnect` clears it.
+    /// nothing. An unfinished write that handed any bytes to the writer
+    /// breaks the connection, including an unfinished flush. A buffered
+    /// writer may have sent only part of the frame to its peer.
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
+    async fn write_all_tracked(&self, buf: &[u8], started: &AtomicBool, admission: Option<&AccountAdmission>) -> Result<(), Error> {
+        if let Some(admission) = admission {
+            admission.check()?;
+        }
+        self.write_all(buf).await?;
+        started.store(true, Ordering::Relaxed);
+        Ok(())
+    }
     /// Release the physical stream, even while owners still hold it: pending
     /// and later reads and writes fail with [`Error::Shutdown`], and
     /// `reconnect` refuses. Idempotent.
@@ -237,22 +279,25 @@ impl AsyncSocket {
     }
 }
 
-/// How much of a frame `write_all` has handed to the socket. Dropped partway,
-/// with its caller cancelled or after a failed write, it breaks the connection:
-/// the wire now ends mid-frame, and the next frame would be misread from there.
+/// Tracks bytes accepted by the writer before its flush succeeds.
 struct FrameProgress<'a> {
     socket: &'a AsyncSocket,
     len: usize,
     /// The bytes not yet written; `write_all_buf` advances it as it goes,
     /// cancelled or not.
     remaining: &'a [u8],
+    started: &'a AtomicBool,
+    flushed: bool,
 }
 
 impl Drop for FrameProgress<'_> {
     fn drop(&mut self) {
         let written = self.len - self.remaining.len();
-        if written > 0 && !self.remaining.is_empty() {
-            warn!("write stopped after {written} of {} bytes; resetting the connection", self.len);
+        if written > 0 {
+            self.started.store(true, Ordering::Relaxed);
+        }
+        if written > 0 && !self.flushed {
+            warn!("write stopped before flushing {written} of {} bytes; resetting the connection", self.len);
             self.socket.set_state(SocketState::Broken);
         }
     }
@@ -291,7 +336,19 @@ impl AsyncIo for AsyncSocket {
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        let mut writer = self.writer.lock().await;
+        self.write_all_tracked(buf, &AtomicBool::new(false), None).await
+    }
+
+    async fn write_all_tracked(&self, buf: &[u8], started: &AtomicBool, admission: Option<&AccountAdmission>) -> Result<(), Error> {
+        let mut writer = if let Some(admission) = admission {
+            tokio::select! {
+                biased;
+                () = admission.cancelled() => return Err(Error::Cancelled),
+                writer = self.writer.lock() => writer,
+            }
+        } else {
+            self.writer.lock().await
+        };
         let writer = self.open_half(&mut writer)?;
         // Declared after `writer`, so it drops first: a break lands while the
         // writer is still held, and cannot interleave with `reconnect`.
@@ -299,6 +356,8 @@ impl AsyncIo for AsyncSocket {
             socket: self,
             len: buf.len(),
             remaining: buf,
+            started,
+            flushed: false,
         };
         // Biased: a break or close landing after `open_half` still fails
         // before the write sends a byte. Later, `close` wakes a backpressured
@@ -307,8 +366,24 @@ impl AsyncIo for AsyncSocket {
             biased;
             err = self.interrupted() => Err(err),
             result = async {
+                if let Some(admission) = admission {
+                    let first_write = writer.write_buf(&mut progress.remaining);
+                    tokio::pin!(first_write);
+                    let written = tokio::select! {
+                        biased;
+                        () = admission.cancelled() => return Err(Error::Cancelled),
+                        result = poll_fn(|cx| {
+                            let _caller = admission.open()?;
+                            first_write.as_mut().poll(cx).map_err(Error::from)
+                        }) => result?,
+                    };
+                    if written == 0 {
+                        return Err(io::Error::from(io::ErrorKind::WriteZero).into());
+                    }
+                }
                 writer.write_all_buf(&mut progress.remaining).await?;
                 writer.flush().await?;
+                progress.flushed = true;
                 Ok(())
             } => result,
         }

@@ -69,6 +69,15 @@ impl Client {
     /// # Arguments
     /// * `auto_bind` - [`AutoBind::Yes`] assigns newly created orders an API order ID and implicitly associates them with this client; with [`AutoBind::No`] future orders are not bound.
     ///
+    /// TWS sends nothing in reply to the request itself and the stream has no
+    /// end marker: it runs until dropped. Besides orders bound from TWS, it
+    /// yields the `OpenOrder` and `OrderStatus` frames of this client's own
+    /// orders and of any [`open_orders`](Self::open_orders) or
+    /// [`all_open_orders`](Self::all_open_orders) reply on the same
+    /// connection, but not their `OpenOrderEnd`, so those requests don't end
+    /// it. Live (2026-11-25), an order another API client placed reached it
+    /// only through such a reply.
+    ///
     /// # Examples
     ///
     /// ```no_run

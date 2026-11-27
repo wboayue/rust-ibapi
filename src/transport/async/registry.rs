@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::future::Future;
 use std::hash::Hash;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use log::{debug, trace};
@@ -18,9 +18,11 @@ use tokio::sync::{broadcast, Mutex};
 
 use crate::accounts::types::AccountId;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
-use crate::transport::common::{read_lock, write_lock, LeaseRef};
-use crate::transport::{Admit, BoundState, BufferBound, RoutedItem, SharedCounts, SharedTicket};
+use crate::transport::common::{lock, read_lock, write_lock, LeaseRef};
+use crate::transport::{Admit, BoundState, BufferBound, ReplySkip, RoutedItem, SharedCounts, SharedTicket, UnansweredReplies};
 use crate::Error;
+
+use super::io::AccountAdmission;
 
 pub(super) type BroadcastSender = broadcast::Sender<RoutedItem>;
 
@@ -260,10 +262,9 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     }
 }
 
-/// One persistent broadcast channel per shared request type, from
-/// `CHANNEL_MAPPINGS`. Each is allocated on its first subscription (tokio
-/// preallocates every slot) and kept from then on; every live subscription
-/// of a type reads the same channel from its own receiver.
+/// One broadcast channel per shared request type and session. Senders are
+/// allocated on the first subscription and retired on reset so that old
+/// receivers, including their clones, cannot get the next session's frames.
 #[derive(Debug)]
 pub(super) struct SharedChannels {
     /// One entry per request type; emptied at shutdown, which closes them.
@@ -273,6 +274,91 @@ pub(super) struct SharedChannels {
     /// Live subscriptions per request type; see [`SharedCounts`].
     /// A tokio lock: it spans the request write.
     counts: Mutex<SharedCounts>,
+    account_counts: Mutex<SharedCounts>,
+    /// Held across end dispatch and receiver creation so the reply cursor
+    /// and the receiver agree on which end markers the receiver can see.
+    replies: Arc<std::sync::Mutex<SharedReplies>>,
+}
+
+#[derive(Debug, Default)]
+struct SharedReplies {
+    unanswered: UnansweredReplies,
+    dispatched: HashMap<IncomingMessages, usize>,
+    generation: u64,
+    resetting: bool,
+}
+
+#[derive(Default)]
+pub(super) struct SharedReplySkip {
+    skip: ReplySkip,
+    cursor: Option<ReplyCursor>,
+    pub(super) finished: bool,
+}
+
+#[derive(Clone)]
+struct ReplyCursor {
+    replies: Arc<std::sync::Mutex<SharedReplies>>,
+    skip_through: usize,
+    generation: u64,
+}
+
+impl SharedReplySkip {
+    pub(super) fn resubscribe(&self, receiver: &broadcast::Receiver<RoutedItem>) -> (broadcast::Receiver<RoutedItem>, Self) {
+        let Some(cursor) = &self.cursor else {
+            return (receiver.resubscribe(), Self::default());
+        };
+        // The new receiver starts after every end already dispatched, even
+        // when the source receiver has not consumed those frames.
+        let replies = lock(&cursor.replies);
+        let receiver = receiver.resubscribe();
+        let mut skip = ReplySkip::default();
+        if replies.generation == cursor.generation {
+            if let Some(end) = self.skip.end {
+                let dispatched = replies.dispatched.get(&end).copied().unwrap_or(0);
+                skip = ReplySkip {
+                    end: Some(end),
+                    remaining: cursor.skip_through.saturating_sub(dispatched),
+                };
+            }
+        }
+        (
+            receiver,
+            Self {
+                skip,
+                cursor: self.cursor.clone(),
+                finished: false,
+            },
+        )
+    }
+
+    pub(super) fn session_reset(&self) -> bool {
+        self.cursor
+            .as_ref()
+            .is_some_and(|cursor| lock(&cursor.replies).generation != cursor.generation)
+    }
+
+    pub(super) fn waiting_for_end(&self) -> bool {
+        self.skip.remaining > 0
+    }
+
+    pub(super) fn skips(&mut self, message_type: IncomingMessages) -> bool {
+        self.skip.skips(message_type)
+    }
+}
+
+/// Withdraws a counted request from [`UnansweredReplies`] when dropped.
+struct Withdraw<'a> {
+    replies: &'a std::sync::Mutex<SharedReplies>,
+    message_type: OutgoingMessages,
+    started: &'a AtomicBool,
+}
+
+impl Drop for Withdraw<'_> {
+    fn drop(&mut self) {
+        if !self.started.load(Ordering::Relaxed) {
+            lock(self.replies).unanswered.withdraw(self.message_type);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -307,58 +393,139 @@ impl SharedChannels {
         Self {
             channels: RwLock::new(channels),
             counts: Mutex::new(SharedCounts::default()),
+            account_counts: Mutex::new(SharedCounts::default()),
+            replies: Arc::new(std::sync::Mutex::new(SharedReplies::default())),
         }
     }
 
     /// Runs `write` for a new subscription of `message_type` and counts it on
-    /// success; returns the receiver and the ticket. The count lock spans the
-    /// write so the count and the wire agree. `account` is the account-updates
-    /// account, checked before the write.
+    /// success; returns the receiver, the ticket, and the earlier replies the
+    /// receiver passes over. The count lock spans the write so the count and
+    /// the wire agree; the receiver is created under it, before the write, so
+    /// unanswered requests are counted in wire order. `account` is the
+    /// account-updates account, checked before the write; `write` is told
+    /// whether that account's updates are live already.
     pub(super) async fn subscribe<F: Future<Output = Result<(), Error>>>(
         &self,
         message_type: OutgoingMessages,
         account: Option<&AccountId>,
-        write: impl FnOnce() -> F,
-    ) -> Result<(broadcast::Receiver<RoutedItem>, SharedTicket), Error> {
-        let receiver = self
-            .channels()
-            .get(&message_type)
-            .map(SharedChannel::subscribe)
-            .ok_or_else(|| Error::InvalidArgument(format!("No shared channel configured for message type: {message_type:?}")))?;
-
-        let mut counts = self.counts.lock().await;
+        admission: Option<&AccountAdmission>,
+        started: &AtomicBool,
+        write: impl FnOnce(bool) -> F,
+    ) -> Result<(broadcast::Receiver<RoutedItem>, SharedTicket, SharedReplySkip), Error> {
+        let counts = self.counts_for(message_type);
+        let mut counts = if let Some(admission) = admission {
+            tokio::select! {
+                biased;
+                () = admission.cancelled() => return Err(Error::Cancelled),
+                counts = counts.lock() => counts,
+            }
+        } else {
+            counts.lock().await
+        };
         counts.check_account_updates(account)?;
-        write().await?;
-        Ok((receiver, counts.subscribe(message_type, account)))
+        let live = account.is_some_and(|account| counts.is_account_updates_live(account));
+        let (receiver, skip) = {
+            let mut replies = lock(&self.replies);
+            if replies.resetting {
+                return Err(Error::ConnectionReset);
+            }
+            replies.unanswered.check_account_updates(message_type, live)?;
+            let receiver = self
+                .channels()
+                .get(&message_type)
+                .map(SharedChannel::subscribe)
+                .ok_or_else(|| Error::InvalidArgument(format!("No shared channel configured for message type: {message_type:?}")))?;
+            let skip = replies.unanswered.add(message_type);
+            let skip_through = skip
+                .end
+                .filter(|_| skip.remaining > 0)
+                .map_or(0, |end| *replies.dispatched.entry(end).or_default() + skip.remaining);
+            let cursor = ReplyCursor {
+                replies: Arc::clone(&self.replies),
+                skip_through,
+                generation: replies.generation,
+            };
+            (
+                receiver,
+                SharedReplySkip {
+                    skip,
+                    cursor: Some(cursor),
+                    finished: false,
+                },
+            )
+        };
+        // Keep an ambiguous request counted until its End or session reset:
+        // a custom writer can expose bytes to TWS before its flush completes.
+        let pending = Withdraw {
+            replies: &self.replies,
+            message_type,
+            started,
+        };
+        write(live).await?;
+        let replies = lock(&self.replies);
+        if replies.resetting {
+            return Err(Error::ConnectionReset);
+        }
+        std::mem::forget(pending);
+        Ok((receiver, counts.subscribe(message_type, account), skip))
     }
 
     /// Uncounts `ticket`'s subscription; runs `write` (the cancel) only when
     /// `SharedCounts::unsubscribe` says so.
+    /// `cancels` says whether `write` sends a cancel. Account dumps can still
+    /// arrive after the last cancel, so their replies stay counted.
     pub(super) async fn unsubscribe<F: Future<Output = Result<(), Error>>>(
         &self,
         ticket: SharedTicket,
+        cancels: bool,
         write: impl FnOnce() -> F,
     ) -> Result<(), Error> {
-        let mut counts = self.counts.lock().await;
-        if counts.unsubscribe(ticket) {
-            write().await
-        } else {
-            Ok(())
+        let mut counts = self.counts_for(ticket.message_type).lock().await;
+        if lock(&self.replies).resetting || !counts.unsubscribe(ticket) {
+            return Ok(());
         }
+        write().await?;
+        if cancels {
+            lock(&self.replies).unanswered.cancelled(ticket.message_type);
+        }
+        Ok(())
     }
 
     fn channels(&self) -> RwLockReadGuard<'_, HashMap<OutgoingMessages, SharedChannel>> {
         read_lock(&self.channels)
     }
 
+    pub(super) fn counts_for(&self, request: OutgoingMessages) -> &Mutex<SharedCounts> {
+        if request == OutgoingMessages::RequestAccountData {
+            &self.account_counts
+        } else {
+            &self.counts
+        }
+    }
+
     fn channels_mut(&self) -> RwLockWriteGuard<'_, HashMap<OutgoingMessages, SharedChannel>> {
         write_lock(&self.channels)
     }
 
-    /// Every live shared subscription has just been failed: start a new
-    /// generation so their later drops cannot touch the next session's counts.
+    pub(super) fn retire_session(&self) {
+        let mut replies = lock(&self.replies);
+        replies.resetting = true;
+        replies.generation += 1;
+        for channel in self.channels_mut().values_mut() {
+            drop(channel.sender.take());
+        }
+    }
+
     pub(super) async fn reset_counts(&self) {
-        self.counts.lock().await.reset();
+        let mut counts = self.counts.lock().await;
+        let mut account_counts = self.account_counts.lock().await;
+        let mut replies = lock(&self.replies);
+        counts.reset();
+        account_counts.reset();
+        replies.unanswered.clear();
+        replies.dispatched.clear();
+        replies.resetting = false;
     }
 
     /// Sends `item()` once to every channel selected by `filter`; returns how
@@ -379,10 +546,17 @@ impl SharedChannels {
     /// Deliver `message` to every channel whose request maps `message_type`.
     /// Returns `false` when no channel maps it (or after shutdown).
     pub(super) fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) -> bool {
-        self.send_to(|channel| channel.responses.contains(&message_type), || message.clone().into()) > 0
+        let mut replies = lock(&self.replies);
+        let selected = self.send_to(|channel| channel.responses.contains(&message_type), || message.clone().into());
+        replies.unanswered.answered(message_type);
+        if let Some(dispatched) = replies.dispatched.get_mut(&message_type) {
+            *dispatched += 1;
+        }
+        selected > 0
     }
 
     /// Deliver `item()` once to every channel.
+    #[cfg(test)]
     pub(super) fn notify_all(&self, item: impl Fn() -> RoutedItem) {
         self.send_to(|_| true, item);
     }
@@ -412,12 +586,17 @@ impl SharedChannels {
 
     #[cfg(test)]
     pub(super) async fn live(&self, message_type: OutgoingMessages) -> usize {
-        self.counts.lock().await.live(message_type)
+        self.counts_for(message_type).lock().await.live(message_type)
+    }
+
+    #[cfg(test)]
+    pub(super) fn unanswered(&self, end: IncomingMessages) -> usize {
+        lock(&self.replies).unanswered.pending(end)
     }
 
     #[cfg(test)]
     pub(super) async fn account_updates(&self) -> Option<AccountId> {
-        self.counts.lock().await.account_updates().cloned()
+        self.account_counts.lock().await.account_updates().cloned()
     }
 }
 

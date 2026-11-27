@@ -105,3 +105,83 @@ fn admit_closes_on_any_of_several_end_markers() {
         assert!(state.closed(), "{end:?} is terminal");
     }
 }
+
+/// Requests sharing an end marker share one count, an end marker with
+/// nothing outstanding (the `OpenOrderEnd` TWS sends at connect) is ignored,
+/// and a skip passes over every frame up to and including its last end marker.
+#[test]
+fn unanswered_replies_count_by_end_marker() {
+    use crate::messages::IncomingMessages as M;
+    let mut unanswered = UnansweredReplies::default();
+
+    unanswered.answered(M::OpenOrderEnd);
+    assert!(!unanswered.add(OutgoingMessages::RequestOpenOrders).skips(M::OpenOrder));
+    assert!(
+        !unanswered.add(OutgoingMessages::RequestCurrentTime).skips(M::CurrentTime),
+        "one-shots never skip"
+    );
+
+    let mut all = unanswered.add(OutgoingMessages::RequestAllOpenOrders);
+    let mut completed = unanswered.add(OutgoingMessages::RequestCompletedOrders);
+    assert_eq!(unanswered.pending(M::OpenOrderEnd), 2);
+    assert!(!completed.skips(M::CompletedOrder), "another end marker's requests counted");
+
+    for frame in [M::OpenOrder, M::OrderStatus, M::OpenOrderEnd] {
+        assert!(all.skips(frame), "{frame:?} of the earlier reply delivered");
+    }
+    assert!(!all.skips(M::OpenOrder), "own reply skipped");
+
+    unanswered.answered(M::OpenOrderEnd);
+    unanswered.answered(M::OpenOrderEnd);
+    unanswered.answered(M::OpenOrderEnd);
+    assert_eq!(unanswered.pending(M::OpenOrderEnd), 0);
+
+    unanswered.add(OutgoingMessages::RequestPositions);
+    unanswered.withdraw(OutgoingMessages::RequestPositions);
+    assert_eq!(unanswered.pending(M::PositionEnd), 0, "a withdrawn request still counted");
+
+    unanswered.add(OutgoingMessages::RequestPositions);
+    unanswered.add(OutgoingMessages::RequestPositions);
+    unanswered.cancelled(OutgoingMessages::RequestPositions);
+    assert_eq!(unanswered.pending(M::PositionEnd), 0, "a cancel kept a count");
+    unanswered.add(OutgoingMessages::RequestAccountData);
+    assert_eq!(unanswered.pending(M::AccountDownloadEnd), 1, "account updates are counted");
+
+    unanswered.add(OutgoingMessages::RequestOpenOrders);
+    unanswered.clear();
+    assert_eq!(unanswered.pending(M::OpenOrderEnd), 0, "clear kept a count");
+}
+
+pub(super) fn account_update_dump(value: &str) -> [Vec<u8>; 2] {
+    use crate::common::test_utils::helpers::binary_proto;
+    use crate::messages::IncomingMessages as M;
+
+    [
+        binary_proto(
+            M::AccountValue as i32,
+            &crate::proto::AccountValue {
+                key: Some("NetLiquidation".to_string()),
+                value: Some(value.to_string()),
+                currency: Some("USD".to_string()),
+                account_name: Some("DU1".to_string()),
+            },
+        ),
+        binary_proto(
+            M::AccountDownloadEnd as i32,
+            &crate::proto::AccountDataEnd {
+                account_name: Some("DU1".to_string()),
+            },
+        ),
+    ]
+}
+
+pub(super) fn account_update_value(item: crate::subscriptions::SubscriptionItem<crate::accounts::AccountUpdate>) -> Option<String> {
+    use crate::accounts::AccountUpdate;
+    use crate::subscriptions::SubscriptionItem;
+
+    match item {
+        SubscriptionItem::Data(AccountUpdate::AccountValue(value)) => Some(value.value),
+        SubscriptionItem::Data(AccountUpdate::End) => None,
+        other => panic!("unexpected account update {other:?}"),
+    }
+}

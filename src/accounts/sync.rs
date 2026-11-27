@@ -66,6 +66,11 @@ impl Client {
     /// Subscribes to [PositionUpdate]s for all accessible accounts.
     /// All positions sent initially, and then only updates as positions change.
     ///
+    /// Cancelling the last positions subscription clears the count of pending replies. If TWS
+    /// still sends rows and `PositionEnd` for a dump cancelled mid-reply, a replacement
+    /// subscription opened immediately can receive those rows and treat that marker as the end of
+    /// its own initial set.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -255,11 +260,24 @@ impl Client {
     /// subscription to the first has been cancelled or dropped. To stream several
     /// accounts at once, use [`account_updates_multi`](Client::account_updates_multi).
     ///
+    /// TWS answers a repeated subscribe for the same account with nothing, so a
+    /// second subscription is sent as an unsubscribe then a subscribe, which
+    /// TWS answers with the full initial values and [`AccountUpdate::End`]
+    /// again. Every live subscription of the account receives that dump: an
+    /// earlier caller reads the current values and `End` a second time, and
+    /// the notice stream gets TWS's 2100 "API client has been unsubscribed
+    /// from account data". A subscription made while an earlier dump is still
+    /// arriving skips that dump and reads its own whole one.
+    ///
     /// # Arguments
     /// * `account` - The account id (i.e. U1234567) for which the information is requested.
     ///
     /// # Errors
     /// [`Error::AccountUpdatesInUse`] while another account's updates are live.
+    /// [`Error::AlreadySubscribed`] if the last subscriber is gone and the client
+    /// is still waiting for an earlier dump's [`AccountUpdate::End`]. The client
+    /// sends no request. Retry after the outstanding ends arrive or after a
+    /// transport reconnect if TWS never sends them.
     ///
     /// # Examples
     ///
@@ -284,7 +302,8 @@ impl Client {
     pub fn account_updates(&self, account: impl Into<AccountId>) -> Result<Subscription<AccountUpdate>, Error> {
         let account = &account.into();
         let request = encoders::encode_request_account_updates(true, account)?;
-        let subscription = self.message_bus.send_account_updates_request(account, &request)?;
+        let unsubscribe = encoders::encode_request_account_updates(false, account)?;
+        let subscription = self.message_bus.send_account_updates_request(account, &request, &unsubscribe)?;
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
     }
 

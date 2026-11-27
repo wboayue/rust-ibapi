@@ -24,6 +24,18 @@ pub struct ChannelMapping {
     /// Note this is explicit data, not derived from the presence of an `*End`
     /// response: `NewsBulletins` streams without an End marker.
     pub one_shot: bool,
+    /// The end marker of the full reply TWS sends to *each* request, when it
+    /// answers overlapping requests one after another in the order sent;
+    /// requests sharing an end marker share that order. Every reply reaches
+    /// every subscription of its message types, so a subscription made while
+    /// earlier requests of its end marker are unanswered skips their replies
+    /// (see `UnansweredReplies`). `None` where that is unverified or untrue.
+    /// `RequestAccountData` counts because a second subscription to the same
+    /// account is sent as an unsubscribe then a subscribe, which TWS answers
+    /// with a full dump each. See
+    /// `docs/wire-facts/orders.md#overlapping-open-order-requests` and
+    /// `docs/wire-facts/accounts.md`.
+    pub reply_end: Option<IncomingMessages>,
 }
 
 // For shared channels configures mapping of request message id to response message ids.
@@ -32,51 +44,65 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
         request: OutgoingMessages::RequestIds,
         responses: &[IncomingMessages::NextValidId],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestFamilyCodes,
         responses: &[IncomingMessages::FamilyCodes],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestMarketRule,
         responses: &[IncomingMessages::MarketRule],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestPositions,
         responses: &[IncomingMessages::Position, IncomingMessages::PositionEnd],
         one_shot: false,
+        reply_end: Some(IncomingMessages::PositionEnd),
     },
     ChannelMapping {
         request: OutgoingMessages::RequestPositionsMulti,
         responses: &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd],
         one_shot: false,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestOpenOrders,
         responses: &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::OpenOrderEnd],
         one_shot: false,
+        reply_end: Some(IncomingMessages::OpenOrderEnd),
     },
     ChannelMapping {
         request: OutgoingMessages::RequestAllOpenOrders,
         responses: &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::OpenOrderEnd],
         one_shot: false,
+        reply_end: Some(IncomingMessages::OpenOrderEnd),
     },
+    // TWS draws no reply to `reqAutoOpenOrders` and the stream has no end
+    // marker, so `OpenOrderEnd` is not among its responses: every one that
+    // arrives ends another request's reply (`open_orders`, `all_open_orders`).
+    // See `docs/wire-facts/orders.md#auto_open_orders-draws-no-reply`.
     ChannelMapping {
         request: OutgoingMessages::RequestAutoOpenOrders,
-        responses: &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::OpenOrderEnd],
+        responses: &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus],
         one_shot: false,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestCompletedOrders,
         responses: &[IncomingMessages::CompletedOrder, IncomingMessages::CompletedOrdersEnd],
         one_shot: false,
+        reply_end: Some(IncomingMessages::CompletedOrdersEnd),
     },
     ChannelMapping {
         request: OutgoingMessages::RequestManagedAccounts,
         responses: &[IncomingMessages::ManagedAccounts],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestAccountData,
@@ -87,56 +113,67 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
             IncomingMessages::AccountUpdateTime,
         ],
         one_shot: false,
+        reply_end: Some(IncomingMessages::AccountDownloadEnd),
     },
     ChannelMapping {
         request: OutgoingMessages::RequestMktDepthExchanges,
         responses: &[IncomingMessages::MktDepthExchanges],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestCurrentTime,
         responses: &[IncomingMessages::CurrentTime],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestCurrentTimeInMillis,
         responses: &[IncomingMessages::CurrentTimeInMillis],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestNewsProviders,
         responses: &[IncomingMessages::NewsProviders],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestNewsBulletins,
         responses: &[IncomingMessages::NewsBulletins],
         one_shot: false,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestScannerParameters,
         responses: &[IncomingMessages::ScannerParameters],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestWshMetaData,
         responses: &[IncomingMessages::WshMetaData],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::RequestFA,
         responses: &[IncomingMessages::ReceiveFA],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::VerifyRequest,
         responses: &[IncomingMessages::VerifyMessageApi],
         one_shot: true,
+        reply_end: None,
     },
     ChannelMapping {
         request: OutgoingMessages::VerifyMessage,
         responses: &[IncomingMessages::VerifyCompleted],
         one_shot: true,
+        reply_end: None,
     },
 ];
 
@@ -170,6 +207,12 @@ pub(crate) fn exclusive_one_shot_response_types() -> &'static HashSet<IncomingMe
 #[cfg(feature = "sync")]
 pub(crate) fn response_types(request: OutgoingMessages) -> Option<&'static [IncomingMessages]> {
     CHANNEL_MAPPINGS.iter().find(|m| m.request == request).map(|m| m.responses)
+}
+
+/// The end marker of the reply TWS sends to each `request`; see
+/// [`ChannelMapping::reply_end`].
+pub(crate) fn reply_end(request: OutgoingMessages) -> Option<IncomingMessages> {
+    CHANNEL_MAPPINGS.iter().find(|m| m.request == request).and_then(|m| m.reply_end)
 }
 
 /// `true` when `request` maps to a one-shot shared channel (single terminating

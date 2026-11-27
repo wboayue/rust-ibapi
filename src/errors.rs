@@ -204,7 +204,8 @@ pub enum Error {
     #[error("{0}")]
     Notice(Notice),
 
-    /// Attempted to create a duplicate subscription.
+    /// Attempted to create a duplicate subscription or to reuse its shared
+    /// channel before an abandoned reply has ended.
     #[error("AlreadySubscribed")]
     AlreadySubscribed,
 

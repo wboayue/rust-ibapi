@@ -9,16 +9,17 @@ pub(crate) use connection_signal::ConnectionSignal;
 /// rather than a socket. Production callers reach it through `AsyncIo`.
 #[cfg(test)]
 pub(crate) use io::read_framed_message;
+pub(crate) use io::AccountAdmission;
 /// The stream traits, for test fixtures that stand in for a socket.
 #[cfg(test)]
 pub(crate) use io::{AsyncIo, AsyncReconnect};
 pub(crate) use io::{AsyncSocket, AsyncStream, Connector};
-use registry::{Route, SenderHash, SharedChannels};
+use registry::{Route, SenderHash, SharedChannels, SharedReplySkip};
 pub(crate) use shutdown::ShutdownSignal;
 
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
@@ -184,6 +185,7 @@ impl RouteKey {
 }
 
 /// Asynchronous message bus trait
+#[allow(private_interfaces)] // The transport is private, including the account admission token.
 #[async_trait]
 pub trait AsyncMessageBus: Send + Sync {
     /// Open a request-id route and write `message`. With `bound`, unread
@@ -211,8 +213,17 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
     /// `send_shared_request` for `RequestAccountData`, refused with
-    /// `Error::AccountUpdatesInUse` while another account is live.
-    async fn send_account_updates_request(&self, account: &AccountId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
+    /// `Error::AccountUpdatesInUse` while another account is live. While
+    /// `account` is live already, writes `unsubscribe` ahead of `message`:
+    /// TWS answers a repeated subscribe with nothing, but an unsubscribe and
+    /// subscribe with the full initial dump, which reaches every subscription.
+    async fn send_account_updates_request(
+        &self,
+        account: &AccountId,
+        message: Vec<u8>,
+        unsubscribe: Vec<u8>,
+        admission: &AccountAdmission,
+    ) -> Result<AsyncInternalSubscription, Error>;
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error>;
 
@@ -277,6 +288,9 @@ pub struct AsyncInternalSubscription {
     lease: Option<(Lease, RouteKey)>,
     /// The shared-channel ticket, for a shared-channel subscription.
     shared: Option<SharedTicket>,
+    /// The earlier replies a shared-channel subscription passes over; see
+    /// `UnansweredReplies`.
+    skip: SharedReplySkip,
     /// The bus session generation the request was sent in; see
     /// [`AsyncMessageBus::session_generation`].
     session: u64,
@@ -297,7 +311,7 @@ impl Clone for AsyncInternalSubscription {
         // the broadcast channel — clones see future messages, not the
         // original's history.
         let new_template = self.template_receiver.resubscribe();
-        let new_polling = self.template_receiver.resubscribe();
+        let (new_polling, skip) = self.skip.resubscribe(&self.template_receiver);
         Self {
             template_receiver: new_template,
             stream: BroadcastStream::new(new_polling),
@@ -306,6 +320,7 @@ impl Clone for AsyncInternalSubscription {
             // no-op while another clone still holds the lease.
             lease: self.lease.clone(),
             shared: self.shared,
+            skip,
             session: self.session,
             reads: None,
             class: self.class,
@@ -334,6 +349,7 @@ impl AsyncInternalSubscription {
             cleanup_sender: None,
             lease: None,
             shared: None,
+            skip: SharedReplySkip::default(),
             session: 0,
             reads: None,
             class: ChannelClass::default(),
@@ -348,6 +364,7 @@ impl AsyncInternalSubscription {
             cleanup_sender: Some(cleanup_sender),
             lease: None,
             shared: None,
+            skip: SharedReplySkip::default(),
             session: 0,
             reads: None,
             class: ChannelClass::default(),
@@ -360,9 +377,11 @@ impl AsyncInternalSubscription {
         self
     }
 
-    /// Mark this a subscription to the shared channel `ticket` names.
-    fn shared(mut self, ticket: SharedTicket) -> Self {
+    /// Mark this a subscription to the shared channel `ticket` names, which
+    /// passes over the earlier replies `skip` counts.
+    fn shared(mut self, ticket: SharedTicket, skip: SharedReplySkip) -> Self {
         self.shared = Some(ticket);
+        self.skip = skip;
         self
     }
 
@@ -384,29 +403,50 @@ impl AsyncInternalSubscription {
         self
     }
 
-    /// Poll the underlying broadcast stream, converting a `Lagged` error into
-    /// an in-band [`SUBSCRIPTION_LAG_CODE`](crate::messages::SUBSCRIPTION_LAG_CODE)
-    /// notice (which also logs: `error!` on an order-class channel, else
-    /// `warn!`). The single place lag is handled — every
-    /// consumer polls through here, so none can reintroduce a silent swallow.
+    /// Report lag as an in-band notice, or as a terminal error while waiting
+    /// for an earlier shared reply's end marker.
     pub(crate) fn poll_next_routed(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<RoutedItem>> {
         use std::task::Poll;
-        match std::pin::Pin::new(&mut self.stream).poll_next(cx) {
-            Poll::Ready(Some(Ok(item))) => {
-                if let Some(reads) = &self.reads {
-                    reads.fetch_add(1, Ordering::Relaxed);
+        if self.skip.finished {
+            return Poll::Ready(None);
+        }
+        loop {
+            let item = match std::pin::Pin::new(&mut self.stream).poll_next(cx) {
+                Poll::Ready(Some(Ok(item))) => item,
+                Poll::Ready(Some(Err(BroadcastStreamRecvError::Lagged(skipped)))) => {
+                    let notice = match self.class {
+                        ChannelClass::MarketData => crate::messages::subscription_lag_notice(skipped),
+                        ChannelClass::Order | ChannelClass::OrderStream => crate::messages::order_lag_notice(skipped),
+                    };
+                    if self.skip.waiting_for_end() {
+                        // A dropped frame could be the End that separates our
+                        // reply from the earlier one.
+                        self.skip.finished = true;
+                        let error = if self.skip.session_reset() {
+                            Error::ConnectionReset
+                        } else {
+                            Error::Notice(notice)
+                        };
+                        return Poll::Ready(Some(RoutedItem::Error(error)));
+                    }
+                    return Poll::Ready(Some(RoutedItem::Notice(notice)));
                 }
-                Poll::Ready(Some(item))
+                Poll::Ready(None) if self.skip.session_reset() => {
+                    self.skip.finished = true;
+                    return Poll::Ready(Some(RoutedItem::Error(Error::ConnectionReset)));
+                }
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => return Poll::Pending,
+            };
+            if let Some(reads) = &self.reads {
+                reads.fetch_add(1, Ordering::Relaxed);
             }
-            Poll::Ready(Some(Err(BroadcastStreamRecvError::Lagged(skipped)))) => {
-                let notice = match self.class {
-                    ChannelClass::MarketData => crate::messages::subscription_lag_notice(skipped),
-                    ChannelClass::Order | ChannelClass::OrderStream => crate::messages::order_lag_notice(skipped),
-                };
-                Poll::Ready(Some(RoutedItem::Notice(notice)))
+            if let RoutedItem::Response(message) = &item {
+                if self.skip.skips(message.message_type()) {
+                    continue;
+                }
             }
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
+            return Poll::Ready(Some(item));
         }
     }
 
@@ -686,11 +726,6 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                                 // reconnect can run for minutes.
                                 message_bus.reset_channels().await;
 
-                                // Fail any write still on the dead
-                                // connection, so the gate below need not wait
-                                // for a peer that stopped reading.
-                                message_bus.connection.socket.sever();
-
                                 // Waits out writes whose state check passed
                                 // before the flip (a write stuck on the dead
                                 // socket must not delay the failures above);
@@ -877,14 +912,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         self.orders.fail_all(|| Error::ConnectionReset.into());
         // Aliases of the routes just failed.
         self.executions.clear();
-        // Shared channels too, mirroring sync's `fail_all`: an in-flight
-        // open_orders/positions subscription awaits an end marker only the
-        // pre-reconnect request could produce, so it would hang forever.
-        // Unfiltered on purpose — `fail_one_shot_channels`' one-shot filter
-        // protects live streams from *unrelated* errors, but a reset
-        // terminates every stream by definition. The channels persist across
-        // sessions, so they are not closed.
-        self.shared_channels.notify_all(|| Error::ConnectionReset.into());
+        self.shared_channels.retire_session();
+        // Shared writes can hold the count lock until their flush returns.
+        self.connection.socket.sever();
         self.shared_channels.reset_counts().await;
         self.order_taps.reset();
     }
@@ -1141,27 +1171,114 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     // Registers a subscription of `message_type` and writes its request;
     // `account` for account updates (see `SharedCounts`).
+    /// `unsubscribe` goes out ahead of `message` when `account`'s updates are
+    /// live already; see `AsyncMessageBus::send_account_updates_request`.
     async fn send_shared(
         &self,
         message_type: OutgoingMessages,
         account: Option<&AccountId>,
         message: Vec<u8>,
+        replay: Option<(Vec<u8>, &AccountAdmission)>,
     ) -> Result<AsyncInternalSubscription, Error> {
         // See `open_route`.
         let session = self.session_generation();
         self.ensure_connected()?;
-        self.throttle(&message).await;
-
-        let (receiver, ticket) = self.shared_channels.subscribe(message_type, account, || self.write_now(&message)).await?;
+        if replay.is_none() {
+            self.throttle(&message).await;
+        }
+        let admission = replay.as_ref().map(|(_, admission)| *admission);
+        let started = AtomicBool::new(false);
+        let write = |live| self.write_shared(session, &message, replay.as_ref(), live, &started);
+        let (receiver, ticket, skip) = self.shared_channels.subscribe(message_type, account, admission, &started, write).await?;
 
         Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
-            .shared(ticket)
+            .shared(ticket, skip)
             .in_session(session)
             .class(ChannelClass::of_shared(message_type)))
+    }
+
+    async fn write_shared(
+        &self,
+        session: u64,
+        message: &[u8],
+        replay: Option<&(Vec<u8>, &AccountAdmission)>,
+        live: bool,
+        started: &AtomicBool,
+    ) -> Result<(), Error> {
+        let Ok(_session) = self.session.try_read() else {
+            return Err(self.ended_reason(Error::Reconnecting));
+        };
+        self.ensure_connected()?;
+        if session != self.session_generation() {
+            return Err(Error::ConnectionReset);
+        }
+        if let Some((unsubscribe, admission)) = replay {
+            admission.check()?;
+            let permit = tokio::select! {
+                biased;
+                () = admission.cancelled() => return Err(Error::Cancelled),
+                paced = self.throttle_account_request() => paced?,
+            };
+            if live {
+                self.connection
+                    .write_message_tracked(unsubscribe, &AtomicBool::new(false), Some(admission))
+                    .await?;
+                self.observe_account_write(permit);
+                let mut replay = AccountReplay {
+                    socket: &self.connection.socket,
+                    armed: true,
+                };
+                let permit = self.throttle_account_request().await?;
+                self.connection.write_message_tracked(message, started, None).await?;
+                self.observe_account_write(permit);
+                replay.armed = false;
+                return Ok(());
+            }
+            self.connection.write_message_tracked(message, started, Some(admission)).await?;
+            self.observe_account_write(permit);
+            return Ok(());
+        }
+        self.connection.write_message_tracked(message, started, None).await
+    }
+
+    async fn throttle_account_request(&self) -> Result<tokio::time::Instant, Error> {
+        let now = tokio::time::Instant::now();
+        let Some(limiter) = self.rate_limiter.get() else {
+            return self.ensure_connected().map(|()| now);
+        };
+        let permit = now + limiter.reserve(now.into_std(), false);
+        if permit == now {
+            return self.ensure_connected().map(|()| permit);
+        }
+        tokio::select! {
+            biased;
+            error = self.connection_state.disconnected() => Err(error),
+            () = tokio::time::sleep_until(permit) => self.ensure_connected().map(|()| permit),
+        }
+    }
+
+    fn observe_account_write(&self, permit: tokio::time::Instant) {
+        if let Some(limiter) = self.rate_limiter.get() {
+            limiter.observe_account_write(permit.into_std(), tokio::time::Instant::now().into_std());
+        }
+    }
+}
+
+struct AccountReplay<'a, S: AsyncStream> {
+    socket: &'a S,
+    armed: bool,
+}
+
+impl<S: AsyncStream> Drop for AccountReplay<'_, S> {
+    fn drop(&mut self) {
+        if self.armed {
+            self.socket.sever();
+        }
     }
 }
 
 #[async_trait]
+#[allow(private_interfaces)]
 impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     async fn send_request_capped(
         &self,
@@ -1184,23 +1301,40 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.send_shared(message_type, None, message).await
+        self.send_shared(message_type, None, message, None).await
     }
 
-    async fn send_account_updates_request(&self, account: &AccountId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.send_shared(OutgoingMessages::RequestAccountData, Some(account), message).await
+    async fn send_account_updates_request(
+        &self,
+        account: &AccountId,
+        message: Vec<u8>,
+        unsubscribe: Vec<u8>,
+        admission: &AccountAdmission,
+    ) -> Result<AsyncInternalSubscription, Error> {
+        self.send_shared(
+            OutgoingMessages::RequestAccountData,
+            Some(account),
+            message,
+            Some((unsubscribe, admission)),
+        )
+        .await
     }
 
     async fn cancel_shared_subscription(&self, ticket: SharedTicket, message: Option<Vec<u8>>) -> Result<(), Error> {
-        // Throttled before the lock: some cancels (account updates) are
-        // requests with an off flag and do wait.
-        if let Some(message) = &message {
-            self.throttle(message).await;
-        }
         self.shared_channels
-            .unsubscribe(ticket, || async move {
+            .unsubscribe(ticket, message.is_some(), || async move {
                 match message {
-                    Some(message) => self.write_now(&message).await,
+                    Some(message) => {
+                        if ticket.message_type == OutgoingMessages::RequestAccountData {
+                            let permit = self.throttle_account_request().await?;
+                            self.write_now(&message).await?;
+                            self.observe_account_write(permit);
+                            return Ok(());
+                        } else {
+                            self.throttle(&message).await;
+                        }
+                        self.write_now(&message).await
+                    }
                     None => Ok(()),
                 }
             })

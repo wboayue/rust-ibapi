@@ -202,6 +202,11 @@ impl SharedCounts {
         }
     }
 
+    /// `true` while subscriptions to `account`'s updates are live.
+    pub(crate) fn is_account_updates_live(&self, account: &AccountId) -> bool {
+        self.account_updates.as_ref() == Some(account)
+    }
+
     /// Uncounts `ticket`'s subscription. `true` when the cancel should be
     /// written: the ticket is from this session and no other subscription of
     /// the type is live. A ticket with no counted subscription (one
@@ -243,6 +248,117 @@ impl SharedCounts {
     }
 }
 
+/// Requests written but not yet answered, per reply end marker, for the
+/// shared requests TWS answers one at a time with a full reply each
+/// (`ChannelMapping::reply_end`).
+/// Every reply reaches every live subscription of its message types, so a
+/// subscription made while `n` replies of its end marker are outstanding
+/// skips those `n` and then reads its own: without it, `open_orders` called
+/// during another `open_orders` ends at the earlier reply's end marker with
+/// the tail of that reply, and `all_open_orders` overlapping `open_orders`
+/// reads the other request's result set.
+///
+/// Counted under the same lock as the request write, so the count follows
+/// wire order; decremented under the lock that delivers the end marker, so a
+/// new subscription sees each end marker exactly when the count does.
+///
+/// A request TWS stops answering is uncounted when its cancel goes out
+/// ([`cancelled`](Self::cancelled)): `reqPositions` sent during a connectivity
+/// loss (1100) never ended, and every later `positions()` would otherwise pass
+/// over its own reply waiting for that one. Requests without a cancel
+/// (`reqOpenOrders`, `reqAllOpenOrders`, `reqCompletedOrders`) stay counted
+/// after their subscription is dropped, since TWS still sends the reply.
+/// Account dumps can also arrive after the last unsubscribe. A fresh account
+/// subscription is refused until those replies have ended or the session resets.
+#[cfg(any(feature = "sync", feature = "async"))]
+#[derive(Debug, Default)]
+pub(crate) struct UnansweredReplies {
+    pending: std::collections::HashMap<crate::messages::IncomingMessages, usize>,
+}
+
+#[cfg(any(feature = "sync", feature = "async"))]
+impl UnansweredReplies {
+    pub(crate) fn check_account_updates(&self, request: OutgoingMessages, live: bool) -> Result<(), Error> {
+        if request == OutgoingMessages::RequestAccountData && !live && self.pending(crate::messages::IncomingMessages::AccountDownloadEnd) > 0 {
+            return Err(Error::AlreadySubscribed);
+        }
+        Ok(())
+    }
+
+    /// Counts a request of `request` about to be written and returns what its
+    /// subscription skips: the replies still outstanding ahead of it.
+    pub(crate) fn add(&mut self, request: OutgoingMessages) -> ReplySkip {
+        let Some(end) = crate::messages::shared_channel_configuration::reply_end(request) else {
+            return ReplySkip::default();
+        };
+        let pending = self.pending.entry(end).or_insert(0);
+        let skip = ReplySkip {
+            end: Some(end),
+            remaining: *pending,
+        };
+        *pending += 1;
+        skip
+    }
+
+    /// Uncounts a request whose write failed after [`add`](Self::add).
+    pub(crate) fn withdraw(&mut self, request: OutgoingMessages) {
+        if let Some(end) = crate::messages::shared_channel_configuration::reply_end(request) {
+            self.answered(end);
+        }
+    }
+
+    /// Records a frame of `message_type`: an end marker answers the oldest
+    /// outstanding request. One with nothing outstanding (TWS sends this
+    /// client's open orders and an `OpenOrderEnd` at connect) changes nothing.
+    pub(crate) fn answered(&mut self, message_type: crate::messages::IncomingMessages) {
+        if let Some(pending) = self.pending.get_mut(&message_type) {
+            *pending = pending.saturating_sub(1);
+        }
+    }
+
+    /// Uncounts cancelled replies that TWS can stop sending. Keep abandoned
+    /// account dumps counted because TWS can still send their end markers.
+    pub(crate) fn cancelled(&mut self, request: OutgoingMessages) {
+        let end = crate::messages::shared_channel_configuration::reply_end(request);
+        if let Some(end) = end.filter(|end| *end != crate::messages::IncomingMessages::AccountDownloadEnd) {
+            self.pending.remove(&end);
+        }
+    }
+
+    /// Starts a new session: nothing written before it will be answered.
+    pub(crate) fn clear(&mut self) {
+        self.pending.clear();
+    }
+
+    pub(crate) fn pending(&self, end: crate::messages::IncomingMessages) -> usize {
+        self.pending.get(&end).copied().unwrap_or(0)
+    }
+}
+
+/// The earlier replies a shared subscription has yet to pass over before its
+/// own; see [`UnansweredReplies`].
+#[cfg(any(feature = "sync", feature = "async"))]
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct ReplySkip {
+    end: Option<crate::messages::IncomingMessages>,
+    remaining: usize,
+}
+
+#[cfg(any(feature = "sync", feature = "async"))]
+impl ReplySkip {
+    /// `true` when a frame of `message_type` belongs to an earlier reply, and
+    /// so is not this subscription's. Counts down on each end marker.
+    pub(crate) fn skips(&mut self, message_type: crate::messages::IncomingMessages) -> bool {
+        if self.remaining == 0 {
+            return false;
+        }
+        if self.end == Some(message_type) {
+            self.remaining -= 1;
+        }
+        true
+    }
+}
+
 // MessageBus trait - defines the interface for message handling
 #[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
@@ -259,8 +375,11 @@ pub(crate) trait MessageBus: Send + Sync {
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
     /// `send_shared_request` for `RequestAccountData`, refused with
-    /// `Error::AccountUpdatesInUse` while another account is live.
-    fn send_account_updates_request(&self, account: &AccountId, packet: &[u8]) -> Result<InternalSubscription, Error>;
+    /// `Error::AccountUpdatesInUse` while another account is live. While
+    /// `account` is live already, writes `unsubscribe` ahead of `packet`:
+    /// TWS answers a repeated subscribe with nothing, but an unsubscribe and
+    /// subscribe with the full initial dump, which reaches every subscription.
+    fn send_account_updates_request(&self, account: &AccountId, packet: &[u8], unsubscribe: &[u8]) -> Result<InternalSubscription, Error>;
 
     /// Ends one subscription of `message_id`. `packet` is the cancel to write
     /// for the last one; `None` for a stream TWS never cancels, which still

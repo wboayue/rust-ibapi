@@ -228,6 +228,57 @@ first `Inactive` event.*
 - **Not probed:** other 201 reasons; a 201 on a modify; `completed_orders(true)`; a raw capture
   to settle the two `open_orders()` hits; the Gateway.
 
+### Overlapping open-order requests
+
+*Live 2026-11-25 off-hours, paper TWS, server 223; client with 3 resting EUR.USD limits, a
+second client with 1, other clients' orders resting too.*
+
+- Two requests written back to back on one client, before any reply frame: TWS sends one full
+  reply per request, each with its own end marker, in the order sent, never interleaved. Seen
+  for `reqOpenOrders` twice (`5 3 5 3 5 3 53`, then the same again), `reqAllOpenOrders`
+  twice, both mixed orders (the own-client list of 3 orders and `53`, then the all-clients
+  list and `53`, or the reverse), and `reqCompletedOrders` twice (76 `CompletedOrder` and
+  `102`, twice). The second reply came about 100 ms after the first.
+- `reqPositions` twice behaves the same: 14 `Position` and `62`, twice.
+- A second request written after the first reply's first frame arrived draws the same: the
+  rest of the first reply, its end marker, then a full second reply.
+- At connect, before `nextValidId`, TWS sends this client's open orders and an `OpenOrderEnd`
+  that answers no request.
+- So routing these replies by message type alone is not enough: every reply reaches every
+  live subscription of its types, and a subscription must pass over the replies outstanding
+  when its request was written (`ChannelMapping::reply_end`). Without that, a second
+  `open_orders` made mid-reply read 4 of 6 frames and ended, and `all_open_orders` written
+  after `open_orders` read the 3 own orders instead of all of them.
+- A request can go unanswered: during the farm outage runs of #1315, a `reqPositions` sent
+  after a 1100 got no `PositionEnd` for 1554 s and 348 s.
+- **Not probed:** whether a busier account ever interleaves two replies, an unsolicited
+  `OpenOrderEnd` while a request is outstanding; whether `cancelPositions` sent mid-dump
+  suppresses the `PositionEnd`; whether `reqOpenOrders` or `reqCompletedOrders` sent during a
+  connectivity loss are answered. `reqAutoOpenOrders`: see
+  [`auto_open_orders` draws no reply](#auto_open_orders-draws-no-reply).
+
+### `auto_open_orders` draws no reply
+
+*Live 2026-11-25 10:09-10:11 UTC off-hours, paper TWS, server 223, client id 0, async client
+with `IBAPI_RECORDING_DIR`.*
+
+- `reqAutoOpenOrders(autoBind=true)` drew no frame at all in the next 5 to 6 s, with no open
+  order on the account, and again with a resting EUR.USD limit of client 0 and one of another
+  client. No `OpenOrder`, no `OrderStatus`, no `OpenOrderEnd`: the request has no reply and
+  no end marker.
+- A far EUR.USD limit placed by another API client while the request was live sent client 0
+  nothing.
+- `reqAllOpenOrders` on client 0 while the request was live drew `5 3 53` (the other client's
+  order). The client fanned that reply out to the `auto_open_orders` stream as well, which
+  yielded the order and its status and then ended at the `53`. `reqOpenOrders` on client 0
+  (with its own resting order) did the same. So every `OpenOrderEnd` a client 0 connection
+  sees ends some other request's reply, and the auto stream now ignores it
+  (`ChannelMapping` for `RequestAutoOpenOrders` lists no `OpenOrderEnd`).
+- At connect, TWS sent client 0 its resting order, its status and an `OpenOrderEnd` before
+  `nextValidId`; a connection whose client had no open order got none of the three.
+- **Not probed:** an order placed in the TWS window, the case `autoBind` exists for (no manual
+  order was placed); `autoBind=false`.
+
 ### Executions: `last_n_days` and `specific_dates`
 
 *Live 2026-09-27 (Sunday), paper Gateway, server 220; #858.*

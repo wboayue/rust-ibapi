@@ -172,7 +172,11 @@ fn prune_dead_drops_only_dead_routes() {
 }
 
 async fn subscribe(channels: &SharedChannels, request: OutgoingMessages) -> broadcast::Receiver<RoutedItem> {
-    channels.subscribe(request, None, || async { Ok(()) }).await.unwrap().0
+    channels
+        .subscribe(request, None, None, &AtomicBool::new(false), |_| async { Ok(()) })
+        .await
+        .unwrap()
+        .0
 }
 
 #[tokio::test]
@@ -191,7 +195,9 @@ async fn fail_one_shot_channels_spares_streaming_channels() {
 async fn subscribe_counts_only_a_written_request() {
     let channels = SharedChannels::new(|_| 8);
     let failed = channels
-        .subscribe(OutgoingMessages::RequestPositions, None, || async { Err(Error::ConnectionReset) })
+        .subscribe(OutgoingMessages::RequestPositions, None, None, &AtomicBool::new(false), |_| async {
+            Err(Error::ConnectionReset)
+        })
         .await;
     assert!(matches!(failed, Err(Error::ConnectionReset)));
     assert_eq!(channels.live(OutgoingMessages::RequestPositions).await, 0);
@@ -209,7 +215,11 @@ async fn close_fails_then_ends_every_channel() {
 
     assert!(matches!(positions.try_recv(), Ok(RoutedItem::Error(Error::Shutdown))));
     assert!(matches!(positions.try_recv(), Err(broadcast::error::TryRecvError::Closed)));
-    let refused = channels.subscribe(OutgoingMessages::RequestPositions, None, || async { Ok(()) }).await;
+    let refused = channels
+        .subscribe(OutgoingMessages::RequestPositions, None, None, &AtomicBool::new(false), |_| async {
+            Ok(())
+        })
+        .await;
     assert!(matches!(refused, Err(Error::InvalidArgument(_))));
 }
 
@@ -228,4 +238,21 @@ async fn shared_channels_take_per_type_capacity_lazily() {
 
     assert_eq!(items(&mut completed).len(), 2, "capacity-4 channel lost an item");
     assert!(matches!(positions.try_recv(), Err(broadcast::error::TryRecvError::Lagged(1))));
+}
+
+/// A caller's future dropped while its request write is pending (a `timeout`
+/// around `open_orders()` with the writer busy) withdraws the count, so later
+/// requests do not pass over a reply that will never come.
+#[tokio::test]
+async fn subscribe_dropped_during_its_write_withdraws_the_count() {
+    let channels = SharedChannels::new(|_| 16);
+
+    let started = AtomicBool::new(false);
+    let pending = channels.subscribe(OutgoingMessages::RequestOpenOrders, None, None, &started, |_| {
+        std::future::pending::<Result<(), Error>>()
+    });
+    let timed_out = tokio::time::timeout(std::time::Duration::from_millis(10), pending).await.is_err();
+
+    assert!(timed_out, "the write never completes");
+    assert_eq!(channels.unanswered(IncomingMessages::OpenOrderEnd), 0);
 }

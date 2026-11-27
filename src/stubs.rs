@@ -386,7 +386,7 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, MockRoute::Shared(message_type), message))
     }
 
-    fn send_account_updates_request(&self, _account: &AccountId, message: &[u8]) -> Result<InternalSubscription, Error> {
+    fn send_account_updates_request(&self, _account: &AccountId, message: &[u8], _unsubscribe: &[u8]) -> Result<InternalSubscription, Error> {
         MessageBus::send_shared_request(self, OutgoingMessages::RequestAccountData, message)
     }
 
@@ -466,6 +466,7 @@ fn mock_request(stub: &MessageBusStub, route: MockRoute, message: &[u8]) -> Inte
 
 #[cfg(feature = "async")]
 #[async_trait]
+#[allow(private_interfaces)]
 impl AsyncMessageBus for MessageBusStub {
     async fn send_request_capped(
         &self,
@@ -490,7 +491,14 @@ impl AsyncMessageBus for MessageBusStub {
         Ok(self.seeded_subscription(message))
     }
 
-    async fn send_account_updates_request(&self, _account: &AccountId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
+    async fn send_account_updates_request(
+        &self,
+        _account: &AccountId,
+        message: Vec<u8>,
+        _unsubscribe: Vec<u8>,
+        admission: &crate::transport::r#async::AccountAdmission,
+    ) -> Result<AsyncInternalSubscription, Error> {
+        admission.check()?;
         AsyncMessageBus::send_shared_request(self, OutgoingMessages::RequestAccountData, message).await
     }
 

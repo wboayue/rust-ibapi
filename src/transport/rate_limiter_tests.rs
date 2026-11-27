@@ -84,6 +84,90 @@ fn cancel_never_waits_but_takes_a_slot() {
 }
 
 #[test]
+fn account_request_reserves_one_slot_and_replay_follows_the_actual_unsubscribe() {
+    let limiter = RateLimiter::per_second(1);
+    let start = Instant::now();
+    assert_eq!(limiter.reserve(start, false), Duration::ZERO);
+    assert_eq!(limiter.reserved_until(), Some(start + SECOND));
+
+    let off = start + limiter.reserve(start, false);
+    assert_eq!(off, start + SECOND);
+    // Account for a writer that flushes after the original send slot.
+    let flushed = off + SECOND * 2;
+    limiter.observe_account_write(off, flushed);
+    let on = flushed + limiter.reserve(flushed, false);
+    assert_eq!(on, flushed + SECOND);
+    assert_eq!(limiter.reserved_until(), Some(on + SECOND));
+}
+
+#[test]
+fn account_write_delay_preserves_existing_rate_and_burst_budget() {
+    let start = Instant::now();
+    let limiter = RateLimiter::per_second(2);
+    let half = SECOND / 2;
+    for (permit, actual) in [(start, start + SECOND), (start + SECOND + half, start + SECOND + half)] {
+        let reserved = if permit == start { start } else { start + SECOND };
+        assert_eq!(reserved + limiter.reserve(reserved, false), permit);
+        limiter.observe_account_write(permit, actual);
+    }
+    assert_eq!(limiter.reserved_until(), Some(start + 2 * SECOND));
+
+    let burst = RateLimiter::per_second(20);
+    assert_eq!(burst.reserve(start, false), Duration::ZERO);
+    burst.observe_account_write(start, start);
+    assert_eq!(burst.reserve(start, false), Duration::ZERO);
+    assert_eq!(burst.reserve(start, false), Duration::from_nanos(52_631_579));
+}
+
+#[test]
+fn late_account_write_does_not_shift_another_clients_reservations() {
+    let slow = RateLimiter::per_second(2);
+    let fast = slow.clone();
+    let start = Instant::now();
+    let ten_seconds_later = start + 10 * SECOND;
+
+    assert_eq!(slow.reserve(start, false), Duration::ZERO);
+    assert_eq!(fast.reserve(ten_seconds_later, false), Duration::ZERO);
+    let completed = ten_seconds_later + Duration::from_millis(100);
+    slow.observe_account_write(start, completed);
+
+    // Both frames draw on this window. The old writer's ten-second delay
+    // must not move the fast client's accumulated debt by ten seconds.
+    assert_eq!(fast.reserved_until(), Some(ten_seconds_later + SECOND));
+    assert_eq!(fast.reserve(completed, false), Duration::from_millis(900));
+    assert_eq!(fast.reserve(completed, true), Duration::ZERO);
+    assert_eq!(fast.reserved_until(), Some(ten_seconds_later + 2 * SECOND));
+}
+
+#[test]
+fn account_write_short_delay_preserves_remaining_debt() {
+    let slow = RateLimiter::per_second(2);
+    let fast = slow.clone();
+    let start = Instant::now();
+    let completed = start + Duration::from_millis(100);
+
+    assert_eq!(slow.reserve(start, false), Duration::ZERO);
+    assert_eq!(fast.reserve(start, false), Duration::from_millis(500));
+    slow.observe_account_write(start, completed);
+
+    assert_eq!(fast.reserved_until(), Some(completed + SECOND));
+    assert_eq!(fast.reserve(completed, false), SECOND);
+}
+
+#[test]
+fn timely_account_write_after_idle_uses_one_slot() {
+    let limiter = RateLimiter::per_second(2);
+    let start = Instant::now();
+    let resumed = start + 10 * SECOND;
+
+    assert_eq!(limiter.reserve(start, false), Duration::ZERO);
+    assert_eq!(limiter.reserve(resumed, false), Duration::ZERO);
+    limiter.observe_account_write(resumed, resumed);
+    assert_eq!(limiter.reserved_until(), Some(resumed + SECOND / 2));
+    assert_eq!(limiter.reserve(resumed, false), SECOND / 2);
+}
+
+#[test]
 fn clones_share_one_budget() {
     let a = RateLimiter::per_second(10);
     let b = a.clone();
