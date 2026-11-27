@@ -252,12 +252,12 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
   0.01, NG 0.001, GC 0.1, and 718 ES options 0.05. It is not the increment at the contract's
   price.
 
-| Rule | Contracts | Bands (low edge: increment) |
-| ---- | --------- | --------------------------- |
-| 4563 | AAPL | 0: 0.01 |
-| 557 | CTXR (US stock below 1 USD) | 0: 0.0001, 1: 0.01 |
-| 67, 151, 32, 98, 65 | ES, ZC, CL, NG, GC futures | one band: 0.25, 0.0025, 0.01, 0.001, 0.1 |
-| 235 | ES options (FOP, 718 rows for 202612) | 0: 0.05, 5: 0.1, 20: 0.25, 100: 0.5 |
+| Rule                | Contracts                             | Bands (low edge: increment)              |
+| ------------------- | ------------------------------------- | ---------------------------------------- |
+| 4563                | AAPL                                  | 0: 0.01                                  |
+| 557                 | CTXR (US stock below 1 USD)           | 0: 0.0001, 1: 0.01                       |
+| 67, 151, 32, 98, 65 | ES, ZC, CL, NG, GC futures            | one band: 0.25, 0.0025, 0.01, 0.001, 0.1 |
+| 235                 | ES options (FOP, 718 rows for 202612) | 0: 0.05, 5: 0.1, 20: 0.25, 100: 0.5      |
 
 - **Not probed:** bonds, warrants, structured products; contracts with no market rule; an order
   on JPNNEXT.
@@ -288,14 +288,14 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
 *Live 2026-11-24 21:47-21:51 UTC (HKFE, OSE and KSE closed) and 2026-11-25 06:21 UTC (SEHK
 options), paper TWS, server 223; contract details of every listed contract.*
 
-| Query | Rows | `localSymbol` | `tradingClass` |
-| ----- | ---- | ------------- | -------------- |
-| OPT HSI HKFE | 2,572 | `HSI25600L6`, `HSI25600X6`, `HSI19200L6W04` | `HSI` |
-| OPT MHI HKFE | 866 | `MHI12800L6`, `MHI12800X6` | `MHI` |
-| FOP HSI HKFE | 1,942 | `PHS25600L6`, `PHS25600X6` | `PHS` |
-| OPT N225 OSE.JPN 202612 | 706 | `131126218` (16250 P), `141127718` (17750 C) | `225` |
-| OPT K200 KSE 202612 | 1,134 | `K200270L6.KS`, `K200992L6.KS` (992.5 C), `K200220X6.KS` | `01` |
-| OPT 700 SEHK 202612 C | 139 | `TCH DEC26 640 C` | `TCH` |
+| Query                   | Rows  | `localSymbol`                                            | `tradingClass` |
+| ----------------------- | ----- | -------------------------------------------------------- | -------------- |
+| OPT HSI HKFE            | 2,572 | `HSI25600L6`, `HSI25600X6`, `HSI19200L6W04`              | `HSI`          |
+| OPT MHI HKFE            | 866   | `MHI12800L6`, `MHI12800X6`                               | `MHI`          |
+| FOP HSI HKFE            | 1,942 | `PHS25600L6`, `PHS25600X6`                               | `PHS`          |
+| OPT N225 OSE.JPN 202612 | 706   | `131126218` (16250 P), `141127718` (17750 C)             | `225`          |
+| OPT K200 KSE 202612     | 1,134 | `K200270L6.KS`, `K200992L6.KS` (992.5 C), `K200220X6.KS` | `01`           |
+| OPT 700 SEHK 202612 C   | 139   | `TCH DEC26 640 C`                                        | `TCH`          |
 
 - HKFE and KSE: the trading class on HKFE or the symbol on KSE (`K200`; its trading class is
   `01`), strike, one letter for month and right, last digit of the expiry year, then `.KS` on KSE. Calls take `A` (January) to `L` (December), puts `M` to
@@ -321,13 +321,13 @@ options), paper TWS, server 223; contract details of every listed contract.*
 
 *Live 2026-11-24 21:47-22:23 UTC (TSE, SEHK and LSE closed), paper TWS, server 223.*
 
-| Contract | `minSize` | `sizeIncrement` | `suggestedSizeIncrement` |
-| -------- | --------- | --------------- | ------------------------ |
-| 7203 TSEJ (Toyota) | 100 | 100 | 100 |
-| 700 SEHK (Tencent) | 100 | 100 | 100 |
-| 5 SEHK (HSBC) | 400 | 400 | 400 |
-| VOD LSE | 0.0001 | 0.0001 | 1 |
-| HSI, N225, N225M, K200 futures; HSI, K200, N225 options | 1 | 1 | 1 |
+| Contract                                                | `minSize` | `sizeIncrement` | `suggestedSizeIncrement` |
+| ------------------------------------------------------- | --------- | --------------- | ------------------------ |
+| 7203 TSEJ (Toyota)                                      | 100       | 100             | 100                      |
+| 700 SEHK (Tencent)                                      | 100       | 100             | 100                      |
+| 5 SEHK (HSBC)                                           | 400       | 400             | 400                      |
+| VOD LSE                                                 | 0.0001    | 0.0001          | 1                        |
+| HSI, N225, N225M, K200 futures; HSI, K200, N225 options | 1         | 1               | 1                        |
 
 - The board lot is `minSize`, and `sizeIncrement` equals it on TSE and SEHK. It differs per
   stock on SEHK (100 for 700, 400 for 5).
@@ -343,13 +343,13 @@ options), paper TWS, server 223; contract details of every listed contract.*
 `market_rule`, orders and what-if orders. LSE units and bars: 2026-11-25 19:16 UTC (LSE closed),
 historical ticks and bars.*
 
-| Contract (exchanges) | Rule | Bands (low edge: increment) |
-| -------------------- | ---- | --------------------------- |
-| 7203 (TSEJ) | 1460 | 0: 0.1, 1,000: 0.5, 3,000: 1, 10,000: 5, 30,000: 10, ... 30,000,000: 10,000 |
-| 7203 (SMART, JPNNEXT) | 3407 | 0: 0.1, 10,000: 0.5, 30,000: 1, 100,000: 5, 300,000: 10, 1,000,000: 100 |
-| 700, 5 (SEHK) | 1910, 1852 | 0: 0.001, 0.25: 0.005, 10: 0.01, 20: 0.02, 50: 0.05, 100: 0.1, ... 5,000: 5 |
-| VOD (LSE and 5 others; EUIBSI 3060) | 1918 | 0: 0.000001, ... 1: 0.0005, 2: 0.001, ... 500: 0.2 |
-| HSI future and options; N225 future; N225M future; K200 future | 68, 197, 380, 11 | one band: 1, 10, 5, 0.05 |
+| Contract (exchanges)                                           | Rule             | Bands (low edge: increment)                                                 |
+| -------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------- |
+| 7203 (TSEJ)                                                    | 1460             | 0: 0.1, 1,000: 0.5, 3,000: 1, 10,000: 5, 30,000: 10, ... 30,000,000: 10,000 |
+| 7203 (SMART, JPNNEXT)                                          | 3407             | 0: 0.1, 10,000: 0.5, 30,000: 1, 100,000: 5, 300,000: 10, 1,000,000: 100     |
+| 700, 5 (SEHK)                                                  | 1910, 1852       | 0: 0.001, 0.25: 0.005, 10: 0.01, 20: 0.02, 50: 0.05, 100: 0.1, ... 5,000: 5 |
+| VOD (LSE and 5 others; EUIBSI 3060)                            | 1918             | 0: 0.000001, ... 1: 0.0005, 2: 0.001, ... 500: 0.2                          |
+| HSI future and options; N225 future; N225M future; K200 future | 68, 197, 380, 11 | one band: 1, 10, 5, 0.05                                                    |
 
 - `minTick` is the first band's increment (7203: 0.1, SEHK: 0.001), not the increment at the
   stock's price. One stock can carry different rules per venue: 7203's TSEJ rule moves to 0.5 at
@@ -379,14 +379,14 @@ historical ticks and bars.*
 *Live 2026-11-25 19:15-19:23 UTC (TSE, KRX and EUREX closed), paper TWS, server 223;
 `contract_details` and `matching_symbols`.*
 
-| Contract | Query | `localSymbol` | Notes |
-| -------- | ----- | ------------- | ----- |
-| Toyota 7203 | STK on TSEJ or SMART | `7203.T` | primary `TSEJ` |
-| Toyota 7203 | STK on JPNNEXT | `7203` | same conid 13905804 |
-| Samsung Electronics 005930 (KOSPI) | by conid | `005930.KS` | primary `KRX`, exchange `SMART` |
-| Ecopro BM 247540 (KOSDAQ) | by conid | `247540.KQ` | primary `KRX` |
-| DAX future, December 2026 | FUT `DAX` on EUREX | `FDAX 20261218 M` | class `FDAX`; the mini is `FDXM 20261218 M` |
-| Euro Stoxx 50 index | IND `ESTX50` on EUREX | `SX5E` | IND `SX5E` draws 200 |
+| Contract                           | Query                 | `localSymbol`     | Notes                                       |
+| ---------------------------------- | --------------------- | ----------------- | ------------------------------------------- |
+| Toyota 7203                        | STK on TSEJ or SMART  | `7203.T`          | primary `TSEJ`                              |
+| Toyota 7203                        | STK on JPNNEXT        | `7203`            | same conid 13905804                         |
+| Samsung Electronics 005930 (KOSPI) | by conid              | `005930.KS`       | primary `KRX`, exchange `SMART`             |
+| Ecopro BM 247540 (KOSDAQ)          | by conid              | `247540.KQ`       | primary `KRX`                               |
+| DAX future, December 2026          | FUT `DAX` on EUREX    | `FDAX 20261218 M` | class `FDAX`; the mini is `FDXM 20261218 M` |
+| Euro Stoxx 50 index                | IND `ESTX50` on EUREX | `SX5E`            | IND `SX5E` draws 200                        |
 
 - A TSE stock's local symbol depends on the exchange in the query: `7203.T` on TSEJ and SMART,
   `7203` on JPNNEXT.
