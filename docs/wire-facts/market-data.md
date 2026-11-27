@@ -349,7 +349,8 @@ unplugged for 2 min; one client never cancelled or re-requested; #1300.*
 - Keep-up-to-date bars: 10182 "Failed to request live updates (disconnected)." arrived in the
   same millisecond as 2105 for `cashhmds`, after it, every run, every client (one also got 165);
   2026-11-26, about 1 ms after it. No frame followed in 270 s, 389 s, 635 s, 1587 s and 390 s.
-  A cancel after the 10182 drew 366 within 3 ms (4 of 4), so the stream sends none. A new
+  On 2026-11-26, a cancel after the 10182 drew 366 within 3 ms (4 of 4). The stream sends no
+  cancel because the request has ended. A new
   request after the restore returned a batch covering every outage minute, 2.5 to 3.7 s after
   the 1102. One sent at the first HMDS OK was answered 0.6 s after the 1102, one sent at the
   second HMDS OK 0.1 s before it. `Client::resubscribing` reopens the request once no HMDS farm
@@ -367,13 +368,18 @@ unplugged for 2 min; one client never cancelled or re-requested; #1300.*
   12:21:12.490 batch on 1500000008, 21 of 21 outage minutes, 0.1 s before the 1102
   ```
 
+- On 2026-11-27 (paper TWS 223, EUR/USD IDEALPRO, 5-minute Wi-Fi cut), 10182 arrived just
+  after `cashhmds` 2105 and 12.2 s before 1100. A new keep-up-to-date request sent 5 s after
+  that 10182, with HMDS still down, stayed outstanding. Its first batch arrived after 2106 and
+  0.24 s after 1102: 121 one-minute bars covering all six affected minute closes, followed by
+  further updates. An explicit cancel of the ended request 1 s after 10182 had no matching 366
+  in that run. The active re-request probe separately saw 366 on other request IDs.
 - 10197 "No market data during competing live session" does not end a market data request: drawn
   51 s into the 6-minute outage on all clients; on the client that sent no cancel, ticks resumed
   on the same id at restore (2233 to the end). Tick-by-tick, depth and realtime bars got no 10197.
   A market data subscription yields it as a notice and keeps reading
   (`TickTypes::error_continues_request`).
 - **Not probed:** 1101, and whether streams resume on their own ids after it (a reopen after 1101
-  loses the realtime bar back-fill if they do); whether TWS answers a keep-up-to-date bar request
-  sent during the outage once its farm is back (every such request was replaced before the
-  restore); the path where an HMDS farm goes inactive (2107) instead of reporting OK; stocks,
+  loses the realtime bar back-fill if they do); the path where an HMDS farm goes inactive
+  (2107) instead of reporting OK; stocks,
   futures, RTH; depth update rows after restore; 10197 during a real competing session.
