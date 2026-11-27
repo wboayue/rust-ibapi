@@ -228,6 +228,8 @@ pub enum Error {
     /// The orders in `sent` may be at TWS: the ones written before the failure, and last, the one
     /// whose write failed, which may still have arrived. Cancel them by id after reconnecting with
     /// the same client id; a cancel for one that never arrived draws error 10147 and does nothing.
+    /// When `source` is [`Error::Shutdown`] or [`Error::ConnectionFailed`], no reconnect follows
+    /// on this client: cancel them from a new connection with the same client id.
     /// A bracket's parent and take-profit are held at TWS until the stop-loss transmits, and
     /// `open_orders` doesn't list held orders, so their ids are the only way to reach them. The
     /// orders in `not_sent` were never written. Both lists are in submit order.
@@ -311,6 +313,19 @@ impl Error {
         }
     }
 
+    /// Build an [`Error::OrdersPartiallySent`] for a multi-order submit whose send of the
+    /// order at index `failed` in `ids` returned `source`: the orders up to and including it are
+    /// `sent` (its write may still have reached TWS), the rest `not_sent`.
+    pub(crate) fn orders_partially_sent(ids: impl IntoIterator<Item = i32>, failed: usize, source: Error) -> Error {
+        let mut sent: Vec<i32> = ids.into_iter().collect();
+        let not_sent = sent.split_off(failed + 1);
+        Error::OrdersPartiallySent {
+            sent,
+            not_sent,
+            source: Box::new(source),
+        }
+    }
+
     /// Build an [`Error::Parse`] naming the field, for a field that is absent
     /// or holds something other than text (a timestamp out of range).
     pub(crate) fn invalid_field(field: &'static str, reason: impl Into<String>) -> Error {
@@ -376,7 +391,7 @@ impl Error {
     /// before resubscribing: it returns once the session is back, or with
     /// `ConnectionFailed` / `Shutdown` if it never will be.
     ///
-    /// [`Error::OrdersPartiallySent`] answers for the send failure it wraps.
+    /// [`Error::OrdersPartiallySent`] returns `true` when its `source` does.
     ///
     /// # Examples
     ///

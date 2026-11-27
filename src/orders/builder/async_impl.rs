@@ -97,8 +97,9 @@ impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// the error's `sent` ids (live: 2026-11-27, paper Gateway, server 226).
     ///
     /// Dropping the returned future between sends (a timeout, a `select!` branch) also stops
-    /// partway, and returns nothing, so held legs it sent can't be found by id. Let `submit_all`
-    /// finish rather than racing it against a timeout.
+    /// partway, and returns nothing, so held legs it sent can't be found by id: avoid racing it
+    /// against a timeout. Without one, a write stalled on a peer that stopped reading blocks the
+    /// call until the client finds the connection lost and severs it, which fails the write.
     ///
     /// # Examples
     ///

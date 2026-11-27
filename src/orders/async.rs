@@ -191,15 +191,18 @@ impl Client {
 
     /// Sends a batch of orders, each under the id paired with it, after
     /// [`verify::prepare_place_orders`] has checked and encoded all of them. A failed send stops
-    /// the loop and returns [`Error::OrdersPartiallySent`] with the ids that may be at TWS. A dropped future (between sends)
-    /// returns nothing, so its orders aren't reported.
+    /// the loop and returns [`Error::OrdersPartiallySent`] with the ids that may be at TWS. A
+    /// future dropped between sends returns nothing, so its orders aren't reported.
     pub(crate) async fn submit_orders<'a>(&self, orders: impl IntoIterator<Item = (OrderId, &'a Contract, &'a Order)>) -> Result<(), Error> {
         let orders: Vec<_> = orders.into_iter().collect();
         let requests = verify::prepare_place_orders(self.id_manager(), self.server_version(), orders.iter().copied())?;
         for (i, request) in requests.into_iter().enumerate() {
             if let Err(source) = self.send_message(request).await {
-                let ids: Vec<i32> = orders.iter().map(|(order_id, _, _)| order_id.value()).collect();
-                return Err(verify::partially_sent(&ids, i, source));
+                return Err(Error::orders_partially_sent(
+                    orders.iter().map(|(order_id, _, _)| order_id.value()),
+                    i,
+                    source,
+                ));
             }
         }
         Ok(())

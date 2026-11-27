@@ -503,8 +503,11 @@ impl Client {
         let requests = verify::prepare_place_orders(self.id_manager(), self.server_version(), orders.iter().copied())?;
         for (i, request) in requests.into_iter().enumerate() {
             if let Err(source) = self.send_message(request) {
-                let ids: Vec<i32> = orders.iter().map(|(order_id, _, _)| order_id.value()).collect();
-                return Err(verify::partially_sent(&ids, i, source));
+                return Err(Error::orders_partially_sent(
+                    orders.iter().map(|(order_id, _, _)| order_id.value()),
+                    i,
+                    source,
+                ));
             }
         }
         Ok(())

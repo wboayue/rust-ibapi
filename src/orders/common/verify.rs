@@ -40,7 +40,7 @@ pub(crate) fn prepare_place_order(
 /// The place-order requests for a batch, each order under the id paired with it, prepared with
 /// [`prepare_place_order`]. Every order is checked and encoded before the caller sends the
 /// first, so an order that fails sends nothing; only sending can then stop partway, which
-/// [`partially_sent`] reports. The OCA and bracket submits (sync and async) send through this.
+/// [`Error::OrdersPartiallySent`] reports. The OCA and bracket submits (sync and async) send through this.
 pub(crate) fn prepare_place_orders<'a>(
     ids: &ClientIdManager,
     server_version: i32,
@@ -50,18 +50,6 @@ pub(crate) fn prepare_place_orders<'a>(
         .into_iter()
         .map(|(order_id, contract, order)| prepare_place_order(ids, server_version, order_id, contract, order).map(|(_, request)| request))
         .collect()
-}
-
-/// The error for a multi-order submit whose send of `ids[failed]` returned `source`:
-/// [`Error::OrdersPartiallySent`], with the orders up to and including the failed one as `sent`
-/// (its write may still have reached TWS) and the rest as `not_sent`.
-pub(crate) fn partially_sent(ids: &[i32], failed: usize, source: Error) -> Error {
-    let (sent, not_sent) = ids.split_at(failed + 1);
-    Error::OrdersPartiallySent {
-        sent: sent.to_vec(),
-        not_sent: not_sent.to_vec(),
-        source: Box::new(source),
-    }
 }
 
 /// Numbers each order from `next_id` and puts it in `oca_group` with `oca_type`, overwriting a

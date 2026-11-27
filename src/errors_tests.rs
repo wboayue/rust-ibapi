@@ -295,10 +295,24 @@ fn clone_preserves_parse_time() {
 }
 
 fn partially_sent(source: Error) -> Error {
-    Error::OrdersPartiallySent {
-        sent: vec![7, 8],
-        not_sent: vec![9],
-        source: Box::new(source),
+    Error::orders_partially_sent([7, 8, 9], 1, source)
+}
+
+#[test]
+fn orders_partially_sent_splits_after_the_failed_order() {
+    let cases = [
+        ("first send fails", 0, vec![7], vec![8, 9]),
+        ("middle send fails", 1, vec![7, 8], vec![9]),
+        ("last send fails", 2, vec![7, 8, 9], vec![]),
+    ];
+    for (label, failed, expected_sent, expected_not_sent) in cases {
+        match Error::orders_partially_sent([7, 8, 9], failed, Error::ConnectionReset) {
+            Error::OrdersPartiallySent { sent, not_sent, .. } => {
+                assert_eq!(sent, expected_sent, "{label}");
+                assert_eq!(not_sent, expected_not_sent, "{label}");
+            }
+            other => panic!("{label}: {other:?}"),
+        }
     }
 }
 

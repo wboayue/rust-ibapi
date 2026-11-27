@@ -1549,7 +1549,7 @@ let spread = legs.fold(Contract::spread(symbol).add_leg(id, action).done(), |spr
 let contract = spread.build()?;
 ```
 
-### 53. `submit_oca_orders` takes the group; OCA and bracket submits send nothing when an order fails its checks
+### 53. `submit_oca_orders` takes the group; OCA and bracket submits check every order first and return `Error::OrdersPartiallySent` if a send fails partway
 
 `submit_oca_orders` (sync and async) takes the group name and OCA type and sets them on every
 order:
@@ -1578,8 +1578,8 @@ let ids = client.submit_oca_orders("MyOCA", OcaType::CancelWithBlock, vec![(aapl
 before sending the first. In 5.x they sent one order at a time, so if a later order failed its
 checks (an id at or above 1,500,000,000, an `ext_operator` TWS would reject), the earlier
 orders were already live and the error didn't say so. For a bracket, that left the parent and
-take-profit held at TWS. Those errors now send nothing; the signatures of `submit_all` and the
-error types are unchanged.
+take-profit held at TWS. Those errors now send nothing and keep their types; `submit_all`'s
+signature is unchanged.
 
 Only a transport error can still stop partway. Both methods then return the new
 `Error::OrdersPartiallySent { sent, not_sent, source }` instead of the bare transport error:
@@ -1600,7 +1600,8 @@ match result {
     Err(Error::OrdersPartiallySent { sent, .. }) => {
         client.wait_connected()?;
         for id in sent {
-            client.cancel_order(id)?; // 10147 for one that never arrived
+            // TWS answers 10147 for one that never arrived; harmless.
+            let _cancellation = client.cancel_order(id)?;
         }
     }
     // ...
