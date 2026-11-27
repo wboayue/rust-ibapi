@@ -83,6 +83,8 @@ enum SendMode {
     Succeed,
     /// Succeed until this many messages are recorded, then fail with `ConnectionReset`.
     FailAfter(usize),
+    /// Fail with `ConnectionReset` without recording the message.
+    Refuse,
     #[cfg(feature = "async")]
     Stall,
 }
@@ -193,6 +195,13 @@ impl MessageBusStub {
     /// recording it, as a write to a lost connection does.
     pub fn with_failing_sends(mut self) -> Self {
         self.send_mode = SendMode::FailAfter(0);
+        self
+    }
+
+    /// Make each `send_message` fail with [`Error::ConnectionReset`] without recording the
+    /// message, as a request refused while the client reconnects is: nothing reaches the wire.
+    pub fn with_refused_sends(mut self) -> Self {
+        self.send_mode = SendMode::Refuse;
         self
     }
 
@@ -315,6 +324,9 @@ impl MessageBus for MessageBusStub {
     }
 
     fn send_message(&self, message: &[u8]) -> Result<(), Error> {
+        if let SendMode::Refuse = self.send_mode {
+            return Err(Error::ConnectionReset);
+        }
         self.request_messages.write().unwrap().push(message.to_vec());
         match self.send_mode {
             SendMode::FailAfter(n) if self.request_messages.read().unwrap().len() > n => Err(Error::ConnectionReset),
@@ -481,9 +493,12 @@ impl AsyncMessageBus for MessageBusStub {
     }
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
+        if let SendMode::Refuse = self.send_mode {
+            return Err(Error::ConnectionReset);
+        }
         self.request_messages.write().unwrap().push(message);
         match self.send_mode {
-            SendMode::Succeed => Ok(()),
+            SendMode::Succeed | SendMode::Refuse => Ok(()),
             SendMode::FailAfter(n) if self.request_messages.read().unwrap().len() > n => Err(Error::ConnectionReset),
             SendMode::FailAfter(_) => Ok(()),
             SendMode::Stall => std::future::pending().await,

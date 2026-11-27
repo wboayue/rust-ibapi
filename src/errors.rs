@@ -428,17 +428,19 @@ impl Error {
         }
     }
 
-    /// Returns `true` if this error was raised before the failing call wrote anything to TWS, so
-    /// the request it would have sent certainly did not go out. Returns `false` when the request
-    /// may have reached TWS: an order call must then ask TWS (open orders, executions, the order
-    /// update stream) what became of it.
+    /// Returns `true` only for errors raised by a check before anything was written, so the
+    /// request certainly did not reach TWS. `false` means it may have: an order call must then ask
+    /// TWS (open orders, executions, the order update stream) what became of it. Some `false`
+    /// errors also come before any write (see [`ConnectionReset`](Error::ConnectionReset) below),
+    /// so `false` is "unknown", not "sent".
     ///
     /// Written for the calls that place, modify, cancel or exercise orders: `place_order`,
     /// `submit_order`, `cancel_order`, `cancel_order_with`, `global_cancel`, `global_cancel_with`,
     /// the order builder's `submit` and `analyze`, and `exercise_options`. Each runs its checks,
-    /// then encodes, then writes the request once; only the write can fail after bytes left.
+    /// then encodes, then writes the request once; only the write can fail after bytes left. The
+    /// classification holds for any other call too: no `true` variant is raised after a write.
     ///
-    /// `true` for the errors only those checks raise:
+    /// `true` for the errors only pre-write checks raise:
     ///
     /// | Variant | Raised by |
     /// |---|---|
@@ -446,8 +448,8 @@ impl Error {
     /// | [`InvalidArgument`](Error::InvalidArgument) | a caller-bug check before the write |
     /// | [`OrderIdInRequestRange`](Error::OrderIdInRequestRange) | an order id at or above the request-id range |
     /// | [`ServerVersion`](Error::ServerVersion) | an order field the connected server does not support |
-    /// | [`AlreadySubscribed`](Error::AlreadySubscribed) | a second order update stream, which writes nothing |
-    /// | [`AccountUpdatesInUse`](Error::AccountUpdatesInUse) | the account-updates slot check, before the request is written |
+    /// | [`AlreadySubscribed`](Error::AlreadySubscribed) | a second order update stream (not an order call), which writes nothing |
+    /// | [`AccountUpdatesInUse`](Error::AccountUpdatesInUse) | the account-updates slot check (not an order call), before the request is written |
     ///
     /// `false` for every other variant, including those raised both before and after a write:
     ///
@@ -462,7 +464,8 @@ impl Error {
     /// - [`Notice`](Error::Notice) and the decode, parse and stream variants report what TWS
     ///   sent back, so the request was sent.
     /// - [`OrdersPartiallySent`](Error::OrdersPartiallySent) reports a multi-order submit that
-    ///   stopped partway; its `sent` orders may be at TWS.
+    ///   stopped partway; its `sent` orders may be at TWS. It is `false` whatever its `source`
+    ///   is, since `sent` always holds at least the order whose write failed.
     ///
     /// The bracket builder's `submit_all` and `submit_oca_orders` check every order before
     /// sending any, so a `true` error from them means none of their orders was sent; a send

@@ -1606,9 +1606,20 @@ fn next_valid_order_id_then_submit_order_does_not_reissue_the_id() {
     assert_eq!(client.next_order_id(), order_id + 1);
 }
 
-/// `Error::is_unsent` is `true` exactly when the failing order call wrote nothing.
+/// `Error::is_unsent` is `true` only when the failing order call wrote nothing. The converse
+/// doesn't hold: a request refused while the client reconnects writes nothing yet is `false`,
+/// because the same error also ends a write cut off mid-frame.
 #[test]
-fn is_unsent_matches_whether_the_order_call_wrote() {
+fn is_unsent_implies_the_order_call_wrote_nothing() {
+    /// What the stubbed bus does with a write.
+    #[derive(Clone, Copy)]
+    enum Sends {
+        Succeed,
+        /// Recorded, then fails: the request may have reached TWS.
+        Fail,
+        /// Fails without recording, as a request refused while reconnecting.
+        Refuse,
+    }
     type Call = fn(&Client) -> Result<(), Error>;
     fn bad_operator() -> crate::orders::OrderCancel {
         crate::orders::OrderCancel {
@@ -1619,65 +1630,87 @@ fn is_unsent_matches_whether_the_order_call_wrote() {
     fn limit() -> Order {
         order_builder::limit_order(Action::Buy, 1.0, 1.0)
     }
-    let cases: [(&str, bool, Call); 10] = [
-        ("place_order, id in the request range", false, |client| {
+    let cases: [(&str, Sends, bool, Call); 14] = [
+        ("place_order, id in the request range", Sends::Succeed, true, |client| {
             client.place_order(REQUEST_ID_FLOOR, &Contract::stock("AAPL").build(), &limit()).map(drop)
         }),
-        ("place_order, bad ext_operator", false, |client| {
+        ("place_order, bad ext_operator", Sends::Succeed, true, |client| {
             let order = Order {
                 ext_operator: "TRADER_7".to_owned(),
                 ..limit()
             };
             client.place_order(41, &Contract::stock("AAPL").build(), &order).map(drop)
         }),
-        ("place_order, field above the server version", false, |client| {
+        ("place_order, field above the server version", Sends::Succeed, true, |client| {
             let order = Order {
                 hedge_max_size: Some(10),
                 ..limit()
             };
             client.place_order(41, &Contract::stock("AAPL").build(), &order).map(drop)
         }),
-        ("cancel_order_with, bad ext_operator", false, |client| {
+        ("cancel_order, id in the request range", Sends::Succeed, true, |client| {
+            client.cancel_order(REQUEST_ID_FLOOR).map(drop)
+        }),
+        ("cancel_order_with, bad ext_operator", Sends::Succeed, true, |client| {
             client.cancel_order_with(41, &bad_operator()).map(drop)
         }),
-        ("global_cancel_with, bad ext_operator", false, |client| {
+        ("global_cancel_with, bad ext_operator", Sends::Succeed, true, |client| {
             client.global_cancel_with(&bad_operator())
         }),
-        ("builder submit, negative quantity", false, |client| {
+        ("builder submit, negative quantity", Sends::Succeed, true, |client| {
             client.order(&Contract::stock("AAPL").build()).buy(-100).market().submit().map(drop)
         }),
-        ("submit_order, write fails", true, |client| {
+        ("builder analyze, negative quantity", Sends::Succeed, true, |client| {
+            client.order(&Contract::stock("AAPL").build()).buy(-100).market().analyze().map(drop)
+        }),
+        ("exercise_options, zero quantity", Sends::Succeed, true, |client| {
+            client.exercise_options(&Contract::stock("AAPL").build()).exercise(0).submit().map(drop)
+        }),
+        (
+            "bracket submit_all, a later leg's id in the request range",
+            Sends::Succeed,
+            true,
+            |client| {
+                client.id_manager().raise_order_id(OrderId::from(REQUEST_ID_FLOOR - 1));
+                let contract = Contract::stock("AAPL").build();
+                client
+                    .order(&contract)
+                    .buy(1)
+                    .bracket()
+                    .entry_limit(1.0)
+                    .take_profit(2.0)
+                    .stop_loss(0.5)
+                    .submit_all()
+                    .map(drop)
+            },
+        ),
+        ("submit_order, write fails", Sends::Fail, false, |client| {
             client.submit_order(41, &Contract::stock("AAPL").build(), &limit())
         }),
-        ("global_cancel, write fails", true, |client| client.global_cancel()),
-        ("bracket submit_all, a later leg's id in the request range", false, |client| {
-            client.id_manager().raise_order_id(OrderId::from(REQUEST_ID_FLOOR - 1));
-            let contract = Contract::stock("AAPL").build();
-            client
-                .order(&contract)
-                .buy(1)
-                .bracket()
-                .entry_limit(1.0)
-                .take_profit(2.0)
-                .stop_loss(0.5)
-                .submit_all()
-                .map(drop)
-        }),
-        ("submit_oca_orders, write fails", true, |client| {
+        ("global_cancel, write fails", Sends::Fail, false, |client| client.global_cancel()),
+        ("submit_oca_orders, write fails", Sends::Fail, false, |client| {
             let orders = vec![(Contract::stock("AAPL").build(), limit()), (Contract::stock("MSFT").build(), limit())];
             client.submit_oca_orders("G", OcaType::CancelWithBlock, orders).map(drop)
         }),
+        ("submit_order, refused while reconnecting", Sends::Refuse, false, |client| {
+            client.submit_order(41, &Contract::stock("AAPL").build(), &limit())
+        }),
     ];
 
-    for (name, failing_sends, call) in cases {
+    for (name, sends, unsent, call) in cases {
         let stub = MessageBusStub::default();
-        let message_bus = Arc::new(if failing_sends { stub.with_failing_sends() } else { stub });
+        let message_bus = Arc::new(match sends {
+            Sends::Succeed => stub,
+            Sends::Fail => stub.with_failing_sends(),
+            Sends::Refuse => stub.with_refused_sends(),
+        });
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
         let err = call(&client).expect_err(name);
 
         let written = request_message_count(&message_bus);
-        assert_eq!(err.is_unsent(), written == 0, "{name}: {err:?}, {written} requests written");
-        assert_eq!(written, usize::from(failing_sends), "{name}: requests written");
+        assert_eq!(err.is_unsent(), unsent, "{name}: {err:?}");
+        assert!(!err.is_unsent() || written == 0, "{name}: unsent, yet {written} requests written");
+        assert_eq!(written, usize::from(matches!(sends, Sends::Fail)), "{name}: requests written");
     }
 }
