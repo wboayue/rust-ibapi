@@ -352,16 +352,7 @@ fn spread_builder_carries_symbol() {
 fn spread_builder_rejects_empty_symbol() {
     let err = Contract::spread("").vertical(100, 105).build().unwrap_err();
     assert!(
-        matches!(err, Error::InvalidArgument(ref msg) if msg == "Spread requires a symbol"),
-        "got {err:?}"
-    );
-}
-
-#[test]
-fn spread_builder_empty_fails() {
-    let err = Contract::spread("AAPL").build().unwrap_err();
-    assert!(
-        matches!(err, Error::InvalidArgument(ref msg) if msg == "Spread must have at least one leg"),
+        matches!(err, ValidationError::InvalidField { field: "Contract::symbol", ref value, .. } if value.is_empty()),
         "got {err:?}"
     );
 }
@@ -443,7 +434,7 @@ fn leg_tuples(spread: &Contract) -> Legs {
 
 #[test]
 fn spread_presets_set_legs() {
-    type Preset = fn(SpreadBuilder) -> SpreadBuilder;
+    type Preset = fn(SpreadBuilder) -> SpreadBuilder<HasLegs>;
     let cases: [(&str, Preset, Legs); 6] = [
         (
             "straddle",

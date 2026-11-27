@@ -1,10 +1,13 @@
 use time::OffsetDateTime;
 
 use crate::client::ids::RequestId;
-use crate::contracts::{Contract, SecurityType};
+use crate::contracts::Contract;
 use crate::market_data::historical::{BarRequest, BarSize, Duration, HistoricalData, HistoricalDataFrame, WhatToShow};
 use crate::market_data::TradingHours;
 use crate::Error;
+
+use super::date_spec::{Between, DateSpec, DurationEnding, DurationOnly, EndingOnly, Resolved};
+use crate::builder::Missing;
 
 #[cfg(test)]
 #[path = "data_tests.rs"]
@@ -12,24 +15,25 @@ mod tests;
 
 /// Builder for historical bar data requests.
 ///
-/// Required: one of [`duration`](Self::duration) (with optional [`ending`](Self::ending))
-/// or [`between`](Self::between) to specify the time range. Mixing the two styles
-/// errors at the terminal.
+/// Required: a date range, either [`duration`](Self::duration) (with optional
+/// [`ending`](Self::ending), in either order) or [`between`](Self::between). The
+/// third type parameter records which (see [`date_spec`](super::date_spec)): the
+/// terminals exist only once the range is complete, and `between` does not
+/// combine with `duration` or `ending`.
 ///
 /// Three terminals: `fetch` collects the bars, retrying after a connection
 /// reset; `subscribe` sends once and hands back the frames;
-/// `subscribe_with_updates` also keeps the bars up to date.
+/// `subscribe_with_updates`, only after `duration` alone, also keeps the bars
+/// up to date.
 #[must_use = "HistoricalDataBuilder does nothing until you call .fetch(), .subscribe() or .subscribe_with_updates()"]
-pub struct HistoricalDataBuilder<'a, C> {
+pub struct HistoricalDataBuilder<'a, C, D = Missing> {
     client: &'a C,
     contract: &'a Contract,
     request_id: RequestId,
     bar_size: BarSize,
     what_to_show: WhatToShow,
     trading_hours: TradingHours,
-    duration: Option<Duration>,
-    ending: Option<OffsetDateTime>,
-    between: Option<(OffsetDateTime, OffsetDateTime)>,
+    dates: D,
     buffer_limit: Option<usize>,
 }
 
@@ -42,13 +46,78 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
             bar_size,
             what_to_show: WhatToShow::Trades,
             trading_hours: TradingHours::Regular,
-            duration: None,
-            ending: None,
-            between: None,
+            dates: Missing,
             buffer_limit: None,
         }
     }
 
+    /// Amount of data going back from the end date: now, unless [`ending`](Self::ending)
+    /// follows.
+    pub fn duration(self, duration: Duration) -> HistoricalDataBuilder<'a, C, DurationOnly> {
+        self.with_dates(DurationOnly(duration))
+    }
+
+    /// Anchor the query at a specific end date (defaults to now); [`duration`](Self::duration)
+    /// must follow before a terminal. TWS rejects an end date for a
+    /// [`ContinuousFuture`](crate::contracts::SecurityType::ContinuousFuture) (error 10339), so
+    /// for one the request fails with [`Error::InvalidArgument`] and nothing is sent; use
+    /// `duration` alone or [`between`](Self::between) instead.
+    pub fn ending(self, end_date: OffsetDateTime) -> HistoricalDataBuilder<'a, C, EndingOnly> {
+        self.with_dates(EndingOnly(end_date))
+    }
+
+    /// Convenience: specify an explicit date range.
+    ///
+    /// IBKR measures request durations in trading time, so no duration maps exactly onto a
+    /// wall-clock range. The request asks for a duration that covers `[start, end)`, and the
+    /// result is trimmed to that range with [`HistoricalData::trim_to`], whose docs say which
+    /// bar at each edge survives for intraday, daily, weekly and monthly bars.
+    ///
+    /// TWS rejects any end date for a
+    /// [`ContinuousFuture`](crate::contracts::SecurityType::ContinuousFuture) (error 10339), so
+    /// for one the request has no end date and covers `[start, now)`; the bars after `end` are
+    /// then dropped. Such a range must start before now. The request size grows with
+    /// `now - start`, not `end - start`: a short range far in the past fetches every bar since
+    /// `start`. TWS still applies its bar-size step limit (error 162), and a large request is
+    /// slow: a month of 1-minute ES bars took over a minute (live: 2026-11-22). Use
+    /// [`duration`](Self::duration) alone for one, or a larger bar size.
+    ///
+    /// The range is complete: `between` takes no `duration` or `ending`.
+    ///
+    /// ```compile_fail,E0599
+    /// # use ibapi::market_data::historical::{HistoricalDataBuilder, ToDuration};
+    /// # use time::macros::datetime;
+    /// # fn f<C>(request: HistoricalDataBuilder<'_, C>) {
+    /// let request = request
+    ///     .between(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC))
+    ///     .duration(7.days());
+    /// # }
+    /// ```
+    pub fn between(self, start: OffsetDateTime, end: OffsetDateTime) -> HistoricalDataBuilder<'a, C, Between> {
+        self.with_dates(Between { start, end })
+    }
+}
+
+impl<'a, C> HistoricalDataBuilder<'a, C, EndingOnly> {
+    /// Amount of data going back from the end date set by
+    /// [`ending`](HistoricalDataBuilder::ending).
+    pub fn duration(self, duration: Duration) -> HistoricalDataBuilder<'a, C, DurationEnding> {
+        let ending = self.dates.0;
+        self.with_dates(DurationEnding { duration, ending })
+    }
+}
+
+impl<'a, C> HistoricalDataBuilder<'a, C, DurationOnly> {
+    /// Anchor the query at a specific end date instead of now, with the same
+    /// continuous-future restriction as [`ending`](HistoricalDataBuilder::ending)
+    /// before `duration`.
+    pub fn ending(self, end_date: OffsetDateTime) -> HistoricalDataBuilder<'a, C, DurationEnding> {
+        let duration = self.dates.0;
+        self.with_dates(DurationEnding { duration, ending: end_date })
+    }
+}
+
+impl<'a, C, D> HistoricalDataBuilder<'a, C, D> {
     /// The request id the terminal will send. Allocated when the builder was
     /// made; nothing has been written yet. A dropped builder skips the id.
     /// `fetch` sends its first attempt under it, and a resend after a
@@ -66,40 +135,6 @@ impl<'a, C> HistoricalDataBuilder<'a, C> {
     /// Override regular- vs extended-hours (defaults to [`TradingHours::Regular`]).
     pub fn trading_hours(mut self, trading_hours: TradingHours) -> Self {
         self.trading_hours = trading_hours;
-        self
-    }
-
-    /// Amount of data going back from the end date (now if [`ending`](Self::ending) is unset).
-    pub fn duration(mut self, duration: Duration) -> Self {
-        self.duration = Some(duration);
-        self
-    }
-
-    /// Anchor the query at a specific end date (defaults to now). TWS rejects an end date for a
-    /// [`ContinuousFuture`](SecurityType::ContinuousFuture) (error 10339), so for one the request
-    /// fails with [`Error::InvalidArgument`] and nothing is sent; use
-    /// [`duration`](Self::duration) alone or [`between`](Self::between) instead.
-    pub fn ending(mut self, end_date: OffsetDateTime) -> Self {
-        self.ending = Some(end_date);
-        self
-    }
-
-    /// Convenience: specify an explicit date range.
-    ///
-    /// IBKR measures request durations in trading time, so no duration maps exactly onto a
-    /// wall-clock range. The request asks for a duration that covers `[start, end)`, and the
-    /// result is trimmed to that range with [`HistoricalData::trim_to`], whose docs say which
-    /// bar at each edge survives for intraday, daily, weekly and monthly bars.
-    ///
-    /// TWS rejects any end date for a [`ContinuousFuture`](SecurityType::ContinuousFuture)
-    /// (error 10339), so for one the request has no end date and covers `[start, now)`; the bars
-    /// after `end` are then dropped. Such a range must start before now. The request size grows
-    /// with `now - start`, not `end - start`: a short range far in the past fetches every bar
-    /// since `start`. TWS still applies its bar-size step limit (error 162), and a large request
-    /// is slow: a month of 1-minute ES bars took over a minute (live: 2026-11-22). Use
-    /// [`duration`](Self::duration) alone for one, or a larger bar size.
-    pub fn between(mut self, start: OffsetDateTime, end: OffsetDateTime) -> Self {
-        self.between = Some((start, end));
         self
     }
 
@@ -200,42 +235,16 @@ async fn main() {
         self
     }
 
-    /// Resolve the builder for a one-shot [`fetch`](Self::fetch): the date spec,
-    /// and no `buffer_limit` (a single response has nothing to cap).
-    fn resolve_for_fetch(&self) -> Result<(Option<OffsetDateTime>, Duration), Error> {
-        if self.buffer_limit.is_some() {
-            return Err(Error::InvalidArgument(
-                "historical_data().fetch(): buffer_limit applies to .subscribe() and .subscribe_with_updates() only".to_owned(),
-            ));
-        }
-        self.resolve_date_spec()
-    }
-
-    /// Resolve the builder's date spec into (end_date, duration). Errors if the
-    /// user mixed `.between` with `.duration`/`.ending`, or set neither.
-    fn resolve_date_spec(&self) -> Result<(Option<OffsetDateTime>, Duration), Error> {
-        match (self.between, self.duration, self.ending) {
-            (Some(_), Some(_), _) | (Some(_), _, Some(_)) => Err(Error::InvalidArgument(
-                "historical_data: cannot mix .between(...) with .duration()/.ending()".to_owned(),
-            )),
-            (Some((start, end)), None, None) => {
-                if end <= start {
-                    return Err(Error::InvalidArgument(
-                        "historical_data: .between(start, end) requires end > start".to_owned(),
-                    ));
-                }
-                if self.contract.security_type == SecurityType::ContinuousFuture {
-                    return continuous_future_range(start, OffsetDateTime::now_utc());
-                }
-                Ok((Some(end), covering_duration(end - start)))
-            }
-            (None, Some(_), Some(_)) if self.contract.security_type == SecurityType::ContinuousFuture => Err(Error::InvalidArgument(
-                "historical_data: TWS rejects .ending() for a continuous future (error 10339); use .duration() alone".to_owned(),
-            )),
-            (None, Some(duration), ending) => Ok((ending, duration)),
-            (None, None, _) => Err(Error::InvalidArgument(
-                "historical_data: must set .duration() or .between(...)".to_owned(),
-            )),
+    fn with_dates<E>(self, dates: E) -> HistoricalDataBuilder<'a, C, E> {
+        HistoricalDataBuilder {
+            client: self.client,
+            contract: self.contract,
+            request_id: self.request_id,
+            bar_size: self.bar_size,
+            what_to_show: self.what_to_show,
+            trading_hours: self.trading_hours,
+            dates,
+            buffer_limit: self.buffer_limit,
         }
     }
 
@@ -250,53 +259,19 @@ async fn main() {
             trading_hours: self.trading_hours,
         }
     }
+}
 
-    /// Resolve the builder for `subscribe_with_updates` (`keep_up_to_date = true`).
-    /// IBKR requires `end_date = None` for streaming, so `.ending()` / `.between()`
-    /// are rejected.
-    fn resolve_for_updates(&self) -> Result<Duration, Error> {
-        if self.ending.is_some() || self.between.is_some() {
+impl<C, D: DateSpec> HistoricalDataBuilder<'_, C, D> {
+    /// Resolve the builder for a one-shot `fetch`: the date spec, and no
+    /// `buffer_limit` (a single response has nothing to cap).
+    fn resolve_for_fetch(&self) -> Result<Resolved, Error> {
+        if self.buffer_limit.is_some() {
             return Err(Error::InvalidArgument(
-                "historical_data().subscribe_with_updates(): IBKR requires end_date = None for streaming; drop .ending() / .between()".to_owned(),
+                "historical_data().fetch(): buffer_limit applies to .subscribe() and .subscribe_with_updates() only".to_owned(),
             ));
         }
-        self.duration
-            .ok_or_else(|| Error::InvalidArgument("historical_data().subscribe_with_updates(): must set .duration()".to_owned()))
+        self.dates.resolve(self.contract)
     }
-}
-
-const SECONDS_PER_DAY: u64 = 86_400;
-/// IBKR rejects `S` durations above one day and `D` durations above 365.
-const MAX_DAYS: u64 = 365;
-
-/// An IBKR duration that covers a wall-clock `span` ending at the request's end date.
-///
-/// IBKR counts `S` in trading seconds, `D` in whole sessions counted back from the
-/// session containing the end date, and `Y` in calendar years. Trading time never exceeds
-/// wall-clock time, so `S` and `D` over-fetch rather than fall short, provided `D` asks for
-/// one extra session to cover a range that starts partway through one. `span` is positive.
-fn covering_duration(span: time::Duration) -> Duration {
-    let seconds = span.whole_seconds().unsigned_abs() + u64::from(span.subsec_nanoseconds() != 0);
-    if seconds <= SECONDS_PER_DAY {
-        return Duration::seconds(seconds as i32);
-    }
-    let days = seconds.div_ceil(SECONDS_PER_DAY) + 1;
-    if days <= MAX_DAYS {
-        return Duration::days(days as i32);
-    }
-    Duration::years(seconds.div_ceil(MAX_DAYS * SECONDS_PER_DAY) as i32)
-}
-
-/// The `(end_date, duration)` of a [`between`](HistoricalDataBuilder::between) request for a
-/// continuous future. TWS rejects any end date for one (error 10339), so the request covers
-/// `[start, now)` and the trim to `[start, end)` drops the bars after `end`.
-fn continuous_future_range(start: OffsetDateTime, now: OffsetDateTime) -> Result<(Option<OffsetDateTime>, Duration), Error> {
-    if start >= now {
-        return Err(Error::InvalidArgument(
-            "historical_data: .between(start, end) on a continuous future requires start before now".to_owned(),
-        ));
-    }
-    Ok((None, covering_duration(now - start)))
 }
 
 /// Drop bars outside `[start, end)` when the request came from [`between`](HistoricalDataBuilder::between).
@@ -308,13 +283,14 @@ fn trim_to_range(data: HistoricalData, range: Option<(OffsetDateTime, OffsetDate
 }
 
 #[cfg(feature = "sync")]
-impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
+impl<'a, D: DateSpec> HistoricalDataBuilder<'a, crate::client::sync::Client, D> {
     /// Submit a one-shot request and return the [`HistoricalData`] bars.
     ///
     /// Succeeds only after TWS sends its end marker; an empty result with the marker is valid.
     ///
     /// # Errors
-    /// - [`Error::InvalidArgument`] for an invalid date range, or if
+    /// - [`Error::InvalidArgument`] for a range the client rejects before sending (see [`between`](HistoricalDataBuilder::between)
+    ///   and [`ending`](HistoricalDataBuilder::ending)), or if
     ///   [`buffer_limit`](Self::buffer_limit) is set; nothing is sent.
     /// - [`Error::Notice`] when TWS rejects the request (e.g. 162, no data).
     /// - [`Error::UnexpectedEndOfStream`] if the response closes before the end
@@ -352,10 +328,22 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     ///     .expect("historical data request failed");
     /// # let _ = bars;
     /// ```
+    ///
+    /// Without a date range there is no `fetch`:
+    ///
+    /// ```compile_fail,E0599
+    /// # use ibapi::client::blocking::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # use ibapi::market_data::historical::BarSize;
+    /// # fn f(client: &Client, contract: &Contract) {
+    /// let bars = client.historical_data(contract, BarSize::Hour).fetch();
+    /// # }
+    /// ```
     pub fn fetch(self) -> Result<HistoricalData, Error> {
-        let (end_date, duration) = self.resolve_for_fetch()?;
-        let data = crate::market_data::historical::sync::historical_data(self.client, self.bar_request(end_date, duration), self.request_id)?;
-        Ok(trim_to_range(data, self.between))
+        let resolved = self.resolve_for_fetch()?;
+        let request = self.bar_request(resolved.end_date, resolved.duration);
+        let data = crate::market_data::historical::sync::historical_data(self.client, request, self.request_id)?;
+        Ok(trim_to_range(data, resolved.range))
     }
 
     /// Send the request once and return a subscription of its
@@ -381,7 +369,8 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// 162: the request is over at TWS.
     ///
     /// # Errors
-    /// [`Error::InvalidArgument`], with nothing sent, for an invalid date range,
+    /// [`Error::InvalidArgument`], with nothing sent, for a range the client rejects before sending (see
+    /// [`between`](HistoricalDataBuilder::between) and [`ending`](HistoricalDataBuilder::ending)),
     /// [`WhatToShow::AdjustedLast`] with an end date, or a `buffer_limit`
     /// outside `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
     ///
@@ -435,21 +424,44 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// }
     /// ```
     pub fn subscribe(self) -> Result<crate::subscriptions::sync::Subscription<HistoricalDataFrame>, Error> {
-        let (end_date, duration) = self.resolve_date_spec()?;
+        let resolved = self.dates.resolve(self.contract)?;
         crate::market_data::historical::sync::historical_data_subscription(
             self.client,
-            self.bar_request(end_date, duration),
+            self.bar_request(resolved.end_date, resolved.duration),
             self.request_id,
             self.buffer_limit,
         )
     }
+}
 
+#[cfg(feature = "sync")]
+impl HistoricalDataBuilder<'_, crate::client::sync::Client, DurationOnly> {
     /// Submit a request with IBKR's `keepUpToDate` and return a
     /// [`Subscription`](crate::subscriptions::Subscription) of [`HistoricalDataFrame`]:
     /// `Bars`, `End`, then `Update` for the forming bar until cancelled.
     ///
-    /// Rejects builders that called [`ending`](Self::ending) or [`between`](Self::between) —
-    /// IBKR requires `end_date = None` for streaming.
+    /// Only after [`duration`](HistoricalDataBuilder::duration) alone: IBKR requires
+    /// `end_date = None` for streaming, so a builder with
+    /// [`ending`](HistoricalDataBuilder::ending) or [`between`](HistoricalDataBuilder::between)
+    /// has no `subscribe_with_updates`.
+    ///
+    /// ```compile_fail,E0599
+    /// # use ibapi::client::blocking::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # use ibapi::market_data::historical::{BarSize, ToDuration};
+    /// # use time::macros::datetime;
+    /// # fn f(client: &Client, contract: &Contract) {
+    /// let subscription = client
+    ///     .historical_data(contract, BarSize::Min15)
+    ///     .duration(1.days())
+    ///     .ending(datetime!(2026-04-15 0:00 UTC))
+    ///     .subscribe_with_updates();
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// [`Error::InvalidArgument`], with nothing sent, for a `buffer_limit` outside
+    /// `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
     ///
     /// # Examples
     ///
@@ -469,10 +481,9 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
     /// # drop(subscription);
     /// ```
     pub fn subscribe_with_updates(self) -> Result<crate::subscriptions::sync::Subscription<HistoricalDataFrame>, Error> {
-        let duration = self.resolve_for_updates()?;
         crate::market_data::historical::sync::historical_data_updates(
             self.client,
-            self.bar_request(None, duration),
+            self.bar_request(None, self.dates.0),
             self.request_id,
             self.buffer_limit,
         )
@@ -480,13 +491,14 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::sync::Client> {
 }
 
 #[cfg(feature = "async")]
-impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
+impl<'a, D: DateSpec> HistoricalDataBuilder<'a, crate::client::r#async::Client, D> {
     /// Submit a one-shot request and return the [`HistoricalData`] bars.
     ///
     /// Succeeds only after TWS sends its end marker; an empty result with the marker is valid.
     ///
     /// # Errors
-    /// - [`Error::InvalidArgument`] for an invalid date range, or if
+    /// - [`Error::InvalidArgument`] for a range the client rejects before sending (see [`between`](HistoricalDataBuilder::between)
+    ///   and [`ending`](HistoricalDataBuilder::ending)), or if
     ///   [`buffer_limit`](Self::buffer_limit) is set; nothing is sent.
     /// - [`Error::Notice`] when TWS rejects the request (e.g. 162, no data).
     /// - [`Error::UnexpectedEndOfStream`] if the response closes before the end
@@ -528,11 +540,22 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     ///     let _ = bars;
     /// }
     /// ```
+    ///
+    /// Without a date range there is no `fetch`:
+    ///
+    /// ```compile_fail,E0599
+    /// # use ibapi::client::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # use ibapi::market_data::historical::BarSize;
+    /// # async fn f(client: &Client, contract: &Contract) {
+    /// let bars = client.historical_data(contract, BarSize::Hour).fetch().await;
+    /// # }
+    /// ```
     pub async fn fetch(self) -> Result<HistoricalData, Error> {
-        let (end_date, duration) = self.resolve_for_fetch()?;
-        let data =
-            crate::market_data::historical::r#async::historical_data(self.client, self.bar_request(end_date, duration), self.request_id).await?;
-        Ok(trim_to_range(data, self.between))
+        let resolved = self.resolve_for_fetch()?;
+        let request = self.bar_request(resolved.end_date, resolved.duration);
+        let data = crate::market_data::historical::r#async::historical_data(self.client, request, self.request_id).await?;
+        Ok(trim_to_range(data, resolved.range))
     }
 
     /// Send the request once and return a subscription of its
@@ -558,7 +581,8 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// 162: the request is over at TWS.
     ///
     /// # Errors
-    /// [`Error::InvalidArgument`], with nothing sent, for an invalid date range,
+    /// [`Error::InvalidArgument`], with nothing sent, for a range the client rejects before sending (see
+    /// [`between`](HistoricalDataBuilder::between) and [`ending`](HistoricalDataBuilder::ending)),
     /// [`WhatToShow::AdjustedLast`] with an end date, or a `buffer_limit`
     /// outside `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
     ///
@@ -612,22 +636,45 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn subscribe(self) -> Result<crate::subscriptions::r#async::Subscription<HistoricalDataFrame>, Error> {
-        let (end_date, duration) = self.resolve_date_spec()?;
+        let resolved = self.dates.resolve(self.contract)?;
         crate::market_data::historical::r#async::historical_data_subscription(
             self.client,
-            self.bar_request(end_date, duration),
+            self.bar_request(resolved.end_date, resolved.duration),
             self.request_id,
             self.buffer_limit,
         )
         .await
     }
+}
 
+#[cfg(feature = "async")]
+impl HistoricalDataBuilder<'_, crate::client::r#async::Client, DurationOnly> {
     /// Submit a request with IBKR's `keepUpToDate` and return a
     /// [`Subscription`](crate::subscriptions::Subscription) of [`HistoricalDataFrame`]:
     /// `Bars`, `End`, then `Update` for the forming bar until cancelled.
     ///
-    /// Rejects builders that called [`ending`](Self::ending) or [`between`](Self::between) —
-    /// IBKR requires `end_date = None` for streaming.
+    /// Only after [`duration`](HistoricalDataBuilder::duration) alone: IBKR requires
+    /// `end_date = None` for streaming, so a builder with
+    /// [`ending`](HistoricalDataBuilder::ending) or [`between`](HistoricalDataBuilder::between)
+    /// has no `subscribe_with_updates`.
+    ///
+    /// ```compile_fail,E0599
+    /// # use ibapi::client::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # use ibapi::market_data::historical::BarSize;
+    /// # use time::macros::datetime;
+    /// # async fn f(client: &Client, contract: &Contract) {
+    /// let subscription = client
+    ///     .historical_data(contract, BarSize::Min15)
+    ///     .between(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC))
+    ///     .subscribe_with_updates()
+    ///     .await;
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// [`Error::InvalidArgument`], with nothing sent, for a `buffer_limit` outside
+    /// `1..=`[`MAX_BUFFER_LIMIT`](crate::subscriptions::MAX_BUFFER_LIMIT).
     ///
     /// # Examples
     ///
@@ -649,10 +696,9 @@ impl<'a> HistoricalDataBuilder<'a, crate::client::r#async::Client> {
     /// }
     /// ```
     pub async fn subscribe_with_updates(self) -> Result<crate::subscriptions::r#async::Subscription<HistoricalDataFrame>, Error> {
-        let duration = self.resolve_for_updates()?;
         crate::market_data::historical::r#async::historical_data_updates(
             self.client,
-            self.bar_request(None, duration),
+            self.bar_request(None, self.dates.0),
             self.request_id,
             self.buffer_limit,
         )

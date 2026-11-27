@@ -52,13 +52,14 @@ pub enum Error {
     },
 
     /// The call itself is wrong, a caller bug no one recovers from at runtime:
-    /// a builder missing a required field (`Contract::spread` without legs,
-    /// `ContractBuilder` without a symbol, `OrderBuilder::order_type(..)` without
-    /// the price that type needs), conflicting `historical_data` settings
-    /// (`.between()` mixed with `.duration()`, an end before the start), a bad
+    /// a builder missing a required field (`ContractBuilder` without a symbol,
+    /// `OrderBuilder::order_type(..)` without the price that type needs), a
+    /// `historical_data` range the client rejects before sending (`.between()`
+    /// with an end before the start, `.ending()` on a continuous future), a bad
     /// `ClientBuilder` setting, `buffer_limit(0)`. Fix the code; the message says
-    /// what to change. Where a builder tracks a required field in its type, a
-    /// missing one is a compile error instead.
+    /// what to change. Where a builder tracks a required field or a conflicting
+    /// call in its type (`OrderBuilder`, `Contract::spread`, `historical_data`),
+    /// a missing or conflicting one is a compile error instead.
     ///
     /// A bad *value* a caller may correct at runtime is [`Error::Validation`].
     #[error("InvalidArgument: {0}")]

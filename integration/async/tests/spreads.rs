@@ -5,7 +5,9 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use ibapi::contracts::{ButterflyLegs, CollarLegs, Contract, ExpirationDate, Expiry, IronCondorLegs, OptionRight, SecurityType, SpreadBuilder};
+use ibapi::contracts::{
+    ButterflyLegs, CollarLegs, Contract, ExpirationDate, Expiry, HasLegs, IronCondorLegs, OptionRight, SecurityType, SpreadBuilder,
+};
 use ibapi::Client;
 use ibapi_integration_async::connect;
 use ibapi_test::{yyyymmdd_from_now, ClientId};
@@ -84,7 +86,7 @@ async fn spread_presets_accepted_by_what_if() {
 
     const SHARES: i32 = 100;
     let spread = || Contract::spread(SYMBOL);
-    let cases: Vec<(&str, SpreadBuilder, f64)> = vec![
+    let cases: Vec<(&str, SpreadBuilder<HasLegs>, f64)> = vec![
         ("vertical", spread().vertical(calls[&k[2]], calls[&k[3]]), price),
         ("long_calendar", spread().long_calendar(calls[&k[2]], far_calls[&k[2]]), price),
         // Buys the near leg, sells the dearer far one: a credit, bought at a negative price.

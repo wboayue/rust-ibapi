@@ -53,26 +53,6 @@ fn assert_trimmed(data: &HistoricalData) {
     );
     assert_eq!((data.start, data.end), (TRIM_START, TRIM_END), "window should report the requested range");
 }
-
-// `Subscription<T>` doesn't impl Debug, so `{:?}` formatting on `Result<Subscription<_>, _>`
-// won't compile. These helpers match the Err arm manually for the .subscribe_with_updates() terminals.
-// Sync + async use their own variants because the `Subscription` type differs per feature.
-#[cfg(feature = "sync")]
-fn assert_updates_invalid_argument_sync(
-    result: Result<crate::subscriptions::sync::Subscription<crate::market_data::historical::HistoricalDataFrame>, crate::Error>,
-) {
-    let Err(err) = result else { panic!("expected InvalidArgument error") };
-    assert!(matches!(err, crate::Error::InvalidArgument(_)), "expected InvalidArgument, got: {err}");
-}
-
-#[cfg(feature = "async")]
-fn assert_updates_invalid_argument_async(
-    result: Result<crate::subscriptions::r#async::Subscription<crate::market_data::historical::HistoricalDataFrame>, crate::Error>,
-) {
-    let Err(err) = result else { panic!("expected InvalidArgument error") };
-    assert!(matches!(err, crate::Error::InvalidArgument(_)), "expected InvalidArgument, got: {err}");
-}
-
 #[cfg(feature = "sync")]
 mod sync_tests {
     use std::sync::Arc;
@@ -156,6 +136,32 @@ mod sync_tests {
     }
 
     #[test]
+    fn ending_before_duration_anchors_end_date() {
+        let (client, bus) = client_with_data_pair();
+        let contract = Contract::stock("AAPL").build();
+        let end = datetime!(2026-04-15 16:00:00 UTC);
+
+        client
+            .historical_data(&contract, BarSize::Hour)
+            .ending(end)
+            .duration(2.days())
+            .fetch()
+            .expect("fetch should succeed");
+
+        assert_request(
+            &bus,
+            0,
+            &historical_data_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .contract(&contract)
+                .end_date(Some(end))
+                .duration(Duration::days(2))
+                .bar_size(BarSize::Hour)
+                .use_rth(true),
+        );
+    }
+
+    #[test]
     fn between_computes_duration_from_range() {
         let (client, bus) = client_with_data_pair();
         let contract = Contract::stock("AAPL").build();
@@ -231,6 +237,13 @@ mod sync_tests {
             panic!("expected InvalidArgument")
         };
         assert!(matches!(err, Error::InvalidArgument(_)), "got: {err}");
+        // Ending before duration reaches the same check.
+        let reordered = client
+            .historical_data(&contract, BarSize::Hour)
+            .ending(datetime!(2026-04-15 0:00 UTC))
+            .duration(2.days())
+            .fetch();
+        assert!(matches!(reordered, Err(Error::InvalidArgument(_))), "got: {reordered:?}");
         assert_eq!(request_message_count(&bus), 0, "nothing sent");
     }
 
@@ -249,38 +262,6 @@ mod sync_tests {
     }
 
     #[test]
-    fn fetch_without_date_spec_errors() {
-        let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL").build();
-
-        let result = client.historical_data(&contract, BarSize::Hour).fetch();
-
-        assert!(
-            matches!(result, Err(Error::InvalidArgument(_))),
-            "expected InvalidArgument, got: {result:?}"
-        );
-    }
-
-    #[test]
-    fn between_with_duration_errors() {
-        let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL").build();
-        let start = datetime!(2026-04-08 0:00 UTC);
-        let end = datetime!(2026-04-15 0:00 UTC);
-
-        let result = client
-            .historical_data(&contract, BarSize::Hour)
-            .duration(7.days())
-            .between(start, end)
-            .fetch();
-
-        assert!(
-            matches!(result, Err(Error::InvalidArgument(_))),
-            "expected InvalidArgument, got: {result:?}"
-        );
-    }
-
-    #[test]
     fn between_with_inverted_range_errors() {
         let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
@@ -294,33 +275,6 @@ mod sync_tests {
             matches!(result, Err(Error::InvalidArgument(_))),
             "expected InvalidArgument, got: {result:?}"
         );
-    }
-
-    #[test]
-    fn stream_rejects_ending() {
-        let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL").build();
-
-        let result = client
-            .historical_data(&contract, BarSize::Hour)
-            .duration(1.days())
-            .ending(datetime!(2026-04-15 0:00 UTC))
-            .subscribe_with_updates();
-
-        super::assert_updates_invalid_argument_sync(result);
-    }
-
-    #[test]
-    fn stream_rejects_between() {
-        let (client, _bus) = create_blocking_test_client_with_version(server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL").build();
-
-        let result = client
-            .historical_data(&contract, BarSize::Hour)
-            .between(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC))
-            .subscribe_with_updates();
-
-        super::assert_updates_invalid_argument_sync(result);
     }
 
     // ---- subscribe ----
@@ -635,6 +589,14 @@ mod async_tests {
             panic!("expected InvalidArgument")
         };
         assert!(matches!(err, Error::InvalidArgument(_)), "got: {err}");
+        // Ending before duration reaches the same check.
+        let reordered = client
+            .historical_data(&contract, BarSize::Hour)
+            .ending(datetime!(2026-04-15 0:00 UTC))
+            .duration(2.days())
+            .fetch()
+            .await;
+        assert!(matches!(reordered, Err(Error::InvalidArgument(_))), "got: {reordered:?}");
         assert_eq!(request_message_count(&bus), 0, "nothing sent");
     }
 
@@ -651,48 +613,6 @@ mod async_tests {
             .expect("fetch should succeed");
 
         super::assert_trimmed(&data);
-    }
-
-    #[tokio::test]
-    async fn fetch_without_date_spec_errors() {
-        let (client, _bus) = create_test_client_with_version(server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL").build();
-
-        let result = client.historical_data(&contract, BarSize::Hour).fetch().await;
-
-        assert!(
-            matches!(result, Err(Error::InvalidArgument(_))),
-            "expected InvalidArgument, got: {result:?}"
-        );
-    }
-
-    #[tokio::test]
-    async fn stream_rejects_ending() {
-        let (client, _bus) = create_test_client_with_version(server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL").build();
-
-        let result = client
-            .historical_data(&contract, BarSize::Hour)
-            .duration(1.days())
-            .ending(datetime!(2026-04-15 0:00 UTC))
-            .subscribe_with_updates()
-            .await;
-
-        super::assert_updates_invalid_argument_async(result);
-    }
-
-    #[tokio::test]
-    async fn stream_rejects_between() {
-        let (client, _bus) = create_test_client_with_version(server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL").build();
-
-        let result = client
-            .historical_data(&contract, BarSize::Hour)
-            .between(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC))
-            .subscribe_with_updates()
-            .await;
-
-        super::assert_updates_invalid_argument_async(result);
     }
 
     // ---- subscribe ----
@@ -905,56 +825,5 @@ mod async_tests {
         assert!(matches!(subscription.next().await, Some(Err(Error::ConnectionReset))));
         assert!(subscription.next().await.is_none());
         assert_eq!(request_message_count(&bus), 1, "subscribe never resends");
-    }
-}
-
-mod continuous_future_range_tests {
-    use super::super::continuous_future_range;
-    use crate::market_data::historical::Duration;
-    use crate::Error;
-    use time::macros::datetime;
-
-    #[test]
-    fn covers_start_to_now_without_end_date() {
-        let range = continuous_future_range(datetime!(2026-04-08 0:00 UTC), datetime!(2026-04-15 0:00 UTC)).unwrap();
-
-        assert_eq!(range, (None, Duration::days(8)));
-    }
-
-    #[test]
-    fn start_not_before_now_errors() {
-        let now = datetime!(2026-04-15 0:00 UTC);
-
-        assert!(matches!(continuous_future_range(now, now), Err(Error::InvalidArgument(_))));
-    }
-}
-
-mod covering_duration_tests {
-    use super::super::covering_duration;
-    use crate::market_data::historical::Duration;
-    use time::Duration as Span;
-
-    #[test]
-    fn up_to_one_day_uses_seconds() {
-        assert_eq!(covering_duration(Span::hours(1)), Duration::seconds(3600));
-        assert_eq!(covering_duration(Span::days(1)), Duration::seconds(86_400));
-        assert_eq!(covering_duration(Span::milliseconds(500)), Duration::seconds(1));
-    }
-
-    // IBKR rejects `S` above 86400 (code 321); `D` is session-aligned, so one extra
-    // session covers a range that starts mid-session.
-    #[test]
-    fn over_one_day_uses_days_plus_one_session() {
-        assert_eq!(covering_duration(Span::days(1) + Span::seconds(1)), Duration::days(3));
-        assert_eq!(covering_duration(Span::days(3)), Duration::days(4));
-        assert_eq!(covering_duration(Span::days(364)), Duration::days(365));
-    }
-
-    // IBKR rejects `D` above 365 (code 321); `Y` is calendar years.
-    #[test]
-    fn over_365_sessions_uses_years() {
-        assert_eq!(covering_duration(Span::days(365)), Duration::years(1));
-        assert_eq!(covering_duration(Span::days(365) + Span::seconds(1)), Duration::years(2));
-        assert_eq!(covering_duration(Span::days(3 * 365)), Duration::years(3));
     }
 }
