@@ -1,6 +1,6 @@
 //! Table-driven test data for orders module tests
 
-use crate::common::test_utils::helpers::{proto_error_response, proto_response};
+use crate::common::test_utils::helpers::{decode_request_proto, proto_error_response, proto_response, request_message_count};
 use crate::contracts::{Contract, SecurityType};
 use crate::messages::{IncomingMessages, ResponseMessage, ORDER_PRESET_TIF_CODE};
 use crate::orders::{OptionExerciseType, Order, OrderStatusKind, OrderType, PlaceOrder, WhatIfType};
@@ -8,6 +8,7 @@ use crate::server_versions;
 use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::orders::{execution_data, open_order, order_status};
 use crate::testdata::builders::ResponseProtoEncoder;
+use crate::{proto, stubs::MessageBusStub};
 
 /// An order field gated above the connection floor: the server version it needs and the
 /// feature name its `Error::ServerVersion` carries.
@@ -277,3 +278,53 @@ pub(crate) const ALL_ORDER_TYPES: &[(OrderType, &str)] = &[
     (OrderType::RelativeLimitCombo, "REL + LMT"),
     (OrderType::RelativeMarketCombo, "REL + MKT"),
 ];
+
+pub(crate) const LINKED_ORDER_IDS: [i32; 3] = [9400, 9404, 9409];
+
+pub(crate) fn linked_orders() -> Vec<(Contract, Order)> {
+    let [parent, take_profit, stop_loss] = LINKED_ORDER_IDS;
+    let contract = Contract::stock("AAPL").build();
+    let entry = super::order_builder::limit_order(crate::orders::Action::Buy, 1.0, 1.0);
+    let profit = super::order_builder::limit_order(crate::orders::Action::Sell, 1.0, 5.0);
+    let stop = super::order_builder::stop(crate::orders::Action::Sell, 1.0, 0.5);
+    vec![
+        (
+            contract.clone(),
+            Order {
+                order_id: parent,
+                transmit: true,
+                ..entry
+            },
+        ),
+        (
+            contract.clone(),
+            Order {
+                order_id: take_profit,
+                parent_id: parent,
+                transmit: true,
+                ..profit
+            },
+        ),
+        (
+            contract,
+            Order {
+                order_id: stop_loss,
+                parent_id: parent,
+                transmit: false,
+                ..stop
+            },
+        ),
+    ]
+}
+
+pub(crate) fn assert_linked_order_requests(bus: &MessageBusStub, count: usize) {
+    assert_eq!(request_message_count(bus), count);
+    for (index, &id) in LINKED_ORDER_IDS.iter().take(count).enumerate() {
+        let frame: proto::PlaceOrderRequest = decode_request_proto(bus, index);
+        assert_eq!(frame.order_id, Some(id));
+        assert_eq!(frame.contract.unwrap().symbol.as_deref(), Some("AAPL"));
+        let order = frame.order.unwrap();
+        assert_eq!(order.parent_id, (index > 0).then_some(LINKED_ORDER_IDS[0]));
+        assert_eq!(order.transmit, (index == LINKED_ORDER_IDS.len() - 1).then_some(true));
+    }
+}

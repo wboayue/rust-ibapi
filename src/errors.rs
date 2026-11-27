@@ -230,10 +230,10 @@ pub enum Error {
         order_id: i32,
     },
 
-    /// A multi-order submit (`submit_oca_orders`, a bracket's `submit_all`) stopped partway
-    /// because sending one order failed with `source`. Every order passed its checks before the
-    /// first was sent, so `source` is a transport error, such as [`Error::ConnectionReset`] or
-    /// [`Error::Reconnecting`].
+    /// A multi-order submit stopped partway because sending one order failed with `source`.
+    /// This covers `submit_oca_orders`, `submit_linked_orders`, and a bracket's `submit_all`.
+    /// Every order passed its checks before the first was sent, so `source` is a transport
+    /// error such as [`Error::ConnectionReset`] or [`Error::Reconnecting`].
     ///
     /// The orders in `sent` may be at TWS: the ones written before the failure, and last, the one
     /// whose write failed, which may still have arrived. A send refused before writing
@@ -499,8 +499,8 @@ impl Error {
     ///   is, since `sent` is never empty: a submit whose first send is refused before writing
     ///   returns that refusal, not this.
     ///
-    /// The bracket builder's `submit_all` and `submit_oca_orders` check every order before
-    /// sending any, so a `true` error from them means none of their orders was sent; a send
+    /// The bracket builder's `submit_all`, `submit_oca_orders`, and `submit_linked_orders`
+    /// check every order before sending any, so a `true` error from them means none was sent. A send
     /// failing partway returns `OrdersPartiallySent`. `next_valid_order_id` returns
     /// `OrderIdInRequestRange` for an id TWS sent back, after its id request was written; that
     /// request places nothing.

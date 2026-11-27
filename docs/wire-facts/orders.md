@@ -27,8 +27,23 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - `nextValidId` after the reconnect is past the held order's id.
 - So after a bracket submit stops partway, the held parent and take-profit are reachable only by
   their ids.
-- **Not probed:** a longer gap, a different client id, a gateway restart, TWS (vs Gateway), and
+- **Not probed in this Gateway session:** a longer gap, a different client id, a restart, and
   whether re-sending with `transmit=true` releases a held order.
+
+### Held parent and children
+
+*Live 2026-11-23 off-hours, paper TWS, server 223, AAPL parent and two children.*
+
+- The parent and first child were held. Sending the last child with `transmit=true` released
+  all three. Cancelling the parent after release cancelled both children.
+- Cancelling a held parent left its held child in TWS. Cancelling that child by its own id
+  returned 202 (discarded), then 161. Re-sending a held parent with `transmit=true` released its
+  held child.
+- A held order was still absent from the open and completed order listings after reconnecting
+  with the same client id. Cancelling it returned 202 (discarded), then 161. Cancelling an id
+  that never reached TWS returned 10147. Cancelling an already-cancelled id returned 10148.
+- **Not probed:** a partial write of the final order and what happens to held orders after a
+  TWS restart.
 
 ### Bracket children get an OCA group; echoed `ocaType` defaults to 3
 
