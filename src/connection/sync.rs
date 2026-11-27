@@ -1,6 +1,7 @@
 //! Synchronous connection implementation
 
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use log::{debug, info};
 
@@ -216,17 +217,17 @@ impl<S: Stream> Connection<S> {
     fn replay_market_data_type(&self) -> Result<(), Error> {
         let packet = self.market_data_type_request.lock().unwrap().clone();
         match packet {
-            Some(packet) => self.write_message(&packet),
+            Some(packet) => self.write_message(&packet, None),
             None => Ok(()),
         }
     }
 
     /// Write a protobuf message to the connection
-    pub(crate) fn write_message(&self, data: &[u8]) -> Result<(), Error> {
+    pub(crate) fn write_message(&self, data: &[u8], deadline: Option<Instant>) -> Result<(), Error> {
         self.recorder.record_request(data);
         debug!("-> {:?}", data);
 
-        self.write_raw(data)
+        self.write_raw(data, deadline)
     }
 
     /// Read a message from the connection
@@ -261,9 +262,9 @@ impl<S: Stream> Connection<S> {
     }
 
     /// Write raw bytes with a length prefix
-    pub(crate) fn write_raw(&self, data: &[u8]) -> Result<(), Error> {
+    pub(crate) fn write_raw(&self, data: &[u8], deadline: Option<Instant>) -> Result<(), Error> {
         let packet = encode_raw_length(data);
-        self.socket.write_all(&packet)?;
+        self.socket.write_all(&packet, deadline)?;
         Ok(())
     }
 
@@ -272,7 +273,7 @@ impl<S: Stream> Connection<S> {
         let handshake = self.connection_handler.format_handshake();
         debug!("-> handshake: {handshake:?}");
 
-        self.socket.write_all(&handshake)?;
+        self.socket.write_all(&handshake, None)?;
 
         let ack = parse_handshake_ack(&self.connection_handler, self.read_startup_frame())?;
 
@@ -286,7 +287,7 @@ impl<S: Stream> Connection<S> {
     // asks server to start processing messages
     pub(crate) fn start_api(&self) -> Result<(), Error> {
         let data = self.connection_handler.format_start_api(self.client_id);
-        self.write_raw(&data)?;
+        self.write_raw(&data, None)?;
         Ok(())
     }
 

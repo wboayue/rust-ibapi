@@ -1,6 +1,7 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_request, assert_request_proto, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
+    assert_proto_msg_id, assert_request, assert_request_proto, proto_error_response, proto_response, request_message_count, text_response,
+    TEST_REQ_ID_FIRST,
 };
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
@@ -9,6 +10,7 @@ use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
     depth_market_data_description, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response,
     mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, reroute_market_data, reroute_market_depth, tick_bid_ask,
@@ -718,4 +720,101 @@ fn market_depth_reroute_ends_without_cancel() {
     assert!(subscription.is_terminated());
     subscription.cancel();
     assert_eq!(message_bus.request_messages().len(), 1, "TWS ended the request: no cancel");
+}
+
+/// A request TWS refused with a terminal error that ends it at TWS: the
+/// subscription yields the error, ends, and its drop writes no cancel (TWS
+/// would answer one with 300 or 310).
+fn assert_rejection_ends_without_cancel<T: StreamDecoder<T> + std::fmt::Debug>(
+    message_bus: &MessageBusStub,
+    subscription: Subscription<T>,
+    code: i32,
+) {
+    match subscription.next() {
+        Some(Err(Error::Notice(notice))) => assert_eq!(notice.code, code),
+        other => panic!("expected the {code} rejection, got {other:?}"),
+    }
+    assert!(subscription.is_terminated());
+    drop(subscription);
+    assert_eq!(message_bus.request_messages().len(), 1, "TWS ended the request: no cancel");
+}
+
+fn rejecting_client(code: i32) -> (Arc<MessageBusStub>, Client) {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        TEST_REQ_ID_FIRST,
+        code,
+        "rejected",
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    (message_bus, client)
+}
+
+#[test]
+fn market_data_rejected_with_10168_skips_cancel() {
+    let (message_bus, client) = rejecting_client(10168);
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.market_data(&contract).snapshot().subscribe().expect("subscribe failed");
+    assert_rejection_ends_without_cancel(&message_bus, subscription, 10168);
+}
+
+#[test]
+fn tick_by_tick_rejected_with_10189_skips_cancel() {
+    let (message_bus, client) = rejecting_client(10189);
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.tick_by_tick(&contract, 0).bid_ask(IgnoreSize::No).expect("subscribe failed");
+    assert_rejection_ends_without_cancel(&message_bus, subscription, 10189);
+}
+
+#[test]
+fn realtime_bars_rejected_with_354_skips_cancel() {
+    let (message_bus, client) = rejecting_client(354);
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.realtime_bars(&contract).subscribe().expect("subscribe failed");
+    assert_rejection_ends_without_cancel(&message_bus, subscription, 354);
+}
+
+#[test]
+fn realtime_bars_rejected_with_420_skips_cancel() {
+    let (message_bus, client) = rejecting_client(420);
+    let contract = Contract::stock("IBM").build();
+    let subscription = client.realtime_bars(&contract).subscribe().expect("subscribe failed");
+    assert_rejection_ends_without_cancel(&message_bus, subscription, 420);
+}
+
+#[test]
+fn market_depth_rejected_with_354_skips_cancel() {
+    let (message_bus, client) = rejecting_client(354);
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.market_depth(&contract, 5).subscribe().expect("subscribe failed");
+    assert_rejection_ends_without_cancel(&message_bus, subscription, 354);
+}
+
+/// 10197 during an internet outage: TWS keeps the request and resumes its ticks, so the
+/// subscription yields a notice and reads on, and its cancel is still sent.
+#[test]
+fn market_data_reads_on_after_10197() {
+    let tick = || proto_response(IncomingMessages::TickPrice, tick_price().tick_type(1).price(1.1595).encode_proto());
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        tick(),
+        proto_error_response(TEST_REQ_ID_FIRST, 10197, "No market data during competing live session"),
+        tick(),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let contract = Contract::forex("EUR", "USD").build();
+
+    let subscription = client.market_data(&contract).subscribe().expect("market data request failed");
+    let first = subscription.next();
+    let notice = subscription.next();
+    let after = subscription.next();
+    subscription.cancel();
+
+    assert!(matches!(first, Some(Ok(SubscriptionItem::Data(TickTypes::Price(_))))), "{first:?}");
+    assert!(
+        matches!(notice, Some(Ok(SubscriptionItem::Notice(ref n))) if n.code == 10197),
+        "{notice:?}"
+    );
+    assert!(matches!(after, Some(Ok(SubscriptionItem::Data(TickTypes::Price(_))))), "{after:?}");
+    let requests = message_bus.request_messages();
+    assert_eq!(requests.len(), 2, "the request and its cancel");
+    assert_proto_msg_id(&requests[1], OutgoingMessages::CancelMarketData);
 }

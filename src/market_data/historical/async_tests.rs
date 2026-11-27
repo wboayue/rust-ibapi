@@ -821,6 +821,53 @@ async fn historical_data_streaming_error_response() {
     assert_tws_error_message(err, 162, "No market data permissions");
 }
 
+/// The codes after which TWS answers a cancel of a `keepUpToDate` request
+/// with 366: the request is already over at TWS.
+const STREAM_ENDING_REJECTIONS: [(i32, &str); 2] = [
+    (200, "No security definition has been found for the request"),
+    (
+        321,
+        "Error validating request.-'D' : cause - Source price not supported with live updates",
+    ),
+];
+
+#[tokio::test]
+async fn historical_data_streaming_rejection_ended_at_tws_writes_no_cancel() {
+    for (code, message) in STREAM_ENDING_REJECTIONS {
+        let (client, bus) = create_test_client_with_ordered_proto_responses(vec![proto_error_response(9000, code, message)]);
+        let mut subscription = client
+            .historical_data(&Contract::stock("SAP").build(), BarSize::Hour)
+            .duration(Duration::days(1))
+            .subscribe_with_updates()
+            .await
+            .expect("streaming request should succeed");
+
+        let Some(Err(err)) = subscription.next().await else {
+            panic!("{code}: error should arrive as Some(Err(_))");
+        };
+        assert_tws_error_message(err, code, message);
+        drop(subscription);
+        assert_eq!(historical_requests_and_cancels(&bus).await, (1, 0), "{code} {message}");
+    }
+}
+
+/// 10197 is terminal on our side but unverified at TWS: the cancel stays.
+#[tokio::test]
+async fn historical_data_streaming_unverified_rejection_still_cancels() {
+    let (client, bus) =
+        create_test_client_with_ordered_proto_responses(vec![proto_error_response(9000, 10197, "No market data during competing live session")]);
+    let mut subscription = client
+        .historical_data(&Contract::stock("AAPL").build(), BarSize::Hour)
+        .duration(Duration::days(1))
+        .subscribe_with_updates()
+        .await
+        .expect("streaming request should succeed");
+
+    assert!(matches!(subscription.next().await, Some(Err(Error::Notice(n))) if n.code == 10197));
+    drop(subscription);
+    assert_eq!(historical_requests_and_cancels(&bus).await, (1, 1));
+}
+
 /// 165 "HMDS server connection was successful" ahead of the bars is a notice:
 /// the stream yields it and keeps going (#1136).
 #[tokio::test]

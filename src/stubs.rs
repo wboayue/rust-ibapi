@@ -84,6 +84,11 @@ pub(crate) struct MessageBusStub {
     open_sync_senders: Mutex<Vec<channel::Sender<RoutedItem>>>,
     #[cfg(feature = "async")]
     open_async_senders: Mutex<Vec<broadcast::Sender<RoutedItem>>>,
+    /// Never fed: the stub delivers no global notices, so no farm is broken.
+    #[cfg(feature = "sync")]
+    sync_farms: crate::transport::farm_watch::sync_impl::FarmWatch,
+    #[cfg(feature = "async")]
+    async_farms: crate::transport::farm_watch::async_impl::FarmWatch,
 }
 
 /// What `send_message` does after recording the message.
@@ -153,6 +158,10 @@ impl Default for MessageBusStub {
             open_sync_senders: Mutex::default(),
             #[cfg(feature = "async")]
             open_async_senders: Mutex::default(),
+            #[cfg(feature = "sync")]
+            sync_farms: Default::default(),
+            #[cfg(feature = "async")]
+            async_farms: Default::default(),
         }
     }
 }
@@ -341,7 +350,11 @@ impl MessageBus for MessageBusStub {
         request_id: RequestId,
         message: &[u8],
         bound: Option<crate::transport::BufferBound>,
+        deadline: Option<std::time::Instant>,
     ) -> Result<InternalSubscription, Error> {
+        if deadline.is_some_and(|deadline| deadline <= std::time::Instant::now()) {
+            return Err(Error::Timeout);
+        }
         self.check_request_send(message)?;
         self.record_buffer_limit(bound);
         Ok(mock_request(self, MockRoute::Request(request_id), message))
@@ -449,6 +462,10 @@ impl MessageBus for MessageBusStub {
         self.session_generation.load(Ordering::Relaxed)
     }
 
+    fn farm_watch(&self) -> &crate::transport::farm_watch::sync_impl::FarmWatch {
+        &self.sync_farms
+    }
+
     // fn process_messages(&mut self, _server_version: i32) -> Result<(), Error> {
     //     Ok(())
     // }
@@ -495,7 +512,11 @@ impl AsyncMessageBus for MessageBusStub {
         _request_id: RequestId,
         message: Vec<u8>,
         bound: Option<crate::transport::BufferBound>,
+        admission: Option<crate::transport::r#async::WriteAdmission>,
     ) -> Result<AsyncInternalSubscription, Error> {
+        if let Some(admission) = admission {
+            admission.ensure_open()?;
+        }
         self.check_request_send(&message)?;
         self.record_buffer_limit(bound);
         let subscription = self.seeded_subscription(message);
@@ -622,6 +643,10 @@ impl AsyncMessageBus for MessageBusStub {
 
     fn runtime_handle(&self) -> &tokio::runtime::Handle {
         self.runtime.as_ref().expect("MessageBusStub built outside a Tokio runtime")
+    }
+
+    fn farm_watch(&self) -> &crate::transport::farm_watch::async_impl::FarmWatch {
+        &self.async_farms
     }
 }
 

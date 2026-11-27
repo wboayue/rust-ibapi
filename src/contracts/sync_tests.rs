@@ -632,6 +632,44 @@ fn contract_details_cancels_after_tws_error() {
     assert_request(&message_bus, 1, &cancel_contract_data_request().request_id(TEST_REQ_ID_FIRST));
 }
 
+/// TWS has left contract-details requests unanswered with no error: the
+/// client's one_shot_timeout ends the wait and cancels the request at TWS.
+#[test]
+fn contract_details_times_out_at_the_one_shot_timeout() {
+    let cancel_version = server_versions::CANCEL_CONTRACT_DATA;
+    for (version, count) in [(cancel_version - 1, 1), (cancel_version, 2)] {
+        let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]).keeping_channels_open());
+        let client = Client::stubbed(message_bus.clone(), version).with_one_shot_timeout(std::time::Duration::from_millis(50));
+
+        let error = client.contract_details(&Contract::stock("AAPL").build()).unwrap_err();
+
+        assert!(matches!(error, Error::Timeout), "server {version}: got {error:?}");
+        assert_eq!(request_message_count(&message_bus), count, "server {version}");
+        if version == cancel_version {
+            assert_request(&message_bus, 1, &cancel_contract_data_request().request_id(TEST_REQ_ID_FIRST));
+        }
+    }
+}
+
+#[test]
+fn contract_details_within_the_one_shot_timeout_returns_every_row() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        detail_row(1),
+        detail_row(2),
+        proto_response(
+            IncomingMessages::ContractDataEnd,
+            contract_data_end().request_id(TEST_REQ_ID_FIRST).encode_proto(),
+        ),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA).with_one_shot_timeout(std::time::Duration::from_secs(5));
+
+    let details = client.contract_details(&Contract::stock("AAPL").build()).unwrap();
+
+    let ids: Vec<i32> = details.iter().map(|d| d.contract.contract_id).collect();
+    assert_eq!(ids, vec![1, 2]);
+    assert_eq!(request_message_count(&message_bus), 1, "no cancel after ContractDataEnd");
+}
+
 // ---- buffer_limit ----------------------------------------------------------
 
 #[test]

@@ -25,7 +25,10 @@ use time::{Date, OffsetDateTime};
 use crate::builder::ValidationError;
 use crate::common::error_helpers;
 use crate::common::request_helpers::CancellableOneShot;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE};
+use crate::messages::{
+    IncomingMessages, Notice, ResponseMessage, NO_SECURITY_DEFINITION_CODE, REQUEST_VALIDATION_CODE, SUBSCRIPTION_DISCONNECTED_CODE,
+    WHAT_TO_SHOW_SUBSTITUTED_CODE,
+};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Error, ToField};
 
@@ -668,10 +671,27 @@ impl StreamDecoder<HistoricalDataFrame> for HistoricalDataFrame {
 
     /// Without `keep_up_to_date`, any error: a one-shot query has nothing to
     /// continue after one. Verified live for 162, 200 and 10314, where TWS
-    /// answers a cancel with 366 (no query found). With it, only 200, after
-    /// which TWS answers the cancel with 366.
+    /// answers a cancel with 366 (no query found). With it, only 200 and 321
+    /// ("Source price not supported with live updates"): no frame followed
+    /// either for 65 s, and TWS answered the cancel with 366. 162 still
+    /// cancels: four of its texts behaved the same, but a pacing violation,
+    /// also a 162, could not be provoked to check. And 10182, sent when the
+    /// HMDS farm breaks: no frame followed it for 390 s or more, and TWS
+    /// answered the cancel with 366.
     fn rejection_ends_request(notice: &Notice, context: &DecoderContext) -> bool {
-        !context.keep_up_to_date || notice.code == NO_SECURITY_DEFINITION_CODE
+        !context.keep_up_to_date
+            || matches!(
+                notice.code,
+                NO_SECURITY_DEFINITION_CODE | REQUEST_VALIDATION_CODE | SUBSCRIPTION_DISCONNECTED_CODE
+            )
+    }
+
+    /// Live: after 10299 TWS sends the bars of the series the error names
+    /// (AGGTRADES for crypto `TRADES`, TRADES for AGGTRADES on stocks and
+    /// futures), then the window. With `keep_up_to_date` it streams the
+    /// updates too, and a later cancel draws 162.
+    fn error_continues_request(notice: &Notice, _context: &DecoderContext) -> bool {
+        notice.code == WHAT_TO_SHOW_SUBSTITUTED_CODE
     }
 }
 
@@ -768,8 +788,11 @@ pub enum WhatToShow {
     BidAsk,
     /// Aggregated trade data (wire value `AGGTRADES`).
     ///
-    /// Required for crypto contracts: TWS rejects `TRADES` for crypto with
-    /// error 10299, so crypto trade-price series must be requested as `AGGTRADES`.
+    /// Crypto's trade-price series. A crypto `TRADES` bar request draws error 10299 and TWS
+    /// serves the AGGTRADES series anyway; `AGGTRADES` on a stock or future draws 10299 and TWS
+    /// serves TRADES. With live updates (`subscribe_with_updates()`) crypto `AGGTRADES` draws 321, so crypto
+    /// bars stream only as `TRADES`. Historical ticks get nothing after 10299
+    /// (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`).
     AggTrades,
     /// Historical volatility computed by IB.
     HistoricalVolatility,
