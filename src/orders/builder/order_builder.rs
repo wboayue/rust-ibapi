@@ -1630,6 +1630,11 @@ impl<T, S, O> OrderBuilder<T, S, O> {
 
     /// Mark a SMART-routed combo order non-guaranteed: legs may fill separately.
     ///
+    /// TWS requires it for some two-leg combos: a limit order on a SPY/QQQ stock combo was
+    /// rejected with 10043 ("REL+MKT, LMT+MKT, and REL+LMT order of two legs can only be set as
+    /// non-guaranteed") until this was set (live: 2026-11-26,
+    /// `docs/wire-facts/orders.md#combo-bag-orders`).
+    ///
     /// # Examples
     ///
     /// ```

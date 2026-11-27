@@ -93,6 +93,20 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   → 321 "The combo details for leg '1' are invalid. -  conid, ratio, side: 692807836, 0, 2";
   both ratios 0 → the same for leg '0'. Ratios 1/1 gave a normal what-if reply. TWS does not
   read a missing ratio as 1.
+- *Live 2026-11-26 off-hours (Thursday 23:40 ET, Thanksgiving), paper Gateway, server 226;
+  what-if stock combo, legs SPY (conid 756733) Buy 1 then QQQ (320227571) Sell 1, Buy 1 @ LMT
+  -1000:*
+  - Symbol `"SPY,QQQ"` → 478 "Parameters in request conflicts with contract parameters received
+    by contract id:Requested symbol SPY,QQQ, in legs QQQ,SPY". A multi-underlying combo's symbol
+    must list the leg symbols in TWS's order: `QQQ,SPY` here, alphabetical, not leg or conid
+    order.
+  - Symbol `"QQQ,SPY"` → 10043 "Missing or invalid NonGuaranteed value. REL+MKT, LMT+MKT, and
+    REL+LMT order of two legs can only be set as non-guaranteed." Adding `.non_guaranteed()`
+    (`smart_combo_routing_params` `NonGuaranteed=1`) → PreSubmitted. The AAPL option combos
+    above needed no such flag.
+  - **Not probed:** whether the order is alphabetical in general (one pair, which also
+    sorts alphabetically); three or more legs; other order types (MKT, REL) on a stock combo;
+    whether a single-underlying stock combo needs `NonGuaranteed`.
 
 ### `use_price_mgmt_algo` / `route_marketable_to_bbo` echo and acceptance
 

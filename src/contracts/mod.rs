@@ -464,9 +464,11 @@ impl Contract {
 
     /// Creates a spread/combo contract builder for the combo `symbol`.
     ///
-    /// The symbol is usually the underlying. For a combo across underlyings, TWS's samples join
-    /// them with a comma (`"IBKR,MCD"`). TWS rejects a combo without one with 321, so
-    /// [`build`](SpreadBuilder::build) rejects an empty symbol.
+    /// The symbol is usually the underlying. For a combo across underlyings, join them with a
+    /// comma in the order TWS lists them, which was alphabetical in the one pair probed: legs
+    /// SPY then QQQ need `"QQQ,SPY"`, and `"SPY,QQQ"` is rejected with 478 (live: 2026-11-26,
+    /// `docs/wire-facts/orders.md#combo-bag-orders`). TWS rejects a combo without a symbol
+    /// with 321, so [`build`](SpreadBuilder::build) rejects an empty one.
     ///
     /// # Examples
     ///
