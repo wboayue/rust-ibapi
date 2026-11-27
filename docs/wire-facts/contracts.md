@@ -164,7 +164,7 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
 
 ### `secType` is optional with a `conId`, required without one
 
-*Live 2026-11-27 Fri 11:15 ET (US RTH, half day), paper, server 226; #1330.*
+*Live 2026-11-27 Fri 11:15 and 11:50 ET (US RTH, half day), paper, server 226; #1330.*
 
 - `reqContractDetails` by `conId` alone (exchange and currency empty) for AAPL stock, the ESZ6
   future, a SPY option, SPX and EUR.USD, with `secType` `STK`, absent, or the contract's own type:
@@ -173,12 +173,20 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
   values: the same timestamp for each. One EUR.USD call with `STK` returned a different one; the
   rerun matched.
 - Without a `conId`, an absent `secType` is error 321 "Please enter a valid security type": AAPL
-  (with `SMART`/`USD`, and with neither), ES on `CME`, SPX.
+  (with `SMART`/`USD`, and with neither), ES on `CME`, SPX. A `localSymbol` alone is no
+  different: ESZ6 (with and without `CME`), AAPL on `SMART`/`USD`, EUR.USD on `IDEALPRO`, and a
+  symbol with a primary exchange are each 321.
+- A security id needs no `secType`: AAPL's ISIN `US0378331005` on `SMART`/`USD` returned the
+  stock, and with no exchange or currency 46 rows, all with their types. A CUSIP bond with no type
+  was 200 (not found), not 321.
+- `localSymbol` ESZ6 on `CME` with `FUT` and no contract month resolves the future.
 - None of the 622 contracts these requests returned lacked a `secType`.
 - Settles that an unset `Contract::security_type` sends nothing: TWS resolves a `conId` without
   it and rejects a symbol lookup loudly, with no silent fallback to `STK`.
+- `ContractBuilder::build` follows this: a type is required unless a contract id or security id
+  identifies the contract.
 - **Not probed:** orders, market data, scanners; a `conId` with a wrong type other than `STK`;
-  a lookup by `localSymbol` alone; bonds, warrants, CFDs.
+  a CUSIP that resolves; warrants, CFDs.
 
 ### Matching-symbols `derivativeSecTypes` are security type codes
 
