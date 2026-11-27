@@ -12,7 +12,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use tick_types::TickType;
 
-use crate::encode_option_field;
 use crate::orders::ShortSaleSlot;
 use crate::Error;
 use crate::ToField;
@@ -52,14 +51,13 @@ pub mod tick_types;
 
 // Models
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// SecurityType enumerates available security types
 ///
 /// `Other` preserves a wire value this crate does not model; `Display` writes
 /// it back unchanged. Parse a wire string with `s.parse::<SecurityType>()`.
 pub enum SecurityType {
     /// Stock (or ETF)
-    #[default]
     Stock,
     /// Option
     Option,
@@ -95,12 +93,6 @@ pub enum SecurityType {
     EventContract,
     /// A security type this crate does not model, holding the raw wire value
     Other(String),
-}
-
-impl ToField for Option<SecurityType> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
 }
 
 impl SecurityType {
@@ -177,8 +169,11 @@ pub struct Contract {
     pub contract_id: i32,
     /// The underlying's asset symbol.
     pub symbol: Symbol,
-    /// Type of security (stock, option, future, etc.).
-    pub security_type: SecurityType,
+    /// Type of security (stock, option, future, etc.). `None` when unset: a contract built
+    /// without one, or one TWS sent without a `secType`. Unset sends no `secType`: TWS
+    /// resolves a lookup by [`contract_id`](Self::contract_id) without one and rejects a
+    /// lookup by symbol (error 321; live: 2026-11-27).
+    pub security_type: Option<SecurityType>,
     /// The contract's last trading day ([`Expiry::Date`], `YYYYMMDD`) or contract
     /// month ([`Expiry::Month`], `YYYYMM`), for options and futures. `None` when
     /// unset (stocks, an open futures query).
@@ -189,7 +184,7 @@ pub struct Contract {
     /// market-data sub-unit (`450` cents for a corn option struck at $4.50) but reports it in
     /// contract details in the currency unit (`4.5`).
     pub strike: f64,
-    /// Option type (only meaningful when `security_type == SecurityType::Option`).
+    /// Option type (only meaningful when `security_type == Some(SecurityType::Option)`).
     /// `None` on non-option contracts. Wire values are `"C"` (Call) and `"P"` (Put).
     pub right: Option<OptionRight>,
     /// The instrument's multiplier (i.e. options, futures).
@@ -234,7 +229,7 @@ impl Default for Contract {
         Self {
             contract_id: 0,
             symbol: Symbol::default(),
-            security_type: SecurityType::default(),
+            security_type: None,
             last_trade_date_or_contract_month: None,
             strike: 0.0,
             right: None,
@@ -397,7 +392,7 @@ impl Contract {
 
         Contract {
             symbol: Symbol::new(symbol),
-            security_type: SecurityType::Index,
+            security_type: Some(SecurityType::Index),
             exchange,
             currency,
             ..Default::default()
@@ -453,7 +448,7 @@ impl Contract {
 
         Contract {
             symbol: Symbol::new(security_id.clone()),
-            security_type: SecurityType::Bond,
+            security_type: Some(SecurityType::Bond),
             security_id_type: Some(security_id_type),
             security_id,
             exchange: "SMART".into(),
@@ -497,7 +492,7 @@ impl Contract {
     pub fn news(provider_code: &str) -> Contract {
         Contract {
             symbol: Symbol::new(format!("{provider_code}:{provider_code}_ALL")),
-            security_type: SecurityType::News,
+            security_type: Some(SecurityType::News),
             exchange: Exchange::from(provider_code),
             ..Default::default()
         }
@@ -529,7 +524,7 @@ impl Contract {
     pub fn option(symbol: &str, expiration_date: ExpirationDate, strike: f64, right: OptionRight) -> Contract {
         Contract {
             symbol: symbol.into(),
-            security_type: SecurityType::Option,
+            security_type: Some(SecurityType::Option),
             exchange: "SMART".into(),
             currency: "USD".into(),
             last_trade_date_or_contract_month: Some(expiration_date.into()),
@@ -541,7 +536,7 @@ impl Contract {
 
     /// Returns true if this contract represents a bag/combo order.
     pub fn is_bag(&self) -> bool {
-        self.security_type == SecurityType::Spread
+        self.security_type == Some(SecurityType::Spread)
     }
 }
 

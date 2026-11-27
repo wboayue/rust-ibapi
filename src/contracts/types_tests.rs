@@ -600,3 +600,32 @@ fn trading_session_rejects_malformed_entries() {
         assert!(matches!(&err, Error::Parse { value, .. } if value == raw), "{label}: {err:?}");
     }
 }
+
+mod contract_id {
+    use super::*;
+
+    #[test]
+    fn value_and_display_are_the_raw_id() {
+        let cases = [("typical", 12345), ("zero", 0), ("negative", -1), ("max", i32::MAX)];
+        for (label, raw) in cases {
+            let id = ContractId::from(raw);
+            assert_eq!(id.value(), raw, "{label}");
+            assert_eq!(id.to_string(), raw.to_string(), "{label}");
+        }
+    }
+
+    #[test]
+    fn converts_both_ways() {
+        let raw = 12345;
+        assert_eq!(ContractId::from(raw), ContractId(raw));
+        assert_eq!(ContractId::from(&raw), ContractId(raw));
+        let back: i32 = ContractId(raw).into();
+        assert_eq!(back, raw);
+    }
+
+    #[test]
+    fn is_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<ContractId>();
+    }
+}

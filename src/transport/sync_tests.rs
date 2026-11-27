@@ -3291,16 +3291,16 @@ fn sends_are_refused_while_disconnected() {
 
     bus.connection_state.set_disconnected();
 
-    assert!(matches!(mb.send_request(RequestId::nth(100), b"req-bytes"), Err(Error::ConnectionReset)));
+    assert!(matches!(mb.send_request(RequestId::nth(100), b"req-bytes"), Err(Error::Reconnecting)));
     assert!(matches!(
         mb.send_order_request(OrderId::from(42), b"order-bytes"),
-        Err(Error::ConnectionReset)
+        Err(Error::Reconnecting)
     ));
     assert!(matches!(
         mb.send_shared_request(OutgoingMessages::RequestManagedAccounts, b"shared-bytes"),
-        Err(Error::ConnectionReset)
+        Err(Error::Reconnecting)
     ));
-    assert!(matches!(mb.send_message(b"message-bytes"), Err(Error::ConnectionReset)));
+    assert!(matches!(mb.send_message(b"message-bytes"), Err(Error::Reconnecting)));
 
     assert_eq!(bus.requests.len(), 0, "a refused request must register nothing");
     assert_eq!(bus.orders.len(), 0, "a refused order request must register nothing");
@@ -3340,7 +3340,7 @@ fn sends_are_refused_during_the_reconnect_handshake() -> Result<(), Error> {
     // Stands in for a sender whose check passed before the dispatcher flipped
     // the state: with the signal saying live, only the gate refuses the write.
     bus.connection_state.set_connected();
-    assert!(matches!(bus.send_request(RequestId::nth(100), b"req-bytes"), Err(Error::ConnectionReset)));
+    assert!(matches!(bus.send_request(RequestId::nth(100), b"req-bytes"), Err(Error::Reconnecting)));
     assert_eq!(bus.requests.len(), 0, "a refused request must register nothing");
     assert_eq!(
         stream.captured(),

@@ -9,8 +9,6 @@
 use ibapi::client::blocking::Client;
 use std::env;
 
-use ibapi::accounts::types::AccountId;
-
 pub fn main() {
     env_logger::init();
 
@@ -19,7 +17,9 @@ pub fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let subscription = client
-        .positions_multi(Some(&AccountId(account)), None)
+        .positions_multi()
+        .account(account)
+        .subscribe()
         .expect("error requesting positions by model");
     for position in subscription.iter_data() {
         match position {

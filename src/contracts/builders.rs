@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 
 use super::types::*;
 use super::{ComboLeg, Contract, SecurityType};
-use crate::accounts::types::ContractId;
 use crate::builder::{Missing, ValidationError};
+use crate::contracts::ContractId;
 use crate::Error;
 
 /// Stock contract builder with type-safe API
@@ -61,7 +61,7 @@ impl StockBuilder<Symbol> {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Stock,
+            security_type: Some(SecurityType::Stock),
             exchange: self.exchange,
             currency: self.currency,
             primary_exchange: self.primary_exchange.unwrap_or_else(|| Exchange::from("")),
@@ -220,7 +220,7 @@ impl OptionBuilder<Symbol, f64, ExpirationDate> {
         let expiry = self.expiry.validated()?;
         Ok(Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Option,
+            security_type: Some(SecurityType::Option),
             strike: strike.value(),
             right: Some(self.right),
             last_trade_date_or_contract_month: Some(expiry.into()),
@@ -333,7 +333,7 @@ impl FuturesBuilder<Symbol, ContractMonth> {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Future,
+            security_type: Some(SecurityType::Future),
             last_trade_date_or_contract_month: Some(self.contract_month.into()),
             exchange: self.exchange,
             currency: self.currency,
@@ -359,7 +359,7 @@ impl FuturesBuilder<Symbol, AnyMonth> {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Future,
+            security_type: Some(SecurityType::Future),
             // last_trade_date_or_contract_month left empty (open query)
             exchange: self.exchange,
             currency: self.currency,
@@ -414,7 +414,7 @@ impl ContinuousFuturesBuilder<Symbol> {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::ContinuousFuture,
+            security_type: Some(SecurityType::ContinuousFuture),
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier.map(|m| m.to_string()).unwrap_or_default(),
@@ -452,7 +452,7 @@ impl ForexBuilder {
     pub fn build(self) -> Contract {
         Contract {
             symbol: Symbol::new(self.base.0),
-            security_type: SecurityType::ForexPair,
+            security_type: Some(SecurityType::ForexPair),
             exchange: self.exchange,
             currency: self.quote,
             ..Default::default()
@@ -495,7 +495,7 @@ impl CryptoBuilder {
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Crypto,
+            security_type: Some(SecurityType::Crypto),
             exchange: self.exchange,
             currency: self.currency,
             ..Default::default()
@@ -650,9 +650,9 @@ impl<L> SpreadBuilder<L> {
     ///
     /// let butterfly = Contract::spread("AAPL")
     ///     .butterfly(ButterflyLegs {
-    ///         lower: 100.into(),
-    ///         middle: 105.into(),
-    ///         upper: 110.into(),
+    ///         lower: 100,
+    ///         middle: 105,
+    ///         upper: 110,
     ///     })
     ///     .build()?;
     /// # Ok::<(), ibapi::Error>(())
@@ -679,10 +679,10 @@ impl<L> SpreadBuilder<L> {
     ///
     /// let iron_condor = Contract::spread("AAPL")
     ///     .iron_condor(IronCondorLegs {
-    ///         long_put: 100.into(),
-    ///         short_put: 105.into(),
-    ///         short_call: 110.into(),
-    ///         long_call: 115.into(),
+    ///         long_put: 100,
+    ///         short_put: 105,
+    ///         short_call: 110,
+    ///         long_call: 115,
     ///     })
     ///     .build()?;
     /// # Ok::<(), ibapi::Error>(())
@@ -704,9 +704,9 @@ impl<L> SpreadBuilder<L> {
     ///
     /// let collar = Contract::spread("AAPL")
     ///     .collar(CollarLegs {
-    ///         stock: 265598.into(),
-    ///         put: 100.into(),
-    ///         call: 101.into(),
+    ///         stock: 265598,
+    ///         put: 100,
+    ///         call: 101,
     ///         shares_per_contract: 100,
     ///     })
     ///     .build()?;
@@ -779,7 +779,7 @@ impl SpreadBuilder<HasLegs> {
 
         Ok(Contract {
             symbol: self.symbol,
-            security_type: SecurityType::Spread,
+            security_type: Some(SecurityType::Spread),
             currency: self.currency,
             exchange: self.exchange,
             combo_legs,
@@ -792,35 +792,35 @@ impl SpreadBuilder<HasLegs> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ButterflyLegs {
     /// Lower-strike wing, bought.
-    pub lower: ContractId,
+    pub lower: i32,
     /// Middle strike, sold twice.
-    pub middle: ContractId,
+    pub middle: i32,
     /// Upper-strike wing, bought.
-    pub upper: ContractId,
+    pub upper: i32,
 }
 
 /// Legs of a [`SpreadBuilder::iron_condor`], by option contract id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IronCondorLegs {
     /// Lowest-strike put, bought.
-    pub long_put: ContractId,
+    pub long_put: i32,
     /// Higher-strike put, sold.
-    pub short_put: ContractId,
+    pub short_put: i32,
     /// Lower-strike call, sold.
-    pub short_call: ContractId,
+    pub short_call: i32,
     /// Highest-strike call, bought.
-    pub long_call: ContractId,
+    pub long_call: i32,
 }
 
 /// Legs of a [`SpreadBuilder::collar`], by contract id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CollarLegs {
     /// The underlying stock, bought.
-    pub stock: ContractId,
+    pub stock: i32,
     /// Put below the stock price, bought.
-    pub put: ContractId,
+    pub put: i32,
     /// Call above the stock price, sold.
-    pub call: ContractId,
+    pub call: i32,
     /// Shares one option contract delivers: the stock leg's ratio. Usually 100, and for
     /// split-adjusted options usually the option's `multiplier` (see
     /// [`ContractDetails`](crate::contracts::ContractDetails)). After a merger or spin-off the

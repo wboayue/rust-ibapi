@@ -346,7 +346,7 @@ async fn request_stock_contract_details() {
     assert_eq!(contracts[1].contract.exchange, Exchange::from("AMEX"));
 
     assert_eq!(contracts[0].contract.symbol, Symbol::from("TSLA"));
-    assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
+    assert_eq!(contracts[0].contract.security_type, Some(SecurityType::Stock));
     assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
     assert_eq!(contracts[0].contract.contract_id, 76792991);
     assert_eq!(contracts[0].contract.primary_exchange, Exchange::from("NASDAQ"));
@@ -386,7 +386,7 @@ async fn request_future_contract_details() {
     // Create a future contract
     let contract = Contract {
         symbol: Symbol::from("ES"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
         last_trade_date_or_contract_month: Some("202506".parse().unwrap()),
@@ -407,7 +407,7 @@ async fn request_future_contract_details() {
     assert_eq!(1, contracts.len());
 
     assert_eq!(contracts[0].contract.symbol, Symbol::from("ES"));
-    assert_eq!(contracts[0].contract.security_type, SecurityType::Future);
+    assert_eq!(contracts[0].contract.security_type, Some(SecurityType::Future));
     assert_eq!(contracts[0].contract.exchange, Exchange::from("CME"));
     assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
     assert_eq!(contracts[0].contract.contract_id, 620731015);

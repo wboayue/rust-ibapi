@@ -128,7 +128,7 @@ mod sealed {
 
     impl Sealed for DurationEnding {
         fn resolve(&self, contract: &Contract) -> Result<Resolved, Error> {
-            if contract.security_type == SecurityType::ContinuousFuture {
+            if contract.security_type == Some(SecurityType::ContinuousFuture) {
                 return Err(Error::InvalidArgument(
                     "historical_data: TWS rejects .ending() for a continuous future (error 10339); use .duration() alone".to_owned(),
                 ));
@@ -149,7 +149,7 @@ mod sealed {
                     "historical_data: .between(start, end) requires end > start".to_owned(),
                 ));
             }
-            let (end_date, duration) = if contract.security_type == SecurityType::ContinuousFuture {
+            let (end_date, duration) = if contract.security_type == Some(SecurityType::ContinuousFuture) {
                 continuous_future_range(start, OffsetDateTime::now_utc())?
             } else {
                 (Some(end), covering_duration(end - start))

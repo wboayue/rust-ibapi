@@ -1,7 +1,7 @@
 use time::OffsetDateTime;
 
 use super::HistoricalNewsPage;
-use crate::accounts::types::ContractId;
+use crate::contracts::ContractId;
 use crate::Error;
 
 #[cfg(test)]
@@ -93,7 +93,8 @@ impl HistoricalNewsBuilder<'_, crate::client::sync::Client> {
     /// A TWS rejection as [`Error::Notice`]; [`Error::UnexpectedEndOfStream`] if the
     /// request's channel closes before the end frame; [`Error::Timeout`] if the page has
     /// not fully arrived within the one-shot timeout (30 seconds by default);
-    /// [`Error::ConnectionReset`] if the connection drops on every retry (three),
+    /// [`Error::ConnectionReset`] if the connection drops on every retry (three), or
+    /// [`Error::Reconnecting`] if every attempt is refused while it reconnects;
     /// [`Error::Shutdown`] if the client shuts down.
     ///
     /// # Examples
@@ -163,7 +164,8 @@ impl HistoricalNewsBuilder<'_, crate::client::r#async::Client> {
     /// A TWS rejection as [`Error::Notice`]; [`Error::UnexpectedEndOfStream`] if the
     /// request's channel closes before the end frame; [`Error::Timeout`] if the page has
     /// not fully arrived within the one-shot timeout (30 seconds by default);
-    /// [`Error::ConnectionReset`] if the connection drops on every retry (three),
+    /// [`Error::ConnectionReset`] if the connection drops on every retry (three), or
+    /// [`Error::Reconnecting`] if every attempt is refused while it reconnects;
     /// [`Error::Shutdown`] if the client shuts down. A request channel that overflows
     /// mid-page (see `ClientBuilder::channel_capacity`) fails the read with an
     /// [`Error::Notice`] rather than return a short page.

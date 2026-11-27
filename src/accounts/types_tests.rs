@@ -50,6 +50,12 @@ mod account_id {
     }
 
     #[test]
+    fn into_string() {
+        let raw: String = AccountId::from("U123456").into();
+        assert_eq!(raw, "U123456");
+    }
+
+    #[test]
     fn empty_account_id() {
         let id = AccountId::from("");
         assert_eq!(id.0, "");
@@ -123,6 +129,24 @@ mod model_code {
     }
 
     #[test]
+    fn from_string_ref() {
+        let raw = "MODEL1".to_string();
+        assert_eq!(ModelCode::from(&raw).0, "MODEL1");
+    }
+
+    #[test]
+    fn from_model_code_ref() {
+        let code = ModelCode::from("MODEL1");
+        assert_eq!(ModelCode::from(&code), code);
+    }
+
+    #[test]
+    fn into_string() {
+        let raw: String = ModelCode::from("MODEL1").into();
+        assert_eq!(raw, "MODEL1");
+    }
+
+    #[test]
     fn empty_model_code() {
         let code = ModelCode::from("");
         assert_eq!(code.0, "");
@@ -147,86 +171,6 @@ mod model_code {
         set.insert(ModelCode::from("MODEL1"));
         set.insert(ModelCode::from("MODEL1"));
         set.insert(ModelCode::from("MODEL2"));
-
-        assert_eq!(set.len(), 2);
-    }
-}
-
-mod contract_id {
-    use super::*;
-
-    #[test]
-    fn new() {
-        let id = ContractId(12345);
-        assert_eq!(id.0, 12345);
-    }
-
-    #[test]
-    fn value() {
-        let id = ContractId(12345);
-        assert_eq!(id.value(), 12345);
-    }
-
-    #[test]
-    fn display() {
-        let id = ContractId(12345);
-        assert_eq!(format!("{}", id), "12345");
-    }
-
-    #[test]
-    fn from_i32() {
-        let id = ContractId::from(12345);
-        assert_eq!(id.0, 12345);
-    }
-
-    #[test]
-    fn zero_contract_id() {
-        let id = ContractId(0);
-        assert_eq!(id.value(), 0);
-        assert_eq!(format!("{}", id), "0");
-    }
-
-    #[test]
-    fn negative_contract_id() {
-        let id = ContractId(-1);
-        assert_eq!(id.value(), -1);
-        assert_eq!(format!("{}", id), "-1");
-    }
-
-    #[test]
-    fn max_contract_id() {
-        let id = ContractId(i32::MAX);
-        assert_eq!(id.value(), i32::MAX);
-        assert_eq!(format!("{}", id), i32::MAX.to_string());
-    }
-
-    #[test]
-    fn equality() {
-        let id1 = ContractId(12345);
-        let id2 = ContractId(12345);
-        let id3 = ContractId(54321);
-
-        assert_eq!(id1, id2);
-        assert_ne!(id1, id3);
-    }
-
-    #[test]
-    fn copy() {
-        let id1 = ContractId(12345);
-        let id2 = id1; // Copy
-        assert_eq!(id1, id2);
-        assert_eq!(id1.value(), 12345);
-        assert_eq!(id2.value(), 12345);
-    }
-
-    #[test]
-    fn hash() {
-        use std::collections::HashSet;
-
-        let mut set = HashSet::new();
-        set.insert(ContractId(12345));
-        set.insert(ContractId(12345));
-        set.insert(ContractId(54321));
 
         assert_eq!(set.len(), 2);
     }
@@ -297,7 +241,6 @@ fn types_are_send_sync() {
 
     assert_send_sync::<AccountId>();
     assert_send_sync::<ModelCode>();
-    assert_send_sync::<ContractId>();
     assert_send_sync::<AccountGroup>();
 }
 
@@ -308,9 +251,6 @@ fn types_are_clone() {
 
     let model_code = ModelCode("MODEL".to_string());
     let _ = model_code.clone();
-
-    let contract_id = ContractId(123);
-    let _ = contract_id;
 
     let account_group = AccountGroup("All".to_string());
     let _ = account_group.clone();
@@ -327,11 +267,6 @@ fn types_are_debug() {
     let debug_str = format!("{:?}", model_code);
     assert!(debug_str.contains("ModelCode"));
     assert!(debug_str.contains("MODEL"));
-
-    let contract_id = ContractId(123);
-    let debug_str = format!("{:?}", contract_id);
-    assert!(debug_str.contains("ContractId"));
-    assert!(debug_str.contains("123"));
 
     let account_group = AccountGroup("All".to_string());
     let debug_str = format!("{:?}", account_group);

@@ -111,7 +111,7 @@ impl SessionState {
     pub(crate) fn check(self) -> Result<(), Error> {
         match self {
             SessionState::Connected => Ok(()),
-            SessionState::Disconnected => Err(Error::ConnectionReset),
+            SessionState::Disconnected => Err(Error::Reconnecting),
             SessionState::ShutDown => Err(Error::Shutdown),
             SessionState::Failed => Err(Error::ConnectionFailed),
         }

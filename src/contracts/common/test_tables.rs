@@ -107,7 +107,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             name: "stock contract details",
             contract: Contract {
                 symbol: Symbol::from("TSLA"),
-                security_type: SecurityType::Stock,
+                security_type: Some(SecurityType::Stock),
                 exchange: Exchange::from("SMART"),
                 currency: Currency::from("USD"),
                 ..Default::default()
@@ -141,7 +141,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             expected_count: 1,
             validations: Box::new(|contracts| {
                 assert_eq!(contracts[0].contract.symbol, Symbol::from("TSLA"));
-                assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
+                assert_eq!(contracts[0].contract.security_type, Some(SecurityType::Stock));
                 assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
                 assert_eq!(contracts[0].contract.contract_id, 459200101);
                 assert_eq!(contracts[0].long_name, "TESLA INC");
@@ -158,7 +158,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             name: "future contract details",
             contract: Contract {
                 symbol: Symbol::from("ES"),
-                security_type: SecurityType::Future,
+                security_type: Some(SecurityType::Future),
                 exchange: Exchange::from("CME"),
                 last_trade_date_or_contract_month: Some("202406".parse().unwrap()),
                 currency: Currency::from("USD"),
@@ -195,7 +195,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             expected_count: 1,
             validations: Box::new(|contracts| {
                 assert_eq!(contracts[0].contract.symbol, Symbol::from("ES"));
-                assert_eq!(contracts[0].contract.security_type, SecurityType::Future);
+                assert_eq!(contracts[0].contract.security_type, Some(SecurityType::Future));
                 assert_eq!(contracts[0].contract.exchange, Exchange::from("CME"));
                 assert_eq!(contracts[0].contract.contract_id, 551318584);
                 assert_eq!(contracts[0].contract.multiplier, "50");
@@ -209,7 +209,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             name: "bond contract details",
             contract: Contract {
                 symbol: Symbol::from("TLT"),
-                security_type: SecurityType::Bond,
+                security_type: Some(SecurityType::Bond),
                 exchange: Exchange::from("SMART"),
                 currency: Currency::from("USD"),
                 ..Default::default()
@@ -242,7 +242,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             expected_count: 1,
             validations: Box::new(|contracts| {
                 assert_eq!(contracts[0].contract.symbol, Symbol::from("TLT"));
-                assert_eq!(contracts[0].contract.security_type, SecurityType::Bond);
+                assert_eq!(contracts[0].contract.security_type, Some(SecurityType::Bond));
                 assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
                 assert_eq!(contracts[0].contract.contract_id, 12345);
                 assert_eq!(contracts[0].long_name, "US Treasury Bond");
@@ -257,7 +257,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             name: "stock contract details - multiple exchanges",
             contract: Contract {
                 symbol: Symbol::from("AAPL"),
-                security_type: SecurityType::Stock,
+                security_type: Some(SecurityType::Stock),
                 exchange: Exchange::from("SMART"),
                 currency: Currency::from("USD"),
                 ..Default::default()
@@ -315,11 +315,11 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             validations: Box::new(|contracts| {
                 assert_eq!(contracts.len(), 2);
                 assert_eq!(contracts[0].contract.symbol, Symbol::from("AAPL"));
-                assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
+                assert_eq!(contracts[0].contract.security_type, Some(SecurityType::Stock));
                 assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
                 assert_eq!(contracts[0].contract.primary_exchange, Exchange::from("NASDAQ"));
                 assert_eq!(contracts[1].contract.symbol, Symbol::from("AAPL"));
-                assert_eq!(contracts[1].contract.security_type, SecurityType::Stock);
+                assert_eq!(contracts[1].contract.security_type, Some(SecurityType::Stock));
                 assert_eq!(contracts[1].contract.exchange, Exchange::from("NYSE"));
                 assert_eq!(contracts[1].contract.primary_exchange, Exchange::from("NYSE"));
                 assert_eq!(contracts[0].contract.contract_id, 265598);
@@ -384,7 +384,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
                 assert_eq!(contracts[1].contract.exchange, Exchange::from("AMEX"));
                 assert_eq!(contracts[0].contract.symbol, Symbol::from("TSLA"));
-                assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
+                assert_eq!(contracts[0].contract.security_type, Some(SecurityType::Stock));
                 assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
                 assert_eq!(contracts[0].contract.contract_id, 76792991);
                 assert_eq!(contracts[1].contract.contract_id, 76792991);
@@ -397,7 +397,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             name: "empty response",
             contract: Contract {
                 symbol: Symbol::from("TSLA"),
-                security_type: SecurityType::Stock,
+                security_type: Some(SecurityType::Stock),
                 exchange: Exchange::from("SMART"),
                 currency: Currency::from("USD"),
                 ..Default::default()
@@ -541,7 +541,7 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
             name: "calculate option price",
             contract: Contract {
                 symbol: Symbol::from("AAPL"),
-                security_type: SecurityType::Option,
+                security_type: Some(SecurityType::Option),
                 last_trade_date_or_contract_month: Some("20231215".parse().unwrap()),
                 strike: 150.0,
                 right: Some(OptionRight::Call),
@@ -575,7 +575,7 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
             name: "calculate implied volatility",
             contract: Contract {
                 symbol: Symbol::from("AAPL"),
-                security_type: SecurityType::Option,
+                security_type: Some(SecurityType::Option),
                 last_trade_date_or_contract_month: Some("20231215".parse().unwrap()),
                 strike: 150.0,
                 right: Some(OptionRight::Call),

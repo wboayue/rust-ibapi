@@ -40,3 +40,16 @@ fn display_is_the_raw_value() {
     assert_eq!(OrderId::from(42).to_string(), "42");
     assert_eq!(RequestId(REQUEST_ID_FLOOR).to_string(), REQUEST_ID_FLOOR.to_string());
 }
+
+#[test]
+fn order_id_conversions() {
+    let id = OrderId::new(100);
+    assert_eq!(id.value(), 100);
+
+    let raw = 200;
+    assert_eq!(OrderId::from(raw), OrderId(200));
+    assert_eq!(OrderId::from(&raw), OrderId(200));
+
+    let back: i32 = id.into();
+    assert_eq!(back, 100);
+}

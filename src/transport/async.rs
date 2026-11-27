@@ -803,7 +803,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     /// The send gate: every bus-originated write checks here first, and is
     /// refused unless the session is live and not shutting down - with
-    /// `Error::ConnectionReset` while a reconnect may still bring it back,
+    /// `Error::Reconnecting` while a reconnect may still bring it back,
     /// `Error::ConnectionFailed` once the reconnect gave up, and
     /// `Error::Shutdown` after a shutdown, so a caller can tell "wait" from
     /// "stop".
@@ -859,7 +859,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// as `ensure_connected` would refuse it once the signal catches up.
     async fn write_now(&self, message: &[u8]) -> Result<(), Error> {
         let Ok(_session) = self.session.try_read() else {
-            return Err(self.ended_reason(Error::ConnectionReset));
+            return Err(self.ended_reason(Error::Reconnecting));
         };
         self.ensure_connected()?;
         self.connection.write_message(message).await

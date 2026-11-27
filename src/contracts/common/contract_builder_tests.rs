@@ -100,7 +100,7 @@ fn contract_builder_build_stock_success() {
     let contract = ContractBuilder::stock("AAPL", "NASDAQ", "USD").contract_id(12345).build().unwrap();
 
     assert_eq!(contract.symbol, "AAPL");
-    assert_eq!(contract.security_type, SecurityType::Stock);
+    assert_eq!(contract.security_type, Some(SecurityType::Stock));
     assert_eq!(contract.exchange, "NASDAQ");
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.contract_id, 12345);
@@ -120,7 +120,7 @@ fn contract_builder_build_option_success() {
         .unwrap();
 
     assert_eq!(contract.symbol, "AAPL");
-    assert_eq!(contract.security_type, SecurityType::Option);
+    assert_eq!(contract.security_type, Some(SecurityType::Option));
     assert_eq!(contract.exchange, "SMART");
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.strike, 150.0);
@@ -136,7 +136,7 @@ fn contract_builder_build_futures_success() {
         .unwrap();
 
     assert_eq!(contract.symbol, "ES");
-    assert_eq!(contract.security_type, SecurityType::Future);
+    assert_eq!(contract.security_type, Some(SecurityType::Future));
     assert_eq!(contract.exchange, "CME");
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.last_trade_date_or_contract_month, Some("202312".parse().unwrap()));
@@ -146,7 +146,7 @@ fn contract_builder_build_futures_success() {
 fn contract_builder_build_missing_identifier() {
     let err = ContractBuilder::new().build().unwrap_err();
     assert!(
-        matches!(err, Error::InvalidArgument(ref msg) if msg == "Symbol, local_symbol, or contract_id is required"),
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Symbol, local_symbol, contract_id, or security_id is required"),
         "got {err:?}"
     );
 }
@@ -165,7 +165,7 @@ fn contract_builder_build_with_local_symbol_only() {
     let contract = result.unwrap();
     assert_eq!(contract.symbol, ""); // Empty symbol is OK when local_symbol is provided
     assert_eq!(contract.local_symbol, "FGBL MAR 23");
-    assert_eq!(contract.security_type, SecurityType::Future);
+    assert_eq!(contract.security_type, Some(SecurityType::Future));
     assert_eq!(contract.exchange, "EUREX");
     assert_eq!(contract.currency, "EUR");
 }
@@ -334,7 +334,7 @@ fn contract_builder_chaining() {
         .unwrap();
 
     assert_eq!(contract.symbol, "TSLA");
-    assert_eq!(contract.security_type, SecurityType::Stock);
+    assert_eq!(contract.security_type, Some(SecurityType::Stock));
     assert_eq!(contract.exchange, "NASDAQ");
     assert_eq!(contract.currency, "USD");
     assert_eq!(contract.contract_id, 76792991);
@@ -344,14 +344,61 @@ fn contract_builder_chaining() {
     assert_eq!(contract.description, "Tesla Inc.");
 }
 
+const MISSING_TYPE: &str = "security_type is required unless contract_id or security_id identifies the contract";
+
+/// TWS rejects a symbol or local-symbol lookup without a type (error 321), so `build` does.
+#[test]
+fn build_rejects_missing_security_type_without_contract_or_security_id() {
+    for builder in [
+        ContractBuilder::new().symbol("AAPL").exchange("SMART").currency("USD"),
+        ContractBuilder::new().local_symbol("ESZ6").exchange("CME"),
+        // 0 is the unset id, and a security id needs its scheme.
+        ContractBuilder::new().symbol("AAPL").contract_id(0),
+        ContractBuilder::new().symbol("AAPL").security_id("US0378331005"),
+        ContractBuilder::new()
+            .symbol("AAPL")
+            .security_id_type(SecurityIdType::Isin)
+            .security_id(""),
+    ] {
+        let err = builder.build().unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(ref msg) if msg == MISSING_TYPE), "got {err:?}");
+    }
+}
+
+/// TWS resolves a security id without a type or symbol (docs/wire-facts/contracts.md).
+#[test]
+fn security_id_only_build_sends_no_sec_type() {
+    let contract = ContractBuilder::new()
+        .security_id_type(SecurityIdType::Isin)
+        .security_id("US0378331005")
+        .build()
+        .unwrap();
+
+    let proto = crate::proto::encoders::encode_contract(&contract);
+    assert_eq!(proto.sec_type, None);
+    assert_eq!(proto.sec_id_type.as_deref(), Some("ISIN"));
+    assert_eq!(proto.sec_id.as_deref(), Some("US0378331005"));
+}
+
+/// A lookup by contract id alone carries no security type to TWS; TWS resolves the
+/// contract from the id (docs/wire-facts/contracts.md).
+#[test]
+fn contract_id_only_build_sends_no_sec_type() {
+    let contract = ContractBuilder::new().contract_id(515416632).build().unwrap();
+
+    let proto = crate::proto::encoders::encode_contract(&contract);
+    assert_eq!(proto.con_id, Some(515416632));
+    assert_eq!(proto.sec_type, None);
+}
+
 #[test]
 fn contract_builder_defaults() {
-    // Test that unset fields get proper defaults
-    let contract = ContractBuilder::new().symbol("TEST").build().unwrap();
+    // Test that unset fields get proper defaults; the contract id lets the type go unset.
+    let contract = ContractBuilder::new().contract_id(1).symbol("TEST").build().unwrap();
 
-    assert_eq!(contract.contract_id, 0);
+    assert_eq!(contract.contract_id, 1);
     assert_eq!(contract.symbol, "TEST");
-    assert_eq!(contract.security_type, SecurityType::Stock); // Default
+    assert_eq!(contract.security_type, None);
     assert_eq!(contract.last_trade_date_or_contract_month, None);
     assert_eq!(contract.strike, 0.0);
     assert_eq!(contract.right, None);
@@ -447,7 +494,7 @@ fn setter_parity_with_contract_fields() {
 
     assert_eq!(contract_id, 99);
     assert_eq!(symbol, "X");
-    assert_eq!(security_type, SecurityType::Stock);
+    assert_eq!(security_type, Some(SecurityType::Stock));
     assert_eq!(last_trade_date_or_contract_month, Some("20241220".parse().unwrap()));
     assert_eq!(strike, 150.0);
     assert_eq!(right, Some(OptionRight::Call));
@@ -497,6 +544,65 @@ fn contract_builder_build_zero_strike_with_identifier() {
     ));
 }
 
+/// A contract id or local symbol names one contract: TWS resolves a future without a month,
+/// and an option or futures option without a strike, right or expiry
+/// (docs/wire-facts/contracts.md).
+#[test]
+fn identified_contract_builds_without_expiry_strike_or_right() {
+    let builders = [
+        ContractBuilder::new()
+            .local_symbol("ESZ6")
+            .security_type(SecurityType::Future)
+            .exchange("CME"),
+        ContractBuilder::new().contract_id(515416632).security_type(SecurityType::Future),
+        ContractBuilder::new()
+            .local_symbol("SPY   270115C00580000")
+            .security_type(SecurityType::Option)
+            .exchange("SMART"),
+        ContractBuilder::new()
+            .local_symbol("ESZ6 C7000")
+            .security_type(SecurityType::FuturesOption)
+            .exchange("CME"),
+        ContractBuilder::new().contract_id(896736796).security_type(SecurityType::FuturesOption),
+    ];
+    for builder in builders {
+        let contract = builder.clone().build().unwrap_or_else(|err| panic!("{builder:?}: {err:?}"));
+        assert_eq!(contract.last_trade_date_or_contract_month, None);
+        assert_eq!(contract.strike, 0.0);
+        assert_eq!(contract.right, None);
+
+        let proto = crate::proto::encoders::encode_contract(&contract);
+        assert_eq!(proto.last_trade_date_or_contract_month, None);
+        assert_eq!(proto.strike, None);
+        assert_eq!(proto.right, None);
+    }
+}
+
+/// An identified option still rejects a strike that is set and invalid.
+#[test]
+fn identified_option_rejects_invalid_strike() {
+    let err = ContractBuilder::new()
+        .local_symbol("SPY   270115C00580000")
+        .security_type(SecurityType::Option)
+        .strike(-1.0)
+        .build()
+        .unwrap_err();
+    assert!(
+        matches!(err, Error::Validation(ValidationError::InvalidPrice(price)) if price == -1.0),
+        "got {err:?}"
+    );
+}
+
+/// A symbol, or the unset contract id 0, doesn't name one contract: the requirements stay.
+#[test]
+fn unidentified_contract_keeps_expiry_strike_and_right_requirements() {
+    let future = ContractBuilder::new().symbol("ES").security_type(SecurityType::Future).contract_id(0);
+    assert!(matches!(future.build(), Err(Error::InvalidArgument(msg)) if msg == "Contract month is required for futures"));
+
+    let option = ContractBuilder::new().symbol("SPY").security_type(SecurityType::Option).local_symbol("");
+    assert!(matches!(option.build(), Err(Error::InvalidArgument(msg)) if msg == "Strike price is required for options"));
+}
+
 #[test]
 fn build_parses_last_trade_date_or_contract_month() {
     let future = |text: &str| {
@@ -537,4 +643,14 @@ fn expiry_sets_typed_value() {
         contract.last_trade_date_or_contract_month,
         Some(Expiry::Month(ContractMonth::new(2026, 12).unwrap()))
     );
+}
+
+#[test]
+fn contract_id_takes_a_typed_or_raw_id() {
+    use crate::contracts::ContractId;
+
+    let typed = ContractBuilder::new().contract_id(ContractId(265598)).exchange("SMART").build().unwrap();
+    let raw = ContractBuilder::new().contract_id(265598).exchange("SMART").build().unwrap();
+    assert_eq!(typed.contract_id, 265598);
+    assert_eq!(typed, raw);
 }

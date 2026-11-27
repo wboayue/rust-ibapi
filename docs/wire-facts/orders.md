@@ -15,6 +15,40 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - An untransmitted order gets no open-order or status frames, so a TWS-derived value (e.g. a
   VOL order's limit) is only visible once transmitted.
 
+### Held orders survive a reconnect
+
+*Live 2026-11-27, paper Gateway, server 226; #1335.*
+
+- A held order (`transmit` false) placed before a disconnect is still there after reconnecting
+  with the same client id 5s later: `cancel_order` draws OrderStatus Cancelled + 202 "Order was
+  discarded" + 161, the same as cancelling it in the session that placed it. A never-used id
+  draws 10147 "OrderId … that needs to be cancelled is not found" instead.
+- `all_open_orders` doesn't list it, before or after the reconnect.
+- `nextValidId` after the reconnect is past the held order's id.
+- So after a bracket submit stops partway, the held parent and take-profit are reachable only by
+  their ids.
+- **Not probed:** a longer gap, a different client id, a gateway restart, TWS (vs Gateway), and
+  whether re-sending with `transmit=true` releases a held order.
+
+### Bracket children get an OCA group; echoed `ocaType` defaults to 3
+
+*Live 2026-11-27 RTH, paper Gateway, server 226; smoke test of #1347.*
+
+- `submit_all` sends no OCA group on any leg. TWS echoes the take-profit and stop-loss in an
+  OCA group named after the parent's permId (parent perm 1427568395 → children
+  `ocaGroup` `"1427568395"`), `ocaType` 3 (reduce without block). The parent's echo has an
+  empty group.
+- An order sent with no `ocaType` (`OcaType::None` is left off the wire) echoes `ocaType` 3, with
+  or without a group: a plain limit order and the bracket parent both came back as 3. So an
+  echoed `ReduceWithoutBlock` with an empty group means "no OCA group", not that the type was
+  set.
+- A caller-set group comes back as sent: `submit_oca_orders("SMOKE1347-…", CancelWithBlock, ..)`
+  echoed that group and `ocaType` 1 on both orders, and cancelling one cancelled the other
+  (10148 "state: Cancelled" on cancelling the second). Cancelling the bracket parent cancelled
+  both children.
+- **Not probed:** a bracket child filling (whether TWS reduces or cancels its sibling), a
+  caller-set group on a bracket leg, and TWS (vs Gateway).
+
 ### Attached orders (`attached_orders`)
 
 *Live 2026-09-27, paper Gateway, server 220; #842.*

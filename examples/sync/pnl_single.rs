@@ -26,7 +26,7 @@ fn main() {
 
     let client = Client::connect(gateway_url, 919).expect("connection failed");
 
-    let subscription = client.pnl_single(account, contract_id, None).expect("pnl single request failed");
+    let subscription = client.pnl_single(account, contract_id).subscribe().expect("pnl single request failed");
 
     // Get next item non-blocking
     if let Some(pnl) = subscription.try_next() {

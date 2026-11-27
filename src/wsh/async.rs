@@ -2,7 +2,7 @@
 
 use time::Date;
 
-use crate::accounts::types::ContractId;
+use crate::contracts::ContractId;
 use crate::{client::ClientRequestBuilders, common::request_helpers, subscriptions::Subscription, Client, Error};
 
 use super::builder::{WshEventDataBuilder, WshEventFilterBuilder};

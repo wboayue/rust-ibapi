@@ -3,8 +3,7 @@ use std::time::Instant;
 use futures::StreamExt;
 use ibapi::contracts::Contract;
 use ibapi::orders::{
-    Action, ApiOnly, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderOutcome, OrderStatusKind, OrderType, OrderUpdate, Orders,
-    PlaceOrder,
+    Action, ApiOnly, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderOutcome, OrderStatusKind, OrderType, OrderUpdate, Orders, PlaceOrder,
 };
 use ibapi::subscriptions::{Subscription, SubscriptionItem};
 use ibapi::{Client, Error, NoticeCategory};
@@ -44,7 +43,7 @@ async fn place_bracket_order(client: &Client, contract: &Contract) -> BracketOrd
     ids
 }
 
-async fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
+async fn place_and_cleanup(client: &Client, contract: &Contract) -> i32 {
     let order_id = client
         .order(contract)
         .buy(1)
@@ -52,7 +51,7 @@ async fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
         .submit()
         .await
         .expect("placing order after cancel should succeed");
-    assert!(order_id.0 > 0, "new order id should be positive");
+    assert!(order_id > 0, "new order id should be positive");
     let _ = client.cancel_order(order_id).await.expect("cleanup cancel failed");
     order_id
 }
@@ -222,7 +221,7 @@ async fn order_builder_limit() {
         .await
         .expect("order builder submit failed");
 
-    assert!(order_id.0 > 0, "order id should be positive");
+    assert!(order_id > 0, "order id should be positive");
 
     // Cancel the placed order
     let _ = client.cancel_order(order_id).await.expect("cancel_order failed");
@@ -475,16 +474,16 @@ async fn preset_attached_orders_accepted() {
         .await
         .expect("preset attached orders submit failed");
     let (stop_loss, profit_taker) = (ids.stop_loss.expect("stop-loss id"), ids.profit_taker.expect("profit-taker id"));
-    let children = [stop_loss.0, profit_taker.0];
+    let children = [stop_loss, profit_taker];
 
     let outcome = timeout(Duration::from_secs(15), async {
         while let Some(item) = updates.next().await {
             match item.expect("order update stream error") {
                 SubscriptionItem::Data(OrderUpdate::OpenOrder(o)) if children.contains(&o.order_id) => {
-                    assert_eq!(o.order.parent_id, ids.parent.0, "child should point at the parent");
+                    assert_eq!(o.order.parent_id, ids.parent, "child should point at the parent");
                     return "attached";
                 }
-                SubscriptionItem::Notice(n) if n.request_id == Some(ids.parent.0) => match n.code {
+                SubscriptionItem::Notice(n) if n.request_id == Some(ids.parent) => match n.code {
                     10355 => return "no preset",
                     320 => panic!("TWS could not read the attached-orders request: {n:?}"),
                     _ => {}
@@ -517,7 +516,7 @@ async fn order_update_stream_keeps_frames_under_small_channel_capacity() {
     let mut order_ids = Vec::new();
     for _ in 0..3 {
         let order_id = client.order(&contract).buy(1).limit(1.0).submit().await.expect("submit failed");
-        order_ids.push(order_id.0);
+        order_ids.push(order_id);
     }
     for &order_id in &order_ids {
         let _ = client.cancel_order(order_id).await.expect("cancel failed");
@@ -562,7 +561,7 @@ async fn wait_for_fill_times_out_then_ends_after_cancel() {
     let ended = client.wait_for_fill(order_id, Duration::from_secs(10)).await;
 
     match working.expect("first wait failed") {
-        OrderOutcome::TimedOut(Some(status)) => assert_eq!(status.order_id, order_id.0),
+        OrderOutcome::TimedOut(Some(status)) => assert_eq!(status.order_id, order_id),
         other => panic!("a far limit should time out still working: {other:?}"),
     }
     match ended.expect("second wait failed") {
