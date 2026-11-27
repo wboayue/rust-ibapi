@@ -1,5 +1,7 @@
+use super::encoders;
 use crate::builder::ValidationError;
 use crate::client::id_generator::ClientIdManager;
+use crate::contracts::Contract;
 use crate::orders::OrderId;
 use crate::orders::{Order, OrderCancel};
 use crate::protocol::{check_version, ProtocolFeature};
@@ -8,14 +10,29 @@ use crate::{server_versions, Error};
 /// Checks `order_id` and `order` for sending, then reserves every id the order uses: ids the
 /// client allocates afterwards (`next_order_id`, the order builder's `submit`,
 /// `exercise_options`) start past them. Nothing is reserved when a check fails. The one entry
-/// point for an order id from the caller; `place_order` and `submit_order` (sync and async) call
-/// it.
+/// point for an order id from the caller; every place-order path reaches it through
+/// [`prepare_place_order`].
 pub(crate) fn verify_and_reserve_order_ids(ids: &ClientIdManager, server_version: i32, order_id: OrderId, order: &Order) -> Result<OrderId, Error> {
     let order_id = verify_order_ids(order_id, order)?;
     verify_order(server_version, order)?;
     verify_order_ext_operator(order)?;
     ids.raise_order_id(order_id_after(order_id, order));
     Ok(order_id)
+}
+
+/// [`verify_and_reserve_order_ids`], then encodes the place-order request: the checked id and
+/// the bytes to send. `place_order`, `submit_order` and the batch submits (sync and async) all
+/// call it; a batch prepares every order before sending any, so a failed check sends nothing.
+pub(crate) fn prepare_place_order(
+    ids: &ClientIdManager,
+    server_version: i32,
+    order_id: OrderId,
+    contract: &Contract,
+    order: &Order,
+) -> Result<(OrderId, Vec<u8>), Error> {
+    let order_id = verify_and_reserve_order_ids(ids, server_version, order_id, order)?;
+    let request = encoders::encode_place_order(order_id.value(), contract, order)?;
+    Ok((order_id, request))
 }
 
 /// The order ids `order` carries besides its own: the preset attached-order ids, which TWS

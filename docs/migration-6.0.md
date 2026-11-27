@@ -1507,3 +1507,42 @@ let spread = legs.fold(Contract::spread(symbol).add_leg(id, action).done(), |spr
 });
 let contract = spread.build()?;
 ```
+
+### 53. `submit_oca_orders` takes the group; OCA and bracket submits send nothing when an order fails its checks
+
+`submit_oca_orders` (sync and async) takes the group name and OCA type and sets them on every
+order:
+
+| 5.x | 6.0 |
+|---|---|
+| `submit_oca_orders(orders)` | `submit_oca_orders(group: impl Into<String>, oca_type: OcaType, orders)` |
+
+In 5.x the method only numbered the orders. One built without `.oca_group(..)` went out as an
+independent order, with no error. Now a group already on an order is overwritten, and an empty
+group is `Error::Validation`, returned before any order id is allocated.
+
+```rust,ignore
+// 5.x
+let order1 = client.order(&aapl).buy(100).limit(50.0).oca_group("MyOCA", OcaType::CancelWithBlock).build_order()?;
+let order2 = client.order(&msft).buy(100).limit(45.0).oca_group("MyOCA", OcaType::CancelWithBlock).build_order()?;
+let ids = client.submit_oca_orders(vec![(aapl, order1), (msft, order2)])?;
+
+// 6.0
+let order1 = client.order(&aapl).buy(100).limit(50.0).build_order()?;
+let order2 = client.order(&msft).buy(100).limit(45.0).build_order()?;
+let ids = client.submit_oca_orders("MyOCA", OcaType::CancelWithBlock, vec![(aapl, order1), (msft, order2)])?;
+```
+
+`submit_oca_orders` and `BracketOrderBuilder::submit_all` now check and encode every order
+before sending the first. In 5.x they sent one order at a time, so if a later order failed its
+checks (an id at or above 1,500,000,000, an `ext_operator` TWS would reject), the earlier
+orders were already live and the error didn't say so. For a bracket, that left the parent and
+take-profit held at TWS. Those errors now send nothing; the signatures of `submit_all` and the
+error types are unchanged.
+
+Only a transport error can still stop partway, and the orders sent before it may be at TWS. OCA
+orders are transmitted, so `open_orders` lists them after a reconnect. A bracket's parent and
+take-profit are held until the stop-loss transmits, and TWS keeps held orders across a
+reconnect without listing them in `open_orders`; only `cancel_order` with their ids reaches
+them, and the error doesn't carry the ids yet
+([#1338](https://github.com/wboayue/rust-ibapi/issues/1338)).

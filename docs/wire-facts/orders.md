@@ -15,6 +15,21 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
 - An untransmitted order gets no open-order or status frames, so a TWS-derived value (e.g. a
   VOL order's limit) is only visible once transmitted.
 
+### Held orders survive a reconnect
+
+*Live 2026-11-27, paper Gateway, server 226; #1335.*
+
+- A held order (`transmit` false) placed before a disconnect is still there after reconnecting
+  with the same client id 5s later: `cancel_order` draws OrderStatus Cancelled + 202 "Order was
+  discarded" + 161, the same as cancelling it in the session that placed it. A never-used id
+  draws 10147 "OrderId … that needs to be cancelled is not found" instead.
+- `all_open_orders` doesn't list it, before or after the reconnect.
+- `nextValidId` after the reconnect is past the held order's id.
+- So after a bracket submit stops partway, the held parent and take-profit are reachable only by
+  their ids.
+- **Not probed:** a longer gap, a different client id, a gateway restart, TWS (vs Gateway), and
+  whether re-sending with `transmit=true` releases a held order.
+
 ### Attached orders (`attached_orders`)
 
 *Live 2026-09-27, paper Gateway, server 220; #842.*

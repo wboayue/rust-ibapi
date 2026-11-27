@@ -939,25 +939,25 @@ Groups orders where execution of one cancels all others.
 ```rust
 use ibapi::orders::OcaType;
 
-// Build individual orders with OCA group
 let order1 = client.order(&contract1)
     .buy(100)
     .limit(50.00)
-    .oca_group("MyOCA", OcaType::CancelWithBlock)
-    .build()?;
+    .build_order()?;
 
 let order2 = client.order(&contract2)
     .buy(100)
     .limit(45.00)
-    .oca_group("MyOCA", OcaType::CancelWithBlock)
-    .build()?;
+    .build_order()?;
 
-// Submit as OCA group (requires contract-order pairs)
-let order_ids = client.submit_oca_orders(vec![
+// Puts every order in "MyOCA" with the given type, overwriting any group already set.
+let order_ids = client.submit_oca_orders("MyOCA", OcaType::CancelWithBlock, vec![
     (contract1.clone(), order1),
-    (contract2.clone(), order2)
+    (contract2.clone(), order2),
 ])?;
 ```
+
+All orders are checked before any is sent: if one fails (an empty group, an id in the request
+range), none goes out.
 
 **When to use:** When you want multiple entry strategies but only one execution.
 
