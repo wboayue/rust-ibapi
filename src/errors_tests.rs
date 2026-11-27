@@ -238,6 +238,7 @@ fn clone_preserves_unit_variants() {
     for variant in [
         Error::ConnectionFailed,
         Error::ConnectionReset,
+        Error::Reconnecting,
         Error::Cancelled,
         Error::Shutdown,
         Error::UnexpectedEndOfStream,
@@ -279,6 +280,7 @@ fn clone_preserves_payloaded_variants() {
         },
         Error::BufferLimitExceeded { limit: 5 },
         Error::OrderIdInRequestRange { order_id: 7 },
+        partially_sent(Error::ConnectionReset),
     ];
 
     for original in originals {
@@ -293,6 +295,63 @@ fn clone_preserves_parse_time() {
     assert!(matches!(original.clone(), Error::ParseTime(e) if e == parse_time_error()));
 }
 
+fn partially_sent(source: Error) -> Error {
+    Error::orders_partially_sent([7, 8, 9], 1, source)
+}
+
+#[test]
+fn orders_partially_sent_splits_after_the_failed_order() {
+    let cases = [
+        ("first send fails", 0, vec![7], vec![8, 9]),
+        ("middle send fails", 1, vec![7, 8], vec![9]),
+        ("last send fails", 2, vec![7, 8, 9], vec![]),
+    ];
+    for (label, failed, expected_sent, expected_not_sent) in cases {
+        match Error::orders_partially_sent([7, 8, 9], failed, Error::ConnectionReset) {
+            Error::OrdersPartiallySent { sent, not_sent, .. } => {
+                assert_eq!(sent, expected_sent, "{label}");
+                assert_eq!(not_sent, expected_not_sent, "{label}");
+            }
+            other => panic!("{label}: {other:?}"),
+        }
+    }
+}
+
+/// A send refused before writing put nothing on the wire, so its order counts as not sent, and a
+/// refused first send leaves nothing sent: the refusal comes back as is.
+#[test]
+fn orders_partially_sent_counts_a_refused_send_as_not_sent() {
+    match Error::orders_partially_sent([7, 8, 9], 1, Error::Reconnecting) {
+        Error::OrdersPartiallySent { sent, not_sent, source } => {
+            assert_eq!(sent, vec![7]);
+            assert_eq!(not_sent, vec![8, 9]);
+            assert!(matches!(*source, Error::Reconnecting));
+        }
+        other => panic!("second send refused: {other:?}"),
+    }
+    let first_refused = Error::orders_partially_sent([7, 8, 9], 0, Error::Reconnecting);
+    assert!(matches!(first_refused, Error::Reconnecting), "{first_refused:?}");
+    assert!(first_refused.is_unsent());
+}
+
+#[test]
+fn orders_partially_sent_counts_the_orders_and_chains_the_send_failure() {
+    let err = partially_sent(Error::ConnectionReset);
+
+    assert_eq!(
+        err.to_string(),
+        format!("2 of 3 orders may have been sent before the submit stopped: {}", Error::ConnectionReset)
+    );
+    let source = StdError::source(&err).expect("the send failure is the source");
+    assert_eq!(source.to_string(), Error::ConnectionReset.to_string());
+}
+
+#[test]
+fn orders_partially_sent_is_connection_lost_when_its_send_failure_is() {
+    assert!(partially_sent(Error::ConnectionReset).is_connection_lost());
+    assert!(!partially_sent(Error::Shutdown).is_connection_lost());
+}
+
 #[test]
 fn error_is_non_exhaustive() {
     fn assert_non_exhaustive<T: StdError>() {}
@@ -302,6 +361,10 @@ fn error_is_non_exhaustive() {
 #[test]
 fn is_connection_lost_true_for_connection_variants() {
     assert!(Error::ConnectionReset.is_connection_lost());
+    assert!(
+        Error::Reconnecting.is_connection_lost(),
+        "a refusal while reconnecting: wait, then resend"
+    );
 
     // The socket is still open, but the framing has desynchronized and there is
     // no delimiter to re-anchor on — reconnecting is the only recovery, so the
@@ -335,6 +398,63 @@ fn is_connection_lost_false_for_non_connection() {
 
     for error in cases {
         assert!(!error.is_connection_lost(), "{error:?} should not count as connection-lost");
+    }
+}
+
+#[test]
+fn is_unsent_only_for_errors_raised_before_a_write() {
+    let response = ResponseMessage::from("4\02\0-1\0200\0boom\0");
+    let cases = vec![
+        (Error::Validation(ValidationError::InvalidQuantity(-1.0)), true),
+        (Error::InvalidArgument("buffer_limit must be above zero".into()), true),
+        (Error::OrderIdInRequestRange { order_id: 1_500_000_000 }, true),
+        (
+            Error::ServerVersion {
+                required: 223,
+                actual: 213,
+                feature: "hedge max size".into(),
+            },
+            true,
+        ),
+        (Error::AlreadySubscribed, true),
+        (
+            Error::AccountUpdatesInUse {
+                active: AccountId("DU1".into()),
+                requested: AccountId("DU2".into()),
+            },
+            true,
+        ),
+        (Error::Io(io::Error::new(io::ErrorKind::BrokenPipe, "write failed")), false),
+        (Error::ParseTime(parse_time_error()), false),
+        (
+            Error::Parse {
+                field: Some("action"),
+                value: "v".into(),
+                reason: "m".into(),
+            },
+            false,
+        ),
+        (Error::ConnectionFailed, false),
+        (Error::ConnectionRejected("allow-list".into()), false),
+        (Error::ClientIdInUse { client_id: 7 }, false),
+        (Error::UnsupportedTimeZone("US/Foo".into()), false),
+        (Error::ConnectionReset, false),
+        (Error::Reconnecting, true),
+        (Error::Cancelled, false),
+        (Error::Shutdown, false),
+        (Error::unexpected_response(&response), false),
+        (Error::unexpected_wire_format(&response), false),
+        (Error::UnexpectedEndOfStream, false),
+        (Error::Timeout, false),
+        (Error::BufferLimitExceeded { limit: 5 }, false),
+        (Error::InvalidFrame("short".into()), false),
+        (tws_error_notice(201, "Order rejected"), false),
+        (protobuf_decode_error(), false),
+        (partially_sent(Error::ConnectionReset), false),
+    ];
+
+    for (error, unsent) in cases {
+        assert_eq!(error.is_unsent(), unsent, "{error:?}");
     }
 }
 

@@ -306,3 +306,16 @@ fn cancel_frame_covers_each_cancel_outcome() {
     // The type has no cancel (the `StreamDecoder` default).
     assert!(cancel_frame::<OptionChain>(&context, Some(9000)).is_none());
 }
+
+/// Draining stops on a session that is down: a reset ended the request with the session, and a
+/// cancel refused while reconnecting, or after a shutdown, never reached TWS.
+#[test]
+fn drain_outcome_stops_on_a_session_that_is_down() {
+    for error in [Error::ConnectionReset, Error::Reconnecting, Error::Shutdown] {
+        let expected = error.to_string();
+        match drain_outcome::<()>(Err(error)) {
+            Some(Err(e)) => assert_eq!(e.to_string(), expected),
+            other => panic!("{expected}: expected the error back, got {other:?}"),
+        }
+    }
+}

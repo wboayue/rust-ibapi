@@ -9,7 +9,7 @@ triggers:
   - about to write Error::InvalidArgument(format!(..))
 symbols: [Error::Validation, Error::InvalidArgument, ValidationError, ibapi::builder]
 related: [builder-enum-coverage, param-budget]
-precedents: ["#1169", "#1249", "#1331", "#1332", "#1333"]
+precedents: ["#1169", "#1249", "#1331", "#1332", "#1333", "#1354"]
 ---
 
 Ask who fixes it. A runtime value a caller may correct (a quantity, price or strike, a date from
@@ -86,3 +86,7 @@ fields still pays for typestate only in the setters that change the state.
   carries type parameters" after a defaulted one cost no caller anything. Review caught the cost
   typestate does carry: an optional end date or a runtime list of legs can't be applied in place
   any more (migration §52 shows the generic-function and first-leg patterns).
+- #1354 — `ContractBuilder::build` requires a security type unless a contract id or security id
+  identifies the contract (TWS's 321 otherwise). `InvalidArgument`, not typestate: the
+  requirement is an OR across three optional setters on the field-minimal escape hatch, which
+  typestate can't express without a parameter per setter.

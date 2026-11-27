@@ -83,7 +83,7 @@ async fn place_order() {
 
     let contract = Contract {
         symbol: Symbol::from("ES"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
         local_symbol: "ESU5".to_string(),
@@ -416,7 +416,7 @@ async fn submit_order() {
 
     let contract = Contract {
         symbol: Symbol::from("ES"),
-        security_type: SecurityType::Future,
+        security_type: Some(SecurityType::Future),
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
         local_symbol: "ESU5".to_string(),
@@ -453,7 +453,7 @@ async fn exercise_options() {
 
     let contract = Contract {
         symbol: Symbol::from("ES"),
-        security_type: SecurityType::FuturesOption,
+        security_type: Some(SecurityType::FuturesOption),
         exchange: Exchange::from("CME"),
         currency: Currency::from("USD"),
         last_trade_date_or_contract_month: Some("20250919".parse().unwrap()),
@@ -690,13 +690,13 @@ async fn order_update_stream_survives_unknown_sec_type() {
 
     match stream.next().await {
         Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => {
-            assert_eq!(o.contract.security_type, SecurityType::Other("NOTASECTYPE".into()));
+            assert_eq!(o.contract.security_type, Some(SecurityType::Other("NOTASECTYPE".into())));
         }
         other => panic!("expected OpenOrder with Other sec_type, got {other:?}"),
     }
     match stream.next().await {
         Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => {
-            assert_eq!(o.contract.security_type, SecurityType::Stock);
+            assert_eq!(o.contract.security_type, Some(SecurityType::Stock));
         }
         other => panic!("stream did not survive the unknown sec_type, got {other:?}"),
     }
@@ -997,7 +997,7 @@ async fn submit_assigns_the_next_order_id_and_sends_the_order() {
         .submit()
         .await
         .expect("submit should succeed");
-    assert_eq!(order_id.value(), 9100);
+    assert_eq!(order_id, 9100);
 
     assert_eq!(request_message_count(&bus), 1);
     let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
@@ -1046,7 +1046,7 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
         .await
         .expect("bracket submission should succeed");
 
-    assert_eq!((ids.parent.value(), ids.take_profit.value(), ids.stop_loss.value()), (9200, 9201, 9202));
+    assert_eq!((ids.parent, ids.take_profit, ids.stop_loss), (9200, 9201, 9202));
     assert_eq!(request_message_count(&bus), 3);
 
     let orders: Vec<crate::proto::Order> = (0..3)
@@ -1082,41 +1082,181 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
 }
 
 #[tokio::test]
-async fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
+async fn submit_oca_orders_numbers_each_order_and_sets_the_group() {
     let (client, bus) = create_test_client();
     client.id_manager().raise_order_id(OrderId::from(9300));
     let apple = Contract::stock("AAPL").build();
     let microsoft = Contract::stock("MSFT").build();
 
-    let first = client
-        .order(&apple)
-        .buy(100)
-        .limit(50.0)
-        .oca_group("TestOCA", OcaType::CancelWithBlock)
-        .build_order()
-        .expect("order should build");
+    // No group on the first; a different one on the second, which the call overwrites.
+    let first = client.order(&apple).buy(100).limit(50.0).build_order().expect("order should build");
     let second = client
         .order(&microsoft)
         .buy(100)
         .limit(45.0)
-        .oca_group("TestOCA", OcaType::CancelWithBlock)
+        .oca_group("Other", OcaType::ReduceWithBlock)
         .build_order()
         .expect("order should build");
 
     let ids = client
-        .submit_oca_orders(vec![(apple, first), (microsoft, second)])
+        .submit_oca_orders("TestOCA", OcaType::CancelWithBlock, vec![(apple, first), (microsoft, second)])
         .await
         .expect("OCA submission should succeed");
 
-    assert_eq!(ids.iter().map(|id| id.value()).collect::<Vec<_>>(), vec![9300, 9301]);
+    assert_eq!(ids, vec![9300, 9301]);
     assert_eq!(request_message_count(&bus), 2);
 
-    for i in 0..2 {
+    for (i, id) in ids.iter().enumerate() {
         let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, i);
+        assert_eq!(request.order_id, Some(*id));
         let order = request.order.expect("request carries an order");
         assert_eq!(order.oca_group.as_deref(), Some("TestOCA"));
         assert_eq!(order.oca_type, Some(1));
     }
+}
+
+#[tokio::test]
+async fn submit_oca_orders_rejects_an_empty_group() {
+    let (client, bus) = create_test_client();
+    client.id_manager().raise_order_id(OrderId::from(9300));
+    let contract = Contract::stock("AAPL").build();
+    let order = client.order(&contract).buy(100).limit(50.0).build_order().expect("order should build");
+
+    let result = client.submit_oca_orders("", OcaType::CancelWithBlock, vec![(contract, order)]).await;
+
+    assert!(
+        matches!(
+            result,
+            Err(Error::Validation(ValidationError::InvalidField {
+                field: "Order::oca_group",
+                ..
+            }))
+        ),
+        "{result:?}"
+    );
+    assert_eq!(request_message_count(&bus), 0);
+    assert_eq!(client.next_order_id(), 9300, "no id is taken for a rejected group");
+}
+
+/// The second order fails its id check, so neither goes out: the first must not be left live
+/// on its own.
+#[tokio::test]
+async fn submit_oca_orders_sends_nothing_when_a_later_order_fails() {
+    let (client, bus) = create_test_client();
+    client.id_manager().raise_order_id(OrderId::from(REQUEST_ID_FLOOR - 1));
+    let apple = Contract::stock("AAPL").build();
+    let microsoft = Contract::stock("MSFT").build();
+    let first = client.order(&apple).buy(100).limit(50.0).build_order().expect("order should build");
+    let second = client.order(&microsoft).buy(100).limit(45.0).build_order().expect("order should build");
+
+    let result = client
+        .submit_oca_orders("TestOCA", OcaType::CancelWithBlock, vec![(apple, first), (microsoft, second)])
+        .await;
+
+    assert!(
+        matches!(result, Err(Error::OrderIdInRequestRange { order_id }) if order_id == REQUEST_ID_FLOOR),
+        "{result:?}"
+    );
+    assert_eq!(request_message_count(&bus), 0);
+}
+
+/// The take-profit's id fails its check after the parent's passes, so no leg goes out: a held
+/// parent must not be left at TWS.
+#[tokio::test]
+async fn submit_all_sends_nothing_when_a_later_leg_fails() {
+    let (client, bus) = create_test_client();
+    client.id_manager().raise_order_id(OrderId::from(REQUEST_ID_FLOOR - 1));
+    let contract = Contract::stock("AAPL").build();
+
+    let result = client
+        .order(&contract)
+        .buy(100)
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(55.0)
+        .stop_loss(45.0)
+        .submit_all()
+        .await;
+
+    assert!(
+        matches!(result, Err(Error::OrderIdInRequestRange { order_id }) if order_id == REQUEST_ID_FLOOR),
+        "{result:?}"
+    );
+    assert_eq!(request_message_count(&bus), 0);
+}
+
+/// A send that fails partway through a bracket reports which legs may be at TWS: every leg up to
+/// and including the one whose write failed. Table: messages allowed through before the failure.
+#[tokio::test]
+async fn submit_all_reports_the_legs_sent_when_a_send_fails() {
+    let cases = [
+        ("parent's write fails", 0, vec![9200], vec![9201, 9202]),
+        ("take-profit's write fails", 1, vec![9200, 9201], vec![9202]),
+        ("stop-loss's write fails", 2, vec![9200, 9201, 9202], vec![]),
+    ];
+    for (label, sends_before_failure, expected_sent, expected_not_sent) in cases {
+        let bus = Arc::new(MessageBusStub::default().with_sends_failing_after(sends_before_failure));
+        let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+        client.id_manager().raise_order_id(OrderId::from(9200));
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .order(&contract)
+            .buy(100)
+            .bracket()
+            .entry_limit(50.0)
+            .take_profit(55.0)
+            .stop_loss(45.0)
+            .submit_all()
+            .await;
+
+        match result {
+            Err(Error::OrdersPartiallySent { sent, not_sent, source }) => {
+                assert_eq!(sent, expected_sent, "{label}");
+                assert_eq!(not_sent, expected_not_sent, "{label}");
+                assert!(matches!(*source, Error::ConnectionReset), "{label}: {source:?}");
+            }
+            other => panic!("{label}: expected OrdersPartiallySent, got {other:?}"),
+        }
+        assert_eq!(
+            request_message_count(&bus),
+            sends_before_failure + 1,
+            "{label}: no write after the failed one"
+        );
+    }
+}
+
+#[tokio::test]
+async fn submit_oca_orders_reports_the_orders_sent_when_a_send_fails() {
+    let bus = Arc::new(MessageBusStub::default().with_sends_failing_after(1));
+    let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+    client.id_manager().raise_order_id(OrderId::from(9300));
+    let apple = Contract::stock("AAPL").build();
+    let microsoft = Contract::stock("MSFT").build();
+    let first = client.order(&apple).buy(100).limit(50.0).build_order().expect("order should build");
+    let second = client.order(&microsoft).buy(100).limit(45.0).build_order().expect("order should build");
+
+    let result = client
+        .submit_oca_orders("TestOCA", OcaType::CancelWithBlock, vec![(apple, first), (microsoft, second)])
+        .await;
+
+    assert!(
+        matches!(&result, Err(Error::OrdersPartiallySent { sent, not_sent, .. }) if *sent == [9300, 9301] && not_sent.is_empty()),
+        "{result:?}"
+    );
+}
+
+/// A single order is not a batch: its send failure comes back as is.
+#[tokio::test]
+async fn submit_order_returns_a_failed_send_unwrapped() {
+    let bus = Arc::new(MessageBusStub::default().with_failing_sends());
+    let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+    let contract = Contract::stock("AAPL").build();
+    let order = client.order(&contract).buy(100).limit(50.0).build_order().expect("order should build");
+
+    let result = client.submit_order(9400, &contract, &order).await;
+
+    assert!(matches!(result, Err(Error::ConnectionReset)), "{result:?}");
 }
 
 #[tokio::test]
@@ -1216,9 +1356,9 @@ async fn preset_legs_submit_one_request_with_attached_ids() {
         .await
         .expect("submission should succeed");
 
-    assert_eq!(ids.parent.value(), 9400);
-    assert_eq!(ids.stop_loss.map(|id| id.value()), Some(9401));
-    assert_eq!(ids.profit_taker.map(|id| id.value()), Some(9402));
+    assert_eq!(ids.parent, 9400);
+    assert_eq!(ids.stop_loss, Some(9401));
+    assert_eq!(ids.profit_taker, Some(9402));
 
     // One request: TWS creates the children from the parent.
     assert_eq!(request_message_count(&bus), 1);
@@ -1451,4 +1591,139 @@ async fn next_valid_order_id_then_submit_order_does_not_reissue_the_id() {
     client.submit_order(order_id, &contract, &order).await.expect("submit_order");
 
     assert_eq!(client.next_order_id(), order_id + 1);
+}
+
+/// `Error::is_unsent` is `true` only when the failing order call wrote nothing. The converse
+/// doesn't hold: a request refused after the client gave up or shut down writes nothing yet is
+/// `false`, because `ConnectionFailed` and `Shutdown` also end writes already in progress.
+#[tokio::test]
+async fn is_unsent_implies_the_order_call_wrote_nothing() {
+    use futures::future::BoxFuture;
+
+    /// What the stubbed bus does with a write.
+    #[derive(Clone, Copy)]
+    enum Sends {
+        Succeed,
+        /// Recorded, then fails: the request may have reached TWS.
+        Fail,
+        /// Fails with `Reconnecting` without recording, as a request refused while reconnecting.
+        Refuse,
+    }
+    type Call = for<'a> fn(&'a Client) -> BoxFuture<'a, Result<(), Error>>;
+    fn bad_operator() -> crate::orders::OrderCancel {
+        crate::orders::OrderCancel {
+            ext_operator: "TRADER_7".to_owned(),
+            ..Default::default()
+        }
+    }
+    fn limit() -> Order {
+        order_builder::limit_order(Action::Buy, 1.0, 1.0)
+    }
+    fn aapl() -> Contract {
+        Contract::stock("AAPL").build()
+    }
+    let cases: [(&str, Sends, bool, Call); 15] = [
+        ("place_order, id in the request range", Sends::Succeed, true, |client| {
+            Box::pin(async move { client.place_order(REQUEST_ID_FLOOR, &aapl(), &limit()).await.map(drop) })
+        }),
+        ("place_order, bad ext_operator", Sends::Succeed, true, |client| {
+            Box::pin(async move {
+                let order = Order {
+                    ext_operator: "TRADER_7".to_owned(),
+                    ..limit()
+                };
+                client.place_order(41, &aapl(), &order).await.map(drop)
+            })
+        }),
+        ("place_order, field above the server version", Sends::Succeed, true, |client| {
+            Box::pin(async move {
+                let order = Order {
+                    hedge_max_size: Some(10),
+                    ..limit()
+                };
+                client.place_order(41, &aapl(), &order).await.map(drop)
+            })
+        }),
+        ("cancel_order, id in the request range", Sends::Succeed, true, |client| {
+            Box::pin(async move { client.cancel_order(REQUEST_ID_FLOOR).await.map(drop) })
+        }),
+        ("cancel_order_with, bad ext_operator", Sends::Succeed, true, |client| {
+            Box::pin(async move { client.cancel_order_with(41, &bad_operator()).await.map(drop) })
+        }),
+        ("global_cancel_with, bad ext_operator", Sends::Succeed, true, |client| {
+            Box::pin(async move { client.global_cancel_with(&bad_operator()).await })
+        }),
+        ("builder submit, negative quantity", Sends::Succeed, true, |client| {
+            Box::pin(async move { client.order(&aapl()).buy(-100).market().submit().await.map(drop) })
+        }),
+        ("builder analyze, negative quantity", Sends::Succeed, true, |client| {
+            Box::pin(async move { client.order(&aapl()).buy(-100).market().analyze().await.map(drop) })
+        }),
+        ("exercise_options, zero quantity", Sends::Succeed, true, |client| {
+            Box::pin(async move { client.exercise_options(&aapl()).exercise(0).submit().await.map(drop) })
+        }),
+        (
+            "bracket submit_all, a later leg's id in the request range",
+            Sends::Succeed,
+            true,
+            |client| {
+                Box::pin(async move {
+                    client.id_manager().raise_order_id(OrderId::from(REQUEST_ID_FLOOR - 1));
+                    client
+                        .order(&aapl())
+                        .buy(1)
+                        .bracket()
+                        .entry_limit(1.0)
+                        .take_profit(2.0)
+                        .stop_loss(0.5)
+                        .submit_all()
+                        .await
+                        .map(drop)
+                })
+            },
+        ),
+        ("submit_order, write fails", Sends::Fail, false, |client| {
+            Box::pin(async move { client.submit_order(41, &aapl(), &limit()).await })
+        }),
+        ("global_cancel, write fails", Sends::Fail, false, |client| {
+            Box::pin(async move { client.global_cancel().await })
+        }),
+        ("submit_oca_orders, write fails", Sends::Fail, false, |client| {
+            Box::pin(async move {
+                let orders = vec![(aapl(), limit()), (Contract::stock("MSFT").build(), limit())];
+                client.submit_oca_orders("G", OcaType::CancelWithBlock, orders).await.map(drop)
+            })
+        }),
+        ("submit_order, refused while reconnecting", Sends::Refuse, true, |client| {
+            Box::pin(async move { client.submit_order(41, &aapl(), &limit()).await })
+        }),
+        (
+            "submit_oca_orders, first send refused while reconnecting",
+            Sends::Refuse,
+            true,
+            |client| {
+                Box::pin(async move {
+                    let orders = vec![(aapl(), limit()), (Contract::stock("MSFT").build(), limit())];
+                    client.submit_oca_orders("G", OcaType::CancelWithBlock, orders).await.map(drop)
+                })
+            },
+        ),
+    ];
+
+    for (name, sends, unsent, call) in cases {
+        let stub = MessageBusStub::default();
+        let message_bus = Arc::new(match sends {
+            Sends::Succeed => stub,
+            Sends::Fail => stub.with_failing_sends(),
+            Sends::Refuse => stub.with_refused_sends(),
+        });
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+        let err = call(&client).await.expect_err(name);
+
+        let written = request_message_count(&message_bus);
+        assert_eq!(err.is_unsent(), unsent, "{name}: {err:?}");
+        assert!(!err.is_unsent() || written == 0, "{name}: unsent, yet {written} requests written");
+        assert_eq!(written, usize::from(matches!(sends, Sends::Fail)), "{name}: requests written");
+    }
 }

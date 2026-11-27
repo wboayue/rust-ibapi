@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::builder::ValidationError;
-use crate::orders::OrderId;
 
 /// Order IDs from [`AttachedOrdersBuilder::submit`](crate::orders::AttachedOrdersBuilder).
 ///
@@ -12,11 +11,11 @@ use crate::orders::OrderId;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AttachedOrderIds {
     /// The parent order ID
-    pub parent: OrderId,
+    pub parent: i32,
     /// The preset stop-loss order ID, if requested
-    pub stop_loss: Option<OrderId>,
+    pub stop_loss: Option<i32>,
     /// The preset profit-taker order ID, if requested
-    pub profit_taker: Option<OrderId>,
+    pub profit_taker: Option<i32>,
 }
 
 /// Represents the order IDs for a bracket order
@@ -26,31 +25,26 @@ pub struct AttachedOrderIds {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BracketOrderIds {
     /// The parent order ID
-    pub parent: OrderId,
+    pub parent: i32,
     /// The take profit order ID
-    pub take_profit: OrderId,
+    pub take_profit: i32,
     /// The stop loss order ID
-    pub stop_loss: OrderId,
+    pub stop_loss: i32,
 }
 
 impl BracketOrderIds {
     /// Creates a new BracketOrderIds
     pub fn new(parent: i32, take_profit: i32, stop_loss: i32) -> Self {
         Self {
-            parent: OrderId(parent),
-            take_profit: OrderId(take_profit),
-            stop_loss: OrderId(stop_loss),
+            parent,
+            take_profit,
+            stop_loss,
         }
     }
 
     /// Returns all order IDs as a vector
-    pub fn as_vec(&self) -> Vec<OrderId> {
+    pub fn as_vec(&self) -> Vec<i32> {
         vec![self.parent, self.take_profit, self.stop_loss]
-    }
-
-    /// Returns all order IDs as i32 values
-    pub fn as_i32_vec(&self) -> Vec<i32> {
-        vec![self.parent.0, self.take_profit.0, self.stop_loss.0]
     }
 }
 

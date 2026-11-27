@@ -61,7 +61,7 @@ impl ConnectionSignal {
         self.sender.borrow().check_ended()
     }
 
-    /// `Ok` while connected; otherwise [`Error::ConnectionReset`] while a
+    /// `Ok` while connected; otherwise [`Error::Reconnecting`] while a
     /// reconnect may still succeed, [`Error::ConnectionFailed`] once it gave
     /// up, [`Error::Shutdown`] after a shutdown.
     pub(crate) fn check(&self) -> Result<(), Error> {

@@ -1,4 +1,6 @@
 use super::*;
+use crate::accounts::common::test_tables::{OptionalFilters, OptionalModelCode};
+use crate::accounts::types::ModelCode;
 use crate::common::test_utils::helpers::*;
 use crate::messages::IncomingMessages;
 use crate::stubs::{MessageBusStub, TEST_BROADCAST_CAPACITY};
@@ -66,7 +68,9 @@ async fn positions_multi() {
     let model_code = Some(ModelCode(TEST_MODEL_CODE.to_string()));
 
     let mut subscription = client
-        .positions_multi(account.as_ref(), model_code.as_ref())
+        .positions_multi()
+        .with_filters(account.as_ref(), model_code.as_ref())
+        .subscribe()
         .await
         .expect("request positions_multi failed");
 
@@ -149,11 +153,16 @@ async fn pnl() {
     let account = AccountId(TEST_ACCOUNT.to_string());
     let model_code = Some(ModelCode(TEST_MODEL_CODE.to_string()));
 
-    let subscription1 = client.pnl(&account, model_code.as_ref()).await.expect("request pnl failed");
+    let subscription1 = client
+        .pnl(&account)
+        .with_model_code(model_code.as_ref())
+        .subscribe()
+        .await
+        .expect("request pnl failed");
     drop(subscription1);
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let subscription2 = client.pnl(&account, None).await.expect("request pnl failed");
+    let subscription2 = client.pnl(&account).subscribe().await.expect("request pnl failed");
     drop(subscription2);
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -173,13 +182,19 @@ async fn pnl_single() {
     let model_code = Some(ModelCode(TEST_MODEL_CODE.to_string()));
 
     let subscription1 = client
-        .pnl_single(&account, contract_id, model_code.as_ref())
+        .pnl_single(&account, contract_id)
+        .with_model_code(model_code.as_ref())
+        .subscribe()
         .await
         .expect("request pnl_single failed");
     drop(subscription1);
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let subscription2 = client.pnl_single(&account, contract_id, None).await.expect("request pnl_single failed");
+    let subscription2 = client
+        .pnl_single(&account, contract_id)
+        .subscribe()
+        .await
+        .expect("request pnl_single failed");
     drop(subscription2);
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -354,7 +369,9 @@ async fn account_updates_multi() {
 
     let account = Some(AccountId(TEST_ACCOUNT.to_string()));
     let mut subscription = client
-        .account_updates_multi(account.as_ref(), None, LedgerOnly::Yes)
+        .account_updates_multi(LedgerOnly::Yes)
+        .with_filters(account.as_ref(), None)
+        .subscribe()
         .await
         .expect("request account_updates_multi failed");
 
@@ -402,8 +419,8 @@ async fn concurrent_subscriptions() {
     let account1 = AccountId("ACCOUNT1".to_string());
     let account2 = AccountId("ACCOUNT2".to_string());
 
-    let sub1_future = client.pnl(&account1, None);
-    let sub2_future = client.pnl(&account2, None);
+    let sub1_future = client.pnl(&account1).subscribe();
+    let sub2_future = client.pnl(&account2).subscribe();
     let sub3_future = client.positions();
 
     let (sub1, sub2, sub3) = tokio::join!(sub1_future, sub2_future, sub3_future);
@@ -499,7 +516,9 @@ async fn pnl_comprehensive() {
     for test_case in &test_cases {
         let model_code = test_case.model_code.as_ref().map(|s| ModelCode(s.clone()));
         let sub = client
-            .pnl(&account, model_code.as_ref())
+            .pnl(&account)
+            .with_model_code(model_code.as_ref())
+            .subscribe()
             .await
             .unwrap_or_else(|_| panic!("PnL request failed for {}", test_case.description));
         subscriptions.push(sub);
@@ -525,7 +544,8 @@ async fn pnl_single_edge_cases() {
     // Create all subscriptions
     for test_case in &test_cases {
         let sub = client
-            .pnl_single(&account, test_case.contract_id, None)
+            .pnl_single(&account, test_case.contract_id)
+            .subscribe()
             .await
             .unwrap_or_else(|_| panic!("PnL single failed for {}", test_case.description));
         subscriptions.push(sub);
@@ -557,7 +577,9 @@ async fn positions_multi_parameter_combinations() {
         let model_code = test_case.model_code.as_ref().map(|s| ModelCode(s.clone()));
 
         let sub = client
-            .positions_multi(account.as_ref(), model_code.as_ref())
+            .positions_multi()
+            .with_filters(account.as_ref(), model_code.as_ref())
+            .subscribe()
             .await
             .unwrap_or_else(|_| panic!("positions_multi failed for {}", test_case.description));
         subscriptions.push(sub);
@@ -585,7 +607,9 @@ async fn subscription_lifecycle() {
                 let account_id = AccountId(account.clone());
                 let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
                 let sub = client
-                    .pnl(&account_id, model.as_ref())
+                    .pnl(&account_id)
+                    .with_model_code(model.as_ref())
+                    .subscribe()
                     .await
                     .unwrap_or_else(|_| panic!("PnL subscription failed for {}", test_case.description));
                 drop(sub);
@@ -610,7 +634,9 @@ async fn subscription_lifecycle() {
                 let account_id = account.as_ref().map(|s| AccountId(s.clone()));
                 let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
                 let sub = client
-                    .positions_multi(account_id.as_ref(), model.as_ref())
+                    .positions_multi()
+                    .with_filters(account_id.as_ref(), model.as_ref())
+                    .subscribe()
                     .await
                     .unwrap_or_else(|_| panic!("Positions Multi subscription failed for {}", test_case.description));
                 drop(sub);
@@ -624,7 +650,9 @@ async fn subscription_lifecycle() {
                 let contract = ContractId(*contract_id);
                 let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
                 let sub = client
-                    .pnl_single(&account_id, contract, model.as_ref())
+                    .pnl_single(&account_id, contract)
+                    .with_model_code(model.as_ref())
+                    .subscribe()
                     .await
                     .unwrap_or_else(|_| panic!("PnL Single subscription failed for {}", test_case.description));
                 drop(sub);

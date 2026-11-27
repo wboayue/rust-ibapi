@@ -6,7 +6,7 @@ use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 fn stock_builder_basic() {
     let stock = Contract::stock("AAPL").build();
     assert_eq!(stock.symbol, Symbol::from("AAPL"));
-    assert_eq!(stock.security_type, SecurityType::Stock);
+    assert_eq!(stock.security_type, Some(SecurityType::Stock));
     assert_eq!(stock.exchange, Exchange::from("SMART"));
     assert_eq!(stock.currency, Currency::from("USD"));
 }
@@ -32,7 +32,7 @@ fn call_option_builder() {
     let call = Contract::call("AAPL").strike(150.0).expires_on(2024, 12, 20).build().unwrap();
 
     assert_eq!(call.symbol, Symbol::from("AAPL"));
-    assert_eq!(call.security_type, SecurityType::Option);
+    assert_eq!(call.security_type, Some(SecurityType::Option));
     assert_eq!(call.strike, 150.0);
     assert_eq!(call.right, Some(OptionRight::Call));
     assert_eq!(call.last_trade_date_or_contract_month, Some("20241220".parse().unwrap()));
@@ -53,7 +53,7 @@ fn put_option_builder() {
         .unwrap();
 
     assert_eq!(put.symbol, Symbol::from("SPY"));
-    assert_eq!(put.security_type, SecurityType::Option);
+    assert_eq!(put.security_type, Some(SecurityType::Option));
     assert_eq!(put.strike, 450.0);
     assert_eq!(put.right, Some(OptionRight::Put));
     assert_eq!(put.last_trade_date_or_contract_month, Some("20240315".parse().unwrap()));
@@ -126,7 +126,7 @@ fn futures_builder_with_manual_expiry() {
         .build();
 
     assert_eq!(futures.symbol, Symbol::from("ES"));
-    assert_eq!(futures.security_type, SecurityType::Future);
+    assert_eq!(futures.security_type, Some(SecurityType::Future));
     assert_eq!(futures.last_trade_date_or_contract_month, Some("202403".parse().unwrap()));
     assert_eq!(futures.exchange, Exchange::from("CME"));
     assert_eq!(futures.currency, Currency::from("USD"));
@@ -140,7 +140,7 @@ fn futures_builder_any_month() {
     let query = Contract::futures("ES").on_exchange("NYMEX").in_currency("EUR").any_month().build();
 
     assert_eq!(query.symbol, Symbol::from("ES"));
-    assert_eq!(query.security_type, SecurityType::Future);
+    assert_eq!(query.security_type, Some(SecurityType::Future));
     assert_eq!(query.last_trade_date_or_contract_month, None);
     assert_eq!(query.exchange, Exchange::from("NYMEX"));
     assert_eq!(query.currency, Currency::from("EUR"));
@@ -190,7 +190,7 @@ fn continuous_futures_builder() {
         .build();
 
     assert_eq!(es.symbol, Symbol::from("ES"));
-    assert_eq!(es.security_type, SecurityType::ContinuousFuture);
+    assert_eq!(es.security_type, Some(SecurityType::ContinuousFuture));
     assert_eq!(es.exchange, Exchange::from("CME"));
     assert_eq!(es.currency, Currency::from("USD"));
     assert_eq!(es.multiplier, "50");
@@ -218,7 +218,7 @@ fn forex_builder() {
     let forex = Contract::forex("EUR", "USD").on_exchange("IDEALPRO").build();
 
     assert_eq!(forex.symbol, Symbol::from("EUR"));
-    assert_eq!(forex.security_type, SecurityType::ForexPair);
+    assert_eq!(forex.security_type, Some(SecurityType::ForexPair));
     assert_eq!(forex.exchange, Exchange::from("IDEALPRO"));
     assert_eq!(forex.currency, Currency::from("USD"));
 }
@@ -228,7 +228,7 @@ fn crypto_builder() {
     let btc = Contract::crypto("BTC").on_exchange("PAXOS").in_currency("USD").build();
 
     assert_eq!(btc.symbol, Symbol::from("BTC"));
-    assert_eq!(btc.security_type, SecurityType::Crypto);
+    assert_eq!(btc.security_type, Some(SecurityType::Crypto));
     assert_eq!(btc.exchange, Exchange::from("PAXOS"));
     assert_eq!(btc.currency, Currency::from("USD"));
 }
@@ -238,7 +238,7 @@ fn index_contract() {
     // SPX should get CBOE and USD
     let spx = Contract::index("SPX");
     assert_eq!(spx.symbol, Symbol::from("SPX"));
-    assert_eq!(spx.security_type, SecurityType::Index);
+    assert_eq!(spx.security_type, Some(SecurityType::Index));
     assert_eq!(spx.exchange, Exchange::from("CBOE"));
     assert_eq!(spx.currency, Currency::from("USD"));
 
@@ -270,7 +270,7 @@ fn spread_builder_long_calendar() {
         .build()
         .unwrap();
 
-    assert_eq!(spread.security_type, SecurityType::Spread);
+    assert_eq!(spread.security_type, Some(SecurityType::Spread));
     assert_eq!(spread.combo_legs.len(), 2);
     assert_eq!(spread.combo_legs[0].contract_id, 12345);
     assert_eq!(spread.combo_legs[0].action, LegAction::Sell);
@@ -299,7 +299,7 @@ fn spread_builder_short_calendar() {
 fn spread_builder_vertical() {
     let spread = Contract::spread("AAPL").vertical(11111, 22222).build().unwrap();
 
-    assert_eq!(spread.security_type, SecurityType::Spread);
+    assert_eq!(spread.security_type, Some(SecurityType::Spread));
     assert_eq!(spread.combo_legs.len(), 2);
     assert_eq!(spread.combo_legs[0].contract_id, 11111);
     assert_eq!(spread.combo_legs[0].action, LegAction::Buy);
@@ -323,7 +323,7 @@ fn spread_builder_custom_legs() {
         .build()
         .unwrap();
 
-    assert_eq!(spread.security_type, SecurityType::Spread);
+    assert_eq!(spread.security_type, Some(SecurityType::Spread));
     assert_eq!(spread.combo_legs.len(), 3);
 
     assert_eq!(spread.combo_legs[0].contract_id, 10001);
@@ -450,9 +450,9 @@ fn spread_presets_set_legs() {
             "butterfly",
             |s| {
                 s.butterfly(ButterflyLegs {
-                    lower: 100.into(),
-                    middle: 105.into(),
-                    upper: 110.into(),
+                    lower: 100,
+                    middle: 105,
+                    upper: 110,
                 })
             },
             vec![(100, LegAction::Buy, 1), (105, LegAction::Sell, 2), (110, LegAction::Buy, 1)],
@@ -461,10 +461,10 @@ fn spread_presets_set_legs() {
             "iron_condor",
             |s| {
                 s.iron_condor(IronCondorLegs {
-                    long_put: 100.into(),
-                    short_put: 105.into(),
-                    short_call: 110.into(),
-                    long_call: 115.into(),
+                    long_put: 100,
+                    short_put: 105,
+                    short_call: 110,
+                    long_call: 115,
                 })
             },
             // Long call before short call: the leg order of two chained `vertical`s,
@@ -480,9 +480,9 @@ fn spread_presets_set_legs() {
             "collar",
             |s| {
                 s.collar(CollarLegs {
-                    stock: 265598.into(),
-                    put: 100.into(),
-                    call: 101.into(),
+                    stock: 265598,
+                    put: 100,
+                    call: 101,
                     shares_per_contract: 100,
                 })
             },
@@ -493,9 +493,9 @@ fn spread_presets_set_legs() {
             "collar_mini",
             |s| {
                 s.collar(CollarLegs {
-                    stock: 76792991.into(),
-                    put: 200.into(),
-                    call: 201.into(),
+                    stock: 76792991,
+                    put: 200,
+                    call: 201,
                     shares_per_contract: 10,
                 })
             },
@@ -505,14 +505,14 @@ fn spread_presets_set_legs() {
 
     for (name, preset, expected) in cases {
         let spread = preset(Contract::spread("AAPL")).build().unwrap();
-        assert_eq!(spread.security_type, SecurityType::Spread, "{name}");
+        assert_eq!(spread.security_type, Some(SecurityType::Spread), "{name}");
         assert_eq!(leg_tuples(&spread), expected, "{name}");
     }
 }
 
 #[test]
 fn spread_builder_accepts_contract_id() {
-    use crate::accounts::types::ContractId;
+    use crate::contracts::ContractId;
 
     let spread = Contract::spread("AAPL")
         .vertical(ContractId(11111), ContractId(22222))

@@ -12,7 +12,7 @@
 
 use time::Date;
 
-use crate::accounts::types::ContractId;
+use crate::contracts::ContractId;
 use crate::wsh::{AutoFill, WshEventData};
 use crate::Error;
 
