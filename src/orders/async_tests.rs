@@ -1594,8 +1594,8 @@ async fn next_valid_order_id_then_submit_order_does_not_reissue_the_id() {
 }
 
 /// `Error::is_unsent` is `true` only when the failing order call wrote nothing. The converse
-/// doesn't hold: a request refused while the client reconnects writes nothing yet is `false`,
-/// because the same error also ends a write cut off mid-frame.
+/// doesn't hold: a request refused after the client gave up or shut down writes nothing yet is
+/// `false`, because `ConnectionFailed` and `Shutdown` also end writes already in progress.
 #[tokio::test]
 async fn is_unsent_implies_the_order_call_wrote_nothing() {
     use futures::future::BoxFuture;
@@ -1606,7 +1606,7 @@ async fn is_unsent_implies_the_order_call_wrote_nothing() {
         Succeed,
         /// Recorded, then fails: the request may have reached TWS.
         Fail,
-        /// Fails without recording, as a request refused while reconnecting.
+        /// Fails with `Reconnecting` without recording, as a request refused while reconnecting.
         Refuse,
     }
     type Call = for<'a> fn(&'a Client) -> BoxFuture<'a, Result<(), Error>>;
@@ -1694,7 +1694,7 @@ async fn is_unsent_implies_the_order_call_wrote_nothing() {
                 client.submit_oca_orders("G", OcaType::CancelWithBlock, orders).await.map(drop)
             })
         }),
-        ("submit_order, refused while reconnecting", Sends::Refuse, false, |client| {
+        ("submit_order, refused while reconnecting", Sends::Refuse, true, |client| {
             Box::pin(async move { client.submit_order(41, &aapl(), &limit()).await })
         }),
     ];

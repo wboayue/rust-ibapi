@@ -1648,3 +1648,41 @@ compile. Write `SecurityType::Stock` where that was the intent.
 `Contract` derives `Serialize` / `Deserialize`. An unset field serializes as `null`. A set field
 is the wire code (`"STK"`, §47) as in 5.x, so 5.x JSON with a code still deserializes; one with
 `""` doesn't.
+
+### 55. A request refused while the client reconnects is `Error::Reconnecting`
+
+While the connection is down and the client reconnects, every request is refused before anything
+is written. Before 6.0 that refusal was `Error::ConnectionReset`, the same error a write cut off by
+the dropped connection returns, so a caller couldn't tell "not sent" from "may have been sent".
+It is now the new `Error::Reconnecting`:
+
+| Error | Means |
+|---|---|
+| `Error::Reconnecting` | refused before the write while the client reconnects; nothing reached TWS |
+| `Error::ConnectionReset` | the connection dropped: a stream or one-shot open at the time, or a write it cut off, which may have reached TWS |
+
+`is_connection_lost()` and `is_unsent()` both return `true` for `Reconnecting`, so code that
+branches through `is_connection_lost()` (wait with `wait_connected`, then retry or resubscribe)
+needs no change. A `match` on `Error::ConnectionReset` for a request call must also match
+`Error::Reconnecting`:
+
+```rust,ignore
+// before
+match client.submit_order(order_id, &contract, &order) {
+    Err(Error::ConnectionReset) => { /* sent or not? query open orders */ }
+    // ...
+}
+
+// 6.0
+match client.submit_order(order_id, &contract, &order) {
+    Err(Error::Reconnecting) => { /* not sent: wait_connected, then resend */ }
+    Err(Error::ConnectionReset) => { /* may have been sent: query open orders */ }
+    // ...
+}
+```
+
+One-shot requests (`server_time`, `managed_accounts`, `historical_data`, ...) retry on either
+error. A last attempt refused after an earlier attempt was written still returns
+`ConnectionReset`, since the earlier one may have reached TWS. Streams that were open when the
+connection dropped still end with `ConnectionReset`. Refusals after the reconnect gives up
+(`ConnectionFailed`) or after a shutdown (`Shutdown`) are unchanged.

@@ -754,8 +754,9 @@ impl Client {
     /// # Errors
     ///
     /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000
-    /// (reserved for request ids), [`Error::ConnectionReset`] if the connection is
-    /// down or drops during the wait, [`Error::Shutdown`] if the client shuts down.
+    /// (reserved for request ids), [`Error::Reconnecting`] if the connection is down,
+    /// [`Error::ConnectionReset`] if it drops during the wait, [`Error::Shutdown`] if the
+    /// client shuts down.
     ///
     /// # Examples
     ///

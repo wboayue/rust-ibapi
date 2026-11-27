@@ -111,9 +111,18 @@ pub enum Error {
     #[error("unrecognized IB Gateway timezone {0:?}; register a mapping with `ibapi::register_timezone_alias({0:?}, \"<IANA-name>\")` before connecting, or set `IBAPI_TIMEZONE_ALIASES={0}=<IANA-name>` in the environment. See https://github.com/wboayue/rust-ibapi/blob/main/docs/troubleshooting.md#gateway-time-zone. To request it as a built-in, file an issue at https://github.com/wboayue/rust-ibapi/issues")]
     UnsupportedTimeZone(String),
 
-    /// Connection was reset by TWS/Gateway.
+    /// The connection to TWS/Gateway dropped. Streams and one-shot requests open when it did
+    /// end with this, and so does a write it cut off, which may have reached TWS in part or
+    /// whole. The client reconnects on its own; a request refused while it does, before anything
+    /// is written, is [`Error::Reconnecting`] instead.
     #[error("ConnectionReset")]
     ConnectionReset,
+
+    /// A request refused, before anything was written, while the client reconnects to
+    /// TWS/Gateway: it certainly did not reach TWS. Call `Client::wait_connected`, then send it
+    /// again. Once the reconnect gives up, requests fail with [`Error::ConnectionFailed`] instead.
+    #[error("Reconnecting")]
+    Reconnecting,
 
     /// Operation was cancelled by user or system.
     #[error("Cancelled")]
@@ -370,7 +379,7 @@ impl Error {
     /// place and the client should reconnect, rather than retry the in-flight
     /// request.
     ///
-    /// Matches [`Error::ConnectionReset`] and connection-kind [`Error::Io`] errors
+    /// Matches [`Error::ConnectionReset`], [`Error::Reconnecting`] and connection-kind [`Error::Io`] errors
     /// (broken pipe, unexpected EOF, connection reset/abort) — recoverable losses
     /// where re-establishing the connection is the right response — plus
     /// [`Error::InvalidFrame`], where the socket is still open but the framing has
@@ -386,7 +395,7 @@ impl Error {
     /// The client reconnects on its own, and streams open when the connection
     /// dropped end with [`Error::ConnectionReset`] as soon as it does, before the
     /// reconnect starts. A request sent while it is still reconnecting is refused
-    /// with `ConnectionReset` too; once it gives up, requests fail with
+    /// with [`Error::Reconnecting`]; once it gives up, requests fail with
     /// `ConnectionFailed` instead. So on `true`, call `Client::wait_connected`
     /// before resubscribing: it returns once the session is back, or with
     /// `ConnectionFailed` / `Shutdown` if it never will be.
@@ -422,7 +431,7 @@ impl Error {
                 io_err.kind(),
                 ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe
             ),
-            Error::ConnectionReset | Error::InvalidFrame(_) => true,
+            Error::ConnectionReset | Error::Reconnecting | Error::InvalidFrame(_) => true,
             Error::OrdersPartiallySent { source, .. } => source.is_connection_lost(),
             _ => false,
         }
@@ -431,8 +440,8 @@ impl Error {
     /// Returns `true` only for errors raised by a check before anything was written, so the
     /// request certainly did not reach TWS. `false` means it may have: an order call must then ask
     /// TWS (open orders, executions, the order update stream) what became of it. Some `false`
-    /// errors also come before any write (see [`ConnectionReset`](Error::ConnectionReset) below),
-    /// so `false` is "unknown", not "sent".
+    /// errors also come before any write (see [`ConnectionFailed`](Error::ConnectionFailed)
+    /// below), so `false` is "unknown", not "sent".
     ///
     /// Written for the calls that place, modify, cancel or exercise orders: `place_order`,
     /// `submit_order`, `cancel_order`, `cancel_order_with`, `global_cancel`, `global_cancel_with`,
@@ -450,12 +459,14 @@ impl Error {
     /// | [`ServerVersion`](Error::ServerVersion) | an order field the connected server does not support |
     /// | [`AlreadySubscribed`](Error::AlreadySubscribed) | a second order update stream (not an order call), which writes nothing |
     /// | [`AccountUpdatesInUse`](Error::AccountUpdatesInUse) | the account-updates slot check (not an order call), before the request is written |
+    /// | [`Reconnecting`](Error::Reconnecting) | the send gate, while the client reconnects |
     ///
     /// `false` for every other variant, including those raised both before and after a write:
     ///
-    /// - [`ConnectionReset`](Error::ConnectionReset) refuses a request while the client
-    ///   reconnects, but is also what a write cut off by a dropped connection returns, when part
-    ///   of the frame may have gone out.
+    /// - [`ConnectionReset`](Error::ConnectionReset) is what a write cut off by a dropped
+    ///   connection returns, when part of the frame may have gone out. A one-shot request
+    ///   retried after a reset also returns it when its last attempt was refused while
+    ///   reconnecting, since an earlier attempt was written.
     /// - [`ConnectionFailed`](Error::ConnectionFailed), [`Shutdown`](Error::Shutdown) and
     ///   [`Timeout`](Error::Timeout) refuse a request up front, but a closed socket fails a
     ///   pending write with `Shutdown`, and a one-shot request retried after a reset returns
@@ -487,6 +498,7 @@ impl Error {
     /// }
     ///
     /// assert_eq!(report(&Error::InvalidArgument("buffer_limit must be above zero".into())), "not sent");
+    /// assert_eq!(report(&Error::Reconnecting), "not sent");
     /// assert_eq!(report(&Error::ConnectionReset), "unknown: query the order");
     /// ```
     pub fn is_unsent(&self) -> bool {
@@ -496,7 +508,8 @@ impl Error {
             | Error::OrderIdInRequestRange { .. }
             | Error::ServerVersion { .. }
             | Error::AlreadySubscribed
-            | Error::AccountUpdatesInUse { .. } => true,
+            | Error::AccountUpdatesInUse { .. }
+            | Error::Reconnecting => true,
             Error::Io(_)
             | Error::ParseTime(_)
             | Error::Parse { .. }
@@ -564,6 +577,7 @@ impl Clone for Error {
             Error::ClientIdInUse { client_id } => Error::ClientIdInUse { client_id: *client_id },
             Error::UnsupportedTimeZone(s) => Error::UnsupportedTimeZone(s.clone()),
             Error::ConnectionReset => Error::ConnectionReset,
+            Error::Reconnecting => Error::Reconnecting,
             Error::Cancelled => Error::Cancelled,
             Error::Shutdown => Error::Shutdown,
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),

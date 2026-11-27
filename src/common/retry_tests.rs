@@ -157,6 +157,46 @@ mod sync_tests {
         assert_eq!(call_count, 1, "no attempt after the session was reported gone");
         assert_eq!(waiter.waits(), 1);
     }
+
+    /// A refusal while reconnecting is retried like a reset. When retries run out, the call
+    /// reports `Reconnecting` (nothing written) only if no attempt ended in a reset; otherwise
+    /// an earlier attempt may have reached TWS, so it reports `ConnectionReset`.
+    #[test]
+    fn retry_reports_a_last_refusal_by_whether_an_earlier_attempt_was_written() {
+        let cases = [
+            (
+                "refusals retried until the session is back",
+                vec![Error::Reconnecting, Error::Reconnecting],
+                3,
+                Ok(42),
+            ),
+            (
+                "only refusals: nothing was written",
+                vec![Error::Reconnecting, Error::Reconnecting],
+                1,
+                Err("Reconnecting"),
+            ),
+            (
+                "reset, then a refusal: the first attempt was written",
+                vec![Error::ConnectionReset, Error::Reconnecting],
+                1,
+                Err("ConnectionReset"),
+            ),
+            (
+                "refusal, then a reset",
+                vec![Error::Reconnecting, Error::ConnectionReset],
+                1,
+                Err("ConnectionReset"),
+            ),
+        ];
+        for (label, attempts, max_retries, expected) in cases {
+            let attempts = RefCell::new(attempts.into_iter());
+            let waiter = TestWaiter::reconnecting();
+            let result =
+                blocking::retry_on_connection_reset_with_limit(&waiter, None, || attempts.borrow_mut().next().map_or(Ok(42), Err), max_retries);
+            assert_eq!(result.map_err(|e| e.to_string()), expected.map_err(str::to_string), "{label}");
+        }
+    }
 }
 
 #[cfg(feature = "async")]
@@ -360,5 +400,51 @@ mod async_tests {
         assert!(matches!(result.unwrap_err(), Error::Shutdown));
         assert_eq!(*call_count.lock().unwrap(), 1, "no attempt after the session was reported gone");
         assert_eq!(waiter.waits(), 1);
+    }
+
+    /// Async sibling of the sync test of the same name.
+    #[tokio::test]
+    async fn retry_reports_a_last_refusal_by_whether_an_earlier_attempt_was_written() {
+        let cases = [
+            (
+                "refusals retried until the session is back",
+                vec![Error::Reconnecting, Error::Reconnecting],
+                3,
+                Ok(42),
+            ),
+            (
+                "only refusals: nothing was written",
+                vec![Error::Reconnecting, Error::Reconnecting],
+                1,
+                Err("Reconnecting"),
+            ),
+            (
+                "reset, then a refusal: the first attempt was written",
+                vec![Error::ConnectionReset, Error::Reconnecting],
+                1,
+                Err("ConnectionReset"),
+            ),
+            (
+                "refusal, then a reset",
+                vec![Error::Reconnecting, Error::ConnectionReset],
+                1,
+                Err("ConnectionReset"),
+            ),
+        ];
+        for (label, attempts, max_retries, expected) in cases {
+            let attempts = Mutex::new(attempts.into_iter());
+            let waiter = TestWaiter::reconnecting();
+            let result = retry_on_connection_reset_with_limit(
+                &waiter,
+                None,
+                || {
+                    let next = attempts.lock().unwrap().next();
+                    async move { next.map_or(Ok(42), Err) }
+                },
+                max_retries,
+            )
+            .await;
+            assert_eq!(result.map_err(|e| e.to_string()), expected.map_err(str::to_string), "{label}");
+        }
     }
 }

@@ -238,6 +238,7 @@ fn clone_preserves_unit_variants() {
     for variant in [
         Error::ConnectionFailed,
         Error::ConnectionReset,
+        Error::Reconnecting,
         Error::Cancelled,
         Error::Shutdown,
         Error::UnexpectedEndOfStream,
@@ -343,6 +344,10 @@ fn error_is_non_exhaustive() {
 #[test]
 fn is_connection_lost_true_for_connection_variants() {
     assert!(Error::ConnectionReset.is_connection_lost());
+    assert!(
+        Error::Reconnecting.is_connection_lost(),
+        "a refusal while reconnecting: wait, then resend"
+    );
 
     // The socket is still open, but the framing has desynchronized and there is
     // no delimiter to re-anchor on — reconnecting is the only recovery, so the
@@ -417,6 +422,7 @@ fn is_unsent_only_for_errors_raised_before_a_write() {
         (Error::ClientIdInUse { client_id: 7 }, false),
         (Error::UnsupportedTimeZone("US/Foo".into()), false),
         (Error::ConnectionReset, false),
+        (Error::Reconnecting, true),
         (Error::Cancelled, false),
         (Error::Shutdown, false),
         (Error::unexpected_response(&response), false),

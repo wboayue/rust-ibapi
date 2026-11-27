@@ -172,7 +172,7 @@ fn read_and_write_lock_recover_from_a_poisoned_rwlock() {
 fn session_state_verdicts() {
     let cases = [
         (SessionState::Connected, None, None),
-        (SessionState::Disconnected, Some("ConnectionReset"), None),
+        (SessionState::Disconnected, Some("Reconnecting"), None),
         (SessionState::ShutDown, Some("Shutdown"), Some("Shutdown")),
         (SessionState::Failed, Some("ConnectionFailed"), Some("ConnectionFailed")),
     ];

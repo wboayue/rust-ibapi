@@ -489,7 +489,7 @@ See: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/avail
 ### Connection Errors
 ```rust
 // The client reconnects on its own. A request sent while the connection is
-// down is refused with Error::ConnectionReset, which is_connection_lost()
+// down is refused with Error::Reconnecting, which is_connection_lost()
 // matches. wait_connected() blocks until the session is back, or fails with
 // Error::ConnectionFailed once the reconnect gives up (Error::Shutdown after
 // a shutdown); later requests then fail with that same error.
