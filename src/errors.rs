@@ -111,9 +111,18 @@ pub enum Error {
     #[error("unrecognized IB Gateway timezone {0:?}; register a mapping with `ibapi::register_timezone_alias({0:?}, \"<IANA-name>\")` before connecting, or set `IBAPI_TIMEZONE_ALIASES={0}=<IANA-name>` in the environment. See https://github.com/wboayue/rust-ibapi/blob/main/docs/troubleshooting.md#gateway-time-zone. To request it as a built-in, file an issue at https://github.com/wboayue/rust-ibapi/issues")]
     UnsupportedTimeZone(String),
 
-    /// Connection was reset by TWS/Gateway.
+    /// The connection to TWS/Gateway dropped. Streams and one-shot requests that were open when
+    /// it dropped end with this, as does a write it cut off, which may have reached TWS in part
+    /// or whole. The client reconnects on its own; a request refused before the write while it
+    /// reconnects is [`Error::Reconnecting`] instead.
     #[error("ConnectionReset")]
     ConnectionReset,
+
+    /// A request refused, before anything was written, while the client reconnects to
+    /// TWS/Gateway: it certainly did not reach TWS. Call `Client::wait_connected`, then send it
+    /// again. Once the reconnect gives up, requests fail with [`Error::ConnectionFailed`] instead.
+    #[error("Reconnecting")]
+    Reconnecting,
 
     /// Operation was cancelled by user or system.
     #[error("Cancelled")]
@@ -223,11 +232,15 @@ pub enum Error {
 
     /// A multi-order submit (`submit_oca_orders`, a bracket's `submit_all`) stopped partway
     /// because sending one order failed with `source`. Every order passed its checks before the
-    /// first was sent, so `source` is a transport error, such as [`Error::ConnectionReset`].
+    /// first was sent, so `source` is a transport error, such as [`Error::ConnectionReset`] or
+    /// [`Error::Reconnecting`].
     ///
     /// The orders in `sent` may be at TWS: the ones written before the failure, and last, the one
-    /// whose write failed, which may still have arrived. Cancel them by id after reconnecting with
-    /// the same client id; a cancel for one that never arrived draws error 10147 and does nothing.
+    /// whose write failed, which may still have arrived. A send refused before writing
+    /// ([`Error::Reconnecting`]) puts its order in `not_sent` instead, and a submit whose first
+    /// send is refused returns the refusal itself, since nothing was sent. Cancel the `sent`
+    /// orders by id after reconnecting with the same client id; a cancel for one that never
+    /// arrived draws error 10147 and does nothing.
     /// When `source` is [`Error::Shutdown`] or [`Error::ConnectionFailed`], no reconnect follows
     /// on this client: cancel them from a new connection with the same client id.
     /// A bracket's parent and take-profit are held at TWS until the stop-loss transmits, and
@@ -235,7 +248,7 @@ pub enum Error {
     /// orders in `not_sent` were never written. Both lists are in submit order.
     #[error("{} of {} orders may have been sent before the submit stopped: {source}", .sent.len(), .sent.len() + .not_sent.len())]
     OrdersPartiallySent {
-        /// Ids of the orders that may be at TWS, in submit order; the last one's write failed.
+        /// Ids of the orders that may be at TWS, in submit order. Never empty.
         sent: Vec<i32>,
         /// Ids of the orders never written, in submit order.
         not_sent: Vec<i32>,
@@ -313,17 +326,31 @@ impl Error {
         }
     }
 
-    /// Build an [`Error::OrdersPartiallySent`] for a multi-order submit whose send of the
-    /// order at index `failed` in `ids` returned `source`: the orders up to and including it are
-    /// `sent` (its write may still have reached TWS), the rest `not_sent`.
+    /// The error for a multi-order submit whose send of the order at index `failed` in `ids`
+    /// returned `source`. A write that failed may still have reached TWS, so that order counts
+    /// as `sent`; a send refused before writing ([`source.is_unsent()`](Error::is_unsent), such as
+    /// [`Error::Reconnecting`]) did not, so it counts as `not_sent`. When that leaves nothing
+    /// sent, the refusal comes back as is: [`Error::OrdersPartiallySent`] always has a `sent` id.
     pub(crate) fn orders_partially_sent(ids: impl IntoIterator<Item = i32>, failed: usize, source: Error) -> Error {
         let mut sent: Vec<i32> = ids.into_iter().collect();
-        let not_sent = sent.split_off(failed + 1);
+        let first_unsent = if source.is_unsent() { failed } else { failed + 1 };
+        if first_unsent == 0 {
+            return source;
+        }
+        let not_sent = sent.split_off(first_unsent);
         Error::OrdersPartiallySent {
             sent,
             not_sent,
             source: Box::new(source),
         }
+    }
+
+    /// The connection is down but the client may bring it back: a reset
+    /// ([`Error::ConnectionReset`]) or a send refused while it reconnects
+    /// ([`Error::Reconnecting`]). The internal "session interrupted" set the one-shot retry,
+    /// `cancel_and_drain` and the cancel log share, so a new such variant joins them all at once.
+    pub(crate) fn is_session_interrupted(&self) -> bool {
+        matches!(self, Error::ConnectionReset | Error::Reconnecting)
     }
 
     /// Build an [`Error::Parse`] naming the field, for a field that is absent
@@ -370,7 +397,7 @@ impl Error {
     /// place and the client should reconnect, rather than retry the in-flight
     /// request.
     ///
-    /// Matches [`Error::ConnectionReset`] and connection-kind [`Error::Io`] errors
+    /// Matches [`Error::ConnectionReset`], [`Error::Reconnecting`] and connection-kind [`Error::Io`] errors
     /// (broken pipe, unexpected EOF, connection reset/abort) — recoverable losses
     /// where re-establishing the connection is the right response — plus
     /// [`Error::InvalidFrame`], where the socket is still open but the framing has
@@ -386,7 +413,7 @@ impl Error {
     /// The client reconnects on its own, and streams open when the connection
     /// dropped end with [`Error::ConnectionReset`] as soon as it does, before the
     /// reconnect starts. A request sent while it is still reconnecting is refused
-    /// with `ConnectionReset` too; once it gives up, requests fail with
+    /// with [`Error::Reconnecting`]; once it gives up, requests fail with
     /// `ConnectionFailed` instead. So on `true`, call `Client::wait_connected`
     /// before resubscribing: it returns once the session is back, or with
     /// `ConnectionFailed` / `Shutdown` if it never will be.
@@ -422,7 +449,7 @@ impl Error {
                 io_err.kind(),
                 ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe
             ),
-            Error::ConnectionReset | Error::InvalidFrame(_) => true,
+            Error::ConnectionReset | Error::Reconnecting | Error::InvalidFrame(_) => true,
             Error::OrdersPartiallySent { source, .. } => source.is_connection_lost(),
             _ => false,
         }
@@ -431,8 +458,8 @@ impl Error {
     /// Returns `true` only for errors raised by a check before anything was written, so the
     /// request certainly did not reach TWS. `false` means it may have: an order call must then ask
     /// TWS (open orders, executions, the order update stream) what became of it. Some `false`
-    /// errors also come before any write (see [`ConnectionReset`](Error::ConnectionReset) below),
-    /// so `false` is "unknown", not "sent".
+    /// errors also come before any write (see [`ConnectionFailed`](Error::ConnectionFailed)
+    /// below), so `false` is "unknown", not "sent".
     ///
     /// Written for the calls that place, modify, cancel or exercise orders: `place_order`,
     /// `submit_order`, `cancel_order`, `cancel_order_with`, `global_cancel`, `global_cancel_with`,
@@ -450,12 +477,14 @@ impl Error {
     /// | [`ServerVersion`](Error::ServerVersion) | an order field the connected server does not support |
     /// | [`AlreadySubscribed`](Error::AlreadySubscribed) | a second order update stream (not an order call), which writes nothing |
     /// | [`AccountUpdatesInUse`](Error::AccountUpdatesInUse) | the account-updates slot check (not an order call), before the request is written |
+    /// | [`Reconnecting`](Error::Reconnecting) | the send gate, while the client reconnects |
     ///
     /// `false` for every other variant, including those raised both before and after a write:
     ///
-    /// - [`ConnectionReset`](Error::ConnectionReset) refuses a request while the client
-    ///   reconnects, but is also what a write cut off by a dropped connection returns, when part
-    ///   of the frame may have gone out.
+    /// - [`ConnectionReset`](Error::ConnectionReset) is what a write cut off by a dropped
+    ///   connection returns, when part of the frame may have gone out. A one-shot request
+    ///   retried after a reset also returns it when its last attempt was refused while
+    ///   reconnecting, since an earlier attempt may have been written.
     /// - [`ConnectionFailed`](Error::ConnectionFailed), [`Shutdown`](Error::Shutdown) and
     ///   [`Timeout`](Error::Timeout) refuse a request up front, but a closed socket fails a
     ///   pending write with `Shutdown`, and a one-shot request retried after a reset returns
@@ -465,7 +494,8 @@ impl Error {
     ///   sent back, so the request was sent.
     /// - [`OrdersPartiallySent`](Error::OrdersPartiallySent) reports a multi-order submit that
     ///   stopped partway; its `sent` orders may be at TWS. It is `false` whatever its `source`
-    ///   is, since `sent` always holds at least the order whose write failed.
+    ///   is, since `sent` is never empty: a submit whose first send is refused before writing
+    ///   returns that refusal, not this.
     ///
     /// The bracket builder's `submit_all` and `submit_oca_orders` check every order before
     /// sending any, so a `true` error from them means none of their orders was sent; a send
@@ -487,6 +517,7 @@ impl Error {
     /// }
     ///
     /// assert_eq!(report(&Error::InvalidArgument("buffer_limit must be above zero".into())), "not sent");
+    /// assert_eq!(report(&Error::Reconnecting), "not sent");
     /// assert_eq!(report(&Error::ConnectionReset), "unknown: query the order");
     /// ```
     pub fn is_unsent(&self) -> bool {
@@ -496,7 +527,8 @@ impl Error {
             | Error::OrderIdInRequestRange { .. }
             | Error::ServerVersion { .. }
             | Error::AlreadySubscribed
-            | Error::AccountUpdatesInUse { .. } => true,
+            | Error::AccountUpdatesInUse { .. }
+            | Error::Reconnecting => true,
             Error::Io(_)
             | Error::ParseTime(_)
             | Error::Parse { .. }
@@ -564,6 +596,7 @@ impl Clone for Error {
             Error::ClientIdInUse { client_id } => Error::ClientIdInUse { client_id: *client_id },
             Error::UnsupportedTimeZone(s) => Error::UnsupportedTimeZone(s.clone()),
             Error::ConnectionReset => Error::ConnectionReset,
+            Error::Reconnecting => Error::Reconnecting,
             Error::Cancelled => Error::Cancelled,
             Error::Shutdown => Error::Shutdown,
             Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
