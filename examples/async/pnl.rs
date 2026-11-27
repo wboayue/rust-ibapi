@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Request PnL updates
     println!("\nRequesting PnL updates for account {account}...");
-    let subscription = client.pnl(&account, None).await?;
+    let subscription = client.pnl(&account).subscribe().await?;
 
     // Process PnL updates
     println!("Waiting for PnL updates (press Ctrl+C to stop)...");
