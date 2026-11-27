@@ -9,7 +9,7 @@ triggers:
   - about to write Error::InvalidArgument(format!(..))
 symbols: [Error::Validation, Error::InvalidArgument, ValidationError, ibapi::builder]
 related: [builder-enum-coverage, param-budget]
-precedents: ["#1169", "#1249", "#PRA"]
+precedents: ["#1169", "#1249", "#1331"]
 ---
 
 Ask who fixes it. A runtime value a caller may correct (a quantity, price or strike, a date from
@@ -60,6 +60,6 @@ type parameters.
   zero / NaN strikes it used to pass. Review caught that zero was over-reach: TWS reads
   strike 0 as unset and resolves the contract from its id (`docs/wire-facts/contracts.md`),
   so zero still passes with a `contract_id` or `local_symbol`.
-- #PRA — `Duration`, `BarSize` and historical `WhatToShow` `FromStr` moved from `Error::Parse`
+- #1331 — `Duration`, `BarSize` and historical `WhatToShow` `FromStr` moved from `Error::Parse`
   to `ValidationError::InvalidField`: no decoder calls them, so the text is always caller input.
   The wire-enum parsers stayed on `Error::Parse`. `ValidationError` became `#[non_exhaustive]`.
