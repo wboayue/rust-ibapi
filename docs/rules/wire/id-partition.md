@@ -8,9 +8,9 @@ triggers:
   - adding a request that allocates a request id
   - routing an inbound frame or error by its id
   - adding an Order field that carries another order's id
-symbols: [REQUEST_ID_FLOOR, RequestId, OrderId, WireId, WireId::classify, OrderId::checked, verify_and_reserve_order_ids, carried_order_ids, Client::mint_request_id]
+symbols: [REQUEST_ID_FLOOR, RequestId, OrderId, WireId, WireId::classify, OrderId::checked, verify_and_reserve_order_ids, prepare_place_order, prepare_place_orders, carried_order_ids, Client::mint_request_id]
 related: [proto-aware-accessors, id-parameters]
-precedents: ["#789", "#1069", "#1231"]
+precedents: ["#789", "#1069", "#1231", "#1335"]
 ---
 
 An error frame carries one integer for both requests and orders, so the two id domains must
@@ -26,9 +26,11 @@ are crate-minted only; callers read a live request's id from `Subscription::requ
 
 **Accepting an order id from a caller** → take `impl Into<OrderId>` (`orders::OrderId`, public;
 `i32` converts), then check at the entry point. Anything that places an order goes through
-`verify::verify_and_reserve_order_ids(self.id_manager(), self.server_version(), order_id.into(), order)?`:
-it checks the id and every id the order carries (`parent_id`, the preset attached-order ids,
-since TWS routes frames for those orders by them), then moves the order-id generator past them
+`verify::prepare_place_order(self.id_manager(), self.server_version(), order_id.into(), contract, order)?`
+(a batch through `prepare_place_orders`, which prepares every order before any is sent). It runs
+`verify_and_reserve_order_ids`, then encodes the request. The check covers the id and every id
+the order carries (`parent_id`, the preset attached-order ids, since TWS routes frames for those
+orders by them); the reserve moves the order-id generator past them
 so a client-allocated id never repeats one already sent. A bare id (`cancel_order`) takes
 `order_id.into().checked()?`. Both return `Error::OrderIdInRequestRange`. Check where the id
 enters the crate, never at `OrderId` construction. An `Order` field naming another order's id
@@ -65,3 +67,7 @@ only on user demand. The general form, for every id newtype, is [id parameters](
 - #1231 — the generator ignored caller-chosen ids, so `next_valid_order_id()` then
   `submit_order(id, ..)` let the next builder `submit` reuse `id`. Checking and reserving merged
   into one entry point over one carried-id list; `next_valid_order_id` reserves what it returns.
+- #1335 — OCA and bracket submits checked one order, sent it, then checked the next, so an id
+  check failing on a later order left the earlier ones live. `prepare_place_order` (check, reserve
+  and encode) is now the shared entry point, and `prepare_place_orders` prepares a whole batch
+  before any of it is sent.
