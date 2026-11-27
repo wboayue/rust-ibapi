@@ -74,8 +74,8 @@ use crate::Error;
 /// The builder performs validation when [build](ContractBuilder::build) is called:
 /// - A symbol, local symbol, contract id or security id identifies the contract
 /// - A security type is required unless a contract id or security id identifies the contract
-/// - Option contracts require strike, right, and expiration date
-/// - Futures contracts require contract month
+/// - Option contracts require strike, right, and expiration date, and futures contracts a
+///   contract month, unless a contract id or local symbol identifies the contract
 /// - Strike prices cannot be negative
 #[derive(Clone, Debug, Default)]
 #[must_use = "ContractBuilder does nothing until you call .build()"]
@@ -482,14 +482,15 @@ impl ContractBuilder {
     ///   [`security_id_type`](Self::security_id_type)) is provided
     /// - [`security_type`](Self::security_type) is not set and neither a contract id nor a
     ///   security id identifies the contract. TWS rejects such a lookup with error 321
-    /// - Option contracts are missing required fields (strike, right, expiration)
-    /// - Futures contracts are missing contract month
+    /// - Option contracts are missing required fields (strike, right, expiration), or
+    ///   futures contracts the contract month, unless a contract id or local symbol
+    ///   identifies the contract
     ///
     /// [`Error::Validation`] if:
     /// - An option's strike is not positive and finite ([`ValidationError::InvalidPrice`](crate::builder::ValidationError::InvalidPrice)),
     ///   as [`OptionBuilder::build`](crate::contracts::OptionBuilder::build) checks. A
-    ///   strike of `0.0` passes when a `contract_id` or `local_symbol` identifies the
-    ///   contract: TWS reads it as unset
+    ///   strike of `0.0` passes when a non-zero `contract_id` or a `local_symbol` identifies
+    ///   the contract: TWS reads it as unset
     /// - The [`last_trade_date_or_contract_month`](Self::last_trade_date_or_contract_month)
     ///   text is neither `YYYYMMDD` nor `YYYYMM` ([`ValidationError::InvalidDate`](crate::builder::ValidationError::InvalidDate))
     pub fn build(self) -> Result<Contract, Error> {
@@ -513,31 +514,38 @@ impl ContractBuilder {
 
         let security_type = self.security_type;
 
+        // A contract id or local symbol names one contract, and TWS resolves it with no
+        // expiry, strike or right (docs/wire-facts/contracts.md).
+        let identified = has_contract_id || self.local_symbol.as_deref().is_some_and(|symbol| !symbol.is_empty());
+
         // Validate option-specific requirements
         if matches!(security_type, Some(SecurityType::Option | SecurityType::FuturesOption)) {
             match self.strike {
+                None if identified => {}
                 None => return Err(Error::InvalidArgument("Strike price is required for options".into())),
-                // Strike 0 is TWS's "unset": with a contract id or local symbol TWS resolves the
-                // contract from those (docs/wire-facts/contracts.md, ZC futures option).
-                Some(strike) if strike == 0.0 && (self.contract_id.is_some() || self.local_symbol.is_some()) => {}
+                // Strike 0 is TWS's "unset" (docs/wire-facts/contracts.md, ZC futures option).
+                Some(strike) if strike == 0.0 && identified => {}
                 Some(strike) => {
                     Strike::new(strike)?;
                 }
             }
 
-            if self.right.is_none() {
+            if !identified && self.right.is_none() {
                 return Err(Error::InvalidArgument(
                     "Right (OptionRight::Call or OptionRight::Put) is required for options".into(),
                 ));
             }
 
-            if self.last_trade_date_or_contract_month.is_none() {
+            if !identified && self.last_trade_date_or_contract_month.is_none() {
                 return Err(Error::InvalidArgument("Expiration date is required for options".into()));
             }
         }
 
         // Validate futures-specific requirements
-        if matches!(security_type, Some(SecurityType::Future | SecurityType::FuturesOption)) && self.last_trade_date_or_contract_month.is_none() {
+        if !identified
+            && matches!(security_type, Some(SecurityType::Future | SecurityType::FuturesOption))
+            && self.last_trade_date_or_contract_month.is_none()
+        {
             return Err(Error::InvalidArgument("Contract month is required for futures".into()));
         }
 
