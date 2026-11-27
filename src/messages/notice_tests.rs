@@ -257,7 +257,7 @@ fn notice_is_order_rejection() {
     let start = *ORDER_REJECTION_CODE_RANGE.start();
     let end = *ORDER_REJECTION_CODE_RANGE.end();
 
-    for code in [201, 203, 355, end - 1, end] {
+    for code in [201, 203, 355, end - 1, end, 103, 110, 461, 10244, 10311, 10317] {
         assert!(
             helpers::test_notice(code, "").is_order_rejection(),
             "code {code} should be order rejection"
@@ -270,6 +270,22 @@ fn notice_is_order_rejection() {
         assert!(
             !helpers::test_notice(code, "").is_order_rejection(),
             "code {code} should not be order rejection"
+        );
+    }
+}
+
+#[test]
+fn notice_is_order_change_rejection() {
+    for code in [104, 105, 10067, 10147, 10148, 10241, 10242] {
+        let notice = helpers::test_notice(code, "");
+        assert!(notice.is_order_change_rejection(), "code {code} should be an order change rejection");
+        assert!(notice.is_error(), "code {code} should still end the request");
+        assert_eq!(notice.log_level(), log::Level::Error, "code {code}");
+    }
+    for code in [103, 110, 161, 201, 202, 10149] {
+        assert!(
+            !helpers::test_notice(code, "").is_order_change_rejection(),
+            "code {code} should not be an order change rejection"
         );
     }
 }
@@ -308,6 +324,7 @@ fn notice_category_predicates_are_disjoint() {
                 (notice.is_system_message(), NoticeCategory::SystemMessage),
                 (notice.is_request_error(), NoticeCategory::RequestError),
                 (notice.is_order_rejection(), NoticeCategory::OrderRejection),
+                (notice.is_order_change_rejection(), NoticeCategory::OrderChangeRejection),
             ]
             .into_iter()
             .filter_map(|(hit, category)| hit.then_some(category))
@@ -346,6 +363,21 @@ fn notice_category_partition() {
         (10090, NoticeCategory::DataAdvisory),
         (10091, NoticeCategory::DataAdvisory),
         (10167, NoticeCategory::DataAdvisory),
+        (103, NoticeCategory::OrderRejection),            // duplicate order id: no order created
+        (110, NoticeCategory::OrderRejection),            // price off the minimum tick
+        (10244, NoticeCategory::OrderRejection),          // cash quantity not allowed
+        (10317, NoticeCategory::OrderRejection),          // cash quantity off its minimum variation
+        (461, NoticeCategory::OrderRejection),            // size not a multiple of the board lot
+        (10311, NoticeCategory::OrderRejection),          // direct routing refused by a precautionary setting
+        (104, NoticeCategory::OrderChangeRejection),      // modify of a finished order
+        (105, NoticeCategory::OrderChangeRejection),      // modify changes side or contract
+        (10067, NoticeCategory::OrderChangeRejection),    // trailing stop price changed alone
+        (10241, NoticeCategory::OrderChangeRejection),    // modify of a cash-quantity order
+        (10242, NoticeCategory::OrderChangeRejection),    // modify of a fractional order
+        (10147, NoticeCategory::OrderChangeRejection),    // cancel of an order not found
+        (10148, NoticeCategory::OrderChangeRejection),    // cancel of a finished order
+        (161, NoticeCategory::Error),                     // also follows a cancel that ended the order
+        (10318, NoticeCategory::Error),                   // not verified against a cancel
         (ORDER_PRESET_TIF_CODE, NoticeCategory::Warning), // 10349: TWS goes on with the order
         (ORDER_PRESET_TIF_CODE + 1, NoticeCategory::Error),
         (100, NoticeCategory::Error),

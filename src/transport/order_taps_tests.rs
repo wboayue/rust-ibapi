@@ -137,7 +137,7 @@ fn first_rejection_is_kept() {
     let (receiver, _lease) = status_stream(&taps, 7);
     next_rejection(&receiver);
 
-    reject(&taps, 7, 10147);
+    reject(&taps, 7, 103);
 
     assert!(receiver.try_recv().is_err(), "no second rejection");
     assert_eq!(next_rejection(&status_stream(&taps, 7).0).code, 110);
@@ -151,6 +151,23 @@ fn status_after_rejection_replaces_it() {
     publish(&taps, 7, OrderStatusKind::Inactive);
 
     assert_eq!(next_response(&status_stream(&taps, 7).0).order_id(), Some(7));
+}
+
+#[test]
+fn refused_cancel_or_modify_is_not_a_rejection() {
+    let taps = taps();
+    let (open, _lease) = status_stream(&taps, 7);
+
+    // A cancel of an order filled before this connection (10148), or of an id
+    // with no order (10147), and a refused modify (105) change nothing.
+    for code in [10148, 10147, 105] {
+        reject(&taps, 7, code);
+    }
+
+    assert!(open.try_recv().is_err(), "nothing reaches an open stream");
+    assert!(status_stream(&taps, 7).0.try_recv().is_err(), "nothing starts a later stream");
+    reject(&taps, 7, 110);
+    assert_eq!(next_rejection(&open).code, 110, "a rejection still follows");
 }
 
 #[test]

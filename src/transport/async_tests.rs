@@ -3014,6 +3014,21 @@ async fn order_status_stream_starts_with_earlier_rejection() {
     assert!(matches!(&item, Some(RoutedItem::Error(Error::Notice(n))) if n.code == 110), "{item:?}");
 }
 
+/// A refused cancel before any status (live: 10148 for an order that already
+/// filled) changed nothing, so it does not start a later stream: `wait_for_fill`
+/// goes on to look the order up instead of reporting a rejection.
+#[tokio::test]
+async fn order_status_stream_skips_earlier_refused_cancel() {
+    let (stream, bus) = make_bus();
+
+    stream.push_inbound(helpers::error_frame(7, 10148, "cannot be cancelled, state: Filled."));
+    bus.read_and_route_message().await.unwrap();
+
+    let mut statuses = bus.create_order_status_subscription(OrderId::from(7)).await.unwrap();
+    let item = tokio::time::timeout(TICK, statuses.next_routed()).await;
+    assert!(item.is_err(), "the refusal started the stream: {item:?}");
+}
+
 /// The stream gets a copy: the `place_order` subscription for the same order
 /// and the order-update stream still receive the frame.
 #[tokio::test]
