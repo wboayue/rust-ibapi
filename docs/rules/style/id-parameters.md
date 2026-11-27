@@ -9,7 +9,7 @@ triggers:
   - adding an id newtype, or a conversion on one
 symbols: [AccountId, ModelCode, ContractId, OrderId, BracketOrderIds, AttachedOrderIds]
 related: [id-partition, param-budget, validation-vs-invalid-argument]
-precedents: ["#1204", "#1337"]
+precedents: ["#1204", "#1337", "#1348"]
 ---
 
 Id **parameters** take `impl Into<XId>`, never `&XId` or the raw type; an optional id is a
@@ -56,20 +56,6 @@ Before #1250 it held only in parts: `pnl*` took `&AccountId` while `option_chain
 (#1204 aligned those), and `submit`/`submit_oca_orders`/`BracketOrderIds` returned `OrderId`,
 so callers wrote `ids.parent.0`.
 
-## Not yet conforming
-
-#1250's second PR moves these; delete this section when it lands.
-
-- `positions_multi`, `account_updates_multi`: `Option<&AccountId>, Option<&ModelCode>`.
-- `pnl`, `pnl_single`: `Option<&ModelCode>`.
-  Check: `grep -n "Option<&\(AccountId\|ModelCode\)>" src/accounts/{sync,async}.rs | grep -v ///`
-  (11 lines now).
-- `ContractBuilder::contract_id` takes `i32`.
-  Check: `grep -n "pub fn contract_id(mut self, contract_id: i32)" src/contracts/common/contract_builder.rs`
-  (1 line now).
-- `ButterflyLegs` / `IronCondorLegs` / `CollarLegs` fields are `ContractId`.
-  Check: `grep -n "pub [a-z_]*: ContractId" src/contracts/builders.rs` (10 lines now).
-
 ## Precedents
 
 - #1204 — id parameters across `option_chain`, `wsh_event_data_by_contract`, `historical_news`,
@@ -78,3 +64,6 @@ so callers wrote `ids.parent.0`.
   `AttachedOrderIds`; `as_i32_vec` dropped as a duplicate of `as_vec`); `ContractId` moved to
   `contracts`; conversion set completed on all four newtypes and pinned by a test. Integration
   crates held the only callers that unwrapped with `.0`.
+- #1348 — optional account / model-code filters moved from `Option<&XId>` arguments to builder
+  setters (`positions_multi`, `account_updates_multi`, `pnl`, `pnl_single`);
+  `ContractBuilder::contract_id` typed; spread leg fields raw. No exception left in the crate.

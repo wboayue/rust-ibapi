@@ -295,28 +295,28 @@ let straddle = Contract::spread("AAPL")
 // Butterfly: buy 1 lower, sell 2 middle, buy 1 upper
 let butterfly = Contract::spread("AAPL")
     .butterfly(ButterflyLegs {
-        lower: 30001.into(),
-        middle: 30002.into(),
-        upper: 30003.into(),
+        lower: 30001,
+        middle: 30002,
+        upper: 30003,
     })
     .build()?;
 
 // Iron condor: a put vertical plus a call vertical, legs named
 let iron_condor = Contract::spread("AAPL")
     .iron_condor(IronCondorLegs {
-        long_put: 10001.into(),
-        short_put: 10002.into(),
-        short_call: 10003.into(),
-        long_call: 10004.into(),
+        long_put: 10001,
+        short_put: 10002,
+        short_call: 10003,
+        long_call: 10004,
     })
     .build()?;
 
 // Collar: buy the stock, buy a put floor, sell a call cap
 let collar = Contract::spread("AAPL")
     .collar(CollarLegs {
-        stock: 265598.into(),
-        put: 10005.into(),
-        call: 10006.into(),
+        stock: 265598,
+        put: 10005,
+        call: 10006,
         shares_per_contract: 100,  // the option's deliverable; not always 100
     })
     .build()?;

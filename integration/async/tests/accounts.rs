@@ -2,7 +2,6 @@ use futures::StreamExt;
 use ibapi::accounts::types::{AccountGroup, AccountId};
 use ibapi::accounts::LedgerOnly;
 use ibapi::contracts::Contract;
-use ibapi::contracts::ContractId;
 use ibapi::orders::{Action, Order, OrderStatusKind, OrderType, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Client;
@@ -66,7 +65,12 @@ async fn positions_receives_data() {
 async fn positions_multi_receives_data() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
-    let mut subscription = client.positions_multi(Some(&account), None).await.expect("positions_multi failed");
+    let mut subscription = client
+        .positions_multi()
+        .account(&account)
+        .subscribe()
+        .await
+        .expect("positions_multi failed");
 
     let _item = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
 }
@@ -76,7 +80,7 @@ async fn positions_multi_receives_data() {
 async fn pnl_receives_updates() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
-    let mut subscription = client.pnl(&account, None).await.expect("pnl failed");
+    let mut subscription = client.pnl(&account).subscribe().await.expect("pnl failed");
 
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(10), subscription.next()).await;
     assert!(item.is_ok(), "pnl timed out");
@@ -131,7 +135,9 @@ async fn account_updates_multi() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
     let mut subscription = client
-        .account_updates_multi(Some(&account), None, LedgerOnly::Yes)
+        .account_updates_multi(LedgerOnly::Yes)
+        .account(&account)
+        .subscribe()
         .await
         .expect("account_updates_multi failed");
 
@@ -171,7 +177,7 @@ async fn pnl_single_receives_updates() {
     assert!(filled.is_ok(), "buy order did not fill within 5s");
 
     // Test pnl_single
-    let mut pnl_sub = client.pnl_single(&account, ContractId(con_id), None).await.expect("pnl_single failed");
+    let mut pnl_sub = client.pnl_single(&account, con_id).subscribe().await.expect("pnl_single failed");
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(10), pnl_sub.next()).await;
     assert!(item.is_ok(), "pnl_single timed out");
     assert!(item.unwrap().is_some(), "expected at least one PnL single update");

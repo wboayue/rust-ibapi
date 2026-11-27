@@ -538,3 +538,13 @@ fn expiry_sets_typed_value() {
         Some(Expiry::Month(ContractMonth::new(2026, 12).unwrap()))
     );
 }
+
+#[test]
+fn contract_id_takes_a_typed_or_raw_id() {
+    use crate::contracts::ContractId;
+
+    let typed = ContractBuilder::new().contract_id(ContractId(265598)).exchange("SMART").build().unwrap();
+    let raw = ContractBuilder::new().contract_id(265598).exchange("SMART").build().unwrap();
+    assert_eq!(typed.contract_id, 265598);
+    assert_eq!(typed, raw);
+}
