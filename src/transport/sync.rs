@@ -688,6 +688,15 @@ impl<S: Stream> TcpMessageBus<S> {
                 self.connection.notice_broadcaster.broadcast(notice);
                 self.shared_channels.fail_one_shot_channels(|| RoutedItem::Error(error.clone()));
             }
+            ErrorDisposition::NoticeAndOrders(notice, orders) => {
+                notice.log();
+                // An id with no live subscription (dropped, or placed by an
+                // earlier session) has nothing to tell; the broadcast covers it.
+                for order_id in &orders {
+                    let _ = self.orders.deliver(order_id, RoutedItem::Notice(notice.clone()));
+                }
+                self.connection.notice_broadcaster.broadcast(notice);
+            }
             ErrorDisposition::Route(id, item) => {
                 self.order_taps.publish_rejection(id, &item);
                 self.deliver(id, item, sent_to_update_stream);

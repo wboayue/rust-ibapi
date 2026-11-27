@@ -4671,3 +4671,90 @@ fn reset_starts_new_session_generation() {
 
     assert_eq!(bus.session_generation(), 2);
 }
+
+// ---- 1104: orders TWS has not created after a 1100 (#1322) ----
+
+const PENDING_ORDERS_MSG: &str = "Pending to create 2 orders: 55, 57";
+
+/// A request-less 1104 reaches the subscription of each order it names, one
+/// copy reaches the order-update stream, and the notice stream gets it. It is
+/// a system message, so an in-flight one-shot is not failed.
+#[test]
+fn pending_orders_notice_reaches_named_orders() -> Result<(), Error> {
+    use crate::messages::ORDER_CREATION_PENDING_CODE;
+
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+    let updates = bus.create_order_update_subscription()?;
+    let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
+    let order_55 = bus.send_order_request(OrderId::from(55), &[])?;
+    let order_57 = bus.send_order_request(OrderId::from(57), &[])?;
+    let order_60 = bus.send_order_request(OrderId::from(60), &[])?;
+
+    stream.push_inbound(error_frame(-1, ORDER_CREATION_PENDING_CODE, PENDING_ORDERS_MSG));
+    bus.dispatch()?;
+
+    for (id, sub) in [(55, &order_55), (57, &order_57)] {
+        match sub.next_timeout_routed(TICK) {
+            Some(RoutedItem::Notice(notice)) => assert_eq!(notice.code, ORDER_CREATION_PENDING_CODE, "order {id}"),
+            other => panic!("order {id}: expected RoutedItem::Notice, got {other:?}"),
+        }
+    }
+    assert!(order_60.try_next_routed().is_none(), "an order the 1104 doesn't name got it");
+
+    match updates.next_timeout_routed(TICK) {
+        Some(RoutedItem::Notice(notice)) => assert_eq!(notice.pending_order_ids(), Some(vec![55, 57])),
+        other => panic!("order-update stream: expected RoutedItem::Notice, got {other:?}"),
+    }
+    assert!(updates.try_next_routed().is_none(), "order-update stream got more than one copy");
+
+    assert!(one_shot.try_next_routed().is_none(), "1104 must not fail a one-shot shared request");
+    let notice = notice_stream.next_timeout(TICK).expect("notice stream missed the 1104");
+    assert!(notice.is_system_message());
+    Ok(())
+}
+
+/// A 1104 whose text names no readable id reaches the notice stream only.
+#[test]
+fn unreadable_pending_orders_notice_is_notice_only() -> Result<(), Error> {
+    use crate::messages::ORDER_CREATION_PENDING_CODE;
+
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+    let updates = bus.create_order_update_subscription()?;
+    let order_55 = bus.send_order_request(OrderId::from(55), &[])?;
+
+    stream.push_inbound(error_frame(-1, ORDER_CREATION_PENDING_CODE, "Ordres en attente de création"));
+    bus.dispatch()?;
+
+    assert!(order_55.try_next_routed().is_none(), "order got an unreadable 1104");
+    assert!(updates.try_next_routed().is_none(), "order-update stream got an unreadable 1104");
+    assert!(notice_stream.next_timeout(TICK).is_some(), "notice stream missed the 1104");
+    Ok(())
+}
+
+/// On the public subscription the 1104 is a notice, not the end: a later
+/// rejection on the order's own id (200, as TWS sent for order 57 in the
+/// paper probe) still arrives and ends it.
+#[test]
+fn pending_orders_notice_does_not_end_order_subscription() -> Result<(), Error> {
+    use crate::messages::ORDER_CREATION_PENDING_CODE;
+    use crate::subscriptions::SubscriptionItem;
+
+    let (stream, bus, subscription) = make_order_subscription(OrderId::from(57))?;
+
+    stream.push_inbound(error_frame(-1, ORDER_CREATION_PENDING_CODE, PENDING_ORDERS_MSG));
+    stream.push_inbound(error_frame(57, 200, "No security definition has been found for the request"));
+    bus.dispatch()?;
+    bus.dispatch()?;
+
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Notice(notice))) => assert_eq!(notice.code, ORDER_CREATION_PENDING_CODE),
+        other => panic!("expected the 1104 notice, got {other:?}"),
+    }
+    match subscription.next_timeout(TICK) {
+        Some(Err(Error::Notice(notice))) => assert_eq!(notice.code, 200),
+        other => panic!("expected the 200 rejection, got {other:?}"),
+    }
+    Ok(())
+}

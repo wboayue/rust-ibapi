@@ -379,6 +379,20 @@ impl Client {
     /// Submits an [`crate::orders::Order`] using [Client] for the given [Contract].
     /// Upon successful submission, the client will start receiving events related to the order's activity via the subscription, including order status updates and execution reports.
     ///
+    /// # Orders placed during an outage
+    ///
+    /// When TWS loses its connection to IB (notice 1100) the API socket stays up, and an order
+    /// placed around then can stop at `ApiPending` with no further status, even after
+    /// connectivity returns. TWS then sends notice 1104, "Pending to create N orders: …", and
+    /// the subscription of each order it names yields that notice as a
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem). It does not end
+    /// the subscription: TWS has neither created nor refused the order, and in paper probes a
+    /// named order was rejected later on its own id (error 200). Nor is the order unsent
+    /// ([`Error::is_unsent`]): it was written. After connectivity returns (1101 or 1102),
+    /// look the order up in `open_orders`, `completed_orders` and `executions` before
+    /// re-sending it. In the paper probes, an order placed before the 1100 never appeared
+    /// in them, and cancelling it drew 10147 (live: 2026-11-26).
+    ///
     /// # Arguments
     /// * `order_id` - ID for [`crate::orders::Order`]. Get next valid ID using [Client::next_order_id].
     ///   The client's order-ID generator moves past this ID and every ID the order carries
@@ -639,6 +653,9 @@ impl Client {
     ///   appears in the stream. Watch [`Self::notice_stream`] for the
     ///   connectivity notices (codes 1100 connectivity lost, 1101 restored
     ///   with data lost, 1102 restored with data maintained, 1300 socket reset).
+    ///   A 1104 that names orders TWS has not created yet also arrives on this stream, once
+    ///   per frame; [`Notice::pending_order_ids`](crate::Notice::pending_order_ids)
+    ///   reads its ids.
     /// - **Error.** An `Err` item ends the stream; every later call returns
     ///   `None`. A frame that fails to decode is a bug in TWS or this crate,
     ///   so it is surfaced rather than skipped.

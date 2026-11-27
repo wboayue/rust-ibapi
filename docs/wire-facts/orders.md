@@ -455,9 +455,15 @@ for 15 s, 2 min, 20 min (Wi-Fi) and 2 min (router uplink); AAPL BUY 1 LMT 1.00; 
   with 200 on its order id, 1.0 s and 21.0 s after it was placed.
 - The ids follow `": "` and are separated by `", "`, in English message text; the frame carries
   them nowhere else.
-- `Notice::pending_order_ids` reads the ids from that text.
+- `Notice::pending_order_ids` reads the ids from that text. The client delivers the 1104 to
+  each named order's `place_order` subscription and once to `order_update_stream`, as a notice
+  that ends neither, and it fails no in-flight request (#1322).
+- The 10147 is the probe's own cancel at the end, not part of the loss. Nothing else arrives
+  for a never-created order, so a caller learns of it only from the 1104.
 - **Not probed:** a 1104 without a 1100; an outage that ends in 1101; a named order TWS creates
-  later; TWS set to another language; IB Gateway; live accounts.
+  later; TWS set to another language; IB Gateway; live accounts; several API clients during one
+  outage, i.e. whether a client's 1104 lists only its own orders (order ids are per client id,
+  so another client's id would reach a same-numbered local order).
 
 ### `reqAllOpenOrders` raises the caller's next valid order id
 

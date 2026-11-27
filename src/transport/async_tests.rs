@@ -3285,3 +3285,95 @@ async fn reset_channels_starts_new_session_generation() {
 
     assert_eq!(bus.session_generation(), 2);
 }
+
+// ---- 1104: orders TWS has not created after a 1100 (#1322) ----
+
+const PENDING_ORDERS_MSG: &str = "Pending to create 2 orders: 55, 57";
+
+/// A request-less 1104 reaches the subscription of each order it names, one
+/// copy reaches the order-update stream, and the notice stream gets it. It is
+/// a system message, so an in-flight one-shot is not failed.
+#[tokio::test]
+async fn pending_orders_notice_reaches_named_orders() {
+    use crate::messages::ORDER_CREATION_PENDING_CODE;
+
+    let (stream, bus) = make_bus();
+    let mut notice_stream = bus.notice_subscribe();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+    let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
+    let mut order_55 = bus.send_order_request(OrderId::from(55), vec![]).await.unwrap();
+    let mut order_57 = bus.send_order_request(OrderId::from(57), vec![]).await.unwrap();
+    let mut order_60 = bus.send_order_request(OrderId::from(60), vec![]).await.unwrap();
+
+    stream.push_inbound(error_frame(-1, ORDER_CREATION_PENDING_CODE, PENDING_ORDERS_MSG));
+    bus.read_and_route_message().await.unwrap();
+
+    for (id, sub) in [(55, &mut order_55), (57, &mut order_57)] {
+        match next_routed(sub).await {
+            RoutedItem::Notice(notice) => assert_eq!(notice.code, ORDER_CREATION_PENDING_CODE, "order {id}"),
+            other => panic!("order {id}: expected RoutedItem::Notice, got {other:?}"),
+        }
+    }
+    assert!(try_next_routed(&mut order_60).await.is_none(), "an order the 1104 doesn't name got it");
+
+    match next_routed(&mut updates).await {
+        RoutedItem::Notice(notice) => assert_eq!(notice.pending_order_ids(), Some(vec![55, 57])),
+        other => panic!("order-update stream: expected RoutedItem::Notice, got {other:?}"),
+    }
+    assert!(
+        try_next_routed(&mut updates).await.is_none(),
+        "order-update stream got more than one copy"
+    );
+
+    assert!(one_shot.try_next_routed().is_none(), "1104 must not fail a one-shot shared request");
+    let notice = tokio::time::timeout(TICK, notice_stream.next()).await.unwrap().unwrap();
+    assert!(notice.is_system_message());
+}
+
+/// A 1104 whose text names no readable id reaches the notice stream only.
+#[tokio::test]
+async fn unreadable_pending_orders_notice_is_notice_only() {
+    use crate::messages::ORDER_CREATION_PENDING_CODE;
+
+    let (stream, bus) = make_bus();
+    let mut notice_stream = bus.notice_subscribe();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+    let mut order_55 = bus.send_order_request(OrderId::from(55), vec![]).await.unwrap();
+
+    stream.push_inbound(error_frame(-1, ORDER_CREATION_PENDING_CODE, "Ordres en attente de création"));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(try_next_routed(&mut order_55).await.is_none(), "order got an unreadable 1104");
+    assert!(
+        try_next_routed(&mut updates).await.is_none(),
+        "order-update stream got an unreadable 1104"
+    );
+    assert!(
+        tokio::time::timeout(TICK, notice_stream.next()).await.unwrap().is_some(),
+        "notice stream missed the 1104"
+    );
+}
+
+/// On the public subscription the 1104 is a notice, not the end: a later
+/// rejection on the order's own id (200, as TWS sent for order 57 in the
+/// paper probe) still arrives and ends it.
+#[tokio::test]
+async fn pending_orders_notice_does_not_end_order_subscription() {
+    use crate::messages::ORDER_CREATION_PENDING_CODE;
+
+    let (stream, bus, mut subscription) = make_order_subscription(OrderId::from(57)).await;
+
+    stream.push_inbound(error_frame(-1, ORDER_CREATION_PENDING_CODE, PENDING_ORDERS_MSG));
+    stream.push_inbound(error_frame(57, 200, "No security definition has been found for the request"));
+    bus.read_and_route_message().await.unwrap();
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => assert_eq!(notice.code, ORDER_CREATION_PENDING_CODE),
+        other => panic!("expected the 1104 notice, got {other:?}"),
+    }
+    match next_item(&mut subscription).await {
+        Some(Err(Error::Notice(notice))) => assert_eq!(notice.code, 200),
+        other => panic!("expected the 200 rejection, got {other:?}"),
+    }
+}

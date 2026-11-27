@@ -1654,3 +1654,41 @@ compile. Write `SecurityType::Stock` where that was the intent.
 `Contract` derives `Serialize` / `Deserialize`. An unset field serializes as `null`. A set field
 is the wire code (`"STK"`, §47) as in 5.x, so 5.x JSON with a code still deserializes; one with
 `""` doesn't.
+
+### 55. Notice 1104 is a system message and reaches the orders it names
+
+After a 1100 (connectivity between TWS and IB lost) TWS sends 1104, "Pending to create 2
+orders: 55, 57", with no request id. In 5.x it classified as `NoticeCategory::Error`, so it
+failed every one-shot request in flight (`next_valid_order_id`, `managed_accounts`,
+`server_time`, ...) with `Err(Error::Notice(..))`, and it reached only `notice_stream`. The
+orders it names stayed at `ApiPending` on their `place_order` subscriptions with no sign of
+the outage (#1322).
+
+In 6.0:
+
+- 1104 is in `SYSTEM_MESSAGE_CODES` (now `[i32; 5]`), so `Notice::category()` is
+  `NoticeCategory::SystemMessage`, `is_system_message()` is `true` and `is_error()` is `false`.
+  It fails no request.
+- The `place_order` subscription of each order it names yields it as
+  `SubscriptionItem::Notice`, and `order_update_stream` yields it once. Neither ends.
+  `Notice::pending_order_ids()` reads the ids.
+
+```rust,ignore
+// 5.x: watch the notice stream and parse the text yourself
+if notice.code == 1104 && notice.is_error() { /* ... */ }
+
+// 6.0: on the order's own subscription
+match item? {
+    SubscriptionItem::Notice(n) if n.code == ORDER_CREATION_PENDING_CODE => {
+        // TWS has not created this order. Once connectivity returns (1101/1102),
+        // look it up in open_orders / completed_orders / executions before re-sending.
+    }
+    SubscriptionItem::Notice(n) => println!("notice: {n}"),
+    SubscriptionItem::Data(event) => { /* ... */ }
+}
+```
+
+Code that indexed `SYSTEM_MESSAGE_CODES` by position, or matched `is_system_message()` to
+mean "connectivity changed", sees 1104 too. Check `notice.code` to tell them apart. A loop
+that ends an order subscription on any `SubscriptionItem::Notice` now ends it on a 1104, while
+the order may still be pending at TWS.

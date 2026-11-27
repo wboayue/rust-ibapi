@@ -2,7 +2,7 @@
 
 use log::warn;
 
-use crate::client::ids::WireId;
+use crate::client::ids::{OrderId, WireId};
 use crate::errors::Error;
 use crate::messages::{is_informational_code, routes_by_request_id, IncomingMessages, Notice, ResponseMessage};
 
@@ -202,8 +202,31 @@ pub(crate) use crate::client::ids::UNSPECIFIED_REQUEST_ID;
 /// is in the request range carry nothing an order consumer should see. Decided
 /// by the id's range alone ([`WireId::classify`]), so whether a request
 /// happens to be registered under the number cannot change the answer.
+///
+/// The one request-less exception is a 1104 that names orders
+/// ([`pending_orders`]): it is copied once, as TWS sent it.
 pub(crate) fn order_update_notice(payload: &DecodedError) -> Option<Notice> {
-    matches!(WireId::classify(payload.request_id), Some(WireId::Order(_))).then(|| Notice::from(payload.clone()))
+    match WireId::classify(payload.request_id) {
+        Some(WireId::Order(_)) => Some(Notice::from(payload.clone())),
+        Some(WireId::Request(_)) => None,
+        None => {
+            let notice = Notice::from(payload.clone());
+            (!pending_orders(&notice).is_empty()).then_some(notice)
+        }
+    }
+}
+
+/// The orders a request-less 1104 names ([`Notice::pending_order_ids`]), keeping
+/// only order-range ids. Empty for any other notice, or a 1104 whose text
+/// does not parse.
+fn pending_orders(notice: &Notice) -> Vec<OrderId> {
+    let ids = notice.pending_order_ids().unwrap_or_default();
+    ids.into_iter()
+        .filter_map(|id| match WireId::classify(id) {
+            Some(WireId::Order(order_id)) => Some(order_id),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The outcome of classifying an inbound error frame.
@@ -217,13 +240,17 @@ pub(crate) enum ErrorDisposition {
     /// `NoticeStream` + fail-fast fan-out to in-flight one-shot shared
     /// requests (request-less hard error).
     NoticeAndFailOneShots(Notice, Error),
+    /// `NoticeStream` + a copy to each named order's subscription
+    /// (request-less 1104, "Pending to create N orders: …"). TWS has not
+    /// created those orders, nor refused them, so the copy is a `Notice`.
+    NoticeAndOrders(Notice, Vec<OrderId>),
     /// Deliver `RoutedItem` to the request or order subscription the id names.
     Route(WireId, RoutedItem),
 }
 
 /// Classify an inbound error frame into the action each transport must take.
 ///
-/// Extracts the common four-arm policy so that `sync::route_error_message` and
+/// Extracts the common policy so that `sync::route_error_message` and
 /// `async::route_error_message` are thin runtime-specific delivery shells.
 pub(crate) fn classify_error(payload: DecodedError) -> ErrorDisposition {
     // Informational frames (the same rule as `Notice::is_informational`) are
@@ -236,7 +263,10 @@ pub(crate) fn classify_error(payload: DecodedError) -> ErrorDisposition {
         None => {
             let notice = Notice::from(payload.clone());
             if is_informational {
-                ErrorDisposition::NoticeOnly(notice)
+                match pending_orders(&notice) {
+                    orders if orders.is_empty() => ErrorDisposition::NoticeOnly(notice),
+                    orders => ErrorDisposition::NoticeAndOrders(notice, orders),
+                }
             } else {
                 ErrorDisposition::NoticeAndFailOneShots(notice, Error::from(payload))
             }
