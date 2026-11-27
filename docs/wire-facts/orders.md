@@ -638,14 +638,14 @@ connections, AAPL BUY 1 LMT 1.00 (rests), every order cancelled afterwards.*
 23:46 to 2026-11-25 04:07 UTC (in session and at lunch), paper TWS, server 223;
 non-marketable limit orders, each cancelled after 5 to 10 s.*
 
-| Order | Reply | Cancel |
-| ----- | ----- | ------ |
-| 700 SEHK BUY 100 LMT 320 | 399 "Warning: Your order will not be placed at the exchange until 2026-11-25 09:30:00 Hongkong", then PreSubmitted | Cancelled, 202 |
-| HSI future HKFE BUY 1 LMT 20000; HSI option `HSI25600L6` BUY 1 LMT 1 | the same 399 with `09:15:00 Hongkong`, PreSubmitted, then Submitted within 1.3 s | Cancelled, 202 |
-| HSI futures option `PHS25600L6` BUY 1 LMT 1 | 399 with `09:15:00`, PreSubmitted twice | Cancelled, 202 |
-| N225M future OSE.JPN BUY 1 LMT 40000 | PreSubmitted, no 399 | Cancelled, 202 |
-| 7203 SMART BUY 100 LMT 2000 | Submitted, no 399 | Cancelled, 202 |
-| K200 future KSE BUY 1 LMT 300 | nothing in 5 s | nothing in 5 s; `PendingCancel` in `all_open_orders` 21 s after placing; at 22:17 a second cancel drew 10147 and no open order was listed |
+| Order                                                                | Reply                                                                                                              | Cancel                                                                                                                                    |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 700 SEHK BUY 100 LMT 320                                             | 399 "Warning: Your order will not be placed at the exchange until 2026-11-25 09:30:00 Hongkong", then PreSubmitted | Cancelled, 202                                                                                                                            |
+| HSI future HKFE BUY 1 LMT 20000; HSI option `HSI25600L6` BUY 1 LMT 1 | the same 399 with `09:15:00 Hongkong`, PreSubmitted, then Submitted within 1.3 s                                   | Cancelled, 202                                                                                                                            |
+| HSI futures option `PHS25600L6` BUY 1 LMT 1                          | 399 with `09:15:00`, PreSubmitted twice                                                                            | Cancelled, 202                                                                                                                            |
+| N225M future OSE.JPN BUY 1 LMT 40000                                 | PreSubmitted, no 399                                                                                               | Cancelled, 202                                                                                                                            |
+| 7203 SMART BUY 100 LMT 2000                                          | Submitted, no 399                                                                                                  | Cancelled, 202                                                                                                                            |
+| K200 future KSE BUY 1 LMT 300                                        | nothing in 5 s                                                                                                     | nothing in 5 s; `PendingCancel` in `all_open_orders` 21 s after placing; at 22:17 a second cancel drew 10147 and no open order was listed |
 
 - The 399 carries a `Warning:` line and the order goes on, so it is a warning, not a rejection.
   The time is the exchange's next open in its own zone, as text.
@@ -656,13 +656,13 @@ non-marketable limit orders, each cancelled after 5 to 10 s.*
   cleared without a terminal status reaching the probe.
 - The same orders while the venue traded or was at lunch (2026-11-25, each cancelled after 10 s):
 
-  | Order | Session | Lunch break |
-  | ----- | ------- | ----------- |
-  | 700 SEHK BUY 100 LMT 320 (last 344) | 01:36 UTC: PreSubmitted, no 399 | 04:05: PreSubmitted, no 399 |
-  | HSI option `HSI25600L6` BUY 1 LMT 1 | 01:36: Submitted | 04:05: Submitted |
-  | HSI future BUY 1 LMT 20000 | not run (connection timed out) | 04:07: Submitted |
-  | 7203 SMART BUY 100 LMT 2000 | 00:01: PreSubmitted | 02:35: PreSubmitted; 03:35 after lunch: PreSubmitted |
-  | K200 future BUY 1 LMT 700; N225M future BUY 1 LMT 50000 | 23:46 (day session): Submitted, cancelled at once | |
+  | Order                                                   | Session                                           | Lunch break                                          |
+  | ------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
+  | 700 SEHK BUY 100 LMT 320 (last 344)                     | 01:36 UTC: PreSubmitted, no 399                   | 04:05: PreSubmitted, no 399                          |
+  | HSI option `HSI25600L6` BUY 1 LMT 1                     | 01:36: Submitted                                  | 04:05: Submitted                                     |
+  | HSI future BUY 1 LMT 20000                              | not run (connection timed out)                    | 04:07: Submitted                                     |
+  | 7203 SMART BUY 100 LMT 2000                             | 00:01: PreSubmitted                               | 02:35: PreSubmitted; 03:35 after lunch: PreSubmitted |
+  | K200 future BUY 1 LMT 700; N225M future BUY 1 LMT 50000 | 23:46 (day session): Submitted, cancelled at once |                                                      |
 
 - No 399 came during a session or a lunch break. The SEHK and TSE stock orders stayed
   PreSubmitted with an empty `why_held` while their venue traded, and 7203 had been Submitted at
@@ -677,13 +677,13 @@ non-marketable limit orders, each cancelled after 5 to 10 s.*
 
 *Live 2026-11-24 22:04-22:06 UTC (both closed), paper TWS, server 223.*
 
-| Order | 700 SEHK | 7203 SMART (JPY) |
-| ----- | -------- | ---------------- |
-| LMT, `tif` OPG (LOO) | Inactive, 201 "The time-in-force OPG is invalid for this combination of exchange and security type." | not run (connection timed out) |
-| MKT, `tif` OPG (MOO) | not run (connection timed out) | Submitted; cancelled |
-| MOC | 387 "Unsupported order type for this exchange and security type." | no frame in 5 s; `PendingSubmit` in `all_open_orders`; cancelled (PendingCancel, Cancelled, 202) |
-| LOC | 387 | as MOC |
-| MTL or LMT, `tif` AUC | Inactive, 201 "The time-in-force AUC is invalid ..." | Inactive, 201 (MTL) |
+| Order                 | 700 SEHK                                                                                             | 7203 SMART (JPY)                                                                                 |
+| --------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| LMT, `tif` OPG (LOO)  | Inactive, 201 "The time-in-force OPG is invalid for this combination of exchange and security type." | not run (connection timed out)                                                                   |
+| MKT, `tif` OPG (MOO)  | not run (connection timed out)                                                                       | Submitted; cancelled                                                                             |
+| MOC                   | 387 "Unsupported order type for this exchange and security type."                                    | no frame in 5 s; `PendingSubmit` in `all_open_orders`; cancelled (PendingCancel, Cancelled, 202) |
+| LOC                   | 387                                                                                                  | as MOC                                                                                           |
+| MTL or LMT, `tif` AUC | Inactive, 201 "The time-in-force AUC is invalid ..."                                                 | Inactive, 201 (MTL)                                                                              |
 
 - The unsupported time in force drew an Inactive status before the 201; the unsupported order
   type drew 387 with no status.
@@ -699,16 +699,16 @@ non-marketable limit orders, each cancelled after 5 to 10 s.*
 1000 and SELL limits at 1000000, 0.01 BTC or 10 USD. The account has no crypto trading
 permission, so an order that passes every other check is rejected for that.*
 
-| Order | Reply |
-| ----- | ----- |
-| BUY LMT, `tif` DAY or GTC | Inactive, 201 "The crypto buy order must be Minutes or IOC." |
-| BUY LMT, `tif` IOC or `Minutes`; SELL LMT, `tif` DAY or `Minutes` | Inactive, 201 for the missing permission |
-| BUY LMT or BUY MKT, `tif` FOK | 10052 "Invalid time in force:FOK", no open order or status |
-| SELL LMT, `tif` FOK | Inactive, 201 "The time-in-force FOK is invalid for this combination of exchange and security type." |
-| BUY MKT `Minutes` with cash quantity; SELL MKT DAY | Inactive, 201 "The crypto MKT order must be IOC." |
-| BUY MKT IOC with a quantity and no cash quantity | 10289 "You must set Cash Quantity for this order", no open order |
-| BUY MKT IOC with cash quantity 10; SELL MKT IOC with a quantity | Inactive, 201 for the missing permission |
-| BUY LMT `Minutes` or SELL MKT IOC with cash quantity 10 | 10244 "Cash Quantity cannot be used for this order", no open order |
+| Order                                                             | Reply                                                                                                |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| BUY LMT, `tif` DAY or GTC                                         | Inactive, 201 "The crypto buy order must be Minutes or IOC."                                         |
+| BUY LMT, `tif` IOC or `Minutes`; SELL LMT, `tif` DAY or `Minutes` | Inactive, 201 for the missing permission                                                             |
+| BUY LMT or BUY MKT, `tif` FOK                                     | 10052 "Invalid time in force:FOK", no open order or status                                           |
+| SELL LMT, `tif` FOK                                               | Inactive, 201 "The time-in-force FOK is invalid for this combination of exchange and security type." |
+| BUY MKT `Minutes` with cash quantity; SELL MKT DAY                | Inactive, 201 "The crypto MKT order must be IOC."                                                    |
+| BUY MKT IOC with a quantity and no cash quantity                  | 10289 "You must set Cash Quantity for this order", no open order                                     |
+| BUY MKT IOC with cash quantity 10; SELL MKT IOC with a quantity   | Inactive, 201 for the missing permission                                                             |
+| BUY LMT `Minutes` or SELL MKT IOC with cash quantity 10           | 10244 "Cash Quantity cannot be used for this order", no open order                                   |
 
 - A crypto BUY order takes only IOC or `Minutes`, a market order only IOC, and FOK is refused on
   every order. A market BUY needs a cash quantity, and every other order refuses one.
@@ -759,14 +759,14 @@ market, EUR.USD market orders.*
 
 *Live 2026-11-25 19:13 UTC (US RTH), paper TWS, server 223; AAPL BUY 1 LMT far below the market.*
 
-| Request | Reply |
-| ------- | ----- |
-| Modify a working SMART order with the exchange changed to ARCA | 105 "Order being modified does not match original order." The order kept working. |
-| Modify the same order's price, exchange unchanged | `PreSubmitted`, `Submitted` |
-| New order directed to LSE, which does not list AAPL | 200 "No security definition has been found for the request" |
-| New order directed to IEX | `PreSubmitted`, `Submitted`, no 10311 |
-| Cancel of the order rejected with 200 | 10147 "OrderId 6 that needs to be cancelled is not found." |
-| Second cancel of an order cancelled 3 s before | 10148 "OrderId 5 that needs to be cancelled cannot be cancelled, state: Cancelled." |
+| Request                                                        | Reply                                                                               |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Modify a working SMART order with the exchange changed to ARCA | 105 "Order being modified does not match original order." The order kept working.   |
+| Modify the same order's price, exchange unchanged              | `PreSubmitted`, `Submitted`                                                         |
+| New order directed to LSE, which does not list AAPL            | 200 "No security definition has been found for the request"                         |
+| New order directed to IEX                                      | `PreSubmitted`, `Submitted`, no 10311                                               |
+| Cancel of the order rejected with 200                          | 10147 "OrderId 6 that needs to be cancelled is not found."                          |
+| Second cancel of an order cancelled 3 s before                 | 10148 "OrderId 5 that needs to be cancelled cannot be cancelled, state: Cancelled." |
 
 - 10311 ("This order will be directly routed to ...") did not appear because the TWS API
   precautionary setting allowed direct routes. With the setting off, a downstream adapter saw
