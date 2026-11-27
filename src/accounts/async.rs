@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use tokio::task::JoinHandle;
 
 use crate::client::builders::r#async::SubscriptionBuilder;
-use crate::client::{ClientRequestBuilders, SubscriptionBuilderExt};
+use crate::client::SubscriptionBuilderExt;
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
 use crate::messages::{resubscribed_notice, OutgoingMessages};
 use crate::subscriptions::Subscription;
