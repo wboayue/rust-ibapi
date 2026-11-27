@@ -680,7 +680,7 @@ let pnl = client.pnl(&account).subscribe()?;
 let single = client.pnl_single(&account, contract_id).model_code(&model).subscribe()?;
 ```
 
-Async callers add `.await` after `subscribe()`. A filter held in an `Option` becomes an `if let` around the setter.
+Async callers move `.await` from the call to after `subscribe()`. A filter held in an `Option` becomes an `if let` around the setter.
 
 #### Contract ids in contract builders
 

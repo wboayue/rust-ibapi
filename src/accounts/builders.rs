@@ -4,7 +4,7 @@
 //! Same shape as the option-chain and historical-news builders: generic over `'a` + client
 //! type, `mut self`-returning setters, per-feature `subscribe` terminals. Setters take
 //! `impl Into<AccountId>` / `impl Into<ModelCode>`, so an unset filter is no call rather than a
-//! bare `None` that needs a type; see [id parameters](../../docs/rules/style/id-parameters.md).
+//! bare `None` that needs a type; see `docs/rules/style/id-parameters.md`.
 
 use super::common::encoders;
 use super::types::{AccountId, ModelCode};
@@ -19,8 +19,8 @@ mod tests;
 /// Builder for a [`PositionUpdateMulti`](super::PositionUpdateMulti) subscription, from
 /// `Client::positions_multi`.
 ///
-/// With no filter TWS sends positions for every account; [`account`](Self::account) and
-/// [`model_code`](Self::model_code) narrow it.
+/// Without a filter the request goes out with no account and no model code;
+/// [`account`](Self::account) and [`model_code`](Self::model_code) narrow it.
 #[must_use = "PositionsMultiBuilder does nothing until you call .subscribe()"]
 pub struct PositionsMultiBuilder<'a, C> {
     client: &'a C,
@@ -57,8 +57,8 @@ impl<'a, C> PositionsMultiBuilder<'a, C> {
 /// Builder for an [`AccountUpdateMulti`](super::AccountUpdateMulti) subscription, from
 /// `Client::account_updates_multi`.
 ///
-/// With no filter TWS sends updates for every account; [`account`](Self::account) and
-/// [`model_code`](Self::model_code) narrow it.
+/// Without a filter the request goes out with no account and no model code;
+/// [`account`](Self::account) and [`model_code`](Self::model_code) narrow it.
 #[must_use = "AccountUpdatesMultiBuilder does nothing until you call .subscribe()"]
 pub struct AccountUpdatesMultiBuilder<'a, C> {
     client: &'a C,
@@ -150,41 +150,6 @@ impl<'a, C> PnLSingleBuilder<'a, C> {
 
     fn encode(&self, request_id: i32) -> Result<Vec<u8>, Error> {
         encoders::encode_request_pnl_single(request_id, &self.account, self.contract_id, self.model_code.as_ref())
-    }
-}
-
-// Test-only: the client tests drive these from tables of optional filters.
-#[cfg(test)]
-impl<C> PositionsMultiBuilder<'_, C> {
-    pub(crate) fn with_filters(mut self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Self {
-        self.account = account.cloned();
-        self.model_code = model_code.cloned();
-        self
-    }
-}
-
-#[cfg(test)]
-impl<C> AccountUpdatesMultiBuilder<'_, C> {
-    pub(crate) fn with_filters(mut self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Self {
-        self.account = account.cloned();
-        self.model_code = model_code.cloned();
-        self
-    }
-}
-
-#[cfg(test)]
-impl<C> PnLBuilder<'_, C> {
-    pub(crate) fn with_model_code(mut self, model_code: Option<&ModelCode>) -> Self {
-        self.model_code = model_code.cloned();
-        self
-    }
-}
-
-#[cfg(test)]
-impl<C> PnLSingleBuilder<'_, C> {
-    pub(crate) fn with_model_code(mut self, model_code: Option<&ModelCode>) -> Self {
-        self.model_code = model_code.cloned();
-        self
     }
 }
 

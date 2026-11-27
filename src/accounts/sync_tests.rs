@@ -1,4 +1,5 @@
 use super::{AccountSummarySnapshot, AccountSummarySnapshots, SnapshotBuilder, Subscription};
+use crate::accounts::common::test_tables::{OptionalFilters, OptionalModelCode};
 use crate::accounts::types::{AccountGroup, AccountId, ModelCode};
 use crate::accounts::{AccountSummaryTags, AccountUpdateMulti, LedgerOnly};
 use crate::client::ids::RequestId;
