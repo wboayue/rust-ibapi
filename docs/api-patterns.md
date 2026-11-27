@@ -489,7 +489,7 @@ See: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/avail
 ### Connection Errors
 ```rust
 // The client reconnects on its own. A request sent while the connection is
-// down is refused with Error::ConnectionReset, which is_connection_lost()
+// down is refused with Error::Reconnecting, which is_connection_lost()
 // matches. wait_connected() blocks until the session is back, or fails with
 // Error::ConnectionFailed once the reconnect gives up (Error::Shutdown after
 // a shutdown); later requests then fail with that same error.
@@ -630,20 +630,16 @@ Historical-data pacing (error 162) is a separate limit the library does not enfo
 
 ### Reconnection Handling
 ```rust
-let deadline = Instant::now() + Duration::from_secs(60);
 loop {
-    if !client.is_connected() {
-        // Exhausted reconnection leaves this false, so bound the wait; the
-        // error returned is the one every send gets in that state
-        if Instant::now() >= deadline { return Err(Error::ConnectionReset); }
-        log::info!("Waiting for reconnection...");
-        thread::sleep(Duration::from_secs(5));
-        continue;
-    }
+    // Returns at once while connected, blocks while the client reconnects, and
+    // fails with Error::ConnectionFailed once the reconnect gives up
+    // (Error::Shutdown after a shutdown).
+    client.wait_connected()?;
 
     match perform_operation(&client) {
         Ok(result) => return Ok(result),
-        // Lost mid-operation; the client is reconnecting
+        // Lost mid-operation (ConnectionReset), or refused because the client
+        // started reconnecting after wait_connected returned (Reconnecting)
         Err(e) if e.is_connection_lost() => continue,
         Err(e) => return Err(e),
     }

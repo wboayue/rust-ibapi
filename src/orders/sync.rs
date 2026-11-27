@@ -548,7 +548,8 @@ impl Client {
     /// Every order is checked and encoded before the first is sent, so only a transport error
     /// stops partway. That returns [`Error::OrdersPartiallySent`]: its `sent` ids may be at TWS
     /// (cancel them by id after reconnecting with the same client id), and its `not_sent` ids were
-    /// never written.
+    /// never written. If the first send is refused while the client reconnects, nothing was
+    /// sent, and the error is [`Error::Reconnecting`].
     ///
     /// # Examples
     ///
@@ -773,8 +774,9 @@ impl Client {
     /// # Errors
     ///
     /// [`Error::OrderIdInRequestRange`] if `order_id` is at or above 1,500,000,000
-    /// (reserved for request ids), [`Error::ConnectionReset`] if the connection is
-    /// down or drops during the wait, [`Error::Shutdown`] if the client shuts down.
+    /// (reserved for request ids), [`Error::Reconnecting`] if the connection is down,
+    /// [`Error::ConnectionReset`] if it drops during the wait, [`Error::Shutdown`] if the
+    /// client shuts down.
     ///
     /// # Examples
     ///

@@ -1584,7 +1584,9 @@ signature is unchanged.
 Only a transport error can still stop partway. Both methods then return the new
 `Error::OrdersPartiallySent { sent, not_sent, source }` instead of the bare transport error:
 `sent` lists the orders that may be at TWS (the last one's write failed), `not_sent` the ones
-never written, and `source` the transport error. A `match` on `Error::ConnectionReset` or
+never written, and `source` the transport error. A send refused while the client reconnects
+wrote nothing (§55): its order is in `not_sent`, and when it is the first, the method returns
+`Error::Reconnecting` itself. A `match` on `Error::ConnectionReset` or
 `Error::Io` from these two methods must match the new variant instead;
 `Error::is_connection_lost()` answers for `source`, so a check through it keeps working.
 
@@ -1655,7 +1657,47 @@ compile. Write `SecurityType::Stock` where that was the intent.
 is the wire code (`"STK"`, §47) as in 5.x, so 5.x JSON with a code still deserializes; one with
 `""` doesn't.
 
-### 55. Notice 1104 is a system message and reaches the orders it names; `OrderOutcome::PendingCreation`
+### 55. A request refused while the client reconnects is `Error::Reconnecting`
+
+While the connection is down and the client reconnects, every request is refused before anything
+is written. Before 6.0 that refusal was `Error::ConnectionReset`, the same error a write cut off by
+the dropped connection returns, so a caller couldn't tell "not sent" from "may have been sent".
+It is now the new `Error::Reconnecting`:
+
+| Error | Means |
+|---|---|
+| `Error::Reconnecting` | refused before the write while the client reconnects; nothing reached TWS |
+| `Error::ConnectionReset` | the connection dropped: a stream or one-shot open at the time, or a write it cut off, which may have reached TWS |
+
+`is_connection_lost()` and `is_unsent()` both return `true` for `Reconnecting`, so code that
+branches through `is_connection_lost()` (wait with `wait_connected`, then retry or resubscribe)
+needs no change. A `match` on `Error::ConnectionReset` for a request call must also match
+`Error::Reconnecting`:
+
+```rust,ignore
+// before
+match client.submit_order(order_id, &contract, &order) {
+    Err(Error::ConnectionReset) => { /* sent or not? query open orders */ }
+    // ...
+}
+
+// 6.0
+match client.submit_order(order_id, &contract, &order) {
+    Err(Error::Reconnecting) => { /* not sent: wait_connected, then resend */ }
+    Err(Error::ConnectionReset) => { /* may have been sent: query open orders */ }
+    // ...
+}
+```
+
+One-shot requests (`server_time`, `managed_accounts`, `historical_data`, ...) retry on either
+error. A last attempt refused after an earlier attempt may have been written still returns
+`ConnectionReset`, since the earlier one may have reached TWS. Streams that were open when the
+connection dropped still end with `ConnectionReset`. `submit_oca_orders` and `submit_all` return
+`Reconnecting` when their first send is refused, and otherwise list a refused order in
+`OrdersPartiallySent::not_sent` (§53). Refusals after the reconnect gives up
+(`ConnectionFailed`) or after a shutdown (`Shutdown`) are unchanged.
+
+### 56. Notice 1104 is a system message and reaches the orders it names; `OrderOutcome::PendingCreation`
 
 After a 1100 (connectivity between TWS and IB lost) TWS sends 1104, "Pending to create 2
 orders: 55, 57", with no request id. In 5.x it classified as `NoticeCategory::Error`, so it

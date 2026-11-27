@@ -68,7 +68,7 @@ fn check_follows_the_session_through_a_failed_reconnect() {
     assert!(signal.check_ended().is_ok());
 
     signal.set_disconnected();
-    assert!(matches!(signal.check(), Err(Error::ConnectionReset)));
+    assert!(matches!(signal.check(), Err(Error::Reconnecting)));
     assert!(signal.check_ended().is_ok(), "reconnecting is not ended");
 
     signal.fail();

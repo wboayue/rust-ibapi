@@ -2130,18 +2130,18 @@ async fn sends_are_refused_while_disconnected() {
 
     assert!(matches!(
         mb.send_request(RequestId::nth(100), b"req-bytes".to_vec()).await,
-        Err(Error::ConnectionReset)
+        Err(Error::Reconnecting)
     ));
     assert!(matches!(
         mb.send_order_request(OrderId::from(42), b"order-bytes".to_vec()).await,
-        Err(Error::ConnectionReset)
+        Err(Error::Reconnecting)
     ));
     assert!(matches!(
         mb.send_shared_request(OutgoingMessages::RequestManagedAccounts, b"shared-bytes".to_vec())
             .await,
-        Err(Error::ConnectionReset)
+        Err(Error::Reconnecting)
     ));
-    assert!(matches!(mb.send_message(b"message-bytes".to_vec()).await, Err(Error::ConnectionReset)));
+    assert!(matches!(mb.send_message(b"message-bytes".to_vec()).await, Err(Error::Reconnecting)));
 
     assert!(bus.requests.is_empty(), "a refused request must register nothing");
     assert!(bus.orders.is_empty(), "a refused order request must register nothing");
@@ -2175,7 +2175,7 @@ async fn sends_are_refused_during_the_reconnect_handshake() {
     bus.connection_state.set_connected();
     assert!(matches!(
         bus.send_request(RequestId::nth(100), b"req-bytes".to_vec()).await,
-        Err(Error::ConnectionReset)
+        Err(Error::Reconnecting)
     ));
     assert!(bus.requests.is_empty(), "a refused request must register nothing");
     assert_eq!(

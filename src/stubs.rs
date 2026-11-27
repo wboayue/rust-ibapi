@@ -83,7 +83,7 @@ enum SendMode {
     Succeed,
     /// Succeed until this many messages are recorded, then fail with `ConnectionReset`.
     FailAfter(usize),
-    /// Fail with `ConnectionReset` without recording the message.
+    /// Fail with `Reconnecting` without recording the message.
     Refuse,
     #[cfg(feature = "async")]
     Stall,
@@ -198,8 +198,10 @@ impl MessageBusStub {
         self
     }
 
-    /// Make each `send_message` fail with [`Error::ConnectionReset`] without recording the
+    /// Make each `send_message` fail with [`Error::Reconnecting`] without recording the
     /// message, as a request refused while the client reconnects is: nothing reaches the wire.
+    /// The real bus's refusal is pinned by the transport tests
+    /// `sends_are_refused_while_disconnected` and `sends_are_refused_during_the_reconnect_handshake`.
     pub fn with_refused_sends(mut self) -> Self {
         self.send_mode = SendMode::Refuse;
         self
@@ -325,7 +327,7 @@ impl MessageBus for MessageBusStub {
 
     fn send_message(&self, message: &[u8]) -> Result<(), Error> {
         if let SendMode::Refuse = self.send_mode {
-            return Err(Error::ConnectionReset);
+            return Err(Error::Reconnecting);
         }
         self.request_messages.write().unwrap().push(message.to_vec());
         match self.send_mode {
@@ -494,7 +496,7 @@ impl AsyncMessageBus for MessageBusStub {
 
     async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
         if let SendMode::Refuse = self.send_mode {
-            return Err(Error::ConnectionReset);
+            return Err(Error::Reconnecting);
         }
         self.request_messages.write().unwrap().push(message);
         match self.send_mode {

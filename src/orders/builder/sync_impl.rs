@@ -69,7 +69,9 @@ impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// ids of the legs that may be at TWS. A parent and take-profit sent before the stop-loss are
     /// held there (they transmit with it). After a reconnect with the same client id TWS still
     /// holds them without listing them in `open_orders`, so cancel them with `cancel_order` and
-    /// the error's `sent` ids (live: 2026-11-27, paper Gateway, server 226).
+    /// the error's `sent` ids (live: 2026-11-27, paper Gateway, server 226). If the parent's send
+    /// is refused while the client reconnects, nothing was sent, and the error is
+    /// [`Error::Reconnecting`].
     pub fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let ClientBound { client, contract } = self.parent_builder.target;
         let (orders, ids) = self.build_with_ids(|| client.next_order_id())?;

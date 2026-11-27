@@ -238,6 +238,7 @@ fn clone_preserves_unit_variants() {
     for variant in [
         Error::ConnectionFailed,
         Error::ConnectionReset,
+        Error::Reconnecting,
         Error::Cancelled,
         Error::Shutdown,
         Error::UnexpectedEndOfStream,
@@ -316,6 +317,23 @@ fn orders_partially_sent_splits_after_the_failed_order() {
     }
 }
 
+/// A send refused before writing put nothing on the wire, so its order counts as not sent, and a
+/// refused first send leaves nothing sent: the refusal comes back as is.
+#[test]
+fn orders_partially_sent_counts_a_refused_send_as_not_sent() {
+    match Error::orders_partially_sent([7, 8, 9], 1, Error::Reconnecting) {
+        Error::OrdersPartiallySent { sent, not_sent, source } => {
+            assert_eq!(sent, vec![7]);
+            assert_eq!(not_sent, vec![8, 9]);
+            assert!(matches!(*source, Error::Reconnecting));
+        }
+        other => panic!("second send refused: {other:?}"),
+    }
+    let first_refused = Error::orders_partially_sent([7, 8, 9], 0, Error::Reconnecting);
+    assert!(matches!(first_refused, Error::Reconnecting), "{first_refused:?}");
+    assert!(first_refused.is_unsent());
+}
+
 #[test]
 fn orders_partially_sent_counts_the_orders_and_chains_the_send_failure() {
     let err = partially_sent(Error::ConnectionReset);
@@ -343,6 +361,10 @@ fn error_is_non_exhaustive() {
 #[test]
 fn is_connection_lost_true_for_connection_variants() {
     assert!(Error::ConnectionReset.is_connection_lost());
+    assert!(
+        Error::Reconnecting.is_connection_lost(),
+        "a refusal while reconnecting: wait, then resend"
+    );
 
     // The socket is still open, but the framing has desynchronized and there is
     // no delimiter to re-anchor on — reconnecting is the only recovery, so the
@@ -417,6 +439,7 @@ fn is_unsent_only_for_errors_raised_before_a_write() {
         (Error::ClientIdInUse { client_id: 7 }, false),
         (Error::UnsupportedTimeZone("US/Foo".into()), false),
         (Error::ConnectionReset, false),
+        (Error::Reconnecting, true),
         (Error::Cancelled, false),
         (Error::Shutdown, false),
         (Error::unexpected_response(&response), false),
