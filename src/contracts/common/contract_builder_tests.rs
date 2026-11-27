@@ -355,7 +355,10 @@ fn build_rejects_missing_security_type_without_contract_or_security_id() {
         // 0 is the unset id, and a security id needs its scheme.
         ContractBuilder::new().symbol("AAPL").contract_id(0),
         ContractBuilder::new().symbol("AAPL").security_id("US0378331005"),
-        ContractBuilder::new().symbol("AAPL").security_id_type(SecurityIdType::Isin).security_id(""),
+        ContractBuilder::new()
+            .symbol("AAPL")
+            .security_id_type(SecurityIdType::Isin)
+            .security_id(""),
     ] {
         let err = builder.build().unwrap_err();
         assert!(matches!(err, Error::InvalidArgument(ref msg) if msg == MISSING_TYPE), "got {err:?}");
