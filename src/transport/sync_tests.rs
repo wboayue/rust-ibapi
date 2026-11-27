@@ -4566,7 +4566,7 @@ fn positions_cancel_during_account_pacing_does_not_wait_for_the_account_slot() -
         bus.connection_state.set_disconnected();
         cancelling.join().unwrap();
         assert!(account_was_pacing);
-        assert!(matches!(opening.join().unwrap(), Err(Error::ConnectionReset)));
+        assert!(matches!(opening.join().unwrap(), Err(Error::Reconnecting)));
         assert!(cancelled.is_ok());
         assert_eq!(count_frames(&stream.captured(), &positions_cancel()), 1);
         assert_eq!(count_frames(&stream.captured(), &account_updates_request("DU1")), 0);
