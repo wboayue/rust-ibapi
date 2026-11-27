@@ -72,7 +72,8 @@ use crate::Error;
 /// # Validation
 ///
 /// The builder performs validation when [build](ContractBuilder::build) is called:
-/// - Symbol is always required
+/// - A symbol, local symbol, contract id or security id identifies the contract
+/// - A security type is required unless a contract id or security id identifies the contract
 /// - Option contracts require strike, right, and expiration date
 /// - Futures contracts require contract month
 /// - Strike prices cannot be negative
@@ -157,9 +158,11 @@ impl ContractBuilder {
     /// Sets the security type
     ///
     /// Defines what type of instrument this contract represents.
-    /// See [SecurityType] for available options. Left unset, the contract's
-    /// `security_type` is `None` and no `secType` is sent: fine for a lookup by
-    /// [`contract_id`](Self::contract_id), error 321 from TWS for a lookup by symbol.
+    /// See [SecurityType] for available options. Optional when a
+    /// [`contract_id`](Self::contract_id) or [`security_id`](Self::security_id) identifies the
+    /// contract: the contract's `security_type` is then `None` and no `secType` is sent.
+    /// Required otherwise; [`build`](Self::build) rejects a symbol or local-symbol lookup
+    /// without one.
     pub fn security_type(mut self, security_type: SecurityType) -> Self {
         self.security_type = Some(security_type);
         self
@@ -475,7 +478,10 @@ impl ContractBuilder {
     /// # Errors
     ///
     /// [`Error::InvalidArgument`] if:
-    /// - Symbol is not provided
+    /// - None of symbol, local symbol, contract id or security id (with its
+    ///   [`security_id_type`](Self::security_id_type)) is provided
+    /// - [`security_type`](Self::security_type) is not set and neither a contract id nor a
+    ///   security id identifies the contract. TWS rejects such a lookup with error 321
     /// - Option contracts are missing required fields (strike, right, expiration)
     /// - Futures contracts are missing contract month
     ///
@@ -487,9 +493,22 @@ impl ContractBuilder {
     /// - The [`last_trade_date_or_contract_month`](Self::last_trade_date_or_contract_month)
     ///   text is neither `YYYYMMDD` nor `YYYYMM` ([`ValidationError::InvalidDate`](crate::builder::ValidationError::InvalidDate))
     pub fn build(self) -> Result<Contract, Error> {
-        // Symbol is required unless local_symbol or contract_id is provided
-        if self.symbol.is_none() && self.local_symbol.is_none() && self.contract_id.is_none() {
-            return Err(Error::InvalidArgument("Symbol, local_symbol, or contract_id is required".into()));
+        // 0 is the unset id: the encoder omits it.
+        let has_contract_id = self.contract_id.is_some_and(|id| id != 0);
+        let has_security_id = self.security_id_type.is_some() && self.security_id.as_deref().is_some_and(|id| !id.is_empty());
+
+        if self.symbol.is_none() && self.local_symbol.is_none() && !has_contract_id && !has_security_id {
+            return Err(Error::InvalidArgument(
+                "Symbol, local_symbol, contract_id, or security_id is required".into(),
+            ));
+        }
+
+        // TWS resolves a contract id or security id without a type, and rejects a symbol or
+        // local symbol lookup without one (error 321; docs/wire-facts/contracts.md).
+        if self.security_type.is_none() && !has_contract_id && !has_security_id {
+            return Err(Error::InvalidArgument(
+                "security_type is required unless contract_id or security_id identifies the contract".into(),
+            ));
         }
 
         let security_type = self.security_type;

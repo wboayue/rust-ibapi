@@ -1635,12 +1635,18 @@ let code = contract.security_type.as_ref().map_or("", SecurityType::as_str);
 
 The typed entry points (`Contract::stock`, `Contract::call`, `Contract::futures`, ...) set the
 type as before. The compiler finds every comparison and struct-literal field. It doesn't find
-code that relied on the `Stock` default: a struct literal that leaves `security_type` to
-`..Default::default()`, or a builder chain without `.security_type(..)`, now sends no `secType`.
-For a lookup by symbol, TWS answers that with error 321 ("Please enter a valid security type")
-where 5.x found the stock: set the type, or use `Contract::stock`. A lookup by `contract_id`
-works either way; for contract details and head timestamps TWS takes the type from the id
-(live, server 226).
+code that relied on the `Stock` default:
+
+- A `ContractBuilder` chain without `.security_type(..)` that names the contract by symbol or
+  local symbol now fails at `build()` with `Error::InvalidArgument`, since TWS would reject it
+  with error 321 ("Please enter a valid security type"). Set the type, or use `Contract::stock`.
+  A chain identified by `contract_id`, or by `security_id_type` plus `security_id`, still builds
+  without a type and sends none: TWS resolves those contracts from the id (live, server 226).
+- A struct literal that leaves `security_type` to `..Default::default()` now sends no `secType`.
+  For a lookup by symbol, TWS answers with error 321 where 5.x found the stock.
+
+`ContractBuilder::build` also accepts a contract identified only by `security_id_type` plus
+`security_id`, which 5.x rejected for lacking a symbol.
 
 `SecurityType::default()` and `unwrap_or_default()` on an `Option<SecurityType>` no longer
 compile. Write `SecurityType::Stock` where that was the intent.

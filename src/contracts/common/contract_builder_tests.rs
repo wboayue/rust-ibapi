@@ -146,7 +146,7 @@ fn contract_builder_build_futures_success() {
 fn contract_builder_build_missing_identifier() {
     let err = ContractBuilder::new().build().unwrap_err();
     assert!(
-        matches!(err, Error::InvalidArgument(ref msg) if msg == "Symbol, local_symbol, or contract_id is required"),
+        matches!(err, Error::InvalidArgument(ref msg) if msg == "Symbol, local_symbol, contract_id, or security_id is required"),
         "got {err:?}"
     );
 }
@@ -344,6 +344,39 @@ fn contract_builder_chaining() {
     assert_eq!(contract.description, "Tesla Inc.");
 }
 
+const MISSING_TYPE: &str = "security_type is required unless contract_id or security_id identifies the contract";
+
+/// TWS rejects a symbol or local-symbol lookup without a type (error 321), so `build` does.
+#[test]
+fn build_rejects_missing_security_type_without_contract_or_security_id() {
+    for builder in [
+        ContractBuilder::new().symbol("AAPL").exchange("SMART").currency("USD"),
+        ContractBuilder::new().local_symbol("ESZ6").exchange("CME"),
+        // 0 is the unset id, and a security id needs its scheme.
+        ContractBuilder::new().symbol("AAPL").contract_id(0),
+        ContractBuilder::new().symbol("AAPL").security_id("US0378331005"),
+        ContractBuilder::new().symbol("AAPL").security_id_type(SecurityIdType::Isin).security_id(""),
+    ] {
+        let err = builder.build().unwrap_err();
+        assert!(matches!(err, Error::InvalidArgument(ref msg) if msg == MISSING_TYPE), "got {err:?}");
+    }
+}
+
+/// TWS resolves a security id without a type or symbol (docs/wire-facts/contracts.md).
+#[test]
+fn security_id_only_build_sends_no_sec_type() {
+    let contract = ContractBuilder::new()
+        .security_id_type(SecurityIdType::Isin)
+        .security_id("US0378331005")
+        .build()
+        .unwrap();
+
+    let proto = crate::proto::encoders::encode_contract(&contract);
+    assert_eq!(proto.sec_type, None);
+    assert_eq!(proto.sec_id_type.as_deref(), Some("ISIN"));
+    assert_eq!(proto.sec_id.as_deref(), Some("US0378331005"));
+}
+
 /// A lookup by contract id alone carries no security type to TWS; TWS resolves the
 /// contract from the id (docs/wire-facts/contracts.md).
 #[test]
@@ -357,10 +390,10 @@ fn contract_id_only_build_sends_no_sec_type() {
 
 #[test]
 fn contract_builder_defaults() {
-    // Test that unset fields get proper defaults
-    let contract = ContractBuilder::new().symbol("TEST").build().unwrap();
+    // Test that unset fields get proper defaults; the contract id lets the type go unset.
+    let contract = ContractBuilder::new().contract_id(1).symbol("TEST").build().unwrap();
 
-    assert_eq!(contract.contract_id, 0);
+    assert_eq!(contract.contract_id, 1);
     assert_eq!(contract.symbol, "TEST");
     assert_eq!(contract.security_type, None);
     assert_eq!(contract.last_trade_date_or_contract_month, None);
