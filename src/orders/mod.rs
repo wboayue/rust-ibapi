@@ -33,6 +33,7 @@
 
 // Common implementation modules
 pub(crate) mod common;
+pub use common::lookup::{OrderEvidence, OrderEvidenceMatch, OrderKey, OrderRows};
 
 /// Fluent builder APIs for constructing orders.
 pub mod builder;

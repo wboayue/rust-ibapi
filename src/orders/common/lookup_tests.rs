@@ -187,3 +187,87 @@ fn recheck_delay_ends_at_the_deadline_and_slows_after_the_window() {
         assert_eq!(recheck_delay(deadline, start, now), expected, "{name}");
     }
 }
+
+fn detail(client_id: i32, order_id: i32, account: &str, perm_id: i64, status: OrderStatusKind) -> OrderData {
+    let Orders::OrderData(mut row) = order_row(client_id, order_id, status, 0.0) else {
+        unreachable!()
+    };
+    row.order.account = account.to_string();
+    row.order.perm_id = perm_id;
+    row
+}
+
+#[test]
+fn borrowed_lookup_reuses_complete_replies_for_several_orders() {
+    use OrderEvidenceMatch::*;
+    use OrderStatusKind::*;
+    let open = [
+        detail(7, 13, "DU1", 913, PreSubmitted),
+        detail(8, 13, "DU1", 813, Submitted),
+        detail(7, 13, "DU2", 713, Submitted),
+        detail(7, 13, "DU1", 913, Submitted),
+        detail(7, 14, "DU1", 914, Inactive),
+    ];
+    let completed = [detail(0, 0, "DU1", 914, Cancelled), detail(0, 0, "DU1", 915, Filled)];
+    let evidence = OrderEvidence {
+        open: OrderRows::Complete(&open),
+        completed: OrderRows::Complete(&completed),
+    };
+    let results = [BY_ID, OrderKey::PermId(914), OrderKey::PermId(915), OrderKey::PermId(916)].map(|key| evidence.lookup(key, Some("DU1")));
+    let [Working(working), Finished(cancelled), Finished(filled), Absent] = results else {
+        panic!("{results:?}")
+    };
+    assert!(std::ptr::eq(working, &open[3]));
+    assert!(std::ptr::eq(cancelled, &completed[0]));
+    assert!(std::ptr::eq(filled, &completed[1]));
+    let zero = OrderKey::Id {
+        client_id: 0,
+        order_id: OrderId(0),
+    };
+    assert_eq!(evidence.lookup(zero, Some("DU1")), Absent);
+    assert_eq!(evidence.lookup(OrderKey::PermId(0), Some("DU1")), Absent);
+}
+
+#[test]
+fn borrowed_lookup_distinguishes_unavailable_replies_and_terminal_open_rows() {
+    use OrderEvidenceMatch::*;
+    let working = [detail(7, 13, "DU1", 913, OrderStatusKind::Submitted)];
+    let terminal = [detail(7, 13, "DU1", 913, OrderStatusKind::Cancelled)];
+    let malformed = [detail(7, 13, "DU1", 913, OrderStatusKind::Submitted)];
+    let unavailable = OrderRows::Unavailable;
+    let complete = OrderRows::Complete(&[]);
+    let cases = [
+        (unavailable, OrderRows::Complete(&terminal), Incomplete),
+        (OrderRows::Complete(&working), unavailable, Working(&working[0])),
+        (complete, unavailable, Incomplete),
+        (complete, complete, Absent),
+        (complete, OrderRows::Complete(&malformed), Incomplete),
+        (OrderRows::Complete(&terminal), complete, Incomplete),
+        (OrderRows::Complete(&terminal), OrderRows::Complete(&terminal), Finished(&terminal[0])),
+    ];
+    for (open, completed, expected) in cases {
+        assert_eq!(OrderEvidence { open, completed }.lookup(BY_ID, Some("DU1")), expected);
+    }
+}
+
+#[test]
+fn borrowed_lookup_distinguishes_reused_api_ids_and_allows_repeated_permanent_id() {
+    use OrderEvidenceMatch::*;
+    use OrderStatusKind::*;
+    let open = [
+        detail(7, 13, "DU1", 913, PreSubmitted),
+        detail(7, 13, "DU1", 0, PendingSubmit),
+        detail(7, 13, "DU1", 914, Submitted),
+    ];
+    let conflicting = [detail(7, 13, "DU1", 915, Cancelled)];
+    let evidence = |open, completed| OrderEvidence {
+        open: OrderRows::Complete(open),
+        completed,
+    };
+    assert_eq!(evidence(&open, OrderRows::Unavailable).lookup(BY_ID, None), Ambiguous);
+    assert_eq!(evidence(&open[..2], OrderRows::Complete(&conflicting)).lookup(BY_ID, None), Ambiguous);
+    assert_eq!(
+        evidence(&open, OrderRows::Complete(&conflicting)).lookup(OrderKey::PermId(914), None),
+        Working(&open[2])
+    );
+}
