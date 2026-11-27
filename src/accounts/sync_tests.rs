@@ -1,8 +1,9 @@
 use super::{AccountSummarySnapshot, AccountSummarySnapshots, SnapshotBuilder, Subscription};
-use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
+use crate::accounts::types::{AccountGroup, AccountId, ModelCode};
 use crate::accounts::{AccountSummaryTags, AccountUpdateMulti, LedgerOnly};
 use crate::client::ids::RequestId;
 use crate::common::test_utils::helpers::*;
+use crate::contracts::ContractId;
 use crate::messages::IncomingMessages;
 use crate::subscriptions::common::{DecoderContext, RoutedItem};
 use crate::testdata::builders::accounts::{

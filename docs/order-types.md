@@ -919,7 +919,7 @@ let ids = client.order(&contract)
     .submit()?;
 
 println!("Parent order: {}", ids.parent);
-println!("Stop loss: {:?}", ids.stop_loss);      // Option<OrderId>
+println!("Stop loss: {:?}", ids.stop_loss);      // Option<i32>
 println!("Profit taker: {:?}", ids.profit_taker);
 ```
 

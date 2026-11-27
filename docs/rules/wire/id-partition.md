@@ -9,7 +9,7 @@ triggers:
   - routing an inbound frame or error by its id
   - adding an Order field that carries another order's id
 symbols: [REQUEST_ID_FLOOR, RequestId, OrderId, WireId, WireId::classify, OrderId::checked, verify_and_reserve_order_ids, carried_order_ids, Client::mint_request_id]
-related: [proto-aware-accessors]
+related: [proto-aware-accessors, id-parameters]
 precedents: ["#789", "#1069", "#1231"]
 ---
 
@@ -56,7 +56,7 @@ on `Order` / `OrderStatus` / `Execution` / …, `Subscription::request_id()` and
 `Notice::request_id` stay `i32` / `Option<i32>`, and `RequestId` / `WireId` stay `pub(crate)`.
 Typing them would break every caller's `let id: i32`, `HashMap<i32, _>` key and id arithmetic to
 guard against passing a request id to `cancel_order` — a mistake no issue has reported. Revisit
-only on user demand.
+only on user demand. The general form, for every id newtype, is [id parameters](../style/id-parameters.md).
 
 ## Precedents
 

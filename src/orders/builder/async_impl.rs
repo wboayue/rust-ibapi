@@ -5,7 +5,7 @@ use super::types::{AttachedOrderIds, BracketOrderIds};
 use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::orders::PlaceOrder;
-use crate::orders::{Action, OrderId, OrderType};
+use crate::orders::{Action, OrderType};
 use crate::subscriptions::SubscriptionItemStreamExt;
 
 impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
@@ -37,12 +37,12 @@ impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
     /// let order_id = client.order(&contract).market().submit();
     /// # }
     /// ```
-    pub async fn submit(self) -> Result<OrderId, Error> {
+    pub async fn submit(self) -> Result<i32, Error> {
         let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
         let order = self.build()?;
         client.submit_order(order_id, contract, &order).await?;
-        Ok(OrderId::new(order_id))
+        Ok(order_id)
     }
 
     /// Analyze order for margin/commission (what-if)

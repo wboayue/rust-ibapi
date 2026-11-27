@@ -1799,9 +1799,9 @@ fn preset_legs_take_ids_after_the_parent() {
         assert_eq!(order.order_id, 100);
         assert_eq!(order.preset_stop_loss_order_id, stop_loss);
         assert_eq!(order.preset_profit_taker_order_id, profit_taker);
-        assert_eq!(ids.parent, OrderId(100));
-        assert_eq!(ids.stop_loss, stop_loss.map(OrderId));
-        assert_eq!(ids.profit_taker, profit_taker.map(OrderId));
+        assert_eq!(ids.parent, 100);
+        assert_eq!(ids.stop_loss, stop_loss);
+        assert_eq!(ids.profit_taker, profit_taker);
     }
 }
 
@@ -2420,7 +2420,7 @@ fn pegged_to_benchmark_sets_every_field() {
 
 #[test]
 fn reference_contract_accepts_contract_id() {
-    use crate::accounts::types::ContractId;
+    use crate::contracts::ContractId;
     let order = Order::builder()
         .buy(100)
         .pegged_to_benchmark(50.0)

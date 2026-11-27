@@ -228,13 +228,13 @@ impl Client {
     ///     ).await.expect("OCA submission failed");
     /// }
     /// ```
-    pub async fn submit_oca_orders(&self, orders: Vec<(crate::contracts::Contract, crate::orders::Order)>) -> Result<Vec<OrderId>, Error> {
+    pub async fn submit_oca_orders(&self, orders: Vec<(crate::contracts::Contract, crate::orders::Order)>) -> Result<Vec<i32>, Error> {
         let mut order_ids = Vec::new();
 
         for (contract, mut order) in orders.into_iter() {
             let order_id = self.next_order_id();
             order.order_id = order_id;
-            order_ids.push(OrderId::new(order_id));
+            order_ids.push(order_id);
             self.submit_order(order_id, &contract, &order).await?;
         }
 

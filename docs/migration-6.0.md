@@ -615,7 +615,7 @@ bound now returns what it asked for.
 
 The compiler reports every call. Nothing it can check depends on which bound you choose.
 
-### 27. Id parameters take `impl Into<ContractId>` and `impl Into<AccountId>`
+### 27. Id parameters take `impl Into<XId>`; returned order ids are `i32`; `ContractId` moves to `contracts`
 
 These id parameters now accept both the raw value and the typed id:
 
@@ -652,6 +652,42 @@ let order = client.order(&contract).buy(100).market().account(cow.into_owned());
 ```
 
 The compiler reports every call that no longer compiles. Nothing changes at runtime.
+
+#### Returned order ids are `i32`; `ContractId` moves to `contracts`
+
+Ids the crate returns are raw, as `Order::order_id` and `Contract::contract_id` already were:
+
+| Item (sync and async) | 5.x | 6.0 |
+|---|---|---|
+| `OrderBuilder::submit` | `Result<OrderId, Error>` | `Result<i32, Error>` |
+| `submit_oca_orders` | `Result<Vec<OrderId>, Error>` | `Result<Vec<i32>, Error>` |
+| `BracketOrderIds::{parent, take_profit, stop_loss}` | `OrderId` | `i32` |
+| `BracketOrderIds::as_vec` | `Vec<OrderId>` | `Vec<i32>` |
+| `BracketOrderIds::as_i32_vec` | `Vec<i32>` | removed; use `as_vec` |
+| `AttachedOrderIds::parent` / `stop_loss` / `profit_taker` | `OrderId` / `Option<OrderId>` | `i32` / `Option<i32>` |
+| `ContractId` path | `ibapi::accounts::types::ContractId` | `ibapi::contracts::ContractId` |
+
+Passing a returned id back to an order method compiles as before, since those take `impl Into<OrderId>`. Drop `.0` and `.value()` on the returned ids, and `OrderId` annotations on variables holding them. `ibapi::prelude` exports `ContractId` and now also `OrderId`.
+
+Each id newtype gains the missing conversions: `From<&i32>` on `OrderId` and `ContractId`, `From<ContractId> for i32`, `From<AccountId> for String`, and `From<&String>`, `From<&ModelCode>` and `From<ModelCode> for String` on `ModelCode`.
+
+```rust,ignore
+// 5.x
+use ibapi::accounts::types::ContractId;
+let ids = client.order(&contract).buy(100).bracket().entry_limit(50.0).take_profit(55.0).stop_loss(45.0).submit_all()?;
+let parent: i32 = ids.parent.0;
+let all: Vec<i32> = ids.as_i32_vec();
+let id: OrderId = client.order(&contract).buy(100).market().submit()?;
+
+// 6.0
+use ibapi::contracts::ContractId;
+let ids = client.order(&contract).buy(100).bracket().entry_limit(50.0).take_profit(55.0).stop_loss(45.0).submit_all()?;
+let parent: i32 = ids.parent;
+let all: Vec<i32> = ids.as_vec();
+let id: i32 = client.order(&contract).buy(100).market().submit()?;
+```
+
+Serialized `BracketOrderIds` and `AttachedOrderIds` are unchanged: `OrderId` serialized as its inner integer.
 
 ### 28. `last_trade_date_or_contract_month` holds only the date
 

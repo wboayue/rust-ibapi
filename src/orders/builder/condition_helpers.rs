@@ -14,7 +14,7 @@
 //! let margin_cond = margin().less_than(30);
 //! ```
 
-use crate::accounts::types::ContractId;
+use crate::contracts::ContractId;
 use crate::orders::conditions::*;
 use crate::orders::OrderCondition;
 
