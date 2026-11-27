@@ -1258,12 +1258,13 @@ Err(Error::ServerVersion { required, actual, feature }) => { /* ... */ }
 ```
 
 `market_data::historical::HistoricalParseError` and `Error::HistoricalParseError` are removed.
-`FromStr` for `BarSize`, `Duration` and historical `WhatToShow` returns `Error::Parse`, with the
-input in `value`, as the other wire enums' parsers do. A `?` on one of them in a function returning
-`ibapi::Error` still compiles. Replace any match on `HistoricalParseError::BarSize(..)`, `Duration`,
-`WhatToShow` or `ParseIntError` with `Error::Parse { value, reason, .. }`. `HistoricalParseError`
-derived `PartialEq` and `ibapi::Error` does not, so `assert_eq!(s.parse::<BarSize>(), Ok(..))` no
-longer compiles: compare `s.parse::<BarSize>().unwrap()`, or match on the error.
+`FromStr` for `BarSize`, `Duration` and historical `WhatToShow` returns
+`ibapi::builder::ValidationError::InvalidField { field, value, reason }`, with the type name
+(`"Duration"`) in `field` and the input in `value`: the text is caller input, not a TWS reply. A
+`?` on one of them in a function returning `ibapi::Error` still compiles, as `Error::Validation`.
+Replace any match on `HistoricalParseError::BarSize(..)`, `Duration`, `WhatToShow` or
+`ParseIntError` with `ValidationError::InvalidField { value, reason, .. }`. `ValidationError`
+derives `PartialEq`, so `assert_eq!(s.parse::<BarSize>(), Ok(..))` still compiles.
 
 The compiler finds every tuple pattern. It does not catch a changed `Display`, which a caller
 that matches on the text would see:
@@ -1274,7 +1275,29 @@ that matches on the text would see:
 | Missing required enum field | `parse error: 0 -  - missing action` | `parse error: action: missing` |
 | Missing required submessage | `parse error: 0 - contract - missing in Position` | `parse error: contract: missing in Position` |
 | `"XYZ".parse::<Action>()` | `parse error: 0 - XYZ - unknown Action` | `parse error: "XYZ": unknown Action` |
-| `"bogus".parse::<BarSize>()` | `Invalid BarSize input 'bogus'` | `parse error: "bogus": unknown BarSize` |
-| `"1 X".parse::<Duration>()` | `Invalid Duration input '1 X' Unsupported unit` | `parse error: "1 X": Duration unit is not S, D, W, M or Y` |
+| `"bogus".parse::<BarSize>()` | `Invalid BarSize input 'bogus'` | `Invalid BarSize "bogus": expected wire text such as "5 mins" or a variant name such as MIN5` |
+| `"1 X".parse::<Duration>()` | `Invalid Duration input '1 X' Unsupported unit` | `Invalid Duration "1 X": unit is not S, D, W, M or Y` |
 
 `ServerVersion`'s `Display` is unchanged.
+
+### 50. `ValidationError` is `#[non_exhaustive]`
+
+`ibapi::builder::ValidationError` gains a variant for each new kind of input check, so it is
+`#[non_exhaustive]` and later variants are not breaking changes. A `match` on it outside the
+crate needs a wildcard arm:
+
+```rust,ignore
+// 5.x
+match err {
+    ValidationError::InvalidQuantity(q) => { /* ... */ }
+    ValidationError::InvalidPrice(p) => { /* ... */ }
+    // ...one arm per variant
+}
+
+// 6.0
+match err {
+    ValidationError::InvalidQuantity(q) => { /* ... */ }
+    ValidationError::InvalidPrice(p) => { /* ... */ }
+    other => eprintln!("rejected: {other}"),
+}
+```

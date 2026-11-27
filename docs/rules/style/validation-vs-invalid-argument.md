@@ -9,7 +9,7 @@ triggers:
   - about to write Error::InvalidArgument(format!(..))
 symbols: [Error::Validation, Error::InvalidArgument, ValidationError, ibapi::builder]
 related: [builder-enum-coverage, param-budget]
-precedents: ["#1169", "#1249"]
+precedents: ["#1169", "#1249", "#PRA"]
 ---
 
 Ask who fixes it. A runtime value a caller may correct (a quantity, price or strike, a date from
@@ -22,10 +22,13 @@ conflicting `historical_data` settings, bad client config, `buffer_limit(0)`) is
 Add a `ValidationError` variant rather than formatting a value into a string. If the type
 already carries type parameters, prefer typestate to either error.
 
+`Error::Parse` is for text that came from TWS: a decoder, and the `impl_wire_enum!` and
+`BarTimestamp` parsers decoders use. A `FromStr` that only ever reads caller text (`Duration`,
+`BarSize`, historical `WhatToShow`, `Expiry`) returns `ValidationError`. `ValidationError` is
+`#[non_exhaustive]`, so a new variant is not a breaking change.
+
 Not yet aligned, tracked in #1328: the order builders still return
-`ValidationError::MissingRequiredField` for a missing field, and the wire-vocabulary parsers
-(`Duration`, `BarSize`, `WhatToShow`, `impl_wire_enum!` types) return `Error::Parse`, the error
-decoding uses. Don't copy either pattern into new code.
+`ValidationError::MissingRequiredField` for a missing field. Don't copy it into new code.
 
 ## Why
 
@@ -57,3 +60,6 @@ type parameters.
   zero / NaN strikes it used to pass. Review caught that zero was over-reach: TWS reads
   strike 0 as unset and resolves the contract from its id (`docs/wire-facts/contracts.md`),
   so zero still passes with a `contract_id` or `local_symbol`.
+- #PRA — `Duration`, `BarSize` and historical `WhatToShow` `FromStr` moved from `Error::Parse`
+  to `ValidationError::InvalidField`: no decoder calls them, so the text is always caller input.
+  The wire-enum parsers stayed on `Error::Parse`. `ValidationError` became `#[non_exhaustive]`.

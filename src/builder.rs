@@ -34,7 +34,11 @@ pub struct Missing;
 ///     other => panic!("unexpected {other:?}"),
 /// }
 /// ```
+///
+/// The enum is `#[non_exhaustive]`: the crate adds a variant for each new kind of check, so a
+/// `match` needs a wildcard arm.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum ValidationError {
     /// Quantity must be positive and finite.
     InvalidQuantity(f64),
@@ -74,7 +78,8 @@ pub enum ValidationError {
     /// A field on a caller-built value holds something TWS rejects, such as
     /// `Order::ext_operator`.
     InvalidField {
-        /// The field, as `Type::field`.
+        /// The field, as `Type::field`, or the type name when a whole value was parsed from text
+        /// (`"Duration"`).
         field: &'static str,
         /// The rejected value.
         value: String,
