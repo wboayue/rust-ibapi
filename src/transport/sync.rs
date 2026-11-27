@@ -20,6 +20,7 @@ use crate::connection::common::STARTUP_STALL;
 use crate::connection::sync::Connection;
 
 use super::common::{lock, log_orphan, read_lock, report_unroutable_frame, validate_frame_length, write_lock, Lease, LeaseRef};
+use super::farm_watch::sync_impl::FarmWatch;
 use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::raw_capture::RawFrameTap;
@@ -259,6 +260,8 @@ impl SharedChannels {
 pub(crate) struct NoticeBroadcaster {
     /// `None` once closed.
     senders: Mutex<Option<Vec<Sender<Notice>>>>,
+    /// Fed every notice before the fan-out; reset by the bus on a transport drop.
+    pub(crate) farms: FarmWatch,
 }
 
 impl super::common::NoticeSink for NoticeBroadcaster {
@@ -271,6 +274,7 @@ impl NoticeBroadcaster {
     pub(crate) fn new() -> Self {
         Self {
             senders: Mutex::new(Some(Vec::new())),
+            farms: FarmWatch::default(),
         }
     }
 
@@ -285,6 +289,7 @@ impl NoticeBroadcaster {
     }
 
     pub(crate) fn broadcast(&self, notice: Notice) {
+        self.farms.observe(&notice);
         if let Some(senders) = lock(&self.senders).as_mut() {
             senders.retain(|s| {
                 let sent = s.send(notice.clone()).is_ok();
@@ -300,6 +305,7 @@ impl NoticeBroadcaster {
     /// every later subscription on arrival.
     pub(crate) fn close(&self) {
         *lock(&self.senders) = None;
+        self.farms.close();
     }
 }
 
@@ -452,7 +458,7 @@ impl<S: Stream> TcpMessageBus<S> {
     /// handshake writes through `Connection`, not here.
     fn write_message(&self, message: &[u8]) -> Result<(), Error> {
         self.throttle(message);
-        self.write_now(message)
+        self.write_now(message, None)
     }
 
     /// Waits for the rate limiter, if any. Shared-channel paths call this
@@ -468,7 +474,7 @@ impl<S: Stream> TcpMessageBus<S> {
     /// under the `session` gate. The gate held for write is a reconnect in
     /// progress, whatever the state signal says yet, so the write is refused
     /// as `ensure_connected` would refuse it once the signal catches up.
-    fn write_now(&self, message: &[u8]) -> Result<(), Error> {
+    fn write_now(&self, message: &[u8], deadline: Option<Instant>) -> Result<(), Error> {
         let _session = match self.session.try_read() {
             Ok(guard) => guard,
             // Poison recovery, as `common::lock`: the guard holds nothing.
@@ -476,7 +482,7 @@ impl<S: Stream> TcpMessageBus<S> {
             Err(TryLockError::WouldBlock) => return Err(self.ended_reason(Error::Reconnecting)),
         };
         self.ensure_connected()?;
-        self.connection.write_message(message)
+        self.connection.write_message(message, deadline)
     }
 
     fn reset(&self) {
@@ -492,6 +498,7 @@ impl<S: Stream> TcpMessageBus<S> {
         // Aliases of the routes just failed.
         self.executions.clear();
         self.order_taps.reset();
+        self.connection.notice_broadcaster.farms.reset();
     }
 
     // The three cleanup handlers below remove a registration only when it
@@ -725,7 +732,10 @@ impl<S: Stream> TcpMessageBus<S> {
     /// subscription its id names.
     fn deliver(&self, id: WireId, item: RoutedItem, sent_to_update_stream: bool) {
         let unrouted = match id {
-            WireId::Request(request_id) => self.requests.deliver(&request_id, item),
+            WireId::Request(request_id) => self.requests.deliver(
+                &request_id,
+                item.with_farm_disconnect_mark(|| self.connection.notice_broadcaster.farms.mark()),
+            ),
             WireId::Order(order_id) => self.orders.deliver(&order_id, item),
         };
         if let Err(item) = unrouted {
@@ -807,7 +817,16 @@ impl<S: Stream> TcpMessageBus<S> {
 
     /// Register `request_id`'s channel, optionally with an unread-item cap,
     /// then write the request.
-    fn open_request(&self, request_id: RequestId, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
+    fn open_request(
+        &self,
+        request_id: RequestId,
+        message: &[u8],
+        bound: Option<BufferBound>,
+        deadline: Option<Instant>,
+    ) -> Result<InternalSubscription, Error> {
+        if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
+            return Err(Error::Timeout);
+        }
         // Read before the gate: a reset after this read leaves the
         // subscription in the old session, which is where its request went.
         let session = self.session_generation();
@@ -826,7 +845,15 @@ impl<S: Stream> TcpMessageBus<S> {
         // the registration back out on failure rather than leave a channel no
         // reset will clear. `remove_if_same` so a newer registration under the
         // same id survives.
-        if let Err(e) = self.write_message(message) {
+        let send = match (deadline, self.rate_limiter.get()) {
+            (Some(deadline), Some(limiter)) => limiter.acquire_blocking_before(deadline),
+            _ => {
+                self.throttle(message);
+                Ok(())
+            }
+        }
+        .and_then(|()| self.write_now(message, deadline));
+        if let Err(e) = send {
             self.requests.remove_if_same(request_id, &lease_ref);
             return Err(e);
         }
@@ -946,7 +973,7 @@ impl<S: Stream> TcpMessageBus<S> {
         let lease_ref = lease.downgrade();
         self.shared_channels.add(message_type, sender.clone(), lease_ref.clone());
         self.throttle(message);
-        let ticket = match self.shared_channels.subscribe(message_type, account, || self.write_now(message)) {
+        let ticket = match self.shared_channels.subscribe(message_type, account, || self.write_now(message, None)) {
             Ok(ticket) => ticket,
             Err(e) => {
                 self.shared_channels.remove(&lease_ref);
@@ -970,8 +997,14 @@ impl<S: Stream> TcpMessageBus<S> {
 }
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
-    fn send_request_capped(&self, request_id: RequestId, message: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error> {
-        self.open_request(request_id, message, bound)
+    fn send_request_capped(
+        &self,
+        request_id: RequestId,
+        message: &[u8],
+        bound: Option<BufferBound>,
+        deadline: Option<Instant>,
+    ) -> Result<InternalSubscription, Error> {
+        self.open_request(request_id, message, bound, deadline)
     }
 
     fn send_order_request(&self, order_id: OrderId, message: &[u8]) -> Result<InternalSubscription, Error> {
@@ -1059,7 +1092,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             self.throttle(message);
         }
         self.shared_channels
-            .unsubscribe(ticket, || message.map_or(Ok(()), |message| self.write_now(message)))
+            .unsubscribe(ticket, || message.map_or(Ok(()), |message| self.write_now(message, None)))
     }
 
     fn notice_subscribe(&self) -> NoticeStream {
@@ -1081,6 +1114,10 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
     fn session_generation(&self) -> u64 {
         self.session_generation.load(Ordering::Acquire)
+    }
+
+    fn farm_watch(&self) -> &FarmWatch {
+        &self.connection.notice_broadcaster.farms
     }
 }
 
@@ -1499,8 +1536,11 @@ impl Io for TcpSocket {
         read_message(&mut *reader, &self.tap).map_err(|err| self.closed_or(err))
     }
 
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    fn write_all(&self, buf: &[u8], deadline: Option<Instant>) -> Result<(), Error> {
         let mut writer = lock(&self.writer);
+        if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
+            return Err(Error::Timeout);
+        }
         writer.write_all(buf).map_err(|err| self.closed_or(err.into()))
     }
 
@@ -1520,7 +1560,7 @@ impl Io for TcpSocket {
 
 pub(crate) trait Io {
     fn read_message(&self) -> Result<Vec<u8>, Error>;
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
+    fn write_all(&self, buf: &[u8], deadline: Option<Instant>) -> Result<(), Error>;
     /// Release the physical stream, even while owners still hold it: pending
     /// and later reads and writes fail with [`Error::Shutdown`], and
     /// `reconnect` refuses. Idempotent. Twin of `AsyncIo::close`.

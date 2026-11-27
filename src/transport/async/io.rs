@@ -5,7 +5,7 @@
 //! already-unframed body so callers don't repeat the length-prefix dance.
 
 use std::fmt;
-use std::future::Future;
+use std::future::{poll_fn, Future};
 use std::io;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -15,12 +15,76 @@ use async_trait::async_trait;
 use log::warn;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{watch, Mutex, MutexGuard};
+use tokio::time::{sleep_until, Instant};
 
 use crate::connection::common::Endpoint;
 use crate::errors::Error;
 use crate::transport::common::validate_frame_length;
 use crate::transport::r#async::ShutdownSignal;
 use crate::transport::raw_capture::RawFrameTap;
+
+/// The caller can abandon the operation before the writer accepts its first byte.
+pub(crate) struct WriteAdmission {
+    deadline: Option<Instant>,
+    cancelled: watch::Receiver<bool>,
+}
+
+pub(crate) struct CancelWrite(watch::Sender<bool>);
+
+impl Drop for CancelWrite {
+    fn drop(&mut self) {
+        self.0.send_replace(true);
+    }
+}
+
+impl WriteAdmission {
+    pub(crate) fn new(deadline: Instant) -> (Self, CancelWrite) {
+        Self::with_deadline(Some(deadline))
+    }
+
+    pub(crate) fn without_deadline() -> (Self, CancelWrite) {
+        Self::with_deadline(None)
+    }
+
+    fn with_deadline(deadline: Option<Instant>) -> (Self, CancelWrite) {
+        let (cancel, cancelled) = watch::channel(false);
+        (Self { deadline, cancelled }, CancelWrite(cancel))
+    }
+
+    pub(super) fn deadline(&self) -> Option<Instant> {
+        self.deadline
+    }
+
+    pub(crate) fn ensure_open(&self) -> Result<(), Error> {
+        self.open().map(drop)
+    }
+
+    pub(super) async fn stopped(&self) -> Error {
+        let mut cancelled = self.cancelled.clone();
+        let deadline = async {
+            match self.deadline {
+                Some(deadline) => sleep_until(deadline).await,
+                None => std::future::pending().await,
+            }
+        };
+        tokio::select! {
+            biased;
+            () = deadline => Error::Timeout,
+            _ = cancelled.wait_for(|cancelled| *cancelled) => Error::Cancelled,
+        }
+    }
+
+    fn open(&self) -> Result<watch::Ref<'_, bool>, Error> {
+        let cancelled = self.cancelled.borrow();
+        if self.deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Err(Error::Timeout);
+        }
+        if *cancelled {
+            return Err(Error::Cancelled);
+        }
+        Ok(cancelled)
+    }
+}
 
 #[async_trait]
 pub(crate) trait AsyncIo {
@@ -31,7 +95,8 @@ pub(crate) trait AsyncIo {
     /// from the middle of the cut-off one: later writes must fail, and reads
     /// must fail with a connection-lost error (pending ones included), because
     /// only a read error makes the dispatcher reconnect. `reconnect` clears it.
-    async fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
+    /// Admission stops an abandoned or expired write before any byte is accepted.
+    async fn write_all(&self, buf: &[u8], admission: Option<&WriteAdmission>) -> Result<(), Error>;
     /// Release the physical stream, even while owners still hold it: pending
     /// and later reads and writes fail with [`Error::Shutdown`], and
     /// `reconnect` refuses. Idempotent.
@@ -290,8 +355,15 @@ impl AsyncIo for AsyncSocket {
         }
     }
 
-    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        let mut writer = self.writer.lock().await;
+    async fn write_all(&self, buf: &[u8], admission: Option<&WriteAdmission>) -> Result<(), Error> {
+        let mut writer = match admission {
+            Some(admission) => tokio::select! {
+                biased;
+                e = admission.stopped() => return Err(e),
+                writer = self.writer.lock() => writer,
+            },
+            None => self.writer.lock().await,
+        };
         let writer = self.open_half(&mut writer)?;
         // Declared after `writer`, so it drops first: a break lands while the
         // writer is still held, and cannot interleave with `reconnect`.
@@ -307,6 +379,26 @@ impl AsyncIo for AsyncSocket {
             biased;
             err = self.interrupted() => Err(err),
             result = async {
+                if let Some(admission) = admission {
+                    admission.ensure_open()?;
+                    if !progress.remaining.is_empty() {
+                        let first_write = writer.write_buf(&mut progress.remaining);
+                        tokio::pin!(first_write);
+                        // Coordinate with caller drop for a single poll only. Once a byte
+                        // is accepted, the send owns the frame through the remaining writes.
+                        let written = tokio::select! {
+                            biased;
+                            e = admission.stopped() => return Err(e),
+                            result = poll_fn(|cx| {
+                                let _open = admission.open()?;
+                                first_write.as_mut().poll(cx).map_err(Error::from)
+                            }) => result?,
+                        };
+                        if written == 0 {
+                            return Err(io::Error::from(io::ErrorKind::WriteZero).into());
+                        }
+                    }
+                }
                 writer.write_all_buf(&mut progress.remaining).await?;
                 writer.flush().await?;
                 Ok(())

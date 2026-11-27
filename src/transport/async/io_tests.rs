@@ -45,7 +45,7 @@ async fn socket_pair() -> (Arc<AsyncSocket>, TcpStream, tokio::net::TcpListener)
 /// Write `bytes` with a caller that gives up after 100ms; the write must not
 /// have completed by then.
 async fn abandon_write(socket: &AsyncSocket, bytes: &[u8]) {
-    let written = tokio::time::timeout(Duration::from_millis(100), socket.write_all(bytes)).await;
+    let written = tokio::time::timeout(Duration::from_millis(100), socket.write_all(bytes, None)).await;
     assert!(written.is_err(), "write completed; the peer should not be reading yet");
 }
 
@@ -91,7 +91,7 @@ async fn write_cut_off_mid_frame_breaks_the_connection() {
     );
     let read = read.expect("pending read not woken");
     assert!(matches!(read, Err(Error::ConnectionReset)), "read: {read:?}");
-    let written = socket.write_all(&[0xCC; 3]).await;
+    let written = socket.write_all(&[0xCC; 3], None).await;
     assert!(matches!(written, Err(Error::ConnectionReset)), "write: {written:?}");
 
     let reader = read_to_end(peer);
@@ -111,14 +111,14 @@ async fn write_abandoned_before_it_starts_sends_nothing() {
     let stalled = tokio::spawn({
         let socket = socket.clone();
         let large = large.clone();
-        async move { socket.write_all(&large).await }
+        async move { socket.write_all(&large, None).await }
     });
     until_writer_held(&socket).await;
     abandon_write(&socket, &[0xBB; 3]).await;
 
     let reader = read_to_end(peer);
     stalled.await.unwrap().unwrap();
-    socket.write_all(&[0xCC; 3]).await.unwrap();
+    socket.write_all(&[0xCC; 3], None).await.unwrap();
     drop(socket);
 
     let received = reader.await.unwrap();
@@ -130,13 +130,13 @@ async fn write_abandoned_before_it_starts_sends_nothing() {
 async fn reconnect_clears_a_broken_connection() {
     let (socket, _peer, listener) = socket_pair().await;
     abandon_write(&socket, &vec![0xAA; LARGE]).await;
-    assert!(matches!(socket.write_all(&[0xCC; 3]).await, Err(Error::ConnectionReset)));
+    assert!(matches!(socket.write_all(&[0xCC; 3], None).await, Err(Error::ConnectionReset)));
 
     let (reconnected, accepted) = tokio::join!(socket.reconnect(), listener.accept());
     reconnected.unwrap();
     let mut peer = accepted.unwrap().0;
 
-    socket.write_all(&[0xCC; 3]).await.unwrap();
+    socket.write_all(&[0xCC; 3], None).await.unwrap();
     let mut received = [0u8; 3];
     peer.read_exact(&mut received).await.unwrap();
     assert_eq!(received, [0xCC; 3]);
@@ -159,7 +159,7 @@ async fn physical_close_wakes_read_and_is_terminal() {
     assert!(matches!(read, Err(Error::Shutdown)), "read: {read:?}");
     assert_peer_sees_eof(peer).await;
     socket.close().await;
-    assert!(matches!(socket.write_all(&[1]).await, Err(Error::Shutdown)));
+    assert!(matches!(socket.write_all(&[1], None).await, Err(Error::Shutdown)));
     assert!(matches!(socket.read_message().await, Err(Error::Shutdown)));
     assert!(matches!(socket.reconnect().await, Err(Error::Shutdown)));
 }
@@ -170,12 +170,12 @@ async fn physical_close_wakes_read_and_is_terminal() {
 async fn physical_close_overrides_a_broken_connection() {
     let (socket, _peer, _listener) = socket_pair().await;
     abandon_write(&socket, &vec![0xAA; LARGE]).await;
-    assert!(matches!(socket.write_all(&[0xCC; 3]).await, Err(Error::ConnectionReset)));
+    assert!(matches!(socket.write_all(&[0xCC; 3], None).await, Err(Error::ConnectionReset)));
 
     socket.close().await;
     let read = socket.read_message().await;
     assert!(matches!(read, Err(Error::Shutdown)), "read: {read:?}");
-    let written = socket.write_all(&[0xCC; 3]).await;
+    let written = socket.write_all(&[0xCC; 3], None).await;
     assert!(matches!(written, Err(Error::Shutdown)), "write: {written:?}");
     assert!(matches!(socket.reconnect().await, Err(Error::Shutdown)));
 }
@@ -186,7 +186,7 @@ async fn physical_close_prevents_a_queued_write() {
     let (socket, peer, _listener) = socket_pair().await;
     let writer = socket.writer.lock().await;
     let sending = socket.clone();
-    let write = tokio::spawn(async move { sending.write_all(&[0xAA; 4]).await });
+    let write = tokio::spawn(async move { sending.write_all(&[0xAA; 4], None).await });
     tokio::task::yield_now().await;
     let closing = socket.clone();
     let close = tokio::spawn(async move { closing.close().await });
@@ -210,7 +210,7 @@ async fn physical_close_wakes_a_backpressured_write() {
     let (socket, _peer, _listener) = socket_pair().await;
     let write = tokio::spawn({
         let socket = socket.clone();
-        async move { socket.write_all(&vec![0xAA; LARGE]).await }
+        async move { socket.write_all(&vec![0xAA; LARGE], None).await }
     });
     until_writer_held(&socket).await;
 
@@ -232,7 +232,7 @@ async fn sever_fails_a_stuck_write_until_reconnect() {
     let (socket, _peer, listener) = socket_pair().await;
     let stuck = tokio::spawn({
         let socket = socket.clone();
-        async move { socket.write_all(&vec![0xAA; LARGE]).await }
+        async move { socket.write_all(&vec![0xAA; LARGE], None).await }
     });
     until_writer_held(&socket).await;
 
@@ -242,12 +242,12 @@ async fn sever_fails_a_stuck_write_until_reconnect() {
         .expect("sever left the write stuck")
         .unwrap();
     assert!(matches!(written, Err(Error::ConnectionReset)), "write: {written:?}");
-    assert!(matches!(socket.write_all(&[1]).await, Err(Error::ConnectionReset)));
+    assert!(matches!(socket.write_all(&[1], None).await, Err(Error::ConnectionReset)));
 
     let (reconnected, accepted) = tokio::join!(socket.reconnect(), listener.accept());
     reconnected.expect("reconnect after sever");
     let (mut new_peer, _) = accepted.unwrap();
-    socket.write_all(b"live").await.expect("the new connection must take writes");
+    socket.write_all(b"live", None).await.expect("the new connection must take writes");
     let mut received = [0u8; 4];
     new_peer.read_exact(&mut received).await.unwrap();
     assert_eq!(&received, b"live");
@@ -255,10 +255,10 @@ async fn sever_fails_a_stuck_write_until_reconnect() {
 
 /// A caller's connector, over in-memory duplex pipes: each call opens a fresh
 /// pipe and hands its far end to the test.
-fn duplex_connector() -> (Connector, tokio::sync::mpsc::UnboundedReceiver<tokio::io::DuplexStream>) {
+fn duplex_connector(capacity: usize) -> (Connector, tokio::sync::mpsc::UnboundedReceiver<tokio::io::DuplexStream>) {
     let (peers, opened) = tokio::sync::mpsc::unbounded_channel();
     let connector = Connector::from_stream(move || {
-        let (near, far) = tokio::io::duplex(1024);
+        let (near, far) = tokio::io::duplex(capacity);
         let opened = peers.send(far);
         async move {
             opened.map_err(|_| std::io::Error::other("test dropped the peer receiver"))?;
@@ -272,11 +272,11 @@ fn duplex_connector() -> (Connector, tokio::sync::mpsc::UnboundedReceiver<tokio:
 /// connector again rather than reusing the stream it replaced.
 #[tokio::test]
 async fn caller_stream_is_framed_and_reopened_on_reconnect() {
-    let (connector, mut opened) = duplex_connector();
+    let (connector, mut opened) = duplex_connector(1024);
     let socket = AsyncSocket::connect(connector).await.unwrap();
     let mut first = opened.try_recv().expect("connect did not open a stream");
 
-    socket.write_all(&encode_raw_length(&[0, 0, 0, 1, 7])).await.unwrap();
+    socket.write_all(&encode_raw_length(&[0, 0, 0, 1, 7]), None).await.unwrap();
     let mut sent = [0u8; 9];
     first.read_exact(&mut sent).await.unwrap();
     assert_eq!(sent, [0, 0, 0, 5, 0, 0, 0, 1, 7]);
@@ -295,13 +295,35 @@ async fn caller_stream_is_framed_and_reopened_on_reconnect() {
 /// fails the read instead of being trusted.
 #[tokio::test]
 async fn caller_stream_rejects_an_invalid_frame_length() {
-    let (connector, mut opened) = duplex_connector();
+    let (connector, mut opened) = duplex_connector(1024);
     let socket = AsyncSocket::connect(connector).await.unwrap();
     let mut peer = opened.try_recv().unwrap();
 
     peer.write_all(&u32::MAX.to_be_bytes()).await.unwrap();
     let read = socket.read_message().await;
     assert!(matches!(read, Err(Error::InvalidFrame(_))), "got {read:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn pending_first_write_rechecks_its_deadline_before_accepting_bytes() {
+    let (connector, mut opened) = duplex_connector(1);
+    let socket = AsyncSocket::connect(connector).await.unwrap();
+    let mut peer = opened.try_recv().unwrap();
+    socket.write_all(b"A", None).await.unwrap();
+    let deadline = Instant::now() + Duration::from_micros(400);
+    let (admission, _cancel) = WriteAdmission::new(deadline);
+    let write = socket.write_all(b"B", Some(&admission));
+    tokio::pin!(write);
+    assert!(futures::poll!(write.as_mut()).is_pending());
+
+    tokio::time::advance(Duration::from_micros(400)).await;
+    assert_eq!(peer.read_u8().await.unwrap(), b'A');
+    let result = futures::poll!(write.as_mut());
+
+    assert!(matches!(result, std::task::Poll::Ready(Err(Error::Timeout))), "got {result:?}");
+    assert!(futures::poll!(Box::pin(peer.read_u8()).as_mut()).is_pending());
+    socket.write_all(b"C", None).await.unwrap();
+    assert_eq!(peer.read_u8().await.unwrap(), b'C');
 }
 
 /// A caller's connector that never resolves on reconnect cannot hold up

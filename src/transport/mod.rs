@@ -28,6 +28,7 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
+pub(crate) mod farm_watch;
 pub(crate) mod order_taps;
 pub(crate) mod rate_limiter;
 
@@ -37,7 +38,7 @@ pub(crate) use crate::subscriptions::common::RoutedItem;
 
 /// A request route's unread-item cap (`buffer_limit`), opened with
 /// `send_request_capped`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct BufferBound {
     /// The most unread items the route queues.
     pub limit: usize,
@@ -45,6 +46,11 @@ pub(crate) struct BufferBound {
     /// a result that fills the cap exactly still ends normally. Empty: only an
     /// error ends the stream.
     pub end: &'static [crate::messages::IncomingMessages],
+    /// The decoder's `error_continues_request`, read with `context`. An error
+    /// it accepts is not terminal: TWS goes on sending data after it, so the
+    /// route stays open and the error counts against the cap like data.
+    pub continues: fn(&crate::messages::Notice, &crate::subscriptions::DecoderContext) -> bool,
+    pub context: crate::subscriptions::DecoderContext,
 }
 
 /// The largest `buffer_limit`. The async client allocates its channel's slots
@@ -53,10 +59,13 @@ pub(crate) struct BufferBound {
 pub const MAX_BUFFER_LIMIT: usize = 65_535;
 
 impl BufferBound {
-    /// The bound for a `buffer_limit` on a `T` stream, or `None` when unset.
-    /// Errors if `limit` is outside `1..=MAX_BUFFER_LIMIT`.
+    /// The bound for a `buffer_limit` on a `T` stream opened with `context`,
+    /// or `None` when unset. Errors if `limit` is outside `1..=MAX_BUFFER_LIMIT`.
     #[cfg(any(feature = "sync", feature = "async"))]
-    pub(crate) fn for_stream<T: crate::subscriptions::StreamDecoder<T>>(limit: Option<usize>) -> Result<Option<Self>, Error> {
+    pub(crate) fn for_stream<T: crate::subscriptions::StreamDecoder<T>>(
+        limit: Option<usize>,
+        context: &crate::subscriptions::DecoderContext,
+    ) -> Result<Option<Self>, Error> {
         let Some(limit) = limit else {
             return Ok(None);
         };
@@ -65,7 +74,12 @@ impl BufferBound {
                 "buffer_limit must be 1..={MAX_BUFFER_LIMIT}, got {limit}"
             )));
         }
-        Ok(Some(Self { limit, end: T::END_MESSAGES }))
+        Ok(Some(Self {
+            limit,
+            end: T::END_MESSAGES,
+            continues: T::error_continues_request,
+            context: context.clone(),
+        }))
     }
 }
 
@@ -85,9 +99,10 @@ pub(crate) enum Admit {
 #[derive(Debug)]
 pub(crate) struct BoundState {
     bound: BufferBound,
-    /// Set once a terminal item (end marker, error, or the overflow error)
-    /// was queued: the stream has ended, so later items are discarded and
-    /// at most one item ever uses the slot past the cap.
+    /// Set once a terminal item (end marker, an error the decoder does not
+    /// continue after, or the overflow error) was queued: the stream has
+    /// ended, so later items are discarded and at most one item ever uses the
+    /// slot past the cap.
     closed: std::sync::atomic::AtomicBool,
 }
 
@@ -104,13 +119,17 @@ impl BoundState {
     }
 
     /// Decide `item`'s fate with `unread` items queued. End markers and
-    /// errors always get through; anything else past the cap overflows.
+    /// terminal errors always get through; anything else past the cap,
+    /// including an error the request continues after, overflows.
     pub(crate) fn admit(&self, item: &RoutedItem, unread: usize) -> Admit {
         use std::sync::atomic::Ordering;
         if self.closed() {
             return Admit::Discard;
         }
         let terminal = match item {
+            RoutedItem::Error(Error::Notice(notice)) | RoutedItem::FarmDisconnected(notice, _) => {
+                !(self.bound.continues)(notice, &self.bound.context)
+            }
             RoutedItem::Error(_) => true,
             RoutedItem::Response(message) => self.bound.end.contains(&message.message_type()),
             RoutedItem::Notice(_) => false,
@@ -249,11 +268,17 @@ pub(crate) trait MessageBus: Send + Sync {
     /// Open a request-id route and write `packet`. With `bound`, unread items
     /// are capped: see [`BoundState::admit`]. Past the cap the route queues
     /// `Error::BufferLimitExceeded` and discards later frames.
-    fn send_request_capped(&self, request_id: RequestId, packet: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error>;
+    fn send_request_capped(
+        &self,
+        request_id: RequestId,
+        packet: &[u8],
+        bound: Option<BufferBound>,
+        deadline: Option<std::time::Instant>,
+    ) -> Result<InternalSubscription, Error>;
 
     /// [`send_request_capped`](Self::send_request_capped) without a cap.
     fn send_request(&self, request_id: RequestId, packet: &[u8]) -> Result<InternalSubscription, Error> {
-        self.send_request_capped(request_id, packet, None)
+        self.send_request_capped(request_id, packet, None, None)
     }
 
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
@@ -298,6 +323,10 @@ pub(crate) trait MessageBus: Send + Sync {
     /// was sent in: once they differ, the request died with an earlier
     /// session and a cancel would name an id the current session never saw.
     fn session_generation(&self) -> u64;
+
+    /// Historical-data farm state from the global notices, which
+    /// `Client::resubscribing` waits on after a 10182.
+    fn farm_watch(&self) -> &farm_watch::sync_impl::FarmWatch;
 }
 
 // InternalSubscription - handles receiving messages for sync subscriptions
@@ -381,6 +410,32 @@ impl InternalSubscription {
     /// `None` if no `RoutedItem` arrives within `timeout`.
     pub(crate) fn next_timeout_routed(&self, timeout: Duration) -> Option<RoutedItem> {
         self.pick_receiver()?.recv_timeout(timeout).ok()
+    }
+
+    /// [`next_routed`](Self::next_routed), or `None` once `wake` receives
+    /// first. Either may win when both are ready.
+    pub(crate) fn next_routed_unless(&self, wake: &Receiver<()>) -> Option<Option<RoutedItem>> {
+        let Some(receiver) = self.pick_receiver() else {
+            return Some(None);
+        };
+        crossbeam::select! {
+            recv(receiver) -> item => Some(item.ok()),
+            recv(wake) -> _ => None,
+        }
+    }
+
+    /// Like `next_routed_unless`, with an optional deadline and a ready wake
+    /// taking precedence over queued data.
+    pub(crate) fn next_routed_before_unless(&self, deadline: Option<std::time::Instant>, wake: &Receiver<()>) -> Option<Option<RoutedItem>> {
+        let Some(receiver) = self.pick_receiver() else {
+            return Some(None);
+        };
+        let timer = deadline.map_or_else(crossbeam::channel::never, crossbeam::channel::at);
+        crossbeam::channel::select_biased! {
+            recv(wake) -> _ => None,
+            recv(timer) -> _ => Some(None),
+            recv(receiver) -> item => Some(item.ok()),
+        }
     }
 
     pub(crate) fn cancel(&self) {

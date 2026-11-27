@@ -341,8 +341,8 @@ impl Io for SlowSocket {
         self.stream.read_message()
     }
 
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        self.stream.write_all(buf)
+    fn write_all(&self, buf: &[u8], deadline: Option<std::time::Instant>) -> Result<(), Error> {
+        self.stream.write_all(buf, deadline)
     }
 
     fn close(&self) {
@@ -452,8 +452,8 @@ impl Io for TestSocket {
         self.stream.read_message()
     }
 
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        self.stream.write_all(buf)
+    fn write_all(&self, buf: &[u8], deadline: Option<std::time::Instant>) -> Result<(), Error> {
+        self.stream.write_all(buf, deadline)
     }
 
     fn close(&self) {

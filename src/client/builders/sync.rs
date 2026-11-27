@@ -4,6 +4,7 @@ use crate::client::ids::RequestId;
 use crate::transport::BufferBound;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::client::sync::Client;
 use crate::client::StreamDecoder;
@@ -52,8 +53,20 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T>,
     {
+        self.send_capped_before(message, buffer_limit, None)
+    }
+
+    pub(crate) fn send_capped_before<T>(
+        self,
+        message: Vec<u8>,
+        buffer_limit: Option<usize>,
+        deadline: Option<Instant>,
+    ) -> Result<Subscription<T>, Error>
+    where
+        T: StreamDecoder<T>,
+    {
         let context = self.client.decoder_context();
-        self.send_capped_with_context(message, buffer_limit, context)
+        self.send_capped_with_context_before(message, buffer_limit, context, deadline)
     }
 
     /// Send the request and create a subscription with context
@@ -69,10 +82,23 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T>,
     {
-        let bound = BufferBound::for_stream::<T>(buffer_limit)?;
+        self.send_capped_with_context_before(message, buffer_limit, context, None)
+    }
+
+    fn send_capped_with_context_before<T>(
+        self,
+        message: Vec<u8>,
+        buffer_limit: Option<usize>,
+        context: DecoderContext,
+        deadline: Option<Instant>,
+    ) -> Result<Subscription<T>, Error>
+    where
+        T: StreamDecoder<T>,
+    {
+        let bound = BufferBound::for_stream::<T>(buffer_limit, &context)?;
         SubscriptionBuilder::new(self.client)
             .with_context(context)
-            .send_with_request_id_capped(self.request_id, message, bound)
+            .send_with_request_id_capped(self.request_id, message, bound, deadline)
     }
 
     /// Send the request without creating a subscription
@@ -132,9 +158,15 @@ where
 
     /// Sends a request with a specific request ID and builds the subscription,
     /// capping unread items when `bound` is set.
-    pub fn send_with_request_id_capped(self, request_id: RequestId, message: Vec<u8>, bound: Option<BufferBound>) -> Result<Subscription<T>, Error> {
-        log::debug!("send_message({request_id:?}), buffer limit {:?}", bound.map(|bound| bound.limit));
-        let subscription = self.client.message_bus.send_request_capped(request_id, &message, bound)?;
+    pub fn send_with_request_id_capped(
+        self,
+        request_id: RequestId,
+        message: Vec<u8>,
+        bound: Option<BufferBound>,
+        deadline: Option<Instant>,
+    ) -> Result<Subscription<T>, Error> {
+        log::debug!("send_message({request_id:?}), buffer limit {:?}", bound.as_ref().map(|bound| bound.limit));
+        let subscription = self.client.message_bus.send_request_capped(request_id, &message, bound, deadline)?;
         Ok(self.build(subscription))
     }
 

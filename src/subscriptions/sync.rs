@@ -5,16 +5,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
+use crossbeam::channel::Receiver;
+
 use log::{debug, error, warn};
 
 use super::common::{
-    cancel_frame, collect_step, debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, notice_item, Bound, CollectStop,
-    DecoderContext, Drained, RoutedItem, SubscriptionItem,
+    cancel_frame, collect_step, continuing_error_as_notice, debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared,
+    notice_item, Bound, CollectStop, DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
 use crate::client::ids::RequestId;
 use crate::errors::Error;
 use crate::messages::Notice;
+use crate::transport::farm_watch::FarmMark;
 use crate::transport::{InternalSubscription, MessageBus, SharedTicket};
 
 /// A [Subscription] is a stream of responses returned from TWS. A [Subscription] is normally returned when invoking an API that can return more than one value.
@@ -63,6 +66,7 @@ pub struct Subscription<T: StreamDecoder<T>> {
     /// `cancel_and_drain`. Skips the cancel only where the decoder's
     /// `rejection_ends_request` says TWS ended the request too.
     rejected: OnceLock<Notice>,
+    farm_disconnect_mark: OnceLock<FarmMark>,
     subscription: InternalSubscription,
 }
 
@@ -96,6 +100,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             stream_ended: AtomicBool::new(false),
             ended_natively: AtomicBool::new(false),
             rejected: OnceLock::new(),
+            farm_disconnect_mark: OnceLock::new(),
         }
     }
 
@@ -184,6 +189,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Nothing follows it, though the channel stays open and `next` waits.
     pub(crate) fn snapshot_ended(&self) -> bool {
         self.snapshot_ended.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn farm_disconnect_mark(&self) -> Option<FarmMark> {
+        self.farm_disconnect_mark.get().copied()
     }
 
     /// The id a cancel names: the request id, else the order id.
@@ -364,8 +373,22 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
     }
 
+    /// [`next`](Self::next), or `None` once `wake` receives first, with the
+    /// queue left as it was.
+    pub(crate) fn next_unless(&self, wake: &Receiver<()>) -> Option<Option<Result<SubscriptionItem<T>, Error>>> {
+        if self.stream_ended.load(Ordering::Relaxed) {
+            return Some(None);
+        }
+        loop {
+            match self.handle_response(self.subscription.next_routed_unless(wake)?) {
+                NextAction::Return(val) => return Some(val),
+                NextAction::Skip => continue,
+            }
+        }
+    }
+
     fn handle_response(&self, response: Option<RoutedItem>) -> NextAction<Result<SubscriptionItem<T>, Error>> {
-        match response {
+        match response.map(|item| continuing_error_as_notice::<T>(item, &self.context)) {
             Some(RoutedItem::Response(message)) if is_undeclared(T::RESPONSE_MESSAGE_IDS, &message) => {
                 log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
                 NextAction::Skip
@@ -397,6 +420,13 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 }
             },
             Some(RoutedItem::Notice(notice)) => NextAction::Return(Some(Ok(notice_item(notice)))),
+            Some(RoutedItem::FarmDisconnected(notice, mark)) => {
+                let _ = self.farm_disconnect_mark.set(mark);
+                let e = Error::Notice(notice);
+                self.stream_ended.store(true, Ordering::Relaxed);
+                self.note_rejection(&e);
+                NextAction::Return(Some(Err(e)))
+            }
             Some(RoutedItem::Error(e)) => {
                 self.stream_ended.store(true, Ordering::Relaxed);
                 self.note_rejection(&e);
@@ -617,7 +647,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// }
     /// ```
     pub fn collect_to_end_within(&self, timeout: Duration) -> Result<Vec<T>, Error> {
-        let (rows, stopped) = self.collect_core(Bound::At(Instant::now() + timeout), |_| false);
+        self.collect_to_end_before(Instant::now() + timeout)
+    }
+
+    pub(crate) fn collect_to_end_before(&self, deadline: Instant) -> Result<Vec<T>, Error> {
+        let (rows, stopped) = self.collect_core(Bound::At(deadline), |_| false);
         stopped.into_result(rows)
     }
 
@@ -666,6 +700,37 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         stopped.into_batch(rows)
     }
 
+    /// Returns the next batch or the caller's invalidation notice. Wakes that
+    /// do not invalidate the request leave the batch and its deadline intact.
+    pub(crate) fn next_batch_unless(
+        &self,
+        quiet: Duration,
+        wake: &Receiver<()>,
+        mut invalidated: impl FnMut() -> Option<Notice>,
+    ) -> Result<Option<Result<Vec<T>, Error>>, Notice> {
+        let (rows, stopped) = self.collect_with(
+            Bound::Idle(quiet),
+            |rows| rows.last().is_some_and(T::is_batch_end),
+            |deadline| loop {
+                if let Some(notice) = invalidated() {
+                    return Err(notice);
+                }
+                if self.stream_ended.load(Ordering::Relaxed) {
+                    return Ok(None);
+                }
+                if let Some(item) = self.subscription.next_routed_before_unless(deadline, wake) {
+                    if let NextAction::Return(value) = self.handle_response(item) {
+                        return Ok(value);
+                    }
+                }
+            },
+        )?;
+        if let Some(notice) = invalidated() {
+            return Err(notice);
+        }
+        Ok(stopped.into_batch(rows))
+    }
+
     /// Collects every data item until TWS's end marker, with no time bound.
     /// [`collect_to_end_within`](Self::collect_to_end_within) without the
     /// timeout. Not for open-ended subscriptions like market data.
@@ -677,23 +742,35 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// The loop behind every `collect_*` and [`next_batch`](Self::next_batch):
     /// reads until `bound` runs out, the end of the stream, or [`collect_step`]
     /// says to stop.
-    fn collect_core(&self, bound: Bound<Instant>, mut stop: impl FnMut(&[T]) -> bool) -> (Vec<T>, CollectStop) {
+    fn collect_core(&self, bound: Bound<Instant>, stop: impl FnMut(&[T]) -> bool) -> (Vec<T>, CollectStop) {
+        let collected = self.collect_with(bound, stop, |deadline| {
+            Ok::<_, std::convert::Infallible>(match deadline {
+                None => self.next(),
+                Some(deadline) => self.next_timeout(deadline.saturating_duration_since(Instant::now())),
+            })
+        });
+        match collected {
+            Ok(rows) => rows,
+            Err(impossible) => match impossible {},
+        }
+    }
+
+    fn collect_with<E>(
+        &self,
+        bound: Bound<Instant>,
+        mut stop: impl FnMut(&[T]) -> bool,
+        mut read: impl FnMut(Option<Instant>) -> Result<Option<Result<SubscriptionItem<T>, Error>>, E>,
+    ) -> Result<(Vec<T>, CollectStop), E> {
         let mut rows = Vec::new();
         let mut deadline = match bound {
             Bound::At(deadline) => Some(deadline),
             Bound::None | Bound::Idle(_) => None,
         };
         loop {
-            let item = match deadline {
-                None => self.next(),
-                Some(deadline) => {
-                    let remaining = deadline.saturating_duration_since(Instant::now());
-                    if remaining.is_zero() {
-                        return (rows, CollectStop::Deadline);
-                    }
-                    self.next_timeout(remaining)
-                }
-            };
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                return Ok((rows, CollectStop::Deadline));
+            }
+            let item = read(deadline)?;
             let Some(item) = item else {
                 // `next_timeout` returns `None` for a timeout and for a closed
                 // channel; only a timeout waits until the deadline.
@@ -704,11 +781,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 } else {
                     CollectStop::Closed
                 };
-                return (rows, stopped);
+                return Ok((rows, stopped));
             };
             let read = rows.len();
             if let Some(stopped) = collect_step(&mut rows, item, &mut stop, &self.context) {
-                return (rows, stopped);
+                return Ok((rows, stopped));
             }
             if let Bound::Idle(quiet) = bound {
                 if rows.len() > read {

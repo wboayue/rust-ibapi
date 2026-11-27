@@ -313,6 +313,42 @@ impl Client {
     /// the new subscription's first item. Data from the outage is missing. A first `open` that
     /// fails with a lost connection is retried too, without a notice.
     ///
+    /// An internet outage leaves the socket up, and TWS resumes most streams on their own. It
+    /// ends a historical bar request with `keep_up_to_date` with error
+    /// [`SUBSCRIPTION_DISCONNECTED_CODE`](crate::SUBSCRIPTION_DISCONNECTED_CODE) (10182) when
+    /// its HMDS farm breaks. The wrapper yields that 10182 as a `SubscriptionItem::Notice`, the
+    /// gap marker, waits until no HMDS farm reports broken (or TWS reports connectivity restored
+    /// with 1101 or 1102, or 15 minutes pass), then calls `open` again. A 10182 that arrives
+    /// with no HMDS farm reported broken waits 30 seconds instead, so a TWS that kept answering
+    /// with 10182 would get one request every 30 seconds. A 10182 on the reopened request starts
+    /// another wait, and a reconnect during the wait reopens as above.
+    ///
+    /// TWS has confirmed the farms back when every HMDS farm that reported broken has reported
+    /// OK since, or a 1101 or 1102 arrived. The wait can also end unconfirmed: at the 15-minute
+    /// limit, after the 30-second wait, or when the broken farms went inactive (2107) instead of
+    /// reporting OK. TWS may hold a request sent while its farm is down and never answer it. So
+    /// after an unconfirmed reopen, if TWS later confirms the farms back before the reopened
+    /// request delivers a bar, the wrapper writes that request's cancel and calls `open` once
+    /// more, without a notice. This happens at most once per 10182. The outage runs exercised
+    /// the 15-minute limit and the second reopen; a farm going inactive and a 10182 with no farm
+    /// broken did not occur, and those paths rest on tests only. The wait can last minutes with
+    /// no bars. A consumer that completes a forming bar on a timer must treat the 10182 notice
+    /// as the signal to stop until the reopened stream's first bars arrive; a bar completed
+    /// during the wait rests on bars from before the outage.
+    ///
+    /// TWS sends 1101 ("connectivity restored, data lost") when its own link to IB comes back
+    /// and it no longer serves the requests open before the loss. On a 1101 while the stream is
+    /// open, the wrapper yields the 1101 as a `SubscriptionItem::Notice`, the gap marker, writes
+    /// the old request's cancel, then calls `open` again. The cancel always goes out before the
+    /// new request, because TWS may still count the old request against a limit such as market
+    /// depth lines. An error TWS sends for the old request cannot end the new stream. Each 1101
+    /// reopens once; 1101s that arrive before the wrapper next runs reopen once together. A 1101
+    /// that ends a wait after 10182 reopens once, without a second notice. 1102 ("data
+    /// maintained") reopens nothing, except the second reopen after an unconfirmed wait
+    /// described above. A caller that re-requests on 1101 itself must stop, or it
+    /// opens a second request. No 1101 arrived in the outage runs: this reopen follows IB's
+    /// documentation, not a capture.
+    ///
     /// It ends after yielding any other error, the error `wait_connected` returns when the
     /// reconnect gave up, or when the subscription itself ends (a snapshot that finished).
     ///
@@ -328,14 +364,16 @@ impl Client {
     /// | market depth | the book rebuilt from scratch: reset yours on the notice |
     /// | historical bars, `subscribe_with_updates` | the initial bars again (duplicates) |
     /// | historical bars, `subscribe` | the whole request again, `Bars` then `End`, if cut before `End`; the stream ends after `End` |
+    /// | historical bars, `subscribe_with_updates`, after a 10182 notice | the initial bars again once the HMDS farm is back |
     /// | account, position, PnL, account summary | the initial snapshot again |
     /// | scanner | a fresh scan |
+    /// | any of the above, after a 1101 notice | the same as after a reconnect |
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
-    /// use ibapi::TRANSPORT_RECONNECT_CODE;
+    /// use ibapi::{SUBSCRIPTION_DISCONNECTED_CODE, TRANSPORT_RECONNECT_CODE};
     /// use ibapi::prelude::*;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -344,7 +382,9 @@ impl Client {
     /// for item in client.resubscribing(|| client.realtime_bars(&contract).subscribe()) {
     ///     match item {
     ///         Ok(SubscriptionItem::Data(bar)) => println!("{bar:?}"),
-    ///         Ok(SubscriptionItem::Notice(n)) if n.code == TRANSPORT_RECONNECT_CODE => println!("gap: {n}"),
+    ///         Ok(SubscriptionItem::Notice(n)) if matches!(n.code, TRANSPORT_RECONNECT_CODE | SUBSCRIPTION_DISCONNECTED_CODE | 1101) => {
+    ///             println!("gap: {n}")
+    ///         }
     ///         Ok(SubscriptionItem::Notice(n)) => println!("notice: {n}"),
     ///         Err(e) => panic!("stream ended: {e}"),
     ///     }

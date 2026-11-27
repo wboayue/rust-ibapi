@@ -2,6 +2,7 @@
 
 use crate::client::ids::RequestId;
 use crate::transport::BufferBound;
+use std::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -11,6 +12,7 @@ use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::{DecoderContext, StreamDecoder, Subscription};
+use crate::transport::r#async::WriteAdmission;
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 
 /// Builder for creating requests with IDs
@@ -52,8 +54,20 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
+        self.send_capped_before(message, buffer_limit, None).await
+    }
+
+    pub(crate) fn send_capped_before<T>(
+        self,
+        message: Vec<u8>,
+        buffer_limit: Option<usize>,
+        admission: Option<WriteAdmission>,
+    ) -> impl Future<Output = Result<Subscription<T>, Error>> + Send + 'static
+    where
+        T: StreamDecoder<T> + Send + 'static,
+    {
         let context = self.client.decoder_context();
-        self.send_capped_with_context(message, buffer_limit, context).await
+        self.send_capped_with_context_before(message, buffer_limit, context, admission)
     }
 
     /// Send the request and create a subscription with context
@@ -74,11 +88,27 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        let bound = BufferBound::for_stream::<T>(buffer_limit)?;
+        self.send_capped_with_context_before(message, buffer_limit, context, None).await
+    }
+
+    fn send_capped_with_context_before<T>(
+        self,
+        message: Vec<u8>,
+        buffer_limit: Option<usize>,
+        context: DecoderContext,
+        admission: Option<WriteAdmission>,
+    ) -> impl Future<Output = Result<Subscription<T>, Error>> + Send + 'static
+    where
+        T: StreamDecoder<T> + Send + 'static,
+    {
+        let request_id = self.request_id;
         let message_bus = self.client.message_bus.clone();
-        SubscriptionBuilder::<T>::new_with_components(context, message_bus)
-            .send_with_request_id_capped(self.request_id, message, bound)
-            .await
+        async move {
+            let bound = BufferBound::for_stream::<T>(buffer_limit, &context)?;
+            SubscriptionBuilder::<T>::new_with_components(context, message_bus)
+                .send_with_request_id_capped(request_id, message, bound, admission)
+                .await
+        }
     }
 
     /// Send the request without creating a subscription
@@ -132,11 +162,12 @@ where
         request_id: RequestId,
         message: Vec<u8>,
         bound: Option<BufferBound>,
+        admission: Option<WriteAdmission>,
     ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
-        let subscription = self.message_bus.send_request_capped(request_id, message, bound).await?;
+        let subscription = self.message_bus.send_request_capped(request_id, message, bound, admission).await?;
 
         Ok(Subscription::new_from_internal(
             subscription,

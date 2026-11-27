@@ -13,6 +13,7 @@
 use std::collections::VecDeque;
 use std::io;
 use std::sync::{Arc, Condvar, Mutex};
+use std::time::Instant;
 
 use crate::errors::Error;
 use crate::transport::sync::{Io, Reconnect, Stream};
@@ -103,9 +104,12 @@ impl Io for MemoryStream {
         }
     }
 
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+    fn write_all(&self, buf: &[u8], deadline: Option<Instant>) -> Result<(), Error> {
         let (mutex, _) = &*self.inner;
         let mut inner = mutex.lock().unwrap();
+        if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
+            return Err(Error::Timeout);
+        }
         if inner.retired {
             return Err(Error::Shutdown);
         }

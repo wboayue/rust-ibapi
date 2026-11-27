@@ -1,5 +1,7 @@
 //! Synchronous implementation of account management functionality
 
+use std::ops::Deref;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,7 +9,8 @@ use time::OffsetDateTime;
 
 use crate::client::blocking::{ClientRequestBuilders, Subscription, SubscriptionBuilderExt};
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
-use crate::messages::OutgoingMessages;
+use crate::messages::{resubscribed_notice, Notice, OutgoingMessages};
+use crate::transport::farm_watch::{sync_impl::FarmSignal, FarmMark};
 use crate::{client::sync::Client, Error};
 
 use super::common::snapshots::SnapshotBuilder;
@@ -65,6 +68,15 @@ impl Client {
 
     /// Subscribes to [PositionUpdate]s for all accessible accounts.
     /// All positions sent initially, and then only updates as positions change.
+    ///
+    /// During an internet outage (after a 1100) TWS answers a new positions request only with
+    /// the global notice 2151 "Positions info is not available yet." (request id -1, so it
+    /// reaches `notice_stream()`, not this subscription) and then sends nothing, also after
+    /// connectivity returns: live, no `PositionEnd` came in 1554 s and 348 s. Bound the wait
+    /// for `PositionEnd` and request again after the 1102. The subscription does not end on
+    /// 2151: positions share one channel per client, and a request opened before the outage
+    /// resumes on its subscription, so a request-less 2151 could end a live stream
+    /// (`docs/wire-facts/protocol.md#requests-held-during-an-internet-outage`).
     ///
     /// # Examples
     ///
@@ -203,6 +215,9 @@ impl Client {
     /// emitted only when a row changed a value since the previous one. Choose `quiet` longer than
     /// the gap between the rows of one push, which arrive within milliseconds of each other.
     ///
+    /// The stream ends when the transport reconnects; to resubscribe and keep going, use
+    /// [`account_summary_snapshots_resubscribing`](Self::account_summary_snapshots_resubscribing).
+    ///
     /// To fold the rows with your own batching instead, use [`AccountSummarySnapshot::apply`].
     ///
     /// Notices that arrive on the subscription are logged at `warn!`. For other streams that dump
@@ -244,6 +259,60 @@ impl Client {
             builder: SnapshotBuilder::default(),
             quiet,
         })
+    }
+
+    /// [`account_summary_snapshots`](Self::account_summary_snapshots) that survives transport
+    /// reconnects and TWS invalidation of account data (1101).
+    ///
+    /// When the connection drops, it waits for the reconnect and requests the summary again.
+    /// On notice 1101, it cancels the invalidated request and opens a replacement. Notice
+    /// 1102 keeps the request and its accumulated values. After opening the replacement,
+    /// the wrapper returns an [`Error::Notice`] with `TRANSPORT_RECONNECT_CODE` or 1101, then
+    /// builds the first snapshot from scratch at the new request's `End` marker.
+    ///
+    /// It ends after yielding any other error, the error [`wait_connected`](Self::wait_connected)
+    /// returns when the reconnect gave up, or once the subscription ends.
+    ///
+    /// The iterator borrows the client. To move it into a spawned thread, open it from an
+    /// `Arc<Client>` with [`AccountSummarySnapshotsResubscribing::subscribe`].
+    ///
+    /// # Arguments
+    /// * `group` - Set to "All" to return account summary data for all accounts, or set to a specific Advisor Account Group name that has already been created in TWS Global Configuration.
+    /// * `tags`  - List of the desired tags.
+    /// * `quiet` - How long without a row completes a pushed update.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::accounts::AccountSummaryTags;
+    /// use ibapi::accounts::types::AccountGroup;
+    /// use ibapi::{Error, TRANSPORT_RECONNECT_CODE};
+    /// use std::time::Duration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let group = AccountGroup("All".to_string());
+    /// let tags = &[AccountSummaryTags::NET_LIQUIDATION];
+    ///
+    /// let snapshots = client
+    ///     .account_summary_snapshots_resubscribing(&group, tags, Duration::from_secs(1))
+    ///     .expect("error requesting account summary");
+    /// for snapshot in snapshots {
+    ///     match snapshot {
+    ///         Ok(snapshot) => println!("{} rows", snapshot.len()),
+    ///         Err(Error::Notice(n)) if matches!(n.code, TRANSPORT_RECONNECT_CODE | 1101) => println!("gap: {n}"),
+    ///         Err(e) => eprintln!("error: {e}"),
+    ///     }
+    /// }
+    /// ```
+    pub fn account_summary_snapshots_resubscribing(
+        &self,
+        group: &AccountGroup,
+        tags: &[&str],
+        quiet: Duration,
+    ) -> Result<AccountSummarySnapshotsResubscribing<&Self>, Error> {
+        AccountSummarySnapshotsResubscribing::subscribe(self, group, tags, quiet)
     }
 
     /// Subscribes to a specific account's information and portfolio.
@@ -583,6 +652,164 @@ impl Iterator for AccountSummarySnapshots {
                 Some(Err(e)) => return Some(Err(e)),
                 None => return self.builder.flush().map(Ok),
             }
+        }
+    }
+}
+
+/// Account summary snapshots that survive transport reconnects and 1101, from
+/// [`Client::account_summary_snapshots_resubscribing`] or [`subscribe`](Self::subscribe).
+///
+/// `C` is how the iterator holds the client it resubscribes with: `&Client` from the client
+/// method, or an owned handle such as `Arc<Client>` from [`subscribe`](Self::subscribe), which
+/// makes the iterator `'static` so it can move into a spawned thread.
+pub struct AccountSummarySnapshotsResubscribing<C> {
+    client: C,
+    group: AccountGroup,
+    tags: Vec<String>,
+    quiet: Duration,
+    /// `None` once the stream has ended.
+    snapshots: Option<AccountSummarySnapshots>,
+    mark: FarmMark,
+    farm_changed: FarmSignal,
+    cancelled: AtomicBool,
+}
+
+impl<C> std::fmt::Debug for AccountSummarySnapshotsResubscribing<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AccountSummarySnapshotsResubscribing")
+            .field("group", &self.group)
+            .field("tags", &self.tags)
+            .field("quiet", &self.quiet)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
+    /// Requests the account summary through `client` and returns its snapshots, resubscribing
+    /// after each transport reconnect or 1101, as
+    /// [`Client::account_summary_snapshots_resubscribing`] does.
+    ///
+    /// Pass an `Arc<Client>` to get an iterator that owns its client handle and can move into a
+    /// spawned thread.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use std::time::Duration;
+    ///
+    /// use ibapi::accounts::types::AccountGroup;
+    /// use ibapi::accounts::AccountSummaryTags;
+    /// use ibapi::client::blocking::{AccountSummarySnapshotsResubscribing, Client};
+    ///
+    /// let client = Arc::new(Client::connect("127.0.0.1:4002", 100).expect("connection failed"));
+    ///
+    /// let group = AccountGroup("All".to_string());
+    /// let tags = &[AccountSummaryTags::NET_LIQUIDATION];
+    /// let mut snapshots = AccountSummarySnapshotsResubscribing::subscribe(Arc::clone(&client), &group, tags, Duration::from_secs(1))
+    ///     .expect("error requesting account summary");
+    ///
+    /// // The first snapshot here, the rest in a thread.
+    /// let first = snapshots.next();
+    /// println!("first: {first:?}");
+    /// std::thread::spawn(move || {
+    ///     for snapshot in snapshots {
+    ///         println!("{snapshot:?}");
+    ///     }
+    /// });
+    /// ```
+    // Four required arguments, the client method's three plus the handle; a builder would only
+    // rename them.
+    pub fn subscribe(client: C, group: &AccountGroup, tags: &[&str], quiet: Duration) -> Result<Self, Error> {
+        let farms = client.message_bus.farm_watch();
+        let farm_changed = farms.signal();
+        let mark = farms.mark();
+        let snapshots = client.account_summary_snapshots(group, tags, quiet)?;
+
+        Ok(Self {
+            client,
+            group: group.clone(),
+            tags: tags.iter().map(|tag| tag.to_string()).collect(),
+            quiet,
+            snapshots: Some(snapshots),
+            mark,
+            farm_changed,
+            cancelled: AtomicBool::new(false),
+        })
+    }
+
+    /// Cancels the underlying subscription. Iteration then ends, after a final snapshot of any rows
+    /// not yet emitted.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+        if let Some(snapshots) = &self.snapshots {
+            snapshots.cancel();
+        }
+    }
+
+    /// Waits for the reconnect and requests the summary again. Returns the gap notice, or the
+    /// error that ends the stream.
+    fn resubscribe(&mut self, notice: Notice) -> Error {
+        let tags: Vec<&str> = self.tags.iter().map(String::as_str).collect();
+        loop {
+            if let Err(e) = self.client.wait_connected() {
+                return e;
+            }
+            let mark = self.client.message_bus.farm_watch().mark();
+            match self.client.account_summary_snapshots(&self.group, &tags, self.quiet) {
+                Ok(snapshots) => {
+                    self.snapshots = Some(snapshots);
+                    self.mark = mark;
+                    return Error::Notice(notice);
+                }
+                Err(e) if e.is_connection_lost() => {}
+                Err(e) => return e,
+            }
+        }
+    }
+}
+
+impl<C: Deref<Target = Client>> Iterator for AccountSummarySnapshotsResubscribing<C> {
+    type Item = Result<AccountSummarySnapshot, Error>;
+
+    /// Returns the next snapshot, a notice after opening a replacement, or `None` once the stream has ended.
+    fn next(&mut self) -> Option<Self::Item> {
+        let snapshots = self.snapshots.as_mut()?;
+        let next = if self.cancelled.load(Ordering::Relaxed) {
+            snapshots.next()
+        } else {
+            let farms = self.client.message_bus.farm_watch();
+            loop {
+                let batch = snapshots
+                    .subscription
+                    .next_batch_unless(snapshots.quiet, self.farm_changed.receiver(), || farms.data_lost_since(self.mark));
+                match batch {
+                    Err(notice) => {
+                        snapshots.cancel();
+                        self.snapshots = None;
+                        return Some(Err(self.resubscribe(notice)));
+                    }
+                    Ok(Some(Ok(batch))) => {
+                        if let Some(snapshot) = snapshots.builder.fold(batch) {
+                            break Some(Ok(snapshot));
+                        }
+                    }
+                    Ok(Some(Err(e))) => break Some(Err(e)),
+                    Ok(None) => break snapshots.builder.flush().map(Ok),
+                }
+            }
+        };
+        match next {
+            Some(Err(e)) if e.is_connection_lost() => {
+                // Its request died with the old session; dropping it sends no cancel.
+                self.snapshots = None;
+                Some(Err(self.resubscribe(resubscribed_notice())))
+            }
+            item @ (Some(Err(_)) | None) => {
+                self.snapshots = None;
+                item
+            }
+            item => item,
         }
     }
 }
