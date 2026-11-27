@@ -23,8 +23,9 @@ use crate::transport::common::validate_frame_length;
 use crate::transport::r#async::ShutdownSignal;
 use crate::transport::raw_capture::RawFrameTap;
 
+/// The caller can abandon the operation before the writer accepts its first byte.
 pub(crate) struct WriteAdmission {
-    deadline: Instant,
+    deadline: Option<Instant>,
     cancelled: watch::Receiver<bool>,
 }
 
@@ -38,11 +39,19 @@ impl Drop for CancelWrite {
 
 impl WriteAdmission {
     pub(crate) fn new(deadline: Instant) -> (Self, CancelWrite) {
+        Self::with_deadline(Some(deadline))
+    }
+
+    pub(crate) fn without_deadline() -> (Self, CancelWrite) {
+        Self::with_deadline(None)
+    }
+
+    fn with_deadline(deadline: Option<Instant>) -> (Self, CancelWrite) {
         let (cancel, cancelled) = watch::channel(false);
         (Self { deadline, cancelled }, CancelWrite(cancel))
     }
 
-    pub(super) fn deadline(&self) -> Instant {
+    pub(super) fn deadline(&self) -> Option<Instant> {
         self.deadline
     }
 
@@ -52,16 +61,22 @@ impl WriteAdmission {
 
     pub(super) async fn stopped(&self) -> Error {
         let mut cancelled = self.cancelled.clone();
+        let deadline = async {
+            match self.deadline {
+                Some(deadline) => sleep_until(deadline).await,
+                None => std::future::pending().await,
+            }
+        };
         tokio::select! {
             biased;
-            () = sleep_until(self.deadline) => Error::Timeout,
+            () = deadline => Error::Timeout,
             _ = cancelled.wait_for(|cancelled| *cancelled) => Error::Cancelled,
         }
     }
 
     fn open(&self) -> Result<watch::Ref<'_, bool>, Error> {
         let cancelled = self.cancelled.borrow();
-        if Instant::now() >= self.deadline {
+        if self.deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             return Err(Error::Timeout);
         }
         if *cancelled {

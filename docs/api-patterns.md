@@ -528,6 +528,10 @@ wrapped stream is reopened after a 1101 ("connectivity restored, data lost") beh
 match all three codes as the gap. Order streams are rejected at compile time. `filter_data` drops the gap notice,
 so match the items to see it.
 
+`account_summary_snapshots_resubscribing` reports 1101 or `TRANSPORT_RECONNECT_CODE` as
+`Err(Error::Notice(_))` after opening its replacement request. The next snapshot starts fresh
+at the request's `End`. A 1102 leaves both the request and its accumulated rows in place.
+
 ```rust
 for item in client.resubscribing(|| client.realtime_bars(&contract).subscribe()) {
     match item {

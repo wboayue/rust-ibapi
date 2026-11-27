@@ -952,6 +952,52 @@ fn drop_connection(message_bus: &MessageBusStub) {
     message_bus.send_to_open_subscriptions(RoutedItem::Error(Error::ConnectionReset));
 }
 
+#[tokio::test(start_paused = true)]
+async fn account_summary_data_lost_reopen_survives_dropped_next() {
+    let (client, message_bus) = resubscribing_bus(net_liquidation_dump());
+    let group = AccountGroup("All".to_string());
+    let tags = &[AccountSummaryTags::NET_LIQUIDATION, AccountSummaryTags::BUYING_POWER];
+    let mut snapshots = client
+        .account_summary_snapshots_resubscribing(&group, tags, Duration::from_millis(50))
+        .await
+        .unwrap();
+    let initial = snapshots.next().await.unwrap().unwrap();
+    let farms = client.message_bus.farm_watch();
+    farms.observe(&test_notice(1102, "account data maintained"));
+    message_bus.send_to_open_subscriptions(summary_frame("BuyingPower", "400.0", "USD"));
+    let maintained = snapshots.next().await.unwrap().unwrap();
+    assert_eq!(request_message_count(&message_bus), 1);
+
+    message_bus.send_to_open_subscriptions(summary_frame("BuyingPower", "900.0", "USD"));
+    let (accepted, flush) = message_bus.stall_next_request_send();
+    farms.observe(&test_notice(1101, "account data lost"));
+    tokio::select! {
+        accepted = accepted => accepted.unwrap(),
+        item = snapshots.next() => panic!("replacement should be flushing, got {item:?}"),
+    }
+    assert_eq!(request_message_count(&message_bus), 3);
+    assert_request(&message_bus, 1, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST));
+    assert_request(
+        &message_bus,
+        2,
+        &request_account_summary()
+            .request_id(TEST_REQ_ID_FIRST + 1)
+            .group("All")
+            .tags(tags.iter().copied()),
+    );
+    flush.send(()).unwrap();
+    let gap = snapshots.next().await;
+    let fresh = snapshots.next().await.unwrap().unwrap();
+    snapshots.cancel().await;
+
+    assert_eq!(values(&initial), [("NetLiquidation", "USD", "100.0")]);
+    assert_eq!(values(&maintained), [("BuyingPower", "USD", "400.0"), ("NetLiquidation", "USD", "100.0")]);
+    assert!(matches!(gap, Some(Err(Error::Notice(notice))) if notice.code == 1101));
+    assert_eq!(values(&fresh), [("NetLiquidation", "USD", "100.0")]);
+    assert_eq!(request_message_count(&message_bus), 4);
+    assert_request(&message_bus, 3, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST + 1));
+}
+
 #[tokio::test]
 async fn account_summary_snapshots_resubscribing_starts_a_fresh_snapshot_after_reconnect() {
     let (client, message_bus) = resubscribing_bus(net_liquidation_dump());

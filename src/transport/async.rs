@@ -12,7 +12,7 @@ pub(crate) use io::read_framed_message;
 /// The stream traits, for test fixtures that stand in for a socket.
 #[cfg(test)]
 pub(crate) use io::{AsyncIo, AsyncReconnect};
-pub(crate) use io::{AsyncSocket, AsyncStream, Connector, WriteAdmission};
+pub(crate) use io::{AsyncSocket, AsyncStream, CancelWrite, Connector, WriteAdmission};
 use registry::{Route, SenderHash, SharedChannels};
 pub(crate) use shutdown::ShutdownSignal;
 
@@ -1129,11 +1129,16 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // the registration back out on failure rather than leave a channel no
         // reset will clear. `remove_if_same` so a newer registration under the
         // same id survives.
-        let admitted = match (admission, self.rate_limiter.get()) {
-            (Some(admission), Some(limiter)) => tokio::select! {
+        let admitted = match (admission.map(|admission| (admission, admission.deadline())), self.rate_limiter.get()) {
+            (Some((admission, Some(deadline))), Some(limiter)) => tokio::select! {
                 biased;
                 e = admission.stopped() => Err(e),
-                result = limiter.acquire_before(admission.deadline()) => result,
+                result = limiter.acquire_before(deadline) => result,
+            },
+            (Some((admission, None)), Some(_)) => tokio::select! {
+                biased;
+                e = admission.stopped() => Err(e),
+                () = self.throttle(&message) => Ok(()),
             },
             _ => {
                 self.throttle(&message).await;

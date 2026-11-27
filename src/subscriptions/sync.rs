@@ -700,6 +700,37 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         stopped.into_batch(rows)
     }
 
+    /// Returns the next batch or the caller's invalidation notice. Wakes that
+    /// do not invalidate the request leave the batch and its deadline intact.
+    pub(crate) fn next_batch_unless(
+        &self,
+        quiet: Duration,
+        wake: &Receiver<()>,
+        mut invalidated: impl FnMut() -> Option<Notice>,
+    ) -> Result<Option<Result<Vec<T>, Error>>, Notice> {
+        let (rows, stopped) = self.collect_with(
+            Bound::Idle(quiet),
+            |rows| rows.last().is_some_and(T::is_batch_end),
+            |deadline| loop {
+                if let Some(notice) = invalidated() {
+                    return Err(notice);
+                }
+                if self.stream_ended.load(Ordering::Relaxed) {
+                    return Ok(None);
+                }
+                if let Some(item) = self.subscription.next_routed_before_unless(deadline, wake) {
+                    if let NextAction::Return(value) = self.handle_response(item) {
+                        return Ok(value);
+                    }
+                }
+            },
+        )?;
+        if let Some(notice) = invalidated() {
+            return Err(notice);
+        }
+        Ok(stopped.into_batch(rows))
+    }
+
     /// Collects every data item until TWS's end marker, with no time bound.
     /// [`collect_to_end_within`](Self::collect_to_end_within) without the
     /// timeout. Not for open-ended subscriptions like market data.
@@ -711,23 +742,35 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// The loop behind every `collect_*` and [`next_batch`](Self::next_batch):
     /// reads until `bound` runs out, the end of the stream, or [`collect_step`]
     /// says to stop.
-    fn collect_core(&self, bound: Bound<Instant>, mut stop: impl FnMut(&[T]) -> bool) -> (Vec<T>, CollectStop) {
+    fn collect_core(&self, bound: Bound<Instant>, stop: impl FnMut(&[T]) -> bool) -> (Vec<T>, CollectStop) {
+        let collected = self.collect_with(bound, stop, |deadline| {
+            Ok::<_, std::convert::Infallible>(match deadline {
+                None => self.next(),
+                Some(deadline) => self.next_timeout(deadline.saturating_duration_since(Instant::now())),
+            })
+        });
+        match collected {
+            Ok(rows) => rows,
+            Err(impossible) => match impossible {},
+        }
+    }
+
+    fn collect_with<E>(
+        &self,
+        bound: Bound<Instant>,
+        mut stop: impl FnMut(&[T]) -> bool,
+        mut read: impl FnMut(Option<Instant>) -> Result<Option<Result<SubscriptionItem<T>, Error>>, E>,
+    ) -> Result<(Vec<T>, CollectStop), E> {
         let mut rows = Vec::new();
         let mut deadline = match bound {
             Bound::At(deadline) => Some(deadline),
             Bound::None | Bound::Idle(_) => None,
         };
         loop {
-            let item = match deadline {
-                None => self.next(),
-                Some(deadline) => {
-                    let remaining = deadline.saturating_duration_since(Instant::now());
-                    if remaining.is_zero() {
-                        return (rows, CollectStop::Deadline);
-                    }
-                    self.next_timeout(remaining)
-                }
-            };
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                return Ok((rows, CollectStop::Deadline));
+            }
+            let item = read(deadline)?;
             let Some(item) = item else {
                 // `next_timeout` returns `None` for a timeout and for a closed
                 // channel; only a timeout waits until the deadline.
@@ -738,11 +781,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 } else {
                     CollectStop::Closed
                 };
-                return (rows, stopped);
+                return Ok((rows, stopped));
             };
             let read = rows.len();
             if let Some(stopped) = collect_step(&mut rows, item, &mut stop, &self.context) {
-                return (rows, stopped);
+                return Ok((rows, stopped));
             }
             if let Bound::Idle(quiet) = bound {
                 if rows.len() > read {

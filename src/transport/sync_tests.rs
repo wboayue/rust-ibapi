@@ -3942,7 +3942,7 @@ fn bounded_historical_route_delivers_the_bars_after_10299() -> Result<(), Error>
     let context = DecoderContext::new(crate::server_versions::PROTOBUF_HISTORICAL_DATA);
     let (stream, bus) = make_bus();
     let bound = BufferBound::for_stream::<HistoricalDataFrame>(Some(4), &context)?;
-    let internal = bus.send_request_capped(request_id, &[], bound)?;
+    let internal = bus.send_request_capped(request_id, &[], bound, None)?;
     let subscription: Subscription<HistoricalDataFrame> = Subscription::new(bus.clone(), internal, context);
 
     for frame in substituted_bar_frames(request_id) {

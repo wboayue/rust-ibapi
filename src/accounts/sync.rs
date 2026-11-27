@@ -1,6 +1,7 @@
 //! Synchronous implementation of account management functionality
 
 use std::ops::Deref;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,7 +9,8 @@ use time::OffsetDateTime;
 
 use crate::client::blocking::{ClientRequestBuilders, Subscription, SubscriptionBuilderExt};
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
-use crate::messages::{resubscribed_notice, OutgoingMessages};
+use crate::messages::{resubscribed_notice, Notice, OutgoingMessages};
+use crate::transport::farm_watch::{sync_impl::FarmSignal, FarmMark};
 use crate::{client::sync::Client, Error};
 
 use super::common::snapshots::SnapshotBuilder;
@@ -285,14 +287,13 @@ impl Client {
     }
 
     /// [`account_summary_snapshots`](Self::account_summary_snapshots) that survives transport
-    /// reconnects.
+    /// reconnects and TWS invalidation of account data (1101).
     ///
-    /// When the connection drops, it waits for the reconnect, requests the summary again, and
-    /// yields `Err(`[`Error::Notice`]`)` with code [`TRANSPORT_RECONNECT_CODE`](crate::TRANSPORT_RECONNECT_CODE)
-    /// before the next snapshot, as [`resubscribing`](Self::resubscribing) does. The next snapshot
-    /// is built from scratch: it completes at the new subscription's `End`, holds only the rows
-    /// that subscription reports, and drops rows not yet emitted before the outage. Values that
-    /// changed during the outage are missing.
+    /// When the connection drops, it waits for the reconnect and requests the summary again.
+    /// On notice 1101, it cancels the invalidated request and opens a replacement. Notice
+    /// 1102 keeps the request and its accumulated values. After opening the replacement,
+    /// the wrapper returns an [`Error::Notice`] with `TRANSPORT_RECONNECT_CODE` or 1101, then
+    /// builds the first snapshot from scratch at the new request's `End` marker.
     ///
     /// It ends after yielding any other error, the error [`wait_connected`](Self::wait_connected)
     /// returns when the reconnect gave up, or once the subscription ends.
@@ -325,7 +326,7 @@ impl Client {
     /// for snapshot in snapshots {
     ///     match snapshot {
     ///         Ok(snapshot) => println!("{} rows", snapshot.len()),
-    ///         Err(Error::Notice(n)) if n.code == TRANSPORT_RECONNECT_CODE => println!("gap: {n}"),
+    ///         Err(Error::Notice(n)) if matches!(n.code, TRANSPORT_RECONNECT_CODE | 1101) => println!("gap: {n}"),
     ///         Err(e) => eprintln!("error: {e}"),
     ///     }
     /// }
@@ -691,7 +692,7 @@ impl Iterator for AccountSummarySnapshots {
     }
 }
 
-/// Account summary snapshots that survive transport reconnects, from
+/// Account summary snapshots that survive transport reconnects and 1101, from
 /// [`Client::account_summary_snapshots_resubscribing`] or [`subscribe`](Self::subscribe).
 ///
 /// `C` is how the iterator holds the client it resubscribes with: `&Client` from the client
@@ -704,6 +705,9 @@ pub struct AccountSummarySnapshotsResubscribing<C> {
     quiet: Duration,
     /// `None` once the stream has ended.
     snapshots: Option<AccountSummarySnapshots>,
+    mark: FarmMark,
+    farm_changed: FarmSignal,
+    cancelled: AtomicBool,
 }
 
 impl<C> std::fmt::Debug for AccountSummarySnapshotsResubscribing<C> {
@@ -718,7 +722,7 @@ impl<C> std::fmt::Debug for AccountSummarySnapshotsResubscribing<C> {
 
 impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
     /// Requests the account summary through `client` and returns its snapshots, resubscribing
-    /// after each transport reconnect, as
+    /// after each transport reconnect or 1101, as
     /// [`Client::account_summary_snapshots_resubscribing`] does.
     ///
     /// Pass an `Arc<Client>` to get an iterator that owns its client handle and can move into a
@@ -753,6 +757,9 @@ impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
     // Four required arguments, the client method's three plus the handle; a builder would only
     // rename them.
     pub fn subscribe(client: C, group: &AccountGroup, tags: &[&str], quiet: Duration) -> Result<Self, Error> {
+        let farms = client.message_bus.farm_watch();
+        let farm_changed = farms.signal();
+        let mark = farms.mark();
         let snapshots = client.account_summary_snapshots(group, tags, quiet)?;
 
         Ok(Self {
@@ -761,12 +768,16 @@ impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
             tags: tags.iter().map(|tag| tag.to_string()).collect(),
             quiet,
             snapshots: Some(snapshots),
+            mark,
+            farm_changed,
+            cancelled: AtomicBool::new(false),
         })
     }
 
     /// Cancels the underlying subscription. Iteration then ends, after a final snapshot of any rows
     /// not yet emitted.
     pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
         if let Some(snapshots) = &self.snapshots {
             snapshots.cancel();
         }
@@ -774,16 +785,18 @@ impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
 
     /// Waits for the reconnect and requests the summary again. Returns the gap notice, or the
     /// error that ends the stream.
-    fn resubscribe(&mut self) -> Error {
+    fn resubscribe(&mut self, notice: Notice) -> Error {
         let tags: Vec<&str> = self.tags.iter().map(String::as_str).collect();
         loop {
             if let Err(e) = self.client.wait_connected() {
                 return e;
             }
+            let mark = self.client.message_bus.farm_watch().mark();
             match self.client.account_summary_snapshots(&self.group, &tags, self.quiet) {
                 Ok(snapshots) => {
                     self.snapshots = Some(snapshots);
-                    return Error::Notice(resubscribed_notice());
+                    self.mark = mark;
+                    return Error::Notice(notice);
                 }
                 Err(e) if e.is_connection_lost() => {}
                 Err(e) => return e,
@@ -795,13 +808,38 @@ impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
 impl<C: Deref<Target = Client>> Iterator for AccountSummarySnapshotsResubscribing<C> {
     type Item = Result<AccountSummarySnapshot, Error>;
 
-    /// Returns the next snapshot, the reconnect notice, or `None` once the stream has ended.
+    /// Returns the next snapshot, a notice after opening a replacement, or `None` once the stream has ended.
     fn next(&mut self) -> Option<Self::Item> {
-        match self.snapshots.as_mut()?.next() {
+        let snapshots = self.snapshots.as_mut()?;
+        let next = if self.cancelled.load(Ordering::Relaxed) {
+            snapshots.next()
+        } else {
+            let farms = self.client.message_bus.farm_watch();
+            loop {
+                let batch = snapshots
+                    .subscription
+                    .next_batch_unless(snapshots.quiet, self.farm_changed.receiver(), || farms.data_lost_since(self.mark));
+                match batch {
+                    Err(notice) => {
+                        snapshots.cancel();
+                        self.snapshots = None;
+                        return Some(Err(self.resubscribe(notice)));
+                    }
+                    Ok(Some(Ok(batch))) => {
+                        if let Some(snapshot) = snapshots.builder.fold(batch) {
+                            break Some(Ok(snapshot));
+                        }
+                    }
+                    Ok(Some(Err(e))) => break Some(Err(e)),
+                    Ok(None) => break snapshots.builder.flush().map(Ok),
+                }
+            }
+        };
+        match next {
             Some(Err(e)) if e.is_connection_lost() => {
                 // Its request died with the old session; dropping it sends no cancel.
                 self.snapshots = None;
-                Some(Err(self.resubscribe()))
+                Some(Err(self.resubscribe(resubscribed_notice())))
             }
             item @ (Some(Err(_)) | None) => {
                 self.snapshots = None;

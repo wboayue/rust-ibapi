@@ -11,8 +11,10 @@ use tokio::task::JoinHandle;
 use crate::client::builders::r#async::SubscriptionBuilder;
 use crate::client::{ClientRequestBuilders, SubscriptionBuilderExt};
 use crate::common::request_helpers::{self, empty_on_end_of_stream, expect_proto};
-use crate::messages::{resubscribed_notice, OutgoingMessages};
+use crate::messages::{resubscribed_notice, Notice, OutgoingMessages};
 use crate::subscriptions::Subscription;
+use crate::transport::farm_watch::FarmMark;
+use crate::transport::r#async::{CancelWrite, WriteAdmission};
 use crate::{Client, Error};
 
 use super::common::snapshots::SnapshotBuilder;
@@ -230,18 +232,19 @@ impl Client {
     /// }
     /// ```
     pub async fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
-        self.account_summary_send(group, tags)?.await
+        self.account_summary_send(group, tags, None)?.await
     }
 
     fn account_summary_send(
         &self,
         group: &AccountGroup,
         tags: &[&str],
+        admission: Option<WriteAdmission>,
     ) -> Result<impl std::future::Future<Output = Result<Subscription<AccountSummaryResult>, Error>> + Send + 'static, Error> {
         let request_id = self.mint_request_id();
         let request = encoders::encode_request_account_summary(request_id.raw(), group, tags)?;
         let builder = SubscriptionBuilder::new_with_components(self.decoder_context(), Arc::clone(&self.message_bus));
-        Ok(builder.send_with_request_id_capped(request_id, request, None))
+        Ok(builder.send_with_request_id_capped(request_id, request, None, admission))
     }
 
     /// Subscribe to account summary updates as complete snapshots.
@@ -305,14 +308,13 @@ impl Client {
     }
 
     /// [`account_summary_snapshots`](Self::account_summary_snapshots) that survives transport
-    /// reconnects.
+    /// reconnects and TWS invalidation of account data (1101).
     ///
-    /// When the connection drops, it waits for the reconnect, requests the summary again, and
-    /// yields `Err(`[`Error::Notice`]`)` with code [`TRANSPORT_RECONNECT_CODE`](crate::TRANSPORT_RECONNECT_CODE)
-    /// before the next snapshot, as [`resubscribing`](Self::resubscribing) does. The next snapshot
-    /// is built from scratch: it completes at the new subscription's `End`, holds only the rows
-    /// that subscription reports, and drops rows not yet emitted before the outage. Values that
-    /// changed during the outage are missing.
+    /// When the connection drops, it waits for the reconnect and requests the summary again.
+    /// On notice 1101, it cancels the invalidated request and opens a replacement. Notice
+    /// 1102 keeps the request and its accumulated values. After opening the replacement,
+    /// the wrapper returns an [`Error::Notice`] with `TRANSPORT_RECONNECT_CODE` or 1101, then
+    /// builds the first snapshot from scratch at the new request's `End` marker.
     ///
     /// A broadcast lag notice, a failed reconnect, or another request error ends the stream
     /// after yielding the error. See [`cancel`](AccountSummarySnapshotsResubscribing::cancel)
@@ -350,7 +352,7 @@ impl Client {
     ///     while let Some(snapshot) = snapshots.next().await {
     ///         match snapshot {
     ///             Ok(snapshot) => println!("{} rows", snapshot.len()),
-    ///             Err(Error::Notice(n)) if n.code == TRANSPORT_RECONNECT_CODE => println!("gap: {n}"),
+    ///             Err(Error::Notice(n)) if matches!(n.code, TRANSPORT_RECONNECT_CODE | 1101) => println!("gap: {n}"),
     ///             Err(e) => eprintln!("error: {e}"),
     ///         }
     ///     }
@@ -807,7 +809,7 @@ impl AccountSummarySnapshots {
     }
 }
 
-/// Account summary snapshots that survive transport reconnects, from
+/// Account summary snapshots that survive transport reconnects and 1101, from
 /// [`Client::account_summary_snapshots_resubscribing`] or [`subscribe`](Self::subscribe).
 ///
 /// `C` is how the stream holds the client it resubscribes with: `&Client` from the client
@@ -820,10 +822,23 @@ pub struct AccountSummarySnapshotsResubscribing<C> {
     quiet: Duration,
     /// `None` once the stream has ended, and while reconnecting.
     snapshots: Option<AccountSummarySnapshots>,
+    mark: FarmMark,
+    data_lost: Option<Notice>,
+    invalidated: Option<AccountSummarySnapshots>,
     /// The connection dropped and the next [`next`](Self::next) waits for the reopened request.
     reconnecting: bool,
-    reconnect_cancelled: Arc<AtomicBool>,
-    reopen: Mutex<Option<JoinHandle<Result<AccountSummarySnapshots, Error>>>>,
+    cancelled: Arc<AtomicBool>,
+    reopen: Mutex<Option<SummaryReopen>>,
+}
+
+struct SummaryReopen {
+    task: JoinHandle<Result<OpenedSummary, Error>>,
+    _admission: CancelWrite,
+}
+
+struct OpenedSummary {
+    snapshots: AccountSummarySnapshots,
+    mark: FarmMark,
 }
 
 impl<C> std::fmt::Debug for AccountSummarySnapshotsResubscribing<C> {
@@ -838,7 +853,7 @@ impl<C> std::fmt::Debug for AccountSummarySnapshotsResubscribing<C> {
 
 impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
     /// Requests the account summary through `client` and returns its snapshots, resubscribing
-    /// after each transport reconnect, as
+    /// after each transport reconnect or 1101, as
     /// [`Client::account_summary_snapshots_resubscribing`] does.
     ///
     /// Pass an `Arc<Client>` to get a stream that owns its client handle and can move into a
@@ -877,6 +892,7 @@ impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
     // Four required arguments, the client method's three plus the handle; a builder would only
     // rename them.
     pub async fn subscribe(client: C, group: &AccountGroup, tags: &[&str], quiet: Duration) -> Result<Self, Error> {
+        let mark = client.message_bus.farm_watch().mark();
         let snapshots = client.account_summary_snapshots(group, tags, quiet).await?;
 
         Ok(Self {
@@ -885,39 +901,68 @@ impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
             tags: tags.iter().map(|tag| tag.to_string()).collect(),
             quiet,
             snapshots: Some(snapshots),
+            mark,
+            data_lost: None,
+            invalidated: None,
             reconnecting: false,
-            reconnect_cancelled: Arc::default(),
+            cancelled: Arc::default(),
             reopen: Mutex::default(),
         })
     }
 
     /// Cancels the underlying subscription. The next call to [`next`](Self::next) returns
     /// `Err(Error::Cancelled)`, then any rows not yet emitted, then `None`.
-    /// Cancelling while waiting for a reconnect ends the stream. If a reopen send is already
-    /// in progress, it finishes in the background and cancels its subscription.
+    /// Cancelling while waiting for a reconnect ends the stream. An unopened replacement is
+    /// abandoned before its first byte. If its write has already started, it finishes in the
+    /// background and cancels its subscription.
     pub async fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
         if let Some(snapshots) = &self.snapshots {
             snapshots.cancel().await;
         } else if self.reconnecting {
-            self.reconnect_cancelled.store(true, Ordering::Relaxed);
             let reopen = self.reopen.lock().unwrap().take();
             drop(reopen);
+            if let Some(invalidated) = &self.invalidated {
+                invalidated.cancel().await;
+            }
         }
     }
 
-    /// Returns the next snapshot, the reconnect notice, or `None` once the stream has ended.
+    /// Returns the next snapshot, a notice after opening a replacement, or `None` once the stream has ended.
     ///
     /// Not cancel-safe while reading a snapshot, as [`AccountSummarySnapshots::next`]. A call
     /// dropped during a reconnect or reopen send (a losing `tokio::select!` branch, a
     /// `timeout`) preserves the reopen. The next call resumes waiting unless you call
     /// [`cancel`](Self::cancel).
     pub async fn next(&mut self) -> Option<Result<AccountSummarySnapshot, Error>> {
-        if self.reconnecting && self.reconnect_cancelled.load(Ordering::Relaxed) {
+        if self.reconnecting && self.cancelled.load(Ordering::Relaxed) {
             self.reconnecting = false;
+            self.invalidated = None;
             return Some(Err(Error::Cancelled));
         }
         if !self.reconnecting {
-            match self.snapshots.as_mut()?.next().await {
+            let snapshots = self.snapshots.as_mut()?;
+            let farms = self.client.message_bus.farm_watch();
+            let watch = !self.cancelled.load(Ordering::Relaxed);
+            let next = tokio::select! {
+                biased;
+                notice = farms.data_lost(self.mark), if watch => Err(notice),
+                item = snapshots.next() => if watch {
+                    farms.data_lost_since(self.mark).map_or(Ok(item), Err)
+                } else {
+                    Ok(item)
+                },
+            };
+            let next = match next {
+                Ok(next) => next,
+                Err(notice) => {
+                    self.data_lost = Some(notice);
+                    self.invalidated = self.snapshots.take();
+                    self.reconnecting = true;
+                    return Some(Err(self.resubscribe().await));
+                }
+            };
+            match next {
                 Some(Err(e)) if e.is_connection_lost() => {
                     // Its request died with the old session; dropping it sends no cancel.
                     self.snapshots = None;
@@ -945,25 +990,36 @@ impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
                     return e;
                 }
                 let tags: Vec<&str> = self.tags.iter().map(String::as_str).collect();
-                let request = match self.client.account_summary_send(&self.group, &tags) {
+                let (admission, cancel) = WriteAdmission::without_deadline();
+                let request = match self.client.account_summary_send(&self.group, &tags, Some(admission)) {
                     Ok(request) => request,
                     Err(e) => {
                         self.reconnecting = false;
                         return e;
                     }
                 };
-                let cancelled = Arc::downgrade(&self.reconnect_cancelled);
+                let cancelled = Arc::downgrade(&self.cancelled);
                 let quiet = self.quiet;
+                let message_bus = Arc::clone(&self.client.message_bus);
+                let invalidated = self.invalidated.take();
                 // The write may have reached TWS while its flush is still pending. If the
                 // wrapper is dropped, finish that send so dropping its output can cancel it.
-                *reopen = Some(self.client.message_bus.runtime_handle().spawn(async move {
+                let task = self.client.message_bus.runtime_handle().spawn(async move {
+                    if let Some(invalidated) = invalidated {
+                        invalidated.cancel().await;
+                    }
                     if cancelled.upgrade().is_none_or(|cancelled| cancelled.load(Ordering::Relaxed)) {
                         return Err(Error::Cancelled);
                     }
-                    request.await.map(|subscription| AccountSummarySnapshots::new(subscription, quiet))
-                }));
+                    let mark = message_bus.farm_watch().mark();
+                    request.await.map(|subscription| OpenedSummary {
+                        snapshots: AccountSummarySnapshots::new(subscription, quiet),
+                        mark,
+                    })
+                });
+                *reopen = Some(SummaryReopen { task, _admission: cancel });
             }
-            let result = reopen.as_mut().unwrap().await;
+            let result = (&mut reopen.as_mut().unwrap().task).await;
             *reopen = None;
             let result = match result {
                 Ok(result) => result,
@@ -971,10 +1027,11 @@ impl<C: Deref<Target = Client>> AccountSummarySnapshotsResubscribing<C> {
                 Err(_) => Err(Error::Shutdown),
             };
             match result {
-                Ok(snapshots) => {
+                Ok(OpenedSummary { snapshots, mark }) => {
                     self.snapshots = Some(snapshots);
+                    self.mark = mark;
                     self.reconnecting = false;
-                    return Error::Notice(resubscribed_notice());
+                    return Error::Notice(self.data_lost.take().unwrap_or_else(resubscribed_notice));
                 }
                 Err(e) if e.is_connection_lost() => {}
                 Err(e) => {

@@ -290,6 +290,10 @@ pub(crate) mod async_impl {
             self.sender.borrow().mark()
         }
 
+        pub(crate) fn data_lost_since(&self, mark: FarmMark) -> Option<Notice> {
+            self.sender.borrow().data_lost_since(mark).cloned()
+        }
+
         /// Resolve with the first 1101 after `mark`; pending forever if none comes.
         pub(crate) async fn data_lost(&self, mark: FarmMark) -> Notice {
             let mut receiver = self.sender.subscribe();

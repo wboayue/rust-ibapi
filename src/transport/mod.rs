@@ -424,6 +424,20 @@ impl InternalSubscription {
         }
     }
 
+    /// Like `next_routed_unless`, with an optional deadline and a ready wake
+    /// taking precedence over queued data.
+    pub(crate) fn next_routed_before_unless(&self, deadline: Option<std::time::Instant>, wake: &Receiver<()>) -> Option<Option<RoutedItem>> {
+        let Some(receiver) = self.pick_receiver() else {
+            return Some(None);
+        };
+        let timer = deadline.map_or_else(crossbeam::channel::never, crossbeam::channel::at);
+        crossbeam::channel::select_biased! {
+            recv(wake) -> _ => None,
+            recv(timer) -> _ => Some(None),
+            recv(receiver) -> item => Some(item.ok()),
+        }
+    }
+
     pub(crate) fn cancel(&self) {
         if let Some(sender) = &self.sender {
             if let Err(e) = sender.send(Error::Cancelled.into()) {

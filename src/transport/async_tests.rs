@@ -311,7 +311,9 @@ async fn order_class_lag_surfaces_order_lag_notice() {
 
     for sub in [&mut subscription, &mut clone] {
         match sub.next_routed().await {
-            Some(RoutedItem::Notice(notice)) => assert_eq!(notice, crate::messages::order_lag_notice(3)),
+            Some(RoutedItem::Notice(notice)) => {
+                assert_eq!(notice, crate::messages::order_lag_notice(3))
+            }
             other => panic!("expected order lag notice, got {other:?}"),
         }
     }
@@ -2510,7 +2512,9 @@ async fn queued_send_is_not_written_into_the_reconnect_handshake() {
     );
     match sent {
         Ok(()) => assert_eq!(generations, [0], "a send that succeeded must have finished on the old socket"),
-        Err(Error::ConnectionReset) => assert!(generations.is_empty(), "a refused send must write nothing"),
+        Err(Error::ConnectionReset) => {
+            assert!(generations.is_empty(), "a refused send must write nothing")
+        }
         other => panic!("expected Ok or ConnectionReset, got {other:?}"),
     }
 }
@@ -2847,7 +2851,7 @@ async fn bounded_historical_route_delivers_the_bars_after_10299() {
     let context = DecoderContext::new(server_versions::PROTOBUF_HISTORICAL_DATA);
     let (stream, bus) = make_bus();
     let bound = BufferBound::for_stream::<HistoricalDataFrame>(Some(4), &context).unwrap();
-    let internal = bus.send_request_capped(request_id, vec![], bound).await.unwrap();
+    let internal = bus.send_request_capped(request_id, vec![], bound, None).await.unwrap();
     let mut subscription: Subscription<HistoricalDataFrame> =
         Subscription::new_from_internal(internal, bus.clone(), Some(request_id.raw()), None, context);
 
@@ -2922,11 +2926,15 @@ async fn bounded_request_end_marker_at_limit_still_ends() {
     }
 
     match try_next_routed(&mut sub).await {
-        Some(RoutedItem::Response(message)) => assert_eq!(message.message_type(), IncomingMessages::ContractData),
+        Some(RoutedItem::Response(message)) => {
+            assert_eq!(message.message_type(), IncomingMessages::ContractData)
+        }
         other => panic!("expected the row, got {other:?}"),
     }
     match try_next_routed(&mut sub).await {
-        Some(RoutedItem::Response(message)) => assert_eq!(message.message_type(), IncomingMessages::ContractDataEnd),
+        Some(RoutedItem::Response(message)) => {
+            assert_eq!(message.message_type(), IncomingMessages::ContractDataEnd)
+        }
         other => panic!("expected the end marker, got {other:?}"),
     }
     assert!(try_next_routed(&mut sub).await.is_none(), "frames after the end marker are discarded");
@@ -3490,4 +3498,122 @@ async fn reset_channels_starts_new_session_generation() {
     bus.reset_channels().await;
 
     assert_eq!(bus.session_generation(), 2);
+}
+
+#[tokio::test]
+async fn account_summary_cancel_before_1101_replacement_first_byte_sends_nothing() {
+    use crate::accounts::{types::AccountGroup, AccountSummaryTags};
+    use crate::common::test_utils::helpers::TEST_REQ_ID_FIRST;
+    use crate::testdata::builders::accounts::{cancel_account_summary, request_account_summary};
+    use crate::testdata::builders::RequestEncoder;
+    use crate::transport::raw_capture::RawFrameTap;
+    use tokio::io::AsyncReadExt;
+
+    let version = server_versions::PROTOBUF_REST_MESSAGES_3;
+    let (bus, mut peer) = contract_details_duplex(version).await;
+    let client = crate::Client::stubbed(bus.clone(), version);
+    let group = AccountGroup("All".to_string());
+    let tags = &[AccountSummaryTags::NET_LIQUIDATION];
+    let tap = RawFrameTap::disabled();
+    let (snapshots, initial) = tokio::time::timeout(Duration::from_secs(2), async {
+        tokio::join!(
+            client.account_summary_snapshots_resubscribing(&group, tags, Duration::from_secs(1)),
+            io::read_framed_message(&mut peer, &tap)
+        )
+    })
+    .await
+    .unwrap();
+    let mut snapshots = snapshots.unwrap();
+    let request = request_account_summary()
+        .request_id(TEST_REQ_ID_FIRST)
+        .group("All")
+        .tags(tags.iter().copied())
+        .encode_request();
+    assert_eq!(initial.unwrap(), request);
+
+    bus.farm_watch().observe(&helpers::test_notice(1101, "account data lost"));
+    let mut next = Box::pin(snapshots.next());
+    let mut prefix = [0; 2];
+    tokio::select! {
+        read = tokio::time::timeout(TICK, peer.read_exact(&mut prefix)) => { read.unwrap().unwrap(); }
+        item = &mut next => panic!("initial cancel should still be writing, got {item:?}"),
+    }
+
+    let other_id = RequestId::nth(42);
+    let mut other = Box::pin(bus.send_request(other_id, vec![1, 2, 3, 4]));
+    tokio::select! {
+        () = wait_for_async("the other writer to queue behind the cancel", || bus.requests.contains(&other_id)) => {},
+        result = &mut other => panic!("the other writer finished first: {}", result.is_ok()),
+    }
+    let mut cancel = std::io::Cursor::new(prefix).chain(&mut peer);
+    let expected_cancel = cancel_account_summary().request_id(TEST_REQ_ID_FIRST).encode_request();
+    assert_eq!(
+        tokio::time::timeout(TICK, io::read_framed_message(&mut cancel, &tap))
+            .await
+            .unwrap()
+            .unwrap(),
+        expected_cancel
+    );
+    let replacement = RequestId::nth(1);
+    wait_for_async("the replacement write to queue behind the other writer", || {
+        bus.requests.contains(&replacement)
+    })
+    .await;
+    drop(next);
+    snapshots.cancel().await;
+    wait_for_async("the abandoned replacement route to close", || !bus.requests.contains(&replacement)).await;
+    assert!(matches!(snapshots.next().await, Some(Err(Error::Cancelled))));
+    assert!(snapshots.next().await.is_none());
+
+    let (other, body) = tokio::time::timeout(Duration::from_secs(2), async {
+        tokio::join!(other, io::read_framed_message(&mut peer, &tap))
+    })
+    .await
+    .unwrap();
+    assert!(other.is_ok());
+    assert_eq!(body.unwrap(), [1, 2, 3, 4]);
+    assert!(
+        futures::poll!(Box::pin(peer.read_u8()).as_mut()).is_pending(),
+        "unexpected replacement bytes"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn account_summary_cancel_releases_1101_replacement_waiting_for_pacing() {
+    use crate::accounts::{types::AccountGroup, AccountSummaryTags};
+    use crate::common::test_utils::helpers::TEST_REQ_ID_FIRST;
+    use crate::testdata::builders::accounts::{cancel_account_summary, request_account_summary};
+    use crate::testdata::builders::RequestEncoder;
+
+    let (stream, bus) = make_bus();
+    let client = crate::Client::stubbed(bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let group = AccountGroup("All".to_string());
+    let tags = &[AccountSummaryTags::NET_LIQUIDATION];
+    let mut snapshots = client
+        .account_summary_snapshots_resubscribing(&group, tags, Duration::from_secs(1))
+        .await
+        .unwrap();
+    let limiter = RateLimiter::per_second(1);
+    assert_eq!(limiter.reserve(std::time::Instant::now(), false), Duration::ZERO);
+    bus.set_rate_limiter(limiter);
+    let replacement = RequestId::nth(1);
+    bus.farm_watch().observe(&helpers::test_notice(1101, "account data lost"));
+    tokio::select! {
+        result = tokio::time::timeout(TICK, wait_for_async("the replacement route", || bus.requests.contains(&replacement))) => result.unwrap(),
+        item = snapshots.next() => panic!("replacement should be rate limited, got {item:?}"),
+    }
+    snapshots.cancel().await;
+    tokio::time::timeout(
+        TICK,
+        wait_for_async("the abandoned replacement route to close", || !bus.requests.contains(&replacement)),
+    )
+    .await
+    .unwrap();
+    let request = request_account_summary()
+        .request_id(TEST_REQ_ID_FIRST)
+        .group("All")
+        .tags(tags.iter().copied())
+        .encode_request();
+    let cancel = cancel_account_summary().request_id(TEST_REQ_ID_FIRST).encode_request();
+    assert_eq!(stream.captured(), [encode_raw_length(&request), encode_raw_length(&cancel)].concat());
 }
