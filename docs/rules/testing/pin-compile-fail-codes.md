@@ -31,7 +31,9 @@ line.
 An unpinned block whose `use` line goes stale fails for that reason alone and keeps reporting
 green; the invariant is unguarded from then on, invisibly.
 
-Current sites (`grep -rn compile_fail --include=*.rs src`):
+Two representative sites; `grep -rn compile_fail --include=*.rs src` lists the rest (typestate
+terminals on the condition builders, `SpreadBuilder`, `HistoricalDataBuilder`, and the order-id
+guards):
 
 - `src/contracts/mod.rs` — `Contract::futures` returns `FuturesBuilder<Symbol, Missing>`, and
   `build()` exists only after a month terminal. `E0599` ("no method named `build`") is the

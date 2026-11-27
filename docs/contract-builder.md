@@ -413,14 +413,21 @@ let builder1: OptionBuilder<Symbol, Missing, Missing> = Contract::call("AAPL");
 let builder2: OptionBuilder<Symbol, f64, Missing> = builder1.strike(150.0);
 let builder3: OptionBuilder<Symbol, f64, ExpirationDate> = builder2.expires_on(2024, 12, 20);
 let contract = builder3.build()?;  // Build only available when all required fields are set
+
+// A spread tracks whether it has a leg yet
+use ibapi::contracts::{HasLegs, SpreadBuilder};
+let spread: SpreadBuilder<Missing> = Contract::spread("AAPL");
+let spread: SpreadBuilder<HasLegs> = spread.vertical(11111, 22222);
+let combo = spread.build()?;
 ```
 
 ## Error Handling
 
 The API validates inputs and returns errors for invalid data. A bad value a caller can
 correct at runtime (a strike, a date) is an `ibapi::builder::ValidationError`, wrapped in
-`Error::Validation` when a `build()` returns it; a missing required field (no legs, no symbol)
-is `Error::InvalidArgument`:
+`Error::Validation` when a `build()` returns it. A missing required field (an option strike,
+a spread's legs) is caught at compile time where a typed builder can, and is
+`Error::InvalidArgument` where it can't (`ContractBuilder` without a symbol):
 
 ```rust
 use ibapi::builder::ValidationError;
@@ -431,9 +438,9 @@ use ibapi::Error;
 let result = Strike::new(-10.0);
 assert_eq!(result, Err(ValidationError::InvalidPrice(-10.0)));  // Negative strikes are invalid
 
-// Spread validation
-let empty_spread = Contract::spread("AAPL").build();
-assert!(empty_spread.is_err());  // Spreads need at least one leg
+// Spread validation: `build()` exists only after a leg; an empty symbol is a bad value
+let unnamed = Contract::spread("").vertical(11111, 22222).build();
+assert!(matches!(unnamed, Err(ValidationError::InvalidField { field: "Contract::symbol", .. })));
 
 // Option strike validation happens in build()
 let bad_strike = Contract::call("AAPL").strike(-10.0).expires_on(2024, 12, 20).build();

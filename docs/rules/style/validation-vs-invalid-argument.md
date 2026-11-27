@@ -9,7 +9,7 @@ triggers:
   - about to write Error::InvalidArgument(format!(..))
 symbols: [Error::Validation, Error::InvalidArgument, ValidationError, ibapi::builder]
 related: [builder-enum-coverage, param-budget]
-precedents: ["#1169", "#1249", "#1331", "#1332"]
+precedents: ["#1169", "#1249", "#1331", "#1332", "#1333"]
 ---
 
 Ask who fixes it. A runtime value a caller may correct (a quantity, price or strike, a date from
@@ -17,12 +17,14 @@ user or file input, a field on a caller-built `Order`) fails with a typed
 `ibapi::builder::ValidationError` variant: returned bare from a constructor or `FromStr`
 (`Result<Self, ValidationError>`), wrapped as `Error::Validation` by anything returning
 `ibapi::Error`. A caller bug no one recovers from at runtime (a builder missing a required field,
-conflicting `historical_data` settings, bad client config, `buffer_limit(0)`) is
+a `historical_data` range the client rejects before sending, bad client config, `buffer_limit(0)`) is
 `Error::InvalidArgument(String)`.
-Add a `ValidationError` variant rather than formatting a value into a string. For a required
-builder field, prefer typestate (`ibapi::builder::Missing`) to either error; `InvalidArgument`
-is for what the type can't track, such as a price that depends on the `OrderType` value passed
-to `OrderBuilder::order_type(..)`. `ValidationError` has no missing-field variant.
+Add a `ValidationError` variant rather than formatting a value into a string. When the invalid
+state is a missing or conflicting call, prefer typestate (`ibapi::builder::Missing`) to either
+error; a defaulted parameter (`= Missing`) keeps callers that don't name the type compiling.
+`InvalidArgument` is for what the type can't track, such as a price that depends on the
+`OrderType` value passed to `OrderBuilder::order_type(..)`. `ValidationError` has no
+missing-field variant.
 
 `Error::Parse` is for text that came from TWS: decoders, and the `impl_wire_enum!` and
 `BarTimestamp` parsers they call. A `FromStr` whose text comes from the caller returns
@@ -74,3 +76,13 @@ fields still pays for typestate only in the setters that change the state.
   check, now `InvalidArgument`: `order_type(..)` without the price its value needs,
   `pegged_to_benchmark` without `reference_contract`, `GoodTillDate` without a date.
   `OrderBuilder::build()` moved from `ValidationError` to `ibapi::Error` to carry both.
+- #1333 — typestate for two of the #1249 holdouts. `HistoricalDataBuilder` gained a date-range
+  parameter (`date_spec::{EndingOnly, DurationOnly, DurationEnding, Between}`), so no
+  range, `between` mixed with `duration` / `ending`, and `subscribe_with_updates` after an end
+  date stopped compiling; checks on the values (`end <= start`, continuous-future end dates)
+  stayed `InvalidArgument`. `SpreadBuilder<L = Missing>` gets `build()` only after a leg, and its
+  remaining check, an empty symbol, became `ValidationError::InvalidField`, returned bare.
+  `SpreadBuilder` had no type parameters before; the directive dropped "if the type already
+  carries type parameters" after a defaulted one cost no caller anything. Review caught the cost
+  typestate does carry: an optional end date or a runtime list of legs can't be applied in place
+  any more (migration §52 shows the generic-function and first-leg patterns).

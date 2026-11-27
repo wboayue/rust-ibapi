@@ -1,9 +1,11 @@
 //! Type-safe builders for different contract types.
 
+use std::marker::PhantomData;
+
 use super::types::*;
 use super::{ComboLeg, Contract, SecurityType};
 use crate::accounts::types::ContractId;
-use crate::builder::Missing;
+use crate::builder::{Missing, ValidationError};
 use crate::Error;
 
 /// Stock contract builder with type-safe API
@@ -501,15 +503,33 @@ impl CryptoBuilder {
     }
 }
 
-/// Spread/Combo builder
+/// Spread/Combo builder.
+///
+/// The type parameter records whether a leg has been added: it starts as
+/// [`Missing`], and [`add_leg`](Self::add_leg) (after [`done`](LegBuilder::done))
+/// or a preset such as [`vertical`](Self::vertical) makes it [`HasLegs`].
+/// [`build`](SpreadBuilder::build) exists only then, so a spread without legs
+/// does not compile:
+///
+/// ```compile_fail,E0599
+/// use ibapi::contracts::Contract;
+///
+/// let spread = Contract::spread("AAPL").build(); // no `build` before a leg
+/// ```
 #[derive(Debug, Clone)]
 #[must_use = "SpreadBuilder does nothing until you call .build()"]
-pub struct SpreadBuilder {
+pub struct SpreadBuilder<L = Missing> {
     legs: Vec<Leg>,
     symbol: Symbol,
     currency: Currency,
     exchange: Exchange,
+    has_legs: PhantomData<L>,
 }
+
+/// Typestate marker: a [`SpreadBuilder`] with at least one leg, ready to
+/// [`build`](SpreadBuilder::build).
+#[derive(Debug, Clone, Copy)]
+pub enum HasLegs {}
 
 /// Internal representation of a spread leg used by [SpreadBuilder].
 #[derive(Debug, Clone)]
@@ -529,15 +549,27 @@ impl SpreadBuilder {
             symbol: symbol.into(),
             currency: "USD".into(),
             exchange: "SMART".into(),
+            has_legs: PhantomData,
         }
     }
 }
 
-impl SpreadBuilder {
+impl<L> SpreadBuilder<L> {
+    /// The same builder in another leg state.
+    fn into_state<M>(self) -> SpreadBuilder<M> {
+        SpreadBuilder {
+            legs: self.legs,
+            symbol: self.symbol,
+            currency: self.currency,
+            exchange: self.exchange,
+            has_legs: PhantomData,
+        }
+    }
+
     /// Begin configuring a new leg for the spread.
     pub fn add_leg(self, contract_id: impl Into<ContractId>, action: LegAction) -> LegBuilder {
         LegBuilder {
-            parent: self,
+            parent: self.into_state(),
             leg: Leg {
                 contract_id: contract_id.into().value(),
                 action,
@@ -550,14 +582,14 @@ impl SpreadBuilder {
     /// Long calendar spread: sell the near-dated leg, buy the far-dated leg.
     ///
     /// Buy the combo to open. Both legs normally share strike and right.
-    pub fn long_calendar(self, near_id: impl Into<ContractId>, far_id: impl Into<ContractId>) -> Self {
+    pub fn long_calendar(self, near_id: impl Into<ContractId>, far_id: impl Into<ContractId>) -> SpreadBuilder<HasLegs> {
         self.add_leg(near_id, LegAction::Sell).done().add_leg(far_id, LegAction::Buy).done()
     }
 
     /// Short calendar spread: buy the near-dated leg, sell the far-dated leg.
     ///
     /// Buy the combo to open. Both legs normally share strike and right.
-    pub fn short_calendar(self, near_id: impl Into<ContractId>, far_id: impl Into<ContractId>) -> Self {
+    pub fn short_calendar(self, near_id: impl Into<ContractId>, far_id: impl Into<ContractId>) -> SpreadBuilder<HasLegs> {
         self.add_leg(near_id, LegAction::Buy).done().add_leg(far_id, LegAction::Sell).done()
     }
 
@@ -572,7 +604,7 @@ impl SpreadBuilder {
     /// let bull_call = Contract::spread("AAPL").vertical(long_call, short_call).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn vertical(self, long_id: impl Into<ContractId>, short_id: impl Into<ContractId>) -> Self {
+    pub fn vertical(self, long_id: impl Into<ContractId>, short_id: impl Into<ContractId>) -> SpreadBuilder<HasLegs> {
         self.add_leg(long_id, LegAction::Buy).done().add_leg(short_id, LegAction::Sell).done()
     }
 
@@ -587,7 +619,7 @@ impl SpreadBuilder {
     /// let straddle = Contract::spread("AAPL").straddle(call, put).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn straddle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> Self {
+    pub fn straddle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> SpreadBuilder<HasLegs> {
         self.add_leg(call_id, LegAction::Buy).done().add_leg(put_id, LegAction::Buy).done()
     }
 
@@ -604,7 +636,7 @@ impl SpreadBuilder {
     /// let strangle = Contract::spread("AAPL").strangle(call, put).build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn strangle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> Self {
+    pub fn strangle(self, call_id: impl Into<ContractId>, put_id: impl Into<ContractId>) -> SpreadBuilder<HasLegs> {
         self.straddle(call_id, put_id)
     }
 
@@ -625,7 +657,7 @@ impl SpreadBuilder {
     ///     .build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn butterfly(self, legs: ButterflyLegs) -> Self {
+    pub fn butterfly(self, legs: ButterflyLegs) -> SpreadBuilder<HasLegs> {
         self.add_leg(legs.lower, LegAction::Buy)
             .done()
             .add_leg(legs.middle, LegAction::Sell)
@@ -655,7 +687,7 @@ impl SpreadBuilder {
     ///     .build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn iron_condor(self, legs: IronCondorLegs) -> Self {
+    pub fn iron_condor(self, legs: IronCondorLegs) -> SpreadBuilder<HasLegs> {
         self.vertical(legs.long_put, legs.short_put).vertical(legs.long_call, legs.short_call)
     }
 
@@ -680,7 +712,7 @@ impl SpreadBuilder {
     ///     .build()?;
     /// # Ok::<(), ibapi::Error>(())
     /// ```
-    pub fn collar(self, legs: CollarLegs) -> Self {
+    pub fn collar(self, legs: CollarLegs) -> SpreadBuilder<HasLegs> {
         self.add_leg(legs.stock, LegAction::Buy)
             .ratio(legs.shares_per_contract)
             .done()
@@ -701,15 +733,36 @@ impl SpreadBuilder {
         self.exchange = exchange.into();
         self
     }
+}
 
-    /// Finalize the spread contract, returning an error if no legs were added or the symbol is
-    /// empty (TWS rejects a combo without one with 321).
-    pub fn build(self) -> Result<Contract, Error> {
-        if self.legs.is_empty() {
-            return Err(Error::InvalidArgument("Spread must have at least one leg".into()));
-        }
+impl SpreadBuilder<HasLegs> {
+    /// Finalize the spread contract.
+    ///
+    /// # Errors
+    ///
+    /// [`ValidationError::InvalidField`] for an empty symbol: TWS rejects a combo
+    /// without one with 321.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::builder::ValidationError;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let spread = Contract::spread("AAPL").vertical(100, 105).build()?;
+    /// assert_eq!(spread.combo_legs.len(), 2);
+    ///
+    /// let err = Contract::spread("").vertical(100, 105).build().unwrap_err();
+    /// assert!(matches!(err, ValidationError::InvalidField { field: "Contract::symbol", .. }));
+    /// # Ok::<(), ValidationError>(())
+    /// ```
+    pub fn build(self) -> Result<Contract, ValidationError> {
         if self.symbol.as_str().is_empty() {
-            return Err(Error::InvalidArgument("Spread requires a symbol".into()));
+            return Err(ValidationError::InvalidField {
+                field: "Contract::symbol",
+                value: String::new(),
+                reason: "a combo needs a symbol, usually the underlying; TWS rejects one without (321)".to_owned(),
+            });
         }
 
         let combo_legs: Vec<ComboLeg> = self
@@ -779,7 +832,8 @@ pub struct CollarLegs {
 /// Builder for individual spread legs
 #[must_use = "LegBuilder must be terminated with .done() to add the leg to the SpreadBuilder"]
 pub struct LegBuilder {
-    parent: SpreadBuilder,
+    // `HasLegs` before the leg is pushed: `done()` is the only way out, and it pushes the leg.
+    parent: SpreadBuilder<HasLegs>,
     leg: Leg,
 }
 
@@ -797,7 +851,7 @@ impl LegBuilder {
     }
 
     /// Finish the leg and return control to the parent spread builder.
-    pub fn done(mut self) -> SpreadBuilder {
+    pub fn done(mut self) -> SpreadBuilder<HasLegs> {
         self.parent.legs.push(self.leg);
         self.parent
     }

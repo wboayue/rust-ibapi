@@ -6,6 +6,7 @@
 //! [`HistoricalScheduleBuilder`] for the canonical example.
 
 pub mod data;
+pub mod date_spec;
 pub mod schedule;
 pub mod ticks;
 pub use data::HistoricalDataBuilder;

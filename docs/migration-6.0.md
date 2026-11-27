@@ -405,7 +405,7 @@ The compiler finds every use of the three fields. It does not catch the serializ
 A failure is now one of two shapes, by who can fix it:
 
 - **`Error::Validation(ValidationError)`**: a runtime value a caller may correct, such as a quantity, a price or strike, a date from user or file input, or a field on a caller-built `Order`. Match the variant.
-- **`Error::InvalidArgument(String)`**: a caller bug, such as a builder missing a required field (`Contract::spread` without legs, `ContractBuilder` without a symbol or option strike), conflicting `historical_data` settings, or a bad `ClientBuilder` setting. Fix the code; nothing to match. The order builders track their required fields in their type instead (§51).
+- **`Error::InvalidArgument(String)`**: a caller bug, such as a builder missing a required field (`ContractBuilder` without a symbol or option strike), a `historical_data` range the client rejects before sending, or a bad `ClientBuilder` setting. Fix the code; nothing to match. A spread without legs and conflicting `historical_data` settings no longer compile (§52), and the order builders track their required fields in their type (§51).
 
 `ValidationError` moves from `ibapi::orders::builder` to `ibapi::builder`, beside `Missing` (§11). No other path is kept:
 
@@ -1366,3 +1366,108 @@ only `build()`'s error type changes, and the compiler finds that.
 
 Code that names a builder's type writes the state: `OrderBuilder<Detached, Action, OrderType>` for
 a builder ready to `build()`; the bare name `OrderBuilder<T>` means one with neither set.
+
+### 52. `historical_data` and `Contract::spread` reject a missing or conflicting setting at compile time
+
+Both builders returned `Error::InvalidArgument` from the terminal for a call that could never
+succeed. They now carry a type parameter that records what has been set, and the terminal
+exists only once the call is complete, so the compiler rejects these instead.
+
+**`HistoricalDataBuilder<'a, C, D = Missing>`.** `D` is one of the states in
+`market_data::historical::date_spec`:
+
+| Calls | State | Terminals |
+|---|---|---|
+| none | `Missing` | none |
+| `.ending(t)` | `EndingOnly` | none |
+| `.duration(d)` | `DurationOnly` | `fetch`, `subscribe`, `subscribe_with_updates` |
+| `.duration(d).ending(t)` or `.ending(t).duration(d)` | `DurationEnding` | `fetch`, `subscribe` |
+| `.between(start, end)` | `Between` | `fetch`, `subscribe` |
+
+These no longer compile, where each returned `Error::InvalidArgument`:
+
+```rust,ignore
+// no date range
+client.historical_data(&contract, BarSize::Hour).fetch()?;
+// `between` mixed with `duration` or `ending`
+client.historical_data(&contract, BarSize::Hour).duration(7.days()).between(start, end).fetch()?;
+// `subscribe_with_updates` after `ending` or `between`: TWS streams only a range ending now
+client.historical_data(&contract, BarSize::Hour).duration(1.days()).ending(t).subscribe_with_updates()?;
+```
+
+A second call to `duration`, `ending` or `between` no longer replaces the first; it doesn't
+compile either. Code that names the builder type, such as a helper that takes or returns one,
+adds the state: retype it as `HistoricalDataBuilder<'a, Client, DurationOnly>`. Without it the
+type is the `Missing` start state.
+
+An optional end date can no longer be applied in place, since `.ending(t)` changes the type:
+`if let Some(t) = end { builder = builder.ending(t); }` fails with E0308. Branch into a function
+generic over `date_spec::DateSpec`, which every complete state implements:
+
+```rust,ignore
+// 5.x
+let mut builder = client.historical_data(&contract, BarSize::Hour).duration(1.days());
+if let Some(t) = end {
+    builder = builder.ending(t);
+}
+let bars = builder.fetch()?;
+
+// 6.0
+fn fetch<D: DateSpec>(builder: HistoricalDataBuilder<'_, Client, D>) -> Result<HistoricalData, Error> {
+    builder.fetch()
+}
+let builder = client.historical_data(&contract, BarSize::Hour).duration(1.days());
+let bars = match end {
+    Some(t) => fetch(builder.ending(t))?,
+    None => fetch(builder)?,
+};
+```
+
+The checks that depend on a runtime value still return `Error::InvalidArgument`:
+`between` with `end <= start`, `ending` on a continuous future, `between` on a continuous future
+starting at or after now, and `buffer_limit` with `fetch`.
+
+**`SpreadBuilder<L = Missing>`.** `build()` exists only on `SpreadBuilder<HasLegs>`, which
+`add_leg(..).done()` and every preset (`vertical`, `straddle`, `iron_condor`, ...) return.
+`build()` returns `Result<Contract, ValidationError>`, was `Result<Contract, Error>`. An empty
+symbol (§5 made the symbol required), the one check left, is a bad value rather than a caller
+bug, so it is `ValidationError::InvalidField { field: "Contract::symbol", .. }`, not
+`Error::InvalidArgument`:
+
+```rust,ignore
+// 5.x
+let spread = Contract::spread().build(); // Err(Error::InvalidArgument(..)) at runtime
+
+// 6.0
+let spread = Contract::spread("AAPL").build(); // doesn't compile: no legs
+match Contract::spread(symbol).vertical(long, short).build() {
+    Err(ValidationError::InvalidField { field: "Contract::symbol", .. }) => { /* empty symbol */ }
+    // ...
+}
+```
+
+`?` in a function returning `ibapi::Error` still compiles, now giving `Error::Validation`. Retype
+a helper `fn(SpreadBuilder) -> SpreadBuilder` that adds legs as
+`fn(SpreadBuilder) -> SpreadBuilder<HasLegs>`.
+
+Legs from a runtime list can no longer be folded into one binding, since the first leg changes the
+type. Add the first leg, then fold the rest; an empty list is now the caller's to report:
+
+```rust,ignore
+// 5.x
+let mut spread = Contract::spread(symbol);
+for (id, action) in legs {
+    spread = spread.add_leg(id, action).done();
+}
+let contract = spread.build()?; // Err(InvalidArgument) for no legs
+
+// 6.0
+let mut legs = legs.into_iter();
+let Some((id, action)) = legs.next() else {
+    return Err(/* no legs: the caller's error now */);
+};
+let spread = legs.fold(Contract::spread(symbol).add_leg(id, action).done(), |spread, (id, action)| {
+    spread.add_leg(id, action).done()
+});
+let contract = spread.build()?;
+```
