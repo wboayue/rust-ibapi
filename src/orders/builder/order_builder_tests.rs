@@ -987,6 +987,25 @@ fn bracket_order_validation_buy() {
 }
 
 #[test]
+fn bracket_order_rejects_non_finite_entry_limit() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    for entry in [f64::NAN, f64::INFINITY] {
+        let bracket = OrderBuilder::new(&client, &contract)
+            .buy(100)
+            .bracket()
+            .entry_limit(entry)
+            .take_profit(160.0)
+            .stop_loss(145.0);
+        match bracket.build().unwrap_err() {
+            Error::Validation(ValidationError::InvalidPrice(price)) => assert!(!price.is_finite(), "{entry}"),
+            other => panic!("{entry}: expected InvalidPrice, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn bracket_order_invalid_prices_buy() {
     let client = MockClient;
     let contract = create_test_contract();
@@ -1908,6 +1927,15 @@ fn trail_percent_ignores_an_earlier_stop_price() {
 fn market_if_touched_ignores_an_earlier_stop_price() {
     let order = Order::builder().buy(100).stop(100.0).market_if_touched(105.0).build().unwrap();
     assert_eq!(order.aux_price, Some(105.0));
+}
+
+#[test]
+fn missing_input_message_names_the_input() {
+    let err = Order::builder().buy(1).order_type(OrderType::Limit).build().unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "InvalidArgument: Limit order has no limit price: .order_type(..) sets the type alone; use the type's named setter, which takes it"
+    );
 }
 
 #[test]

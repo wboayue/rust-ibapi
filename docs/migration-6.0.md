@@ -1311,7 +1311,7 @@ exercise action. They are now typestate builders, and `MissingRequiredField` is 
 
 | Builder | Required, tracked in the type | Terminals that need it |
 |---|---|---|
-| `OrderBuilder<T, S, K>` | side `S`: `buy` / `sell` / `sell_short` / `sell_long` make it `Action`; order type `K`: `market`, `limit`, ..., `order_type(..)` make it `OrderType` | `build`, `build_order`, `submit`, `analyze`, `preset_stop_loss`, `preset_profit_taker` need both; `bracket` needs the side |
+| `OrderBuilder<T, S, O>` | side `S`: `buy` / `sell` / `sell_short` / `sell_long` make it `Action`; order type `O`: `market`, `limit`, ..., `order_type(..)` make it `OrderType` | `build`, `build_order`, `submit`, `analyze`, `preset_stop_loss`, `preset_profit_taker` need both; `bracket` needs the side and no order type |
 | `BracketOrderBuilder<'a, C, E, P, L>` | entry `E` (`entry_limit` / `entry_market`), `take_profit` `P`, `stop_loss` `L` | `submit_all` |
 | `ExerciseOptionsBuilder<'a, C, A>` | `exercise` / `lapse` make `A` an `ExerciseAction` | `submit` |
 
@@ -1358,9 +1358,11 @@ match Order::builder().buy(100).order_type(OrderType::Limit).build() {
 
 The compiler finds every missing setter, every match on `MissingRequiredField`, and every
 `build()` whose error is used as a `ValidationError`; `?` into `ibapi::Error` compiles unchanged.
-It does not catch an `Error::Validation(_)` arm, on `build()` or `submit()`, that was relied on
-to also see the cases above: they now arrive as `Error::InvalidArgument`, and fall to the
-wildcard arm `Error` already requires.
+From `submit()` / `analyze()`, the cases above were `Error::InvalidArgument` in 5.x and still are;
+only `build()`'s error type changes, and the compiler finds that.
+
+`bracket()` needs a side and no order type: the entry setter picks the type, so
+`.limit(150.0).bracket()` no longer compiles, where 5.x let the entry replace it.
 
 Code that names a builder's type writes the state: `OrderBuilder<Detached, Action, OrderType>` for
 a builder ready to `build()`; the bare name `OrderBuilder<T>` means one with neither set.

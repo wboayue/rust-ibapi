@@ -28,6 +28,12 @@ pub struct ExerciseOptionsBuilder<'a, C, A = Missing> {
     contract: &'a Contract,
     action: A,
     quantity: i32,
+    fields: ExerciseFields,
+}
+
+/// Everything an [`ExerciseOptionsBuilder`] holds besides its client, contract and action.
+#[derive(Default)]
+struct ExerciseFields {
     account: Option<AccountId>,
     override_natural_action: bool,
     manual_order_time: Option<OffsetDateTime>,
@@ -42,11 +48,7 @@ impl<'a, C> ExerciseOptionsBuilder<'a, C> {
             contract,
             action: Missing,
             quantity: 0,
-            account: None,
-            override_natural_action: false,
-            manual_order_time: None,
-            customer_account: None,
-            professional_customer: false,
+            fields: ExerciseFields::default(),
         }
     }
 }
@@ -68,32 +70,28 @@ impl<'a, C, A> ExerciseOptionsBuilder<'a, C, A> {
             contract: self.contract,
             action,
             quantity,
-            account: self.account,
-            override_natural_action: self.override_natural_action,
-            manual_order_time: self.manual_order_time,
-            customer_account: self.customer_account,
-            professional_customer: self.professional_customer,
+            fields: self.fields,
         }
     }
 
     /// Account holding the options. If unset, no account is sent; on a single-account login TWS
     /// then uses the logged-in account.
     pub fn account(mut self, account: impl Into<AccountId>) -> Self {
-        self.account = Some(account.into());
+        self.fields.account = Some(account.into());
         self
     }
 
     /// Override the system's natural action. For example, exercise an option that is out of the
     /// money, which by its natural action would not be exercised.
     pub fn override_natural_action(mut self) -> Self {
-        self.override_natural_action = true;
+        self.fields.override_natural_action = true;
         self
     }
 
     /// Time at which the options should be exercised. Defaults to now. Requires TWS API 10.26 or
     /// higher.
     pub fn manual_order_time(mut self, time: OffsetDateTime) -> Self {
-        self.manual_order_time = Some(time);
+        self.fields.manual_order_time = Some(time);
         self
     }
 
@@ -102,7 +100,7 @@ impl<'a, C, A> ExerciseOptionsBuilder<'a, C, A> {
     /// unless the account's configuration allows a customer account, even when the value is the
     /// account itself (live: 2026-11-15, a plain paper account).
     pub fn customer_account(mut self, customer_account: impl Into<String>) -> Self {
-        self.customer_account = Some(customer_account.into());
+        self.fields.customer_account = Some(customer_account.into());
         self
     }
 
@@ -110,7 +108,7 @@ impl<'a, C, A> ExerciseOptionsBuilder<'a, C, A> {
     /// IBKR's `exerciseOptions`. Off by default. TWS rejects the exercise with error 145 unless the
     /// account's configuration allows the flag (live: 2026-11-15, a plain paper account).
     pub fn professional_customer(mut self) -> Self {
-        self.professional_customer = true;
+        self.fields.professional_customer = true;
         self
     }
 }
@@ -130,11 +128,11 @@ impl<C> ExerciseOptionsBuilder<'_, C, ExerciseAction> {
             self.contract,
             action,
             quantity,
-            self.account.as_deref().unwrap_or_default(),
-            self.override_natural_action,
-            self.manual_order_time,
-            self.customer_account.as_deref().unwrap_or_default(),
-            self.professional_customer,
+            self.fields.account.as_deref().unwrap_or_default(),
+            self.fields.override_natural_action,
+            self.fields.manual_order_time,
+            self.fields.customer_account.as_deref().unwrap_or_default(),
+            self.fields.professional_customer,
         )?;
         Ok((order_id, request))
     }
