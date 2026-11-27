@@ -90,11 +90,16 @@ impl BracketOrderBuilder<'_, Client, OrderType, f64, f64> {
     /// field the connected server doesn't support. None of these sends anything: all three
     /// orders are checked and encoded before the first is sent.
     ///
-    /// Only a transport error, or dropping the returned future (a timeout, a `select!` branch),
-    /// stops partway. The parent and take-profit sent before that are held at TWS (they transmit
-    /// with the stop-loss). After a reconnect with the same client id TWS still holds them
-    /// without listing them in `open_orders`; only `cancel_order` with their ids reaches them,
-    /// and the error doesn't carry the ids (live: 2026-11-27, paper Gateway, server 226).
+    /// Only a transport error stops partway, and returns [`Error::OrdersPartiallySent`] with the
+    /// ids of the legs that may be at TWS. A parent and take-profit sent before the stop-loss are
+    /// held there (they transmit with it). After a reconnect with the same client id TWS still
+    /// holds them without listing them in `open_orders`, so cancel them with `cancel_order` and
+    /// the error's `sent` ids (live: 2026-11-27, paper Gateway, server 226).
+    ///
+    /// Dropping the returned future between sends (a timeout, a `select!` branch) also stops
+    /// partway, and returns nothing, so held legs it sent can't be found by id: avoid racing it
+    /// against a timeout. Without one, a write stalled on a peer that stopped reading blocks the
+    /// call until the client finds the connection lost and severs it, which fails the write.
     ///
     /// # Examples
     ///

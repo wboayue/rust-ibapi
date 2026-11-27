@@ -1212,6 +1212,77 @@ fn submit_all_sends_nothing_when_a_later_leg_fails() {
     assert_eq!(request_message_count(&bus), 0);
 }
 
+/// A send that fails partway through a bracket reports which legs may be at TWS: every leg up to
+/// and including the one whose write failed. Table: messages allowed through before the failure.
+#[test]
+fn submit_all_reports_the_legs_sent_when_a_send_fails() {
+    let cases = [
+        ("parent's write fails", 0, vec![9200], vec![9201, 9202]),
+        ("take-profit's write fails", 1, vec![9200, 9201], vec![9202]),
+        ("stop-loss's write fails", 2, vec![9200, 9201, 9202], vec![]),
+    ];
+    for (label, sends_before_failure, expected_sent, expected_not_sent) in cases {
+        let bus = Arc::new(MessageBusStub::default().with_sends_failing_after(sends_before_failure));
+        let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+        client.id_manager().raise_order_id(OrderId::from(9200));
+        let contract = Contract::stock("AAPL").build();
+
+        let result = client
+            .order(&contract)
+            .buy(100)
+            .bracket()
+            .entry_limit(50.0)
+            .take_profit(55.0)
+            .stop_loss(45.0)
+            .submit_all();
+
+        match result {
+            Err(Error::OrdersPartiallySent { sent, not_sent, source }) => {
+                assert_eq!(sent, expected_sent, "{label}");
+                assert_eq!(not_sent, expected_not_sent, "{label}");
+                assert!(matches!(*source, Error::ConnectionReset), "{label}: {source:?}");
+            }
+            other => panic!("{label}: expected OrdersPartiallySent, got {other:?}"),
+        }
+        assert_eq!(
+            request_message_count(&bus),
+            sends_before_failure + 1,
+            "{label}: no write after the failed one"
+        );
+    }
+}
+
+#[test]
+fn submit_oca_orders_reports_the_orders_sent_when_a_send_fails() {
+    let bus = Arc::new(MessageBusStub::default().with_sends_failing_after(1));
+    let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+    client.id_manager().raise_order_id(OrderId::from(9300));
+    let apple = Contract::stock("AAPL").build();
+    let microsoft = Contract::stock("MSFT").build();
+    let first = client.order(&apple).buy(100).limit(50.0).build_order().expect("order should build");
+    let second = client.order(&microsoft).buy(100).limit(45.0).build_order().expect("order should build");
+
+    let result = client.submit_oca_orders("TestOCA", OcaType::CancelWithBlock, vec![(apple, first), (microsoft, second)]);
+
+    assert!(
+        matches!(&result, Err(Error::OrdersPartiallySent { sent, not_sent, .. }) if *sent == [9300, 9301] && not_sent.is_empty()),
+        "{result:?}"
+    );
+}
+
+/// A single order is not a batch: its send failure comes back as is.
+#[test]
+fn submit_order_returns_a_failed_send_unwrapped() {
+    let bus = Arc::new(MessageBusStub::default().with_failing_sends());
+    let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+    let contract = Contract::stock("AAPL").build();
+    let order = client.order(&contract).buy(100).limit(50.0).build_order().expect("order should build");
+
+    let result = client.submit_order(9400, &contract, &order);
+
+    assert!(matches!(result, Err(Error::ConnectionReset)), "{result:?}");
+}
+
 #[test]
 fn build_order_does_not_reach_the_wire() {
     let (client, bus) = create_blocking_test_client();

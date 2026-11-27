@@ -185,17 +185,25 @@ impl Client {
     /// }
     /// ```
     pub async fn submit_order(&self, order_id: impl Into<OrderId>, contract: &Contract, order: &Order) -> Result<(), Error> {
-        self.submit_orders([(order_id.into(), contract, order)]).await
+        let (_, request) = verify::prepare_place_order(self.id_manager(), self.server_version(), order_id.into(), contract, order)?;
+        self.send_message(request).await
     }
 
     /// Sends a batch of orders, each under the id paired with it, after
-    /// [`verify::prepare_place_orders`] has checked and encoded all of them. Only a transport
-    /// error, or dropping this future between sends, stops the send loop, with the earlier orders
-    /// already sent.
+    /// [`verify::prepare_place_orders`] has checked and encoded all of them. A failed send stops
+    /// the loop and returns [`Error::OrdersPartiallySent`] with the ids that may be at TWS. A
+    /// future dropped between sends returns nothing, so its orders aren't reported.
     pub(crate) async fn submit_orders<'a>(&self, orders: impl IntoIterator<Item = (OrderId, &'a Contract, &'a Order)>) -> Result<(), Error> {
-        let requests = verify::prepare_place_orders(self.id_manager(), self.server_version(), orders)?;
-        for request in requests {
-            self.send_message(request).await?;
+        let orders: Vec<_> = orders.into_iter().collect();
+        let requests = verify::prepare_place_orders(self.id_manager(), self.server_version(), orders.iter().copied())?;
+        for (i, request) in requests.into_iter().enumerate() {
+            if let Err(source) = self.send_message(request).await {
+                return Err(Error::orders_partially_sent(
+                    orders.iter().map(|(order_id, _, _)| order_id.value()),
+                    i,
+                    source,
+                ));
+            }
         }
         Ok(())
     }
@@ -215,11 +223,13 @@ impl Client {
     ///   attached-order id on an order, is at or above 1,500,000,000 (reserved for request ids).
     /// - [`Error::ServerVersion`] if an order sets a field the connected server doesn't support.
     ///
-    /// Every order is checked and encoded before the first is sent, so only a transport error, or
-    /// dropping the returned future (a timeout, a `select!` branch), stops partway. The orders
-    /// sent before that may be at TWS, and the error doesn't say which: after reconnecting with
-    /// the same client id, [`open_orders`](Client::open_orders) lists them, unless an order was
-    /// built with `transmit` false, which TWS holds without listing.
+    /// Every order is checked and encoded before the first is sent, so only a transport error
+    /// stops partway. That returns [`Error::OrdersPartiallySent`]: its `sent` ids may be at TWS
+    /// (cancel them by id after reconnecting with the same client id), and its `not_sent` ids were
+    /// never written. Dropping the returned future between sends (a timeout, a `select!` branch)
+    /// also stops partway, and returns nothing: after reconnecting with the same client id,
+    /// [`open_orders`](Client::open_orders) lists what was sent, unless an order was built with
+    /// `transmit` false, which TWS holds without listing.
     ///
     /// # Examples
     ///

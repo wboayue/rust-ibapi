@@ -279,6 +279,7 @@ fn clone_preserves_payloaded_variants() {
         },
         Error::BufferLimitExceeded { limit: 5 },
         Error::OrderIdInRequestRange { order_id: 7 },
+        partially_sent(Error::ConnectionReset),
     ];
 
     for original in originals {
@@ -291,6 +292,46 @@ fn clone_preserves_payloaded_variants() {
 fn clone_preserves_parse_time() {
     let original = Error::ParseTime(parse_time_error());
     assert!(matches!(original.clone(), Error::ParseTime(e) if e == parse_time_error()));
+}
+
+fn partially_sent(source: Error) -> Error {
+    Error::orders_partially_sent([7, 8, 9], 1, source)
+}
+
+#[test]
+fn orders_partially_sent_splits_after_the_failed_order() {
+    let cases = [
+        ("first send fails", 0, vec![7], vec![8, 9]),
+        ("middle send fails", 1, vec![7, 8], vec![9]),
+        ("last send fails", 2, vec![7, 8, 9], vec![]),
+    ];
+    for (label, failed, expected_sent, expected_not_sent) in cases {
+        match Error::orders_partially_sent([7, 8, 9], failed, Error::ConnectionReset) {
+            Error::OrdersPartiallySent { sent, not_sent, .. } => {
+                assert_eq!(sent, expected_sent, "{label}");
+                assert_eq!(not_sent, expected_not_sent, "{label}");
+            }
+            other => panic!("{label}: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn orders_partially_sent_counts_the_orders_and_chains_the_send_failure() {
+    let err = partially_sent(Error::ConnectionReset);
+
+    assert_eq!(
+        err.to_string(),
+        format!("2 of 3 orders may have been sent before the submit stopped: {}", Error::ConnectionReset)
+    );
+    let source = StdError::source(&err).expect("the send failure is the source");
+    assert_eq!(source.to_string(), Error::ConnectionReset.to_string());
+}
+
+#[test]
+fn orders_partially_sent_is_connection_lost_when_its_send_failure_is() {
+    assert!(partially_sent(Error::ConnectionReset).is_connection_lost());
+    assert!(!partially_sent(Error::Shutdown).is_connection_lost());
 }
 
 #[test]

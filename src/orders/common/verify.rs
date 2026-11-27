@@ -23,8 +23,8 @@ pub(crate) fn verify_and_reserve_order_ids(ids: &ClientIdManager, server_version
 }
 
 /// [`verify_and_reserve_order_ids`], then encodes the place-order request: the checked id and
-/// the bytes to send. `place_order` calls it directly; every other place-order path goes through
-/// [`prepare_place_orders`].
+/// the bytes to send. `place_order` and `submit_order` call it directly; the multi-order submits
+/// go through [`prepare_place_orders`].
 pub(crate) fn prepare_place_order(
     ids: &ClientIdManager,
     server_version: i32,
@@ -39,8 +39,8 @@ pub(crate) fn prepare_place_order(
 
 /// The place-order requests for a batch, each order under the id paired with it, prepared with
 /// [`prepare_place_order`]. Every order is checked and encoded before the caller sends the
-/// first, so an order that fails sends nothing; only sending can then stop partway. `submit_order`
-/// and the OCA and bracket submits (sync and async) send through this.
+/// first, so an order that fails sends nothing; only sending can then stop partway, which
+/// [`Error::OrdersPartiallySent`] reports. The OCA and bracket submits (sync and async) send through this.
 pub(crate) fn prepare_place_orders<'a>(
     ids: &ClientIdManager,
     server_version: i32,
