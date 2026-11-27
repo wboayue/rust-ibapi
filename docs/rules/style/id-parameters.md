@@ -9,7 +9,7 @@ triggers:
   - adding an id newtype, or a conversion on one
 symbols: [AccountId, ModelCode, ContractId, OrderId, BracketOrderIds, AttachedOrderIds]
 related: [id-partition, param-budget, validation-vs-invalid-argument]
-precedents: ["#1204", "#1337"]
+precedents: ["#1204", "#1337", "#1348"]
 ---
 
 Id **parameters** take `impl Into<XId>`, never `&XId` or the raw type; an optional id is a
@@ -64,3 +64,6 @@ so callers wrote `ids.parent.0`.
   `AttachedOrderIds`; `as_i32_vec` dropped as a duplicate of `as_vec`); `ContractId` moved to
   `contracts`; conversion set completed on all four newtypes and pinned by a test. Integration
   crates held the only callers that unwrapped with `.0`.
+- #1348 — optional account / model-code filters moved from `Option<&XId>` arguments to builder
+  setters (`positions_multi`, `account_updates_multi`, `pnl`, `pnl_single`);
+  `ContractBuilder::contract_id` typed; spread leg fields raw. No exception left in the crate.
