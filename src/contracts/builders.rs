@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 
 use super::types::*;
 use super::{ComboLeg, Contract, SecurityType};
-use crate::accounts::types::ContractId;
 use crate::builder::{Missing, ValidationError};
+use crate::contracts::ContractId;
 use crate::Error;
 
 /// Stock contract builder with type-safe API

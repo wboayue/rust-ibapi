@@ -69,11 +69,13 @@ pub use crate::orders::{
 };
 
 // Account types
-pub use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
+pub use crate::accounts::types::{AccountGroup, AccountId, ModelCode};
 pub use crate::accounts::{
     AccountSummaryResult, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, FamilyCode, LedgerOnly, PnL, PnLSingle, PositionUpdate,
     PositionUpdateMulti,
 };
+pub use crate::contracts::ContractId;
+pub use crate::orders::OrderId;
 
 // Subscription types (canonical home: crate::subscriptions)
 #[cfg(feature = "async")]

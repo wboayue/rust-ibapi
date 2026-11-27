@@ -1,5 +1,6 @@
-use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
+use crate::accounts::types::{AccountGroup, AccountId, ModelCode};
 use crate::accounts::{FaDataType, LedgerOnly, ServerLogLevel};
+use crate::contracts::ContractId;
 use crate::messages::OutgoingMessages;
 use crate::Error;
 

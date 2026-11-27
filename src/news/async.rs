@@ -2,11 +2,11 @@
 
 use super::common::{self, decoders, encoders};
 use super::*;
-use crate::accounts::types::ContractId;
 use crate::client::{ClientRequestBuilders, SubscriptionBuilderExt};
 use crate::common::request_helpers::{self, expect_proto};
 use crate::common::retry::retry_on_connection_reset;
 use crate::contracts::Contract;
+use crate::contracts::ContractId;
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};

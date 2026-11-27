@@ -3,7 +3,7 @@ use super::types::{AttachedOrderIds, BracketOrderIds};
 use crate::client::sync::Client;
 use crate::errors::Error;
 use crate::orders::PlaceOrder;
-use crate::orders::{Action, OrderId, OrderType};
+use crate::orders::{Action, OrderType};
 impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
     /// Submit the order synchronously
     /// Returns the order ID assigned to the submitted order
@@ -13,12 +13,12 @@ impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
     /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
     /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
     /// has reached 1,500,000,000 (reserved for request ids).
-    pub fn submit(self) -> Result<OrderId, Error> {
+    pub fn submit(self) -> Result<i32, Error> {
         let ClientBound { client, contract } = self.target;
         let order_id = client.next_order_id();
         let order = self.build()?;
         client.submit_order(order_id, contract, &order)?;
-        Ok(OrderId::new(order_id))
+        Ok(order_id)
     }
 
     /// Analyze order for margin/commission (what-if)

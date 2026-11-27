@@ -1,7 +1,7 @@
 use time::OffsetDateTime;
 
 use super::HistoricalNewsPage;
-use crate::accounts::types::ContractId;
+use crate::contracts::ContractId;
 use crate::Error;
 
 #[cfg(test)]

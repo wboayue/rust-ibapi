@@ -2,9 +2,9 @@
 
 use time::Date;
 
-use crate::accounts::types::ContractId;
 use crate::client::blocking::ClientRequestBuilders;
 use crate::client::sync::Client;
+use crate::contracts::ContractId;
 use crate::subscriptions::sync::Subscription;
 use crate::{common::request_helpers, Error};
 

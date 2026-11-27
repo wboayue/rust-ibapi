@@ -689,20 +689,21 @@ impl<T> Drop for Subscription<T> { /* ... */ }
 
 ### Newtype Wrappers for Domain Ids
 ```rust
-// Bad: raw i32 allows type confusion
+// Bad: the signature does not say which i32 is which
 fn lookup(contract_id: i32, order_id: i32) -> Contract { /* ... */ }  // easy to swap args
 
-// Good: newtype wrappers prevent mistakes
-// Use newtype wrappers when type confusion is possible (ContractId vs OrderId).
-// The crate's id newtypes (ContractId, OrderId, AccountId, ...) are transparent:
-// a public field, a From impl and Display. Construction does not validate the
+// Good: the parameter names which id it wants
+// The crate's id newtypes (ContractId, OrderId, AccountId, ModelCode) are transparent:
+// a public field, From impls both ways and Display. Construction does not validate the
 // value (an OrderId in the request-id range is rejected when an order uses it).
+// Parameters take `impl Into<XId>`; returned ids and struct fields stay raw.
+// See docs/rules/style/id-parameters.md.
 pub struct ContractId(pub i32);
 
 impl From<i32> for ContractId {
     fn from(id: i32) -> Self { Self(id) }
 }
 
-// Type system prevents swapped arguments
-fn lookup(id: ContractId) -> Contract { /* ... */ }  // Can't pass an OrderId
+fn lookup(contract_id: impl Into<ContractId>) -> Contract { /* ... */ }
+// Self-documenting, not type-checked: any i32, including an order id, converts.
 ```

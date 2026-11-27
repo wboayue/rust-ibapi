@@ -12,8 +12,9 @@ use crate::{client::sync::Client, Error};
 
 use super::common::snapshots::SnapshotBuilder;
 use super::common::{decoders, encoders};
-use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
+use super::types::{AccountGroup, AccountId, ModelCode};
 use super::*;
+use crate::contracts::ContractId;
 
 impl Client {
     /// TWS's current time. TWS is synchronized with the server (not local computer) using NTP and this function will receive the current time in TWS.

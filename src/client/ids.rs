@@ -105,6 +105,12 @@ impl From<i32> for OrderId {
     }
 }
 
+impl From<&i32> for OrderId {
+    fn from(id: &i32) -> Self {
+        Self(*id)
+    }
+}
+
 impl From<OrderId> for i32 {
     fn from(id: OrderId) -> i32 {
         id.0

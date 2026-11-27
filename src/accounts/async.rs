@@ -12,8 +12,9 @@ use crate::{Client, Error};
 
 use super::common::snapshots::SnapshotBuilder;
 use super::common::{decoders, encoders};
-use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
+use super::types::{AccountGroup, AccountId, ModelCode};
 use super::*;
+use crate::contracts::ContractId;
 
 impl Client {
     /// Subscribe to streaming position updates for all accessible accounts.

@@ -512,7 +512,7 @@ fn spread_presets_set_legs() {
 
 #[test]
 fn spread_builder_accepts_contract_id() {
-    use crate::accounts::types::ContractId;
+    use crate::contracts::ContractId;
 
     let spread = Contract::spread("AAPL")
         .vertical(ContractId(11111), ContractId(22222))

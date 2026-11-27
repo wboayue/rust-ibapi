@@ -1,9 +1,10 @@
 use super::algo_builders::AlgoParams;
 use super::types::*;
 use super::validation;
-use crate::accounts::types::{AccountId, ContractId};
+use crate::accounts::types::AccountId;
 use crate::builder::Missing;
 use crate::contracts::Contract;
+use crate::contracts::ContractId;
 use crate::contracts::TagValue;
 use crate::market_data::TradingHours;
 use crate::orders::common::order_builder::non_guaranteed_params;
@@ -2071,9 +2072,9 @@ impl<'a, C> AttachedOrdersBuilder<'a, C> {
         order.preset_stop_loss_order_id = self.stop_loss.then(&mut next_id);
         order.preset_profit_taker_order_id = self.profit_taker.then(&mut next_id);
         let ids = AttachedOrderIds {
-            parent: OrderId(parent),
-            stop_loss: order.preset_stop_loss_order_id.map(OrderId),
-            profit_taker: order.preset_profit_taker_order_id.map(OrderId),
+            parent,
+            stop_loss: order.preset_stop_loss_order_id,
+            profit_taker: order.preset_profit_taker_order_id,
         };
         Ok((order, ids))
     }

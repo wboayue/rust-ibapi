@@ -997,7 +997,7 @@ async fn submit_assigns_the_next_order_id_and_sends_the_order() {
         .submit()
         .await
         .expect("submit should succeed");
-    assert_eq!(order_id.value(), 9100);
+    assert_eq!(order_id, 9100);
 
     assert_eq!(request_message_count(&bus), 1);
     let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
@@ -1046,7 +1046,7 @@ async fn submit_all_reserves_three_ids_and_wires_the_bracket() {
         .await
         .expect("bracket submission should succeed");
 
-    assert_eq!((ids.parent.value(), ids.take_profit.value(), ids.stop_loss.value()), (9200, 9201, 9202));
+    assert_eq!((ids.parent, ids.take_profit, ids.stop_loss), (9200, 9201, 9202));
     assert_eq!(request_message_count(&bus), 3);
 
     let orders: Vec<crate::proto::Order> = (0..3)
@@ -1108,7 +1108,7 @@ async fn submit_oca_orders_numbers_each_order_and_keeps_the_group() {
         .await
         .expect("OCA submission should succeed");
 
-    assert_eq!(ids.iter().map(|id| id.value()).collect::<Vec<_>>(), vec![9300, 9301]);
+    assert_eq!(ids, vec![9300, 9301]);
     assert_eq!(request_message_count(&bus), 2);
 
     for i in 0..2 {
@@ -1216,9 +1216,9 @@ async fn preset_legs_submit_one_request_with_attached_ids() {
         .await
         .expect("submission should succeed");
 
-    assert_eq!(ids.parent.value(), 9400);
-    assert_eq!(ids.stop_loss.map(|id| id.value()), Some(9401));
-    assert_eq!(ids.profit_taker.map(|id| id.value()), Some(9402));
+    assert_eq!(ids.parent, 9400);
+    assert_eq!(ids.stop_loss, Some(9401));
+    assert_eq!(ids.profit_taker, Some(9402));
 
     // One request: TWS creates the children from the parent.
     assert_eq!(request_message_count(&bus), 1);

@@ -1,9 +1,10 @@
 use std::time::Duration;
 
-use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
+use ibapi::accounts::types::{AccountGroup, AccountId};
 use ibapi::accounts::LedgerOnly;
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
+use ibapi::contracts::ContractId;
 use ibapi::orders::{Action, Order, OrderStatusKind, OrderType, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi_integration_sync::connect;
