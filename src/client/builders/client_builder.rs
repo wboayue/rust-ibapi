@@ -262,13 +262,17 @@ pub mod sync_impl {
         /// Fail a one-shot request, one that returns a value rather than a
         /// subscription, with [`Error::Timeout`] when TWS hasn't answered
         /// within `timeout`. Default: requests answered on their own request id,
-        /// such as `historical_data(..).fetch()`, `head_timestamp` and the
-        /// option calculations, wait without a limit; the rest fail after 30 s.
+        /// such as `historical_data(..).fetch()`, `contract_details`,
+        /// `head_timestamp` and the option calculations, wait without a limit;
+        /// the rest fail after 30 s.
         ///
         /// The clock starts when the call does and keeps running across a
         /// reconnect and the resends after it: a reconnect that outlasts the
-        /// timeout ends the call with [`Error::Timeout`]. A request TWS can
-        /// cancel is cancelled on timeout.
+        /// timeout ends the call with [`Error::Timeout`]. `contract_details`
+        /// is not resent: a dropped connection ends it with
+        /// [`Error::ConnectionReset`]. See [`Client::contract_details`] for
+        /// blocking writes and cancellation. On timeout, a request that
+        /// has opened sends a native cancel when TWS supports one.
         /// Subscriptions are not affected: bound those with
         /// `collect_to_end_within`. `timeout` must be longer than zero, or the
         /// connect fails with [`Error::InvalidArgument`].
@@ -610,13 +614,17 @@ pub mod async_impl {
         /// Fail a one-shot request, one that returns a value rather than a
         /// subscription, with [`Error::Timeout`] when TWS hasn't answered
         /// within `timeout`. Default: requests answered on their own request id,
-        /// such as `historical_data(..).fetch()`, `head_timestamp` and the
-        /// option calculations, wait without a limit; the rest fail after 30 s.
+        /// such as `historical_data(..).fetch()`, `contract_details`,
+        /// `head_timestamp` and the option calculations, wait without a limit;
+        /// the rest fail after 30 s.
         ///
         /// The clock starts when the call does and keeps running across a
         /// reconnect and the resends after it: a reconnect that outlasts the
-        /// timeout ends the call with [`Error::Timeout`]. A request TWS can
-        /// cancel is cancelled on timeout.
+        /// timeout ends the call with [`Error::Timeout`]. `contract_details`
+        /// is not resent: a dropped connection ends it with
+        /// [`Error::ConnectionReset`]. See [`Client::contract_details`] for
+        /// send timeouts and cancellation. On timeout, a request that
+        /// has opened sends a native cancel when TWS supports one.
         /// Subscriptions are not affected: bound those with
         /// `collect_to_end_within`. `timeout` must be longer than zero, or the
         /// connect fails with [`Error::InvalidArgument`].

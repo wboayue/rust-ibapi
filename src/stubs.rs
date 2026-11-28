@@ -316,7 +316,11 @@ impl MessageBus for MessageBusStub {
         request_id: RequestId,
         message: &[u8],
         bound: Option<crate::transport::BufferBound>,
+        deadline: Option<std::time::Instant>,
     ) -> Result<InternalSubscription, Error> {
+        if deadline.is_some_and(|deadline| deadline <= std::time::Instant::now()) {
+            return Err(Error::Timeout);
+        }
         self.record_buffer_limit(bound);
         Ok(mock_request(self, MockRoute::Request(request_id), message))
     }
@@ -472,7 +476,11 @@ impl AsyncMessageBus for MessageBusStub {
         _request_id: RequestId,
         message: Vec<u8>,
         bound: Option<crate::transport::BufferBound>,
+        admission: Option<crate::transport::r#async::WriteAdmission>,
     ) -> Result<AsyncInternalSubscription, Error> {
+        if let Some(admission) = admission {
+            admission.ensure_open()?;
+        }
         self.record_buffer_limit(bound);
         Ok(self.seeded_subscription(message))
     }

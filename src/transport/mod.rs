@@ -249,11 +249,17 @@ pub(crate) trait MessageBus: Send + Sync {
     /// Open a request-id route and write `packet`. With `bound`, unread items
     /// are capped: see [`BoundState::admit`]. Past the cap the route queues
     /// `Error::BufferLimitExceeded` and discards later frames.
-    fn send_request_capped(&self, request_id: RequestId, packet: &[u8], bound: Option<BufferBound>) -> Result<InternalSubscription, Error>;
+    fn send_request_capped(
+        &self,
+        request_id: RequestId,
+        packet: &[u8],
+        bound: Option<BufferBound>,
+        deadline: Option<std::time::Instant>,
+    ) -> Result<InternalSubscription, Error>;
 
     /// [`send_request_capped`](Self::send_request_capped) without a cap.
     fn send_request(&self, request_id: RequestId, packet: &[u8]) -> Result<InternalSubscription, Error> {
-        self.send_request_capped(request_id, packet, None)
+        self.send_request_capped(request_id, packet, None, None)
     }
 
     fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;

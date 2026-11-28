@@ -17,9 +17,20 @@ impl Client {
     /// Collects every row before returning. To read rows as they arrive, stop reading early, or know the
     /// request id up front, use [Client::contract_details_stream].
     ///
-    /// Waits for TWS's end marker with no time bound. For a bound, use
+    /// A configured [`one_shot_timeout`](crate::client::blocking::ClientBuilder::one_shot_timeout)
+    /// sets one deadline for rate-limit admission and reading the whole reply. The transport
+    /// checks the deadline again before starting the write. Waiting for the blocking writer
+    /// lock, an in-progress socket write, or writing a cancel can delay the return. With no
+    /// timeout, the call waits without a time limit.
+    /// During a TWS stall, contract-details requests went unanswered, with no error, until TWS
+    /// was restarted (#1299). The request is not resent after a reconnect: a dropped connection
+    /// ends the call with [`Error::ConnectionReset`]. For a bound on one call, use
     /// [`contract_details_stream`](Self::contract_details_stream) and
     /// [`collect_to_end_within`](crate::subscriptions::Subscription::collect_to_end_within).
+    ///
+    /// # Errors
+    /// [`Error::Timeout`] if the deadline expires before the end marker. On server version 215
+    /// or later, the client sends a cancel for an open subscription.
     ///
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
@@ -39,7 +50,12 @@ impl Client {
     /// }
     /// ```
     pub fn contract_details(&self, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
-        self.contract_details_stream(contract).subscribe()?.collect_to_end()
+        let deadline = request_helpers::blocking::one_shot_deadline(self);
+        let subscription = self.contract_details_stream(contract).subscribe_before(deadline)?;
+        match deadline {
+            Some(deadline) => subscription.collect_to_end_before(deadline),
+            None => subscription.collect_to_end(),
+        }
     }
 
     /// Build a contract-details request whose subscription yields one
@@ -309,9 +325,10 @@ pub(in crate::contracts) fn contract_details_stream(
     contract: &Contract,
     request_id: RequestId,
     buffer_limit: Option<usize>,
+    deadline: Option<Instant>,
 ) -> Result<Subscription<ContractDetails>, Error> {
     let packet = encoders::encode_request_contract_data(request_id.raw(), contract)?;
-    client.request_with_id(request_id).send_capped(packet, buffer_limit)
+    client.request_with_id(request_id).send_capped_before(packet, buffer_limit, deadline)
 }
 
 /// Request an underlying's option chain. Reached through
@@ -332,3 +349,4 @@ pub(in crate::contracts) fn option_chain(
 #[cfg(test)]
 #[path = "sync_tests.rs"]
 mod tests;
+use std::time::Instant;

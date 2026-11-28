@@ -18,7 +18,7 @@ fn round_trip_frame() {
     assert_eq!(body, b"hello");
     push.join().unwrap();
 
-    stream.write_all(b"out").unwrap();
+    stream.write_all(b"out", None).unwrap();
     assert_eq!(stream.captured(), b"out");
 
     stream.hang_up();
@@ -37,7 +37,7 @@ fn trait_close_is_terminal() {
     stream.reopen();
     stream.push_inbound(b"late".to_vec());
     assert!(matches!(stream.read_message(), Err(Error::Shutdown)));
-    assert!(matches!(stream.write_all(b"late"), Err(Error::Shutdown)));
+    assert!(matches!(stream.write_all(b"late", None), Err(Error::Shutdown)));
     assert!(matches!(stream.reconnect(), Err(Error::Shutdown)));
     assert!(stream.captured().is_empty());
 }

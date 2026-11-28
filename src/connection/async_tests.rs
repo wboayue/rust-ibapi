@@ -505,8 +505,8 @@ impl AsyncIo for TestSocket {
         self.stream.read_message().await
     }
 
-    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        self.stream.write_all(buf).await
+    async fn write_all(&self, buf: &[u8], admission: Option<&crate::transport::r#async::WriteAdmission>) -> Result<(), Error> {
+        self.stream.write_all(buf, admission).await
     }
 
     async fn close(&self) {

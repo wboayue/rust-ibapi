@@ -14,7 +14,7 @@ use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{encode_raw_length, Notice, ResponseMessage};
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
-use crate::transport::r#async::{AsyncSocket, AsyncStream, NoticeBroadcaster, ShutdownSignal};
+use crate::transport::r#async::{AsyncSocket, AsyncStream, NoticeBroadcaster, ShutdownSignal, WriteAdmission};
 use crate::transport::recorder::MessageRecorder;
 
 type Response = Result<ResponseMessage, Error>;
@@ -239,17 +239,17 @@ impl<S: AsyncStream> AsyncConnection<S> {
     async fn replay_market_data_type(&self) -> Result<(), Error> {
         let packet = self.market_data_type_request.lock().unwrap().clone();
         match packet {
-            Some(packet) => self.write_message(&packet).await,
+            Some(packet) => self.write_message(&packet, None).await,
             None => Ok(()),
         }
     }
 
     /// Write a protobuf message to the connection
-    pub(crate) async fn write_message(&self, data: &[u8]) -> Result<(), Error> {
+    pub(crate) async fn write_message(&self, data: &[u8], admission: Option<&WriteAdmission>) -> Result<(), Error> {
         self.recorder.record_request(data);
         debug!("-> {:?}", data);
 
-        self.write_raw(data).await
+        self.write_raw(data, admission).await
     }
 
     /// Read a message from the connection
@@ -279,9 +279,9 @@ impl<S: AsyncStream> AsyncConnection<S> {
     }
 
     /// Write raw bytes with a length prefix
-    pub(crate) async fn write_raw(&self, data: &[u8]) -> Result<(), Error> {
+    pub(crate) async fn write_raw(&self, data: &[u8], admission: Option<&WriteAdmission>) -> Result<(), Error> {
         let packet = encode_raw_length(data);
-        self.socket.write_all(&packet).await?;
+        self.socket.write_all(&packet, admission).await?;
         Ok(())
     }
 
@@ -290,7 +290,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
         let handshake = self.connection_handler.format_handshake();
         debug!("-> handshake: {handshake:?}");
 
-        self.socket.write_all(&handshake).await?;
+        self.socket.write_all(&handshake, None).await?;
 
         let ack = parse_handshake_ack(&self.connection_handler, self.read_startup_frame().await)?;
 
@@ -304,7 +304,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
     // asks server to start processing messages
     pub(crate) async fn start_api(&self) -> Result<(), Error> {
         let data = self.connection_handler.format_start_api(self.client_id);
-        self.write_raw(&data).await?;
+        self.write_raw(&data, None).await?;
         Ok(())
     }
 
