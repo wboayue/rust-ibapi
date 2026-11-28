@@ -142,6 +142,46 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
     sorts alphabetically); three or more legs; other order types (MKT, REL) on a stock combo;
     whether a single-underlying stock combo needs `NonGuaranteed`.
 
+### Combo (BAG) shape and identity
+
+*Live 2026-11-23 17:24-17:35 ET off-hours (CME Globex closed 17:00-18:00 ET), paper TWS, server
+223; what-if orders on AAPL, SPY, MSFT and IBM options and stock, ES and CL futures; three AAPL
+and MSFT verticals placed at 0.01 and cancelled. Guard: `Contract::spread_from_legs`,
+`integration/*/tests/spreads.rs`.*
+
+- **No combo contract id**: the echoed BAG `contract_id` is a placeholder per combo exchange,
+  the same for every combo there: 28812380 for every SMART combo (AAPL, SPY, MSFT and AAPL/IBM
+  combos, and futures combos sent to SMART), 14442663 on CBOE, 16472979 on CME (Z6/H7 and H7/M7
+  ES calendars), 40348702 on NYMEX. Placed orders echo the same id in `open_orders` and
+  `completed_orders`. So the legs identify a combo, not the id.
+- **Echo**: legs come back sorted by con id ascending, whatever order they were sent in; ratio
+  positive with the side in `action`; leg exchange filled (`SMART`, or the futures exchange).
+  `local_symbol` repeats the symbol, `trading_class` is `COMB`, and `combo_legs_description` is
+  `conid|signed ratio` per leg (`692808040|-1,838697388|1`), with `|CME` appended per leg when a
+  futures combo goes to SMART.
+- **Symbol**: must match the legs; another symbol draws 478 "Requested symbol MSFT, in legs
+  AAPL". For legs on several underlyings TWS accepts any one leg's symbol or all of them sorted
+  and comma-joined, and echoes the joined form (`AAPL,IBM`, though IBM's con id sorts first).
+  `IBM,AAPL` draws 478 "... in legs AAPL,IBM".
+- **Currency**: required on SMART (empty: 321 "Currency null isn't supported for smart combo"),
+  but its value is not checked: `EUR` on USD legs echoed `USD`. Empty was accepted on CME.
+- **Exchange**: required (empty: 321 "Missing order exchange"). Options take `SMART` or `CBOE`.
+  A stock leg takes only `SMART` (10125). A futures calendar takes the legs' exchange (`CME`,
+  `NYMEX`), or `SMART` only when each leg names that exchange; `SMART` with blank leg exchanges,
+  or a wrong exchange, draws 200. SMART and CME gave the same margin for the ES calendar.
+- **Leg exchange**: ignored for options (blank, `SMART` and `CBOE` all echoed the combo
+  exchange). Blank is fine for futures on their own exchange; `NYMEX` on ES legs drew 200.
+- **Ratios**: positive and with no common factor. 2:2, 2:4 and a single leg at 3 draw 321
+  "Invalid leg ratio"; 1:3 and 2:3 were accepted. A zero or negative ratio draws 321 "The combo
+  details for leg ... are invalid".
+- **Not answered** (no reply within 20-40 s, no error): a BAG with one leg at ratio 1 (option
+  or stock), the same leg twice, and the collar (stock 100 + put + call), with or without
+  `NonGuaranteed`. Gateway 226 accepted the collar on 2026-10-29 (above).
+- **Stock pair** (AAPL/MSFT, AAPL/IBM): 10043 unless the order is `NonGuaranteed`.
+- **Not probed:** Gateway (TWS only); RTH; other directed option exchanges; non-USD combos;
+  legs in different currencies; ES/NQ on CME drew 201 "Unknown contract" (no native
+  inter-commodity listing), so a directed multi-underlying combo stays untested.
+
 ### `use_price_mgmt_algo` / `route_marketable_to_bbo` echo and acceptance
 
 *Live 2026-11-05 off-hours (23:43 ET), paper Gateway, server 226; AAPL BUY 1 LMT 1.00; #1191.*
