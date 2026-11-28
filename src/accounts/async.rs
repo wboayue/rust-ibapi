@@ -26,8 +26,9 @@ impl Client {
     /// The stream ends with `Err(Error::Notice)` of code
     /// [`POSITIONS_UNAVAILABLE_CODE`](crate::POSITIONS_UNAVAILABLE_CODE) (2151, "Positions info is
     /// not available yet.") if TWS answers that before the first `PositionEnd`. TWS sends it during
-    /// an internet outage (after a 1100) and then nothing more for the request. Request again
-    /// after the 1102. A stream that already has its `PositionEnd` yields the 2151 as a notice
+    /// an internet outage (after a 1100) and then nothing more for the request. A new request
+    /// sent after the 1102 is expected to be answered; that is unverified on a client whose
+    /// earlier request got 2151. A stream that already has its `PositionEnd` yields the 2151 as a notice
     /// and stays open. To bound the wait for `PositionEnd` itself, wrap each `next()` in
     /// `tokio::time::timeout`.
     ///

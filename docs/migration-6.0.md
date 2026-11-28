@@ -1767,7 +1767,8 @@ for update in subscription.iter_data() {
         Ok(PositionUpdate::Position(position)) => println!("{position:?}"),
         Ok(PositionUpdate::PositionEnd) => break,
         Err(Error::Notice(n)) if n.code == POSITIONS_UNAVAILABLE_CODE => {
-            // TWS will not answer this request. Request positions again after the 1102.
+            // TWS will not answer this request. Request positions again after the 1102
+            // (expected to be answered; unverified on this client after a 2151).
             break;
         }
         Err(e) => return Err(e),

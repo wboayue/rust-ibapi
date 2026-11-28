@@ -363,10 +363,10 @@ impl SharedChannels {
 
     /// Sends `item()` once to every channel selected by `filter`; returns how
     /// many were selected.
-    fn send_to(&self, filter: impl Fn(&SharedChannel) -> bool, item: impl Fn() -> RoutedItem) -> usize {
+    fn send_to(&self, filter: impl Fn(OutgoingMessages, &SharedChannel) -> bool, item: impl Fn() -> RoutedItem) -> usize {
         let channels = self.channels();
         let mut selected = 0;
-        for (request, channel) in channels.iter().filter(|(_, channel)| filter(channel)) {
+        for (request, channel) in channels.iter().filter(|(request, channel)| filter(**request, channel)) {
             selected += 1;
             // Fails only with no receivers: nobody is subscribed.
             if channel.sender.get().is_none_or(|sender| sender.send(item()).is_err()) {
@@ -379,25 +379,17 @@ impl SharedChannels {
     /// Deliver `message` to every channel whose request maps `message_type`.
     /// Returns `false` when no channel maps it (or after shutdown).
     pub(super) fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) -> bool {
-        self.send_to(|channel| channel.responses.contains(&message_type), || message.clone().into()) > 0
+        self.send_to(|_, channel| channel.responses.contains(&message_type), || message.clone().into()) > 0
     }
 
-    /// Deliver `item` to `request`'s channel, if anybody has subscribed to it.
-    pub(super) fn send_to_request(&self, request: OutgoingMessages, item: RoutedItem) {
-        // Fails only with no receivers: nobody is subscribed.
-        if self
-            .channels()
-            .get(&request)
-            .and_then(|channel| channel.sender.get())
-            .is_none_or(|sender| sender.send(item).is_err())
-        {
-            trace!("no shared subscription for {request:?}");
-        }
+    /// Deliver `item()` to `request`'s channel.
+    pub(super) fn send_to_request(&self, request: OutgoingMessages, item: impl Fn() -> RoutedItem) {
+        self.send_to(|channel_request, _| channel_request == request, item);
     }
 
     /// Deliver `item()` once to every channel.
     pub(super) fn notify_all(&self, item: impl Fn() -> RoutedItem) {
-        self.send_to(|_| true, item);
+        self.send_to(|_, _| true, item);
     }
 
     /// Fail in-flight one-shot requests fast by delivering an error to the
@@ -406,7 +398,7 @@ impl SharedChannels {
     /// can't terminate a live stream.
     pub(super) fn fail_one_shot_channels(&self, item: impl Fn() -> RoutedItem) {
         let one_shot = shared_channel_configuration::exclusive_one_shot_response_types();
-        self.send_to(|channel| channel.responses.iter().any(|r| one_shot.contains(r)), item);
+        self.send_to(|_, channel| channel.responses.iter().any(|r| one_shot.contains(r)), item);
     }
 
     /// Deliver `item()` once to every channel, then drop the senders so every

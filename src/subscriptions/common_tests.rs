@@ -319,3 +319,30 @@ fn drain_outcome_stops_on_a_session_that_is_down() {
         }
     }
 }
+
+/// `notice_outcome`: only an opted-in notice before the batch end becomes a
+/// terminal error; everything else stays a `Notice`.
+#[test]
+fn notice_outcome_fails_only_an_opted_in_notice_before_batch_end() {
+    use crate::accounts::{PositionUpdate, PositionUpdateMulti};
+    use crate::common::test_utils::helpers::test_notice;
+    use crate::messages::POSITIONS_UNAVAILABLE_CODE;
+
+    let notice = |code| test_notice(code, "Positions info is not available yet.");
+
+    // (label, opted-in decoder, batch_ended, code, expect error)
+    let cases = [
+        ("positions, pending, 2151", true, false, POSITIONS_UNAVAILABLE_CODE, true),
+        ("positions, live, 2151", true, true, POSITIONS_UNAVAILABLE_CODE, false),
+        ("positions, pending, other warning", true, false, 2150, false),
+        ("positions_multi, pending, 2151", false, false, POSITIONS_UNAVAILABLE_CODE, false),
+    ];
+    for (label, opted_in, batch_ended, code, expect_error) in cases {
+        let is_error = if opted_in {
+            notice_outcome::<PositionUpdate>(notice(code), batch_ended).is_err()
+        } else {
+            notice_outcome::<PositionUpdateMulti>(notice(code), batch_ended).is_err()
+        };
+        assert_eq!(is_error, expect_error, "{label}");
+    }
+}

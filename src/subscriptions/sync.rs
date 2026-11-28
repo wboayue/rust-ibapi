@@ -405,6 +405,8 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             },
             Some(RoutedItem::Notice(notice)) => {
                 let item = notice_outcome(notice, self.batch_ended.load(Ordering::Relaxed));
+                // No `note_rejection`: that TWS ended the request is unverified,
+                // so drop still writes the cancel.
                 if item.is_err() {
                     self.stream_ended.store(true, Ordering::Relaxed);
                 }
