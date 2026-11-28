@@ -479,12 +479,14 @@ impl Error {
     /// | [`AccountUpdatesInUse`](Error::AccountUpdatesInUse) | the account-updates slot check (not an order call), before the request is written |
     /// | [`Reconnecting`](Error::Reconnecting) | the send gate, while the client reconnects |
     ///
-    /// `false` for every other variant, including those raised both before and after a write:
+    /// `false` for every other variant, since none of them guarantees that nothing was written.
+    /// The ones an order call, or a retried one-shot request, can get:
     ///
-    /// - [`ConnectionReset`](Error::ConnectionReset) is what a write cut off by a dropped
-    ///   connection returns, when part of the frame may have gone out. A one-shot request
-    ///   retried after a reset also returns it when its last attempt was refused while
-    ///   reconnecting, since an earlier attempt may have been written.
+    /// - [`ConnectionReset`](Error::ConnectionReset) means the connection dropped. A write it cut
+    ///   off may have sent part of the frame. (The refusal while reconnecting is
+    ///   [`Reconnecting`](Error::Reconnecting), above.) A one-shot request retried after a reset
+    ///   also returns it when its last attempt was refused while reconnecting, since an earlier
+    ///   attempt may have been written.
     /// - [`ConnectionFailed`](Error::ConnectionFailed), [`Shutdown`](Error::Shutdown) and
     ///   [`Timeout`](Error::Timeout) refuse a request up front, but a closed socket fails a
     ///   pending write with `Shutdown`, and a one-shot request retried after a reset returns
