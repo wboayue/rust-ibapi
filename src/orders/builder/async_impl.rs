@@ -1,12 +1,8 @@
-use futures::StreamExt;
-
 use super::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBound, OrderBuilder};
 use super::types::{AttachedOrderIds, BracketOrderIds};
 use crate::client::r#async::Client;
 use crate::errors::Error;
-use crate::orders::PlaceOrder;
 use crate::orders::{Action, OrderId, OrderType};
-use crate::subscriptions::SubscriptionItemStreamExt;
 
 impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
     /// Submit the order asynchronously
@@ -45,36 +41,46 @@ impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
         Ok(order_id)
     }
 
-    /// Analyze order for margin/commission (what-if)
+    /// Analyze the order for margin and commission (what-if): TWS evaluates it without placing it.
+    ///
+    /// Returns the order state that carries the margins and commission. TWS answers some orders
+    /// (live: US stock limit orders) with a warning-only frame first; the returned state keeps
+    /// that frame's [`warning_text`](crate::orders::OrderState::warning_text) (live: 2026-11-24,
+    /// server 223; `docs/wire-facts/orders.md#what-if-answer-frames`). For an order built
+    /// elsewhere, use [`Client::analyze_order`].
     ///
     /// # Errors
-    /// [`Error::Validation`] if the builder's inputs fail validation, before anything is sent;
-    /// [`Error::InvalidArgument`] for a required input the typestate can't see (see
-    /// [`OrderBuilder::build`]); [`Error::OrderIdInRequestRange`] if the client's next order id
-    /// has reached 1,500,000,000 (reserved for request ids); the error TWS returns if it rejects the what-if order;
-    /// [`Error::UnexpectedEndOfStream`] if the reply ends without the order's state.
-    pub async fn analyze(mut self) -> Result<crate::orders::OrderState, Error> {
-        self.fields.what_if = true;
+    /// [`Error::Validation`] if the builder's inputs fail validation, or
+    /// [`Error::InvalidArgument`] for a required input the typestate cannot validate (see
+    /// [`OrderBuilder::build`]), before anything is sent;
+    /// [`Error::OrderIdInRequestRange`] if the client's next order id has reached 1,500,000,000
+    /// (reserved for request ids); the error TWS returns if it rejects the what-if order,
+    /// including the 201 for an order the account's margin cannot carry;
+    /// [`Error::UnexpectedEndOfStream`] if the reply ends without the order's state;
+    /// [`Error::Timeout`] if the state has not come within the client's one-shot timeout (30 s
+    /// unless set), as for [`Client::analyze_order`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let state = client.order(&contract).buy(100).limit(150.0).analyze().await.expect("analyze failed");
+    ///     println!(
+    ///         "initial margin {:?} -> {:?}, commission {:?} {}",
+    ///         state.initial_margin_before, state.initial_margin_after, state.commission_and_fees, state.commission_and_fees_currency
+    ///     );
+    /// }
+    /// ```
+    pub async fn analyze(self) -> Result<crate::orders::OrderState, Error> {
         let ClientBound { client, contract } = self.target;
-        let order_id = client.next_order_id();
         let order = self.build()?;
-
-        // Submit what-if order and get the response
-        let subscription = client.place_order(order_id, contract, &order).await?;
-
-        // Look for the order state in the responses. `?` propagates a rejected
-        // what-if order; the earlier `while let Some(Ok(..))` read discarded it by
-        // ending the loop, so the caller saw `UnexpectedEndOfStream` (#735).
-        let mut data = subscription.filter_data();
-        while let Some(response) = data.next().await {
-            if let PlaceOrder::OpenOrder(order_data) = response? {
-                if order_data.order_id == order_id {
-                    return Ok(order_data.order_state);
-                }
-            }
-        }
-
-        Err(Error::UnexpectedEndOfStream)
+        client.analyze_order(client.next_order_id(), contract, &order).await
     }
 }
 

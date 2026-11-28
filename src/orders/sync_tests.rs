@@ -1018,6 +1018,111 @@ fn analyze_reports_end_of_stream_when_no_order_arrives() {
     assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "got {result:?}");
 }
 
+// Live (server 223): TWS answers a US stock limit what-if with a warning-only frame, then the
+// frame with margins and commission. `analyze` returns the second, keeping the first's warning.
+#[test]
+fn analyze_waits_past_the_warning_only_frame() {
+    let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order()
+                .order_id(9090)
+                .status(OrderStatusKind::PreSubmitted)
+                .commission_and_fees(0.0)
+                .warning_text("If your order is not immediately executable")
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order()
+                .order_id(9090)
+                .status(OrderStatusKind::PreSubmitted)
+                .initial_margin_before(257638.32)
+                .commission_and_fees(1.00003)
+                .encode_proto(),
+        ),
+    ]);
+    client.id_manager().raise_order_id(OrderId::from(9090));
+    let contract = Contract::stock("AAPL").build();
+
+    let state = client.order(&contract).buy(100).limit(50.0).analyze().expect("analyze should succeed");
+
+    assert_eq!(state.initial_margin_before, Some(257638.32));
+    assert_eq!(state.commission_and_fees, Some(1.00003));
+    assert_eq!(state.warning_text, "If your order is not immediately executable");
+}
+
+// Live (server 223): an order the account's margin cannot carry is answered with margins and a
+// suggested size, then a 201. `analyze` returns the 201, not the margins.
+#[test]
+fn analyze_surfaces_the_rejection_after_an_over_margin_frame() {
+    let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order()
+                .order_id(9090)
+                .status(OrderStatusKind::PreSubmitted)
+                .initial_margin_before(257664.09)
+                .suggested_size("4000")
+                .encode_proto(),
+        ),
+        proto_error_response(9090, 201, "Order rejected - reason:YOUR ORDER IS NOT ACCEPTED."),
+    ]);
+    client.id_manager().raise_order_id(OrderId::from(9090));
+    let contract = Contract::stock("AAPL").build();
+
+    let err = client
+        .order(&contract)
+        .buy(10_000_000)
+        .limit(1.0)
+        .analyze()
+        .expect_err("an over-margin what-if order must surface the rejection");
+
+    assert_tws_error_message(err, 201, "YOUR ORDER IS NOT ACCEPTED");
+}
+
+// `analyze_order` takes an order built elsewhere: it sends a what-if copy under the caller's order
+// id, moves the client's id generator past it, applies the same frame rules as `analyze`, and
+// leaves the caller's order unchanged.
+#[test]
+fn analyze_order_sends_a_what_if_copy_under_the_given_order_id() {
+    let (client, bus) = create_blocking_test_client_with_ordered_proto_responses(vec![
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order()
+                .order_id(9090)
+                .status(OrderStatusKind::PreSubmitted)
+                .commission_and_fees(0.0)
+                .warning_text("If your order is not immediately executable")
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::OpenOrder,
+            open_order()
+                .order_id(9090)
+                .status(OrderStatusKind::PreSubmitted)
+                .initial_margin_before(257638.32)
+                .commission_and_fees(1.00003)
+                .encode_proto(),
+        ),
+    ]);
+    let contract = Contract::stock("AAPL").build();
+    let mut order = order_builder::limit_order(Action::Buy, 10.0, 100.0);
+    order.order_id = 77;
+
+    let state = client.analyze_order(9090, &contract, &order).expect("analyze_order should succeed");
+
+    let request: crate::proto::PlaceOrderRequest = decode_request_proto(&bus, 0);
+    assert_eq!(request.order_id, Some(9090));
+    assert_eq!(request.order.expect("request carries an order").what_if, Some(true));
+    assert_eq!(state.initial_margin_before, Some(257638.32));
+    assert_eq!(state.commission_and_fees, Some(1.00003));
+    assert_eq!(state.warning_text, "If your order is not immediately executable");
+    assert!(!order.what_if, "the caller's order keeps what_if unset");
+    assert_eq!(order.order_id, 77);
+    assert_eq!(client.next_order_id(), 9091, "a later order cannot reuse the what-if's id");
+}
+
 // The `submit` family, against `Client::stubbed` rather than a mock client that
 // carried its own copy of each method. The shadows dated from before the
 // builder had a real seam to test against; #735 moved `analyze` off its shadow
@@ -1740,4 +1845,59 @@ fn is_unsent_implies_the_order_call_wrote_nothing() {
         assert!(!err.is_unsent() || written == 0, "{name}: unsent, yet {written} requests written");
         assert_eq!(written, usize::from(matches!(sends, Sends::Fail)), "{name}: requests written");
     }
+}
+
+// TWS sends no end marker for a what-if order: a warning-only frame, or a frame with a suggested
+// size, with nothing after it must time out instead of waiting for good.
+#[test]
+fn analyze_order_times_out_when_the_state_never_comes() {
+    let warning_only = proto_response(
+        IncomingMessages::OpenOrder,
+        open_order()
+            .order_id(9090)
+            .status(OrderStatusKind::PreSubmitted)
+            .commission_and_fees(0.0)
+            .warning_text("If your order is not immediately executable")
+            .encode_proto(),
+    );
+    let over_margin = proto_response(
+        IncomingMessages::OpenOrder,
+        open_order()
+            .order_id(9090)
+            .status(OrderStatusKind::PreSubmitted)
+            .initial_margin_before(257664.09)
+            .suggested_size("4000")
+            .encode_proto(),
+    );
+    let contract = Contract::stock("AAPL").build();
+    let order = order_builder::limit_order(Action::Buy, 10.0, 100.0);
+
+    for (name, frame) in [("warning only", warning_only), ("over margin without 201", over_margin)] {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(vec![frame]).keeping_channels_open());
+        let client =
+            crate::client::blocking::Client::stubbed(bus, server_versions::SIZE_RULES).with_one_shot_timeout(std::time::Duration::from_millis(50));
+
+        let result = client.analyze_order(9090, &contract, &order);
+
+        assert!(matches!(result, Err(Error::Timeout)), "{name}: {result:?}");
+    }
+}
+
+#[test]
+fn analyze_order_accepts_an_unrepresentable_timeout() {
+    let (client, _bus) = create_blocking_test_client_with_ordered_proto_responses(vec![proto_response(
+        IncomingMessages::OpenOrder,
+        open_order()
+            .order_id(9090)
+            .status(OrderStatusKind::PreSubmitted)
+            .initial_margin_before(1234.5)
+            .encode_proto(),
+    )]);
+    let client = client.with_one_shot_timeout(Duration::MAX);
+    let contract = Contract::stock("AAPL").build();
+    let order = order_builder::limit_order(Action::Buy, 10.0, 100.0);
+
+    let state = client.analyze_order(9090, &contract, &order).unwrap();
+
+    assert_eq!(state.initial_margin_before, Some(1234.5));
 }
