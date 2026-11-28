@@ -3,8 +3,9 @@
 use std::time::{Duration, Instant};
 
 use crate::client::ids::OrderId;
+use crate::messages::ORDER_CREATION_PENDING_CODE;
 use crate::orders::{OrderData, OrderOutcome, OrderStatus, OrderStatusKind, Orders};
-use crate::Error;
+use crate::{Error, Notice};
 
 /// The least time `wait_for_fill` gives each lookup reply (open orders, then
 /// completed orders) to reach its end marker, even past the deadline. TWS
@@ -93,6 +94,13 @@ impl FillTracker {
             Error::Notice(notice) => Ok(OrderOutcome::Rejected(notice)),
             error => Err(error),
         }
+    }
+
+    /// The outcome for a notice on the status stream: a 1104 naming the
+    /// order ends the wait with [`OrderOutcome::PendingCreation`]; any other
+    /// notice leaves it running.
+    pub(crate) fn notice(notice: Notice) -> Option<OrderOutcome> {
+        (notice.code == ORDER_CREATION_PENDING_CODE).then_some(OrderOutcome::PendingCreation(notice))
     }
 
     /// The outcome when the time runs out.

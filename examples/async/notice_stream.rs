@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while let Some(notice) = stream.next().await {
         if notice.is_system_message() {
-            println!("[connectivity] {notice}");
+            println!("[system]       {notice}");
         } else if notice.is_informational() {
             println!("[info]         {notice}");
         } else {

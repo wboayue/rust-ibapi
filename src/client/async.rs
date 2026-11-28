@@ -435,7 +435,7 @@ impl Client {
     ///     let mut stream = client.notice_stream();
     ///     while let Some(notice) = stream.next().await {
     ///         if notice.is_system_message() {
-    ///             println!("connectivity: {notice}");
+    ///             println!("system: {notice}");
     ///         } else if notice.is_informational() {
     ///             println!("info: {notice}");
     ///         } else {

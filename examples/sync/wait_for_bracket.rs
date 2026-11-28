@@ -43,6 +43,7 @@ fn report(ids: &BracketOrderIds, outcomes: &[OrderOutcome; 3]) {
             OrderOutcome::TimedOut(Some(status)) => format!("timed out, still {}", status.status),
             OrderOutcome::TimedOut(None) => "timed out, no status seen".to_string(),
             OrderOutcome::Rejected(notice) => format!("rejected: {notice}"),
+            OrderOutcome::PendingCreation(notice) => format!("not created yet: {notice}"),
         };
         println!("  {leg} {order_id}: {state}");
     }

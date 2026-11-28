@@ -262,7 +262,7 @@ fn is_informational_code_system_message_codes() {
     }
 
     // Neighbors of the connectivity codes stay hard errors.
-    for code in [1099, 1103, 1299, 1301] {
+    for code in [1099, 1103, 1105, 1299, 1301] {
         assert!(!is_informational_code(code, ""), "code {code} should not route as a notice");
     }
 }
@@ -759,5 +759,42 @@ fn is_foreign_compares_client_ids() {
     ];
     for (name, client_id, expected) in cases {
         assert_eq!(is_foreign(&status(client_id), 28), expected, "{name}");
+    }
+}
+
+/// A request-less 1104 names the orders TWS has not created (#1322): it goes
+/// to the notice stream and to each named order, never failing one-shots.
+/// Only order-range ids are kept.
+#[test]
+fn classify_error_pending_orders_names_order_ids() {
+    let payload = DecodedError {
+        error_code: crate::messages::ORDER_CREATION_PENDING_CODE,
+        error_message: format!("Pending to create 3 orders: 55, 57, {}", crate::client::ids::REQUEST_ID_FLOOR),
+        ..Default::default()
+    };
+
+    match classify_error(payload.clone()) {
+        ErrorDisposition::NoticeAndOrders(notice, orders) => {
+            assert!(notice.is_system_message());
+            assert_eq!(orders, vec![OrderId::from(55), OrderId::from(57)]);
+        }
+        other => panic!("expected NoticeAndOrders, got {other:?}"),
+    }
+    // The disposition carries the order-update copy, not `order_update_notice`.
+    assert!(order_update_notice(&payload).is_none());
+}
+
+/// A 1104 without readable ids, or any other request-less notice, names no
+/// order and is not copied to the order-update stream.
+#[test]
+fn classify_error_unreadable_pending_orders_is_notice_only() {
+    for message in ["Pending to create 0 orders: ", "Ordres en attente de création"] {
+        let payload = DecodedError {
+            error_code: crate::messages::ORDER_CREATION_PENDING_CODE,
+            error_message: message.into(),
+            ..Default::default()
+        };
+        assert!(matches!(classify_error(payload.clone()), ErrorDisposition::NoticeOnly(_)), "{message:?}");
+        assert!(order_update_notice(&payload).is_none(), "{message:?}");
     }
 }

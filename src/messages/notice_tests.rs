@@ -152,11 +152,12 @@ fn notice_classifies_every_hmds_query_message_as_warning() {
 
 #[test]
 fn notice_is_system_message() {
-    // System message codes: 1100, 1101, 1102, 1300
+    // System message codes: 1100, 1101, 1102, 1104, 1300
     let system_codes = [
         (1100, "Connectivity between IB and TWS has been lost."),
         (1101, "Connectivity restored, data lost."),
         (1102, "Connectivity restored, data maintained."),
+        (1104, "Pending to create 1 orders: 55"),
         (1300, "Socket port has been reset."),
     ];
     for (code, msg) in system_codes {
@@ -173,7 +174,7 @@ fn notice_is_system_message() {
     }
 
     // Non-system codes
-    let non_system_codes = [200, 202, 1099, 1103, 1299, 1301, 2100];
+    let non_system_codes = [200, 202, 1099, 1103, 1105, 1299, 1301, 2100];
     for code in non_system_codes {
         let notice = Notice {
             request_id: None,
@@ -469,6 +470,32 @@ fn data_farm_reads_kind_status_and_name() {
         assert_eq!(notice.connectivity_status(), Some(status), "{message:?}");
     }
     assert_eq!(helpers::test_notice(500, "Not connected:usfarm").data_farm(), None);
+}
+
+#[test]
+fn pending_order_ids_reads_1104() {
+    // The first two messages are as paper TWS sent them
+    // (docs/wire-facts/orders.md#orders-tws-names-in-1104); the rest are spacing edge cases.
+    let cases = [
+        ("Pending to create 1 orders: 55", Some(vec![55])),
+        ("Pending to create 2 orders: 55, 57", Some(vec![55, 57])),
+        ("Pending to create 2 orders:55,57", Some(vec![55, 57])),
+        ("Pending to create 3 orders:  60 ,62,  64 ", Some(vec![60, 62, 64])),
+        ("Pending to create 2 orders: 55, 57,", Some(vec![55, 57])),
+        ("Pending to create 2 orders: 55, 57,  ", Some(vec![55, 57])),
+        ("Pending to create 1 orders: 55x", None),
+        ("Pending to create orders", None),
+        ("Pending to create orders:", None),
+        ("Pending to create orders:  ", None),
+        ("Pending to create orders: ,", None),
+        ("Pending to create 2 orders: ,55, 57", None),
+        ("Pending to create 2 orders: 55, ,57", None),
+        ("Pending to create 2 orders: 55, 57,,", None),
+    ];
+    for (message, expected) in cases {
+        assert_eq!(helpers::test_notice(1104, message).pending_order_ids(), expected, "{message:?}");
+    }
+    assert_eq!(helpers::test_notice(1100, "Pending to create 1 orders: 55").pending_order_ids(), None);
 }
 
 #[test]

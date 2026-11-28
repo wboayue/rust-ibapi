@@ -1535,6 +1535,24 @@ fn wait_for_fill_reports_rejection_without_status() {
     assert!(matches!(&outcome, OrderOutcome::Rejected(n) if n.code == 110), "{outcome:?}");
 }
 
+/// TWS lost its connection to IB and named the order in a 1104 after its
+/// ApiPending status (live 2026-11-26): the wait ends with `PendingCreation`
+/// instead of timing out on an order TWS never created (#1322).
+#[test]
+fn wait_for_fill_reports_pending_creation() {
+    let (client, _) = create_blocking_test_client_with_ordered_proto_responses(vec![
+        order_status_response(order_status().status(OrderStatusKind::ApiPending).filled(0.0).remaining(1.0)),
+        proto_error_response(-1, crate::messages::ORDER_CREATION_PENDING_CODE, "Pending to create 1 orders: 13"),
+    ]);
+
+    let outcome = client.wait_for_fill(13, std::time::Duration::from_secs(5)).unwrap();
+
+    assert!(
+        matches!(&outcome, OrderOutcome::PendingCreation(n) if n.pending_order_ids() == Some(vec![13])),
+        "{outcome:?}"
+    );
+}
+
 #[test]
 fn wait_for_fill_fails_on_connection_reset() {
     let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![]).with_connection_resets(1));

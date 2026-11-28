@@ -663,8 +663,8 @@ fn main() {
             Some(ConnectivityStatus::Ok) => println!("farm online: {n}"),
             Some(ConnectivityStatus::Broken) => println!("farm down: {n}"),
             Some(ConnectivityStatus::Inactive | ConnectivityStatus::Connecting) => println!("farm idle: {n}"),
-            // Connectivity codes 1100/1101/1102 and everything else.
-            None if n.is_system_message() => println!("connectivity: {n}"),
+            // System codes (1100/1101/1102/1104/1300) and everything else.
+            None if n.is_system_message() => println!("system: {n}"),
             None => println!("notice: {n}"),
         }
     }

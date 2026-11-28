@@ -40,6 +40,10 @@ pub const ORDER_CANCELLED_CODE: i32 = 202;
 /// Generic order-message code whose text determines whether TWS reports a warning or an error.
 pub const ORDER_MESSAGE_CODE: i32 = 399;
 
+/// "Pending to create N orders: 55, 57": after a 1100 (connectivity lost), the orders TWS has
+/// not created. [`Notice::pending_order_ids`] reads the ids.
+pub const ORDER_CREATION_PENDING_CODE: i32 = 1104;
+
 /// "Market depth data has been RESET". A [`DATA_ADVISORY_CODES`] entry; a
 /// depth subscription yields it as [`MarketDepths::Reset`](crate::market_data::realtime::MarketDepths::Reset).
 pub(crate) const MARKET_DEPTH_RESET_CODE: i32 = 317;
@@ -145,15 +149,17 @@ pub(crate) const CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE: i32 = 1102;
 /// Socket port was reset during an active connection; the connection is dropped.
 pub(crate) const SOCKET_PORT_RESET_CODE: i32 = 1300;
 
-/// System message codes indicating connectivity status.
+/// System message codes: connectivity status, and the orders an outage leaves pending.
 /// - 1100: Connectivity lost
 /// - 1101: Connectivity restored, market data lost (resubscribe needed)
 /// - 1102: Connectivity restored, market data maintained
+/// - 1104: Orders TWS has not created yet, sent with 1100 ([`ORDER_CREATION_PENDING_CODE`])
 /// - 1300: Socket port reset during active connection
-pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [
+pub const SYSTEM_MESSAGE_CODES: [i32; 5] = [
     CONNECTIVITY_LOST_CODE,
     CONNECTIVITY_RESTORED_DATA_LOST_CODE,
     CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE,
+    ORDER_CREATION_PENDING_CODE,
     SOCKET_PORT_RESET_CODE,
 ];
 
@@ -459,7 +465,8 @@ pub(crate) fn resubscribed_notice() -> Notice {
 /// 3. [`Warning`](Self::Warning) — [`WARNING_CODE_RANGE`], code 399 with a `Warning:`
 ///    line, code 10349 (order TIF set from the order preset), or code 0 (a frame
 ///    whose `error_code` field was absent on the wire).
-/// 4. [`SystemMessage`](Self::SystemMessage) — 1100, 1101, 1102, 1300.
+/// 4. [`SystemMessage`](Self::SystemMessage) — [`SYSTEM_MESSAGE_CODES`]: 1100, 1101, 1102,
+///    1104, 1300.
 /// 5. [`RequestError`](Self::RequestError) — [`REQUEST_ERROR_CODES`]. Ahead of
 ///    [`ORDER_REJECTION_CODE_RANGE`], which they sit inside.
 /// 6. [`OrderRejection`](Self::OrderRejection) — [`ORDER_REJECTION_CODE_RANGE`],
@@ -495,7 +502,7 @@ pub enum NoticeCategory {
     /// line, code 165 "Historical Market Data Service query message", code 10349 "Order
     /// TIF was set to DAY based on order preset", or code 0 — a code-less frame).
     Warning,
-    /// Connectivity / system status (codes 1100, 1101, 1102, 1300).
+    /// Connectivity / system status (codes 1100, 1101, 1102, 1104, 1300).
     SystemMessage,
     /// Order rejection ([`ORDER_REJECTION_CODE_RANGE`], excluding the cases
     /// above it in the precedence chain).
@@ -683,12 +690,13 @@ impl Notice {
         self.category() == NoticeCategory::Warning
     }
 
-    /// Returns `true` if this is a system/connectivity message (codes 1100-1102, 1300).
+    /// Returns `true` if this is a system/connectivity message (codes 1100-1102, 1104, 1300).
     ///
     /// System messages indicate connectivity status changes:
     /// - 1100: Connectivity between IB and TWS lost
     /// - 1101: Connectivity restored, market data lost (resubscribe needed)
     /// - 1102: Connectivity restored, market data maintained
+    /// - 1104: Orders TWS has not created yet, sent with 1100; see [`Notice::pending_order_ids`]
     /// - 1300: Socket port reset during active connection
     pub fn is_system_message(&self) -> bool {
         self.category() == NoticeCategory::SystemMessage
@@ -865,6 +873,53 @@ impl Notice {
             .filter(|name| !name.is_empty())
             .map(str::to_owned);
         Some(DataFarm { kind, status, name })
+    }
+
+    /// Returns the order ids a 1104 notice names, as in "Pending to create 2 orders: 55, 57".
+    /// Returns `None` for another notice, an empty list, or an invalid entry.
+    ///
+    /// TWS sends 1104 with request id -1 alongside a 1100 (connectivity lost), and again as
+    /// the list grows. In paper-account probes, named orders placed before 1100 received
+    /// no further status, were absent from open orders, and returned 10147 on cancellation.
+    /// An order placed just after the 1100 was later rejected with 200 on its own id
+    /// (`docs/wire-facts/orders.md#orders-tws-names-in-1104`).
+    ///
+    /// After connectivity returns, reconcile each named order with open orders, completed
+    /// orders, executions, and order status updates before deciding whether it is safe to retry.
+    ///
+    /// Besides the notice stream, the client delivers a request-less 1104 to the `place_order`
+    /// subscription and `order_status_stream`s of each order it names, and once to
+    /// `order_update_stream`, as a
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem) that ends none of
+    /// them; `wait_for_fill` returns
+    /// [`OrderOutcome::PendingCreation`](crate::orders::OrderOutcome::PendingCreation). It is a [`NoticeCategory::SystemMessage`], so it does not fail requests in
+    /// flight.
+    ///
+    /// The ids come from the message text, which TWS writes in English on the paper account
+    /// probed. A TWS set to another language was not probed; a message this method cannot read
+    /// gives `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::{Notice, ORDER_CREATION_PENDING_CODE};
+    ///
+    /// let notice = Notice {
+    ///     request_id: None,
+    ///     code: ORDER_CREATION_PENDING_CODE,
+    ///     message: "Pending to create 2 orders: 55, 57".into(),
+    ///     error_time: None,
+    ///     advanced_order_reject_json: String::new(),
+    /// };
+    /// assert_eq!(notice.pending_order_ids(), Some(vec![55, 57]));
+    /// ```
+    pub fn pending_order_ids(&self) -> Option<Vec<i32>> {
+        if self.code != ORDER_CREATION_PENDING_CODE {
+            return None;
+        }
+        let (_, ids) = self.message.rsplit_once(':')?;
+        let ids = ids.trim();
+        ids.strip_suffix(',').unwrap_or(ids).split(',').map(|id| id.trim().parse().ok()).collect()
     }
 
     /// Log severity for this notice, derived from [`Notice::category`] so that

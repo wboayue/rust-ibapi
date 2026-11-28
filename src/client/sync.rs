@@ -426,7 +426,7 @@ impl Client {
     /// let stream = client.notice_stream();
     /// for notice in stream.iter() {
     ///     if notice.is_system_message() {
-    ///         println!("connectivity: {notice}");
+    ///         println!("system: {notice}");
     ///     } else if notice.is_informational() {
     ///         println!("info: {notice}");
     ///     } else {
