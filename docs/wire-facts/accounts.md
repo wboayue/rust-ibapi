@@ -81,3 +81,31 @@ Positions, PnL and account updates by model. End-marker behavior for account str
   still mid-dump when a newer request draws the 2151, which `positions()` also ends; whether a
   request sent after the 1102 completes on a client whose earlier request got 2151;
   `positions_multi` (which has a request id) during an outage.
+
+### Exchange on positions, executions and order echoes
+
+*Live 2026-11-24 21:45-22:10 UTC (US closed), paper TWS, server 223; `positions`,
+`executions` with an empty filter, and order replies.*
+
+| Frame                                   | `contract.exchange`                                                                                                | `contract.primaryExchange` |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------- |
+| Position, AAPL options (3 contracts)    | `AMEX`                                                                                                             | empty                      |
+| Position, AAPL and MSFT stock           | `NASDAQ`                                                                                                           | empty                      |
+| Position, SPY                           | `ARCA`                                                                                                             | empty                      |
+| Position, ES future and futures options | `CME`                                                                                                              | empty                      |
+| Execution (129 of the day's)            | the executing venue: `IEX`, `IBKRATS`, `ARCA` for AAPL stock; `MX2`, `BOX`, `PHLX`, `ISE`, `EDGX` for AAPL options | empty                      |
+| OpenOrder echo                          | the exchange the order was sent with: `SMART` for AAPL, VOD and 7203; `SEHK`, `HKFE` when sent there               | as sent                    |
+
+- A position names a listing exchange, not where the position traded: AAPL options came back
+  with `AMEX` whatever venue filled them, stocks with their primary listing in `exchange` and an
+  empty `primaryExchange`. Match a position to an order or execution by `conId`, not by
+  exchange.
+- An execution's `contract.exchange` equalled `execution.exchange` (the venue that filled) in all
+  129. The pair from an exercise of an AAPL 2026-11-27 340 call (the option sold at 0, 100 AAPL
+  bought at 340) reported `SMART` in both.
+- 2026-11-25 (US RTH): AAPL echoes for orders sent to SMART and IEX carried that exchange and an
+  empty `primaryExchange`; EUR.USD fills reported `IDEALPRO` in both exchange fields. A downstream
+  adapter reported stock executions on `EUDARK`, `TGATE`, `FWB`, `IEX` and `ARCA` the same day;
+  not re-probed (no stock fills placed).
+- **Not probed:** positions in non-US contracts (none held); a stock whose primary listing is
+  not its usual SMART destination.
