@@ -52,7 +52,8 @@ pub(in crate::market_data) struct BarTradeFields {
 
 /// TWS's "no trade data" marker on a bar. Historical bars send it for volume, WAP and count on
 /// a bar type without trades (MIDPOINT, BID, ASK, BID_ASK); realtime bars send it for count and
-/// leave volume and WAP out (`docs/wire-facts/market-data.md`).
+/// send it or leave it out for volume and WAP. A contract with a price magnifier gets the WAP as
+/// `-1` times the magnifier (`docs/wire-facts/market-data.md#bar-trade-fields-volume-wap-count`).
 const NO_TRADE_DATA: i32 = -1;
 
 /// Decodes the trade fields shared by realtime and historical bars, by value rather than by
