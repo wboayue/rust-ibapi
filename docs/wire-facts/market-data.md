@@ -276,6 +276,34 @@ server 223.*
 - **Not probed:** real-time `Volume` (8) (no real-time US equity permission on this account);
   delayed volume during regular hours; other markets.
 
+### Open interest ticks
+
+*Live 2026-11-24 Tue 09:47-09:50 UTC (US equities and options closed, CME Globex open), paper,
+server 223; delayed data (type 3).*
+
+- `reqMktData` with generic tick `101` on an AAPL Dec 2026 350 call: `OptionCallOpenInterest`
+  (27) `30680` and `OptionPutOpenInterest` (28) `0`, as size ticks, 0.2 s after the request. The
+  350 put: 27 `0`, 28 `9762`. ES Dec 2026 7200 futures options (FOP) the same way: call 27
+  `4957` / 28 `0`, put 27 `0` / 28 `9796`. Each pair arrived once in 20 s.
+- Generic tick `588` on ES Dec 2026: `FuturesOpenInterest` (86) `2111144`, once in 20 s. On an ES
+  futures option, `588` (with `101`) added nothing.
+- `101` on AAPL stock drew 10089 (no stock data on this account), so the stock's aggregate call and
+  put open interest was not seen.
+- A snapshot with generic tick `101` draws 321 "Snapshot market data subscription is not
+  applicable to generic ticks".
+- Settles that an option's own open interest is the tick for its right, and the other tick's `0`
+  is not a value for the contract. IB's tick type table describes `101` as "currently for
+  stocks".
+- **US trading hours** (*live 2026-11-24 15:57-16:04 UTC, US market open, paper TWS, server
+  223*): the same shape. Delayed (type 3), `101` on the AAPL Dec 2026 350 call drew 27 `30568`
+  and 28 `0` 0.1 s after the request, the 350 put 27 `0` and 28 `10223`, the ES Dec 2026 7500
+  call 27 `7259` / 28 `0` and the put 27 `0` / 28 `13667`; each pair once in a 30 s window.
+  The AAPL call's value differs from the 09:47 UTC read
+  (30680) of the same day. Real-time (type 1) on the AAPL call and the ES option drew 354
+  and no open interest tick.
+- **Not probed:** real-time data on an account with option data permission; `OpenInterest` (22),
+  which never arrived; a stock's aggregate values.
+
 ### Tick-by-tick sizes and `IgnoreSize`
 
 *Live 2026-11-16 03:33Z (Sunday evening ET), paper Gateway, server 226, BTC/PAXOS; #1244.*

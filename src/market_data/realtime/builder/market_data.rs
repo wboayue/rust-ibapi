@@ -90,7 +90,8 @@ impl<'a, C> MarketDataBuilder<'a, C> {
     /// Request a one-time snapshot of market data
     ///
     /// When enabled, the subscription will receive current market data once
-    /// and then automatically end with a SnapshotEnd tick type.
+    /// and then automatically end with a SnapshotEnd tick type. TWS rejects a
+    /// snapshot that has [generic ticks](Self::generic_ticks) with error 321.
     pub fn snapshot(mut self) -> Self {
         self.snapshot = true;
         self
