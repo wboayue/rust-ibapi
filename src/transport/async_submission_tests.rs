@@ -111,7 +111,11 @@ async fn dropping_a_pending_write_releases_its_registration() {
         let (stream, bus) = make_bus(WriteMode::Pending);
         let mut submitting = Box::pin(kind.submit(&bus));
         assert!(futures::poll!(submitting.as_mut()).is_pending());
-        assert!(kind.registered(&bus).await.is_some(), "{kind:?}: registered before the write");
+        assert_eq!(
+            kind.registered(&bus).await.is_some(),
+            !matches!(kind, Registration::Order),
+            "{kind:?}: registration while the write is pending"
+        );
         assert_eq!(
             stream.inner.captured(),
             encode_raw_length(&packet())[..2].to_vec(),

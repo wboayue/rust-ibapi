@@ -283,6 +283,31 @@ and sold at market; MSFT orders of 500 shares filled in 7 to 9 parts.*
 - **Not probed:** futures; a later corrected report; a raw capture of `realized_pnl`; the
   Gateway.
 
+### Executions: request id on replies and live fills
+
+*Live 2026-11-23 23:56Z off-hours, paper TWS, server 223; EUR.USD BUY 20,000 MKT, then
+`executions(ExecutionFilter::default())`.*
+
+- The live `ExecutionData` frame carried request id -1; the same execution in the
+  `executions` reply carried the request's id (`1500000000`). The request id alone tells a
+  reply from a live fill.
+- The reply carried a commission report for each execution, other clients' executions
+  included. A commission report carries no request id or client id, so only the execution id
+  links it to its execution.
+
+*Live 2026-11-24 00:26Z–00:32Z off-hours, paper TWS, server 223; raw captures; EUR.USD BUY
+20,000 MKT with `executions()` sent on the live execution (5 runs), before the fill (2 runs),
+and every 10 ms across the fill (5 runs, 40 requests each).*
+
+- TWS sends one commission report for the live fill and one more inside each reply that lists
+  the fill, before that reply's end marker.
+- In 5 runs a reply landed between the live execution and its commission report. Each time that
+  reply listed the execution without a report, its end marker followed, and then the live
+  report arrived on its own. The fill's reports matched the replies that listed it one for one
+  (38 replies, 38 reports in one run): the live one stood in for the racing reply's.
+- A reply sent before the fill does not list it, and the fill's live report follows as usual.
+- **Not probed:** a live report arriving inside a reply, before its end marker.
+
 ### `Execution.time` rendering
 
 *Live 2026-11-11 overnight (02:17Z to 03:09Z), paper Gateway, server 226; #1225.*
@@ -406,6 +431,75 @@ with `override_natural_action`.*
   executions.
 - **Not probed:** lapse, assignment, automatic exercise at expiry, puts, futures options, and
   exercising from a client other than the one that bought.
+
+### Cancel replies, and a cancel that races a fill
+
+*Live 2026-11-23 23:56Z off-hours, paper TWS, server 223; AAPL BUY 1 LMT 1.00 (PreSubmitted),
+and EUR.USD BUY 20,000 MKT cancelled right after placing.*
+
+- Resting order: `cancel_order` drew `OrderStatus` `Cancelled` and then error 202 ("Order
+  Canceled - reason:"), both on the order id, within 0.2 s. No `PendingCancel` status came first.
+- Market order cancelled at once: `OrderStatus` `PendingCancel`, then the fill
+  (`ExecutionData`, request id -1), `OrderStatus` `Filled`, and the commission report. The cancel
+  lost the race; no 202 or other error followed.
+- **Not probed:** a partial fill followed by a cancel of the rest, and a cancel during RTH.
+
+### Modifying an order
+
+*Live 2026-11-24 off-hours (04:25-04:36 ET), paper TWS, server 223; EUR.USD BUY 20,000 LMT 0.95
+(Submitted), modified with `place_order` on the same id; #1282.*
+
+| Modify sent                                                       | Reply                                                                                |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| limit 0.95 -> 0.96; quantity 20,000 -> 25,000; `DAY` -> `GTC`     | OpenOrder and OrderStatus Submitted (once or twice) with the new terms, same perm id |
+| only `order_type` and `lmt_price` set (quantity 0)                | 321 "... The size value cannot be zero"                                              |
+| action BUY -> SELL; contract EUR.USD -> GBP.USD                   | 105 "Order being modified does not match original order."                            |
+| order type LMT -> STP                                             | 329 "Order modify failed. Cannot change to the new order type.STP"                   |
+| id of a cancelled, filled (MKT) or rejected (201, Inactive) order | 104 "Cannot modify a filled order."                                                  |
+| id of an order TWS had not acknowledged yet                       | 103 "Duplicate order id: 5"                                                          |
+
+- Every refusal carried the order id, came with no status, and left the order working with its
+  earlier terms (`open_orders` right after). A second cancel of a cancelled order drew 10148.
+- **Held order** (`transmit` false): the place and a modify with a new price drew no frames and
+  `open_orders` did not list it. The modify that set `transmit` released it with the newest price
+  (Submitted).
+- **Another client**: client 209 sending client 208's working order id placed a second, separate
+  order (another perm id, both listed by `all_open_orders`); its cancel of that id before then drew
+  10147.
+- **Slow acknowledgment**: in one run TWS took 7 s before the OpenOrder of a new order, and in
+  another sent none; modifies sent meanwhile drew 103, and the unanswered order's cancel
+  drew OrderStatus ApiCancelled with perm id 0.
+- **Subscriptions**: with every subscription on an order id receiving its frames (#1282), a
+  refused modify's error ends the modify's own subscription and reaches the earlier `place_order`
+  subscription as a notice, which keeps receiving the order's frames (201, 104 and 434 on
+  2026-11-24 during US hours, on the build with #1282). On 6.0-dev before #1282, each
+  `place_order` or `cancel_order` on the id replaced the earlier subscription's route: on the
+  async client that subscription ended at once; on the blocking client (read from the code,
+  not run) it kept a sender of its own for the cancel notification, so it stopped receiving
+  and its `next()` blocked. A refused modify then ended its own subscription, leaving none.
+- **Partly filled order** (*live 2026-11-24 16:14-16:21 UTC, US market open, paper TWS, server
+  223; MSFT BUY LMT at or above the ask, modified with `place_order` on the same id after the
+  first partial fill*):
+
+  | Modify sent                                    | Reply                                                                       |
+  | ---------------------------------------------- | --------------------------------------------------------------------------- |
+  | limit to 480 (below the market), filled 100    | OpenOrder with the new price, status `PendingSubmit`, then `Submitted`      |
+  | quantity 2000 -> filled + 100                  | OpenOrder and OrderStatus `PreSubmitted`, then `Submitted`, `remaining` 100 |
+  | quantity below the filled quantity             | 355 "Order size does not conform to market rule." under order id 0          |
+  | quantity equal to the filled quantity          | 434 "The order size cannot be zero." on the order id                        |
+  | limit change while the order was still filling | fills at the old price, status `PendingSubmit`; once `Filled`, 201          |
+
+  - The quantity is the order's total, filled shares included: after 2000 -> 299 with 199
+    filled, the cancel reported `filled` 199 and `remaining` 100.
+  - The 355 frame carried order id 0 (raw capture), so it reached no subscription on the
+    order, only `order_update_stream`; the order kept its quantity. The 434 reached the
+    modify's subscription as an error and the earlier `place_order` subscription as a notice.
+  - Modify overtaken by fills: the OpenOrder that answered the modify echoed the new price with
+    status `PendingSubmit` while seven more fills at the old price (493.45 to 493.47 against a
+    new limit of 480) completed the order; after `Filled` came 201 "Order rejected -
+    reason:Order is already filled" on the order id, and further modifies drew 104.
+- **Not probed:** a modify of a partly filled order's limit back into the market; IB Gateway;
+  futures orders.
 
 ### Weekend cancel of a PreSubmitted ES order wedges in PendingCancel
 

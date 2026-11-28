@@ -1778,3 +1778,47 @@ for update in subscription.iter_data() {
 
 A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
 Check `notice.code` to tell them apart.
+
+### 60. A cancel or modify no longer ends the order's earlier subscription
+
+5.x kept one subscription per order ID: `cancel_order`, or a modify through another
+`place_order` with the same ID, replaced the earlier subscription's route: on the async client
+that subscription ended at once, and on the blocking client it stopped receiving and its `next()`
+blocked. Fills that arrived after the cancel went only to `order_update_stream`. Every
+subscription on the ID now stays live and receives each of the order's frames once.
+
+- **After `cancel_order`**: the `place_order` subscription yields the `Cancelled` status, the
+  202 notice, and any fills and commission reports that follow. The `cancel_order` subscription
+  yields the same statuses and notice. Code that stopped reading the `place_order` subscription
+  because it ended, and read the outcome from the cancel, can read both from it.
+- **After a modify**: the earlier `place_order` subscription keeps yielding the order's events
+  beside the new one. Drop the subscription you no longer read.
+- **A refused modify or cancel**: TWS sends its error (105, 104, 10148, ...) on the order ID
+  without identifying the request. It ends the subscription for the most recently written
+  request. During a socket write, the error follows the newer request if the write succeeds.
+  If the write fails before sending the frame, the error follows the earlier request. When
+  the connection resets before the outcome is known, earlier subscriptions receive queued
+  order errors as notices before the connection error.
+  Every subscription opened before another one on the ID yields it as `SubscriptionItem::Notice`
+  and keeps going, also after the later subscription is dropped (`let _ = client.cancel_order(id)?;`).
+  Code that read the refusal from the `place_order` subscription as an `Err` reads it as a notice
+  there, or from the modify's or cancel's own subscription.
+- **A modify sent with `submit_order`** opens no subscription. If the `place_order` subscription
+  is the order's only one, it is the newest, and a refusal of that modify ends it with the error
+  although the order is still working, as in 5.x. Send modifies with `place_order` to keep it.
+
+### 61. `executions()` replies no longer reach order subscriptions or `order_update_stream`
+
+An `ExecutionData` frame that answers `executions()` carries that request's id; a live fill
+carries -1. 5.x delivered a reply for an order with an open `place_order` subscription to that
+subscription instead of the request, and copied every reply, with its commission reports, to
+`order_update_stream`. Execution rows and end markers now go to the request that asked on both clients.
+
+- **`order_update_stream` and `place_order`**: receive live executions. They receive commission
+  changes only for executions this client saw live. Reports have no request id, so a changed
+  report for a live execution can come from an overlapping reply. A report without an eligible
+  execution is dropped. After an unmatched-report warning or a reconnect, use `executions()`
+  to reconcile missing commissions.
+- **`executions()`**: a reply receives commission reports for the executions it lists until its
+  end marker. Overlapping replies for the same execution each receive the report, while each
+  reply suppresses repeated copies of its current report. Use `execution_id` to apply changes.

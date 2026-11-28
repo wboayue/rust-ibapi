@@ -186,3 +186,36 @@ fn session_state_verdicts() {
         assert_eq!(state.is_terminal(), check_ended.is_some(), "{state:?} is_terminal");
     }
 }
+
+#[test]
+fn live_executions_suppress_identical_reports_and_keep_revisions() {
+    let live = LiveExecutions::default();
+    live.insert("exec-1");
+    live.insert("exec-1");
+
+    assert_eq!(live.record_commission("exec-1", b"original"), Some(true));
+    assert_eq!(live.record_commission("exec-1", b"original"), Some(false));
+    assert_eq!(live.record_commission("exec-1", b"revision"), Some(true));
+    assert_eq!(live.record_commission("exec-2", b"original"), None);
+    assert_eq!(live.len(), 1);
+}
+
+#[test]
+fn live_executions_drop_the_oldest_past_capacity() {
+    let live = LiveExecutions::default();
+    for n in 0..=LIVE_EXECUTIONS_CAPACITY {
+        live.insert(&format!("exec-{n}"));
+    }
+
+    assert_eq!(live.len(), LIVE_EXECUTIONS_CAPACITY);
+    assert_eq!(live.record_commission("exec-0", b"report"), None);
+    assert_eq!(live.record_commission(&format!("exec-{LIVE_EXECUTIONS_CAPACITY}"), b"report"), Some(true));
+}
+
+#[test]
+fn live_executions_clear_drops_every_mark() {
+    let live = LiveExecutions::default();
+    live.insert("exec-1");
+    live.clear();
+    assert_eq!(live.record_commission("exec-1", b"report"), None);
+}

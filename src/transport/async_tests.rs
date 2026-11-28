@@ -9,6 +9,7 @@
 use crate::client::handshake_state::{HandshakeState, ServerVersion};
 use crate::common::test_utils::helpers::order_status_frame;
 use crate::orders::OrderStatusKind;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -469,7 +470,7 @@ async fn subscriptions_with_executions_end_on_request_shutdown_sync() {
     let mut order = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
     let mut executions = bus.send_request(RequestId::nth(99), vec![]).await.unwrap();
 
-    // Mapped by order id, and by request id where no order channel matches.
+    // A live execution maps by order id, a reply by request id.
     stream.push_inbound(execution_data_frame(CLIENT_ID, 0, 7, "exec-order"));
     stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 0, "exec-request"));
     bus.read_and_route_message().await.unwrap();
@@ -478,7 +479,8 @@ async fn subscriptions_with_executions_end_on_request_shutdown_sync() {
         let message = next_message(sub).await;
         assert_eq!(message.message_type(), crate::messages::IncomingMessages::ExecutionData, "{name}");
     }
-    assert_eq!(bus.executions.len(), 2, "both executions mapped");
+    assert_eq!(bus.executions.len(), 1, "live execution not mapped");
+    assert_eq!(bus.executions_requested.len(), 1, "reply not mapped");
 
     bus.clone().process_messages().expect("process_messages");
     bus.request_shutdown_sync();
@@ -488,6 +490,7 @@ async fn subscriptions_with_executions_end_on_request_shutdown_sync() {
         assert!(drained.is_ok(), "{name} subscription with an execution did not end");
     }
     assert!(bus.executions.is_empty());
+    assert!(bus.executions_requested.is_empty());
 }
 
 /// A frame with message id `-2` is `IncomingMessages::Shutdown`: the router
@@ -1446,7 +1449,7 @@ async fn execution_data_routes_to_order_channel() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, -1, 7, "exec-1"));
     bus.read_and_route_message().await.unwrap();
 
     let msg = next_message(&mut sub).await;
@@ -1454,7 +1457,7 @@ async fn execution_data_routes_to_order_channel() {
 }
 
 #[tokio::test]
-async fn execution_data_falls_back_to_request_channel() {
+async fn execution_reply_routes_to_request_channel() {
     let (stream, bus) = make_bus();
     let request_id = RequestId::nth(99);
     let mut sub = bus.send_request(request_id, vec![]).await.unwrap();
@@ -1464,6 +1467,199 @@ async fn execution_data_falls_back_to_request_channel() {
 
     let msg = next_message(&mut sub).await;
     assert_eq!(msg.request_id(), Some(request_id.raw()));
+}
+
+/// An `executions` reply carries its request's id: it and its commission
+/// report reach the request that asked, never the order route that got the
+/// live fill, nor the update stream, which already saw that fill.
+#[tokio::test]
+async fn execution_reply_reaches_request_while_order_route_is_open() {
+    let (stream, bus) = make_bus();
+    let mut order_route = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+    let request_id = RequestId::nth(99);
+    let mut request = bus.send_request(request_id, vec![]).await.unwrap();
+
+    stream.push_inbound(execution_data_frame(CLIENT_ID, -1, 7, "exec-1"));
+    stream.push_inbound(commission_frame("exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, request_id.raw(), 7, "exec-1"));
+    stream.push_inbound(commission_frame("exec-1"));
+    stream.push_inbound(binary_proto(
+        IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd {
+            req_id: Some(request_id.raw()),
+        },
+    ));
+    for _ in 0..5 {
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    let live = [
+        (IncomingMessages::ExecutionData, Some(-1)),
+        (IncomingMessages::CommissionsAndFeesReport, None),
+    ];
+    assert_eq!(frames(&mut order_route).await, live, "order route");
+    assert_eq!(frames(&mut updates).await, live, "update stream");
+    assert_eq!(
+        frames(&mut request).await,
+        [
+            (IncomingMessages::ExecutionData, Some(request_id.raw())),
+            (IncomingMessages::CommissionsAndFeesReport, None),
+            (IncomingMessages::ExecutionDataEnd, Some(request_id.raw())),
+        ],
+        "request"
+    );
+}
+
+/// TWS sends one commission report per live fill and one per `executions`
+/// reply that lists it. A reply sent before the live report lists the fill
+/// without one, so the live report reaches the update stream and the order
+/// route exactly once, whatever the order, and is shared with the request.
+/// The request also receives one copy when TWS repeats the same report.
+#[tokio::test]
+async fn commission_reports_follow_live_fills_and_replies() {
+    let request_id = RequestId::nth(99);
+    let live_exec = || execution_data_frame(CLIENT_ID, -1, 7, "exec-1");
+    let reply_exec = || execution_data_frame(CLIENT_ID, request_id.raw(), 7, "exec-1");
+    let report = || commission_frame("exec-1");
+    let cases = [
+        ("live exec, reply exec, report", vec![live_exec(), reply_exec(), report()]),
+        ("reply exec, live exec, report", vec![reply_exec(), live_exec(), report()]),
+        (
+            "live exec, live report, reply exec, reply report",
+            vec![live_exec(), report(), reply_exec(), report()],
+        ),
+        (
+            "live exec, reply exec, duplicate report",
+            vec![live_exec(), reply_exec(), report(), report()],
+        ),
+    ];
+    for (name, inbound) in cases {
+        let (stream, bus) = make_bus();
+        let mut order_route = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+        let mut updates = bus.create_order_update_subscription().await.unwrap();
+        let mut request = bus.send_request(request_id, vec![]).await.unwrap();
+        let count = inbound.len();
+        for frame in inbound {
+            stream.push_inbound(frame);
+        }
+        for _ in 0..count {
+            bus.read_and_route_message().await.unwrap();
+        }
+
+        let live = vec![
+            (IncomingMessages::ExecutionData, Some(-1)),
+            (IncomingMessages::CommissionsAndFeesReport, None),
+        ];
+        let reply = [
+            (IncomingMessages::ExecutionData, Some(request_id.raw())),
+            (IncomingMessages::CommissionsAndFeesReport, None),
+        ];
+        assert_eq!(frames(&mut order_route).await, live, "{name}: order route");
+        assert_eq!(frames(&mut updates).await, live, "{name}: update stream");
+        assert_eq!(frames(&mut request).await, reply, "{name}: request");
+    }
+}
+
+#[tokio::test]
+async fn overlapping_executions_deliver_each_distinct_commission() {
+    use crate::testdata::builders::orders::commission_and_fees_report;
+
+    let (stream, bus) = make_bus();
+    let first_id = RequestId::nth(97);
+    let second_id = RequestId::nth(98);
+    let unrelated_id = RequestId::nth(99);
+    let mut first = bus.send_executions_request(first_id, vec![]).await.unwrap();
+    let mut second = bus.send_executions_request(second_id, vec![]).await.unwrap();
+    let mut unrelated = bus.send_executions_request(unrelated_id, vec![]).await.unwrap();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+
+    let report = commission_and_fees_report().execution_id("shared").commission_and_fees(1.25);
+    let report_frame = |report: crate::proto::CommissionAndFeesReport| binary_proto(IncomingMessages::CommissionsAndFeesReport as i32, &report);
+    let first_report = report_frame(report.to_proto());
+    let revised = report_frame(report.clone().commission_and_fees(2.75).to_proto());
+    let late_revision = report_frame(report.clone().commission_and_fees(3.5).to_proto());
+    let orphan = report_frame(report.execution_id("unknown").to_proto());
+    let no_id = report_frame(crate::proto::CommissionAndFeesReport::default());
+    let first_end = binary_proto(
+        IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd {
+            req_id: Some(first_id.raw()),
+        },
+    );
+
+    for frame in [
+        execution_data_frame(CLIENT_ID + 1, first_id.raw(), 7, "shared"),
+        first_report.clone(),
+        execution_data_frame(CLIENT_ID + 1, second_id.raw(), 7, "shared"),
+        first_report.clone(),
+        execution_data_frame(CLIENT_ID + 1, second_id.raw(), 7, "shared"),
+        first_report,
+        revised.clone(),
+        revised,
+        first_end,
+        late_revision,
+        orphan,
+        no_id,
+    ] {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    let commissions = |subscription: &mut AsyncInternalSubscription| {
+        std::iter::from_fn(|| subscription.try_next_routed())
+            .filter_map(|item| match item {
+                RoutedItem::Response(message) if message.message_type() == IncomingMessages::CommissionsAndFeesReport => {
+                    let report = message.proto::<crate::proto::CommissionAndFeesReport>().unwrap();
+                    Some((report.exec_id.unwrap(), report.commission_and_fees.unwrap()))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let expected = [("shared".to_owned(), 1.25), ("shared".to_owned(), 2.75)];
+    assert_eq!(commissions(&mut first), expected);
+    assert_eq!(
+        commissions(&mut second),
+        [("shared".to_owned(), 1.25), ("shared".to_owned(), 2.75), ("shared".to_owned(), 3.5)]
+    );
+    assert!(unrelated.try_next_routed().is_none());
+    assert!(updates.try_next_routed().is_none());
+}
+
+#[tokio::test]
+async fn expired_commission_alias_warns_for_reconciliation() {
+    let (stream, bus) = make_bus();
+    let request_id = RequestId::nth(99);
+    let request = bus.send_request(request_id, vec![]).await.unwrap();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+    stream.push_inbound(execution_data_frame(CLIENT_ID + 1, request_id.raw(), 7, "expired"));
+    bus.read_and_route_message().await.unwrap();
+    stream.push_inbound(commission_frame("expired"));
+    bus.read_and_route_message().await.unwrap();
+    stream.push_inbound(commission_frame("expired"));
+    bus.read_and_route_message().await.unwrap();
+    assert!(!bus.live_executions.warned_unmapped());
+
+    drop(request);
+    let leases = bus.executions_requested.leases(&"expired".to_owned());
+    assert_eq!(leases.len(), 1, "the alias must still await cleanup");
+    assert!(!leases[0].is_live());
+    stream.push_inbound(commission_frame("expired"));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(bus.live_executions.warned_unmapped());
+    assert!(updates.try_next_routed().is_none());
+}
+
+/// Every frame queued on `sub`, as message type and request id.
+async fn frames(sub: &mut AsyncInternalSubscription) -> Vec<(IncomingMessages, Option<i32>)> {
+    let mut frames = Vec::new();
+    while let Ok(Some(item)) = tokio::time::timeout(TICK, sub.next()).await {
+        let message = item.unwrap();
+        frames.push((message.message_type(), message.request_id()));
+    }
+    frames
 }
 
 #[tokio::test]
@@ -1534,7 +1730,7 @@ async fn commission_and_fees_report_routes_via_execution_id_mapping() {
     let (stream, bus) = make_bus();
     let mut sub = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
 
-    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-abc"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, -1, 7, "exec-abc"));
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::CommissionsAndFeesReport as i32,
         &crate::proto::CommissionAndFeesReport {
@@ -1580,16 +1776,23 @@ async fn execution_aliases_pruned_when_subscriptions_drop() {
     stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 0, "exec-request"));
     bus.read_and_route_message().await.unwrap();
     bus.read_and_route_message().await.unwrap();
-    assert_eq!(bus.executions.len(), 2, "both executions mapped");
+    assert!(bus.executions.contains(&"exec-order".to_string()), "order execution not mapped");
+    assert!(
+        bus.executions_requested.contains(&"exec-request".to_string()),
+        "request execution not mapped"
+    );
 
     drop(order);
     drain_cleanup_signals(&bus).await;
-    assert!(!bus.executions.contains(&"exec-order".to_string()), "order alias leaked");
-    assert!(bus.executions.contains(&"exec-request".to_string()), "live request alias pruned");
+    assert!(bus.executions.is_empty(), "order alias leaked");
+    assert!(
+        bus.executions_requested.contains(&"exec-request".to_string()),
+        "live request alias pruned"
+    );
 
     drop(executions);
     drain_cleanup_signals(&bus).await;
-    assert!(bus.executions.is_empty(), "request alias leaked");
+    assert!(bus.executions_requested.is_empty(), "request alias leaked");
 }
 
 /// Each clone sends its own cleanup signal; the alias stays while any clone
@@ -1631,6 +1834,86 @@ async fn stale_cleanup_keeps_newer_execution_aliases() {
     drop(sub_b);
     drain_cleanup_signals(&bus).await;
     assert!(bus.executions.is_empty());
+}
+
+/// `cancel_order` registers its own subscription under the order id. The
+/// `place_order` subscription keeps the order's frames that follow, the fill
+/// a cancel races included, and each subscription gets each frame once.
+#[tokio::test]
+async fn order_subscription_keeps_frames_after_a_cancel_subscription_opens() {
+    let (stream, bus) = make_bus();
+    let mut place = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    let mut cancel = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::PendingCancel));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, -1, 7, "exec-1"));
+    stream.push_inbound(commission_frame("exec-1"));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Cancelled));
+    stream.push_inbound(error_frame(7, 202, "Order Canceled - reason:"));
+    for _ in 0..5 {
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    let expected = ["OrderStatus", "ExecutionData", "CommissionsAndFeesReport", "OrderStatus", "notice 202"];
+    for (name, sub) in [("place", &mut place), ("cancel", &mut cancel)] {
+        let items: Vec<String> = std::iter::from_fn(|| sub.try_next_routed()).map(routed_label).collect();
+        assert_eq!(items, expected, "{name}");
+    }
+}
+
+/// A refused modify draws a TWS error on the order id while the order goes on
+/// working. Only the newest subscription on the id, the modify's, ends on it;
+/// the `place_order` subscription receives it as a notice and keeps the
+/// order's frames that follow.
+#[tokio::test]
+async fn order_error_ends_only_the_newest_subscription_on_the_order_id() {
+    let (stream, bus) = make_bus();
+    let mut place = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    let mut modify = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+
+    stream.push_inbound(error_frame(7, 105, "Order being modified does not match original order."));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+    for _ in 0..2 {
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    let place_items: Vec<String> = std::iter::from_fn(|| place.try_next_routed()).map(routed_label).collect();
+    let modify_first = modify.try_next_routed().map(routed_label);
+    assert_eq!(place_items, ["notice 105", "OrderStatus"]);
+    assert_eq!(
+        modify_first.as_deref(),
+        Some("error [105] Order being modified does not match original order.")
+    );
+}
+
+/// `let _ = client.cancel_order(id).await?;` drops the cancel's subscription
+/// before TWS answers. Its refusal still reaches the `place_order`
+/// subscription as a notice: the later request superseded it, so it does not
+/// end on the error.
+#[tokio::test]
+async fn order_error_after_the_newer_subscription_drops_is_a_notice() {
+    let (stream, bus) = make_bus();
+    let mut place = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    let cancel = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    drop(cancel);
+    drain_cleanup_signals(&bus).await;
+
+    stream.push_inbound(error_frame(7, 10148, "OrderId 7 that needs to be cancelled can not be cancelled."));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Filled));
+    for _ in 0..2 {
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    let place_items: Vec<String> = std::iter::from_fn(|| place.try_next_routed()).map(routed_label).collect();
+    assert_eq!(place_items, ["notice 10148", "OrderStatus"]);
+}
+
+fn routed_label(item: RoutedItem) -> String {
+    match item {
+        RoutedItem::Response(message) => format!("{:?}", message.message_type()),
+        RoutedItem::Notice(notice) => format!("notice {}", notice.code),
+        RoutedItem::Error(e) => format!("error {e}"),
+    }
 }
 
 #[tokio::test]
@@ -2178,6 +2461,10 @@ async fn sends_are_refused_during_the_reconnect_handshake() {
         Err(Error::Reconnecting)
     ));
     assert!(bus.requests.is_empty(), "a refused request must register nothing");
+    let order = bus.send_order_request(OrderId::from(42), b"order-bytes".to_vec()).await;
+    assert!(matches!(&order, Err(Error::Reconnecting)));
+    assert!(order.err().unwrap().is_unsent());
+    assert!(bus.orders.is_empty(), "a refused order must register nothing");
     assert_eq!(
         stream.captured(),
         handler.format_handshake(),
@@ -2207,6 +2494,7 @@ async fn sends_are_refused_during_the_reconnect_handshake() {
 struct HandoffSocket {
     stream: MemoryStream,
     marker: &'static [u8],
+    pause_after_write: bool,
     state: Arc<tokio::sync::watch::Sender<Handoff>>,
 }
 
@@ -2235,6 +2523,7 @@ impl HandoffSocket {
         Self {
             stream,
             marker,
+            pause_after_write: false,
             state: Arc::new(tokio::sync::watch::Sender::new(Handoff::default())),
         }
     }
@@ -2270,6 +2559,10 @@ impl AsyncIo for HandoffSocket {
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let is_sender = carries(buf, self.marker);
+        let already_written = is_sender && self.pause_after_write;
+        if already_written {
+            self.stream.write_all(buf).await?;
+        }
         if is_sender {
             self.state.send_modify(|s| s.sender_queued = true);
             self.wait(TEST_SOCKET_WAIT, |s| s.generation > 0 || s.released).await;
@@ -2279,7 +2572,11 @@ impl AsyncIo for HandoffSocket {
             s.writes.push((generation, buf.to_vec()));
             s.sender_wrote |= is_sender;
         });
-        self.stream.write_all(buf).await
+        if already_written {
+            Ok(())
+        } else {
+            self.stream.write_all(buf).await
+        }
     }
 
     async fn close(&self) {
@@ -2496,11 +2793,11 @@ async fn wait_connected_returns_shutdown_when_the_bus_shuts_down() {
     assert!(matches!(result, Err(Error::Shutdown)), "got: {result:?}");
 }
 
-/// Writes fail, reads delegate to a `MemoryStream`. Stands in for a write
-/// refused after the registration went in: the session went down between the
-/// registering call's first state check and its write.
-#[derive(Clone, Debug, Default)]
-struct FailingWriteStream(MemoryStream);
+/// Writes fail while the flag is set, reads delegate to a `MemoryStream`.
+/// Stands in for a write refused after the registration went in: the session
+/// went down between the registering call's first state check and its write.
+#[derive(Clone, Debug)]
+struct FailingWriteStream(MemoryStream, Arc<AtomicBool>);
 
 #[async_trait::async_trait]
 impl AsyncIo for FailingWriteStream {
@@ -2508,8 +2805,11 @@ impl AsyncIo for FailingWriteStream {
         self.0.read_message().await
     }
 
-    async fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
-        Err(Error::ConnectionReset)
+    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        if self.1.load(Ordering::SeqCst) {
+            return Err(Error::ConnectionReset);
+        }
+        self.0.write_all(buf).await
     }
 
     async fn close(&self) {
@@ -2536,7 +2836,8 @@ impl AsyncStream for FailingWriteStream {}
 /// and its write.
 #[tokio::test]
 async fn failed_write_leaves_no_registration() {
-    let connection = AsyncConnection::stubbed(FailingWriteStream::default(), 28);
+    let stream = FailingWriteStream(MemoryStream::default(), Arc::new(AtomicBool::new(true)));
+    let connection = AsyncConnection::stubbed(stream, 28);
     connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
     let bus = Arc::new(AsyncTcpMessageBus::new(connection));
     let mb: &dyn AsyncMessageBus = bus.as_ref();
@@ -2546,6 +2847,381 @@ async fn failed_write_leaves_no_registration() {
 
     assert!(mb.send_order_request(OrderId::from(42), b"order-bytes".to_vec()).await.is_err());
     assert!(bus.orders.is_empty(), "a failed write must leave no order registered");
+}
+
+#[tokio::test]
+async fn order_rejection_during_write_follows_the_write_outcome() {
+    for fails in [true, false] {
+        let stream = MemoryStream::default();
+        let socket = HandoffSocket {
+            pause_after_write: !fails,
+            ..HandoffSocket::new(stream.clone(), b"modify")
+        };
+        let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+        connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+        let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+        let order_id = OrderId::from(7);
+        let mut placed = bus.send_order_request(order_id, b"place".to_vec()).await.unwrap();
+        let modify = {
+            let bus = bus.clone();
+            tokio::spawn(async move { bus.send_order_request(order_id, b"modify".to_vec()).await })
+        };
+
+        assert!(socket.wait(TEST_SOCKET_WAIT, |state| state.sender_queued).await);
+        assert_eq!(count_frames(&stream.captured(), b"modify"), usize::from(!fails));
+        stream.push_inbound(error_frame(7, 201, "overlapping rejection"));
+        bus.read_and_route_message().await.unwrap();
+        let during_write = placed.try_next_routed().map(routed_label);
+        if fails {
+            stream.close().await;
+        }
+        socket.release();
+        let modified = modify.await.unwrap();
+
+        assert_eq!(during_write, None);
+        let observed = placed.try_next_routed().map(routed_label);
+        if fails {
+            assert!(matches!(modified, Err(Error::Shutdown)));
+            assert_eq!(observed.as_deref(), Some("error [201] overlapping rejection"));
+        } else {
+            let mut modified = modified.unwrap();
+            assert_eq!(observed.as_deref(), Some("notice 201"));
+            assert_eq!(
+                modified.try_next_routed().map(routed_label).as_deref(),
+                Some("error [201] overlapping rejection")
+            );
+        }
+    }
+}
+
+/// The fixture fails the modify's socket write before forwarding bytes.
+/// The original placement remains the newest subscription on the order id.
+#[tokio::test]
+async fn failed_order_write_leaves_the_earlier_subscription_not_superseded() {
+    let inbound = MemoryStream::default();
+    let failing = Arc::new(AtomicBool::new(false));
+    let connection = AsyncConnection::stubbed(FailingWriteStream(inbound.clone(), failing.clone()), CLIENT_ID);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+    let mut place = bus.send_order_request(OrderId::from(7), vec![]).await.unwrap();
+    failing.store(true, Ordering::SeqCst);
+    let modify = bus.send_order_request(OrderId::from(7), vec![]).await;
+
+    inbound.push_inbound(error_frame(7, 201, "Order rejected - reason:"));
+    bus.read_and_route_message().await.unwrap();
+
+    let place_first = place.try_next_routed().map(routed_label);
+    assert!(matches!(&modify, Err(Error::ConnectionReset)));
+    assert!(!modify.err().unwrap().is_unsent());
+    assert_eq!(place_first.as_deref(), Some("error [201] Order rejected - reason:"));
+}
+
+#[tokio::test]
+async fn first_order_write_delivers_a_reply_received_before_commit() {
+    let stream = MemoryStream::default();
+    let socket = HandoffSocket {
+        pause_after_write: true,
+        ..HandoffSocket::new(stream.clone(), b"place")
+    };
+    let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+    let order_id = OrderId::from(7);
+    let place = {
+        let bus = bus.clone();
+        tokio::spawn(async move { bus.send_order_request(order_id, b"place".to_vec()).await })
+    };
+
+    assert!(socket.wait(TEST_SOCKET_WAIT, |state| state.sender_queued).await);
+    assert_eq!(count_frames(&stream.captured(), b"place"), 1);
+    assert!(!bus.orders.contains(&order_id));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+    bus.read_and_route_message().await.unwrap();
+    socket.release();
+    let mut placed = place.await.unwrap().unwrap();
+
+    let Some(RoutedItem::Response(message)) = placed.try_next_routed() else {
+        panic!("the first order subscription did not receive its status");
+    };
+    assert_eq!(message.message_type(), IncomingMessages::OrderStatus);
+    assert_eq!(message.order_id(), Some(7));
+    assert_eq!(message.proto::<crate::proto::OrderStatus>().unwrap().status.as_deref(), Some("Submitted"));
+    assert!(placed.try_next_routed().is_none());
+}
+
+#[tokio::test]
+async fn execution_snapshot_completes_while_first_order_write_is_pending() {
+    let stream = MemoryStream::default();
+    let socket = HandoffSocket::new(stream.clone(), b"modify");
+    let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+    let request_id = RequestId::nth(7);
+    let mut snapshot = bus.send_executions_request(request_id, b"executions".to_vec()).await.unwrap();
+    let order_id = OrderId::from(7);
+    let modify = {
+        let bus = bus.clone();
+        tokio::spawn(async move { bus.send_order_request(order_id, b"modify".to_vec()).await })
+    };
+
+    assert!(socket.wait(TEST_SOCKET_WAIT, |state| state.sender_queued).await);
+    assert!(!bus.orders.contains(&order_id));
+    assert_eq!(count_frames(&stream.captured(), b"modify"), 0);
+    let execution_id = "snapshot-fill";
+    for frame in [
+        execution_data_frame(CLIENT_ID, request_id.raw(), 7, execution_id),
+        commission_frame(execution_id),
+        binary_proto(
+            IncomingMessages::ExecutionDataEnd as i32,
+            &crate::proto::ExecutionDetailsEnd {
+                req_id: Some(request_id.raw()),
+            },
+        ),
+    ] {
+        stream.push_inbound(frame);
+        bus.read_and_route_message().await.unwrap();
+    }
+    let during_write: Vec<_> = std::iter::from_fn(|| snapshot.try_next_routed())
+        .map(|item| match item {
+            RoutedItem::Response(message) => (message.message_type(), message.execution_id(), message.request_id()),
+            item => panic!("unexpected snapshot item {item:?}"),
+        })
+        .collect();
+    stream.close().await;
+    socket.release();
+    let modified = modify.await.unwrap();
+
+    assert!(matches!(modified, Err(Error::Shutdown)));
+    assert_eq!(
+        during_write,
+        [
+            (IncomingMessages::ExecutionData, Some(execution_id.to_string()), Some(request_id.raw())),
+            (IncomingMessages::CommissionsAndFeesReport, Some(execution_id.to_string()), None),
+            (IncomingMessages::ExecutionDataEnd, None, Some(request_id.raw())),
+        ]
+    );
+    assert!(snapshot.try_next_routed().is_none());
+}
+
+#[tokio::test]
+async fn pending_order_write_replays_facts_in_wire_order() {
+    for outcome in ["sent", "failed", "reset"] {
+        let stream = MemoryStream::default();
+        let socket = HandoffSocket::new(stream.clone(), b"modify");
+        let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+        connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+        let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+        let order_id = OrderId::from(7);
+        let mut placed = bus.send_order_request(order_id, b"place".to_vec()).await.unwrap();
+        let mut other = bus.send_order_request(OrderId::from(8), b"place".to_vec()).await.unwrap();
+        let modify = {
+            let bus = bus.clone();
+            tokio::spawn(async move { bus.send_order_request(order_id, b"modify".to_vec()).await })
+        };
+
+        assert!(socket.wait(TEST_SOCKET_WAIT, |state| state.sender_queued).await);
+        for frame in [
+            order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted),
+            execution_data_frame(CLIENT_ID, -1, 7, "ordered-fill"),
+            order_status_frame(CLIENT_ID, 8, OrderStatusKind::Cancelled),
+            commission_frame("ordered-fill"),
+            order_status_frame(CLIENT_ID, 7, OrderStatusKind::Filled),
+        ] {
+            stream.push_inbound(frame);
+            bus.read_and_route_message().await.unwrap();
+        }
+        let unrelated = other.try_next_routed().map(routed_label);
+        if outcome == "reset" {
+            bus.reset_channels().await;
+        }
+        if outcome != "sent" {
+            stream.close().await;
+        }
+        socket.release();
+        let modified = modify.await.unwrap();
+
+        let label = |item| match item {
+            RoutedItem::Response(message) if message.message_type() == IncomingMessages::OrderStatus => {
+                message.proto::<crate::proto::OrderStatus>().unwrap().status.unwrap()
+            }
+            item => routed_label(item),
+        };
+        let order_frames = ["Submitted", "ExecutionData", "CommissionsAndFeesReport", "Filled"];
+        assert_eq!(unrelated.as_deref(), Some("OrderStatus"));
+        let placed_frames: Vec<_> = std::iter::from_fn(|| placed.try_next_routed()).map(label).collect();
+        let mut expected = order_frames.map(str::to_owned).to_vec();
+        if outcome == "reset" {
+            expected.push(format!("error {}", Error::ConnectionReset));
+        }
+        assert_eq!(placed_frames, expected, "{outcome}");
+        if outcome == "sent" {
+            let mut modified = modified.unwrap();
+            let modified_frames: Vec<_> = std::iter::from_fn(|| modified.try_next_routed()).map(label).collect();
+            assert_eq!(modified_frames, order_frames);
+        } else {
+            assert!(matches!(modified, Err(Error::Shutdown)));
+        }
+    }
+}
+
+#[tokio::test]
+async fn pending_order_write_overflow_is_reported_before_reset() {
+    let stream = MemoryStream::default();
+    let socket = HandoffSocket::new(stream.clone(), b"modify");
+    let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+    let order_id = OrderId::from(7);
+    let mut placed = bus.send_order_request(order_id, b"place".to_vec()).await.unwrap();
+    let modify = {
+        let bus = bus.clone();
+        tokio::spawn(async move { bus.send_order_request(order_id, b"modify".to_vec()).await })
+    };
+
+    assert!(socket.wait(TEST_SOCKET_WAIT, |state| state.sender_queued).await);
+    for _ in 0..1025 {
+        stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+        bus.read_and_route_message().await.unwrap();
+    }
+    bus.reset_channels().await;
+    stream.close().await;
+    socket.release();
+    let modified = modify.await.unwrap();
+
+    let frames = tokio::time::timeout(TEST_SOCKET_WAIT, async {
+        let mut frames = Vec::new();
+        while let Some(item) = placed.next_routed().await {
+            frames.push(item);
+        }
+        frames
+    })
+    .await
+    .expect("the prior subscription drains and ends after reset");
+
+    let (statuses, tail) = frames.split_at(1022);
+    assert!(statuses
+        .iter()
+        .all(|item| { matches!(item, RoutedItem::Response(message) if message.message_type() == IncomingMessages::OrderStatus) }));
+    assert!(
+        matches!(
+            tail,
+            [
+                RoutedItem::Error(Error::BufferLimitExceeded { limit: 1022 }),
+                RoutedItem::Error(Error::ConnectionReset)
+            ]
+        ),
+        "unexpected overflow/reset tail: {tail:?}"
+    );
+    assert!(matches!(modified, Err(Error::Shutdown)));
+}
+
+#[tokio::test]
+async fn cancelled_order_write_restores_the_previous_error_recipient() {
+    let stream = MemoryStream::default();
+    let socket = HandoffSocket::new(stream.clone(), b"modify");
+    let connection = AsyncConnection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+    let order_id = OrderId::from(7);
+    let mut placed = bus.send_order_request(order_id, b"place".to_vec()).await.unwrap();
+
+    {
+        let modify = bus.send_order_request(order_id, b"modify".to_vec());
+        tokio::pin!(modify);
+        assert!(futures::poll!(&mut modify).is_pending());
+        assert!(socket.holds(|state| state.sender_queued));
+        stream.push_inbound(error_frame(7, 201, "original rejection"));
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    assert_eq!(count_frames(&stream.captured(), b"modify"), 0);
+    assert_eq!(
+        placed.try_next_routed().map(routed_label).as_deref(),
+        Some("error [201] original rejection")
+    );
+}
+
+struct HeldOrderFlush {
+    stream: tokio::io::DuplexStream,
+    flush: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl tokio::io::AsyncRead for HeldOrderFlush {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+        buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        tokio::io::AsyncRead::poll_read(std::pin::Pin::new(&mut self.stream), context, buffer)
+    }
+}
+
+impl tokio::io::AsyncWrite for HeldOrderFlush {
+    fn poll_write(mut self: std::pin::Pin<&mut Self>, context: &mut std::task::Context<'_>, bytes: &[u8]) -> std::task::Poll<std::io::Result<usize>> {
+        tokio::io::AsyncWrite::poll_write(std::pin::Pin::new(&mut self.stream), context, bytes)
+    }
+
+    fn poll_flush(mut self: std::pin::Pin<&mut Self>, context: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+        match self.flush.load(Ordering::SeqCst) {
+            0 => tokio::io::AsyncWrite::poll_flush(std::pin::Pin::new(&mut self.stream), context),
+            1 => std::task::Poll::Pending,
+            _ => std::task::Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
+        }
+    }
+
+    fn poll_shutdown(mut self: std::pin::Pin<&mut Self>, context: &mut std::task::Context<'_>) -> std::task::Poll<std::io::Result<()>> {
+        tokio::io::AsyncWrite::poll_shutdown(std::pin::Pin::new(&mut self.stream), context)
+    }
+}
+
+#[tokio::test]
+async fn uncertain_order_flush_resets_without_assigning_the_rejection() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    for fail_flush in [false, true] {
+        let (stream, mut peer) = tokio::io::duplex(512);
+        let flush = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let stream = std::sync::Mutex::new(Some(HeldOrderFlush {
+            stream,
+            flush: flush.clone(),
+        }));
+        let connector = Connector::from_stream(move || std::future::ready(Ok(stream.lock().unwrap().take().unwrap())));
+        let socket = AsyncSocket::connect(connector).await.unwrap();
+        let connection = AsyncConnection::stubbed(socket, CLIENT_ID);
+        connection.set_server_version_for_test(server_versions::PROTOBUF_REST_MESSAGES_3);
+        let bus = Arc::new(AsyncTcpMessageBus::new(connection));
+        let order_id = OrderId::from(7);
+        let mut placed = bus.send_order_request(order_id, b"place".to_vec()).await.unwrap();
+        flush.store(1, Ordering::SeqCst);
+        {
+            let modify = bus.send_order_request(order_id, b"modify".to_vec());
+            tokio::pin!(modify);
+            assert!(futures::poll!(&mut modify).is_pending());
+            let expected = [encode_raw_length(b"place"), encode_raw_length(b"modify")].concat();
+            let mut sent = vec![0; expected.len()];
+            tokio::time::timeout(TEST_SOCKET_WAIT, peer.read_exact(&mut sent)).await.unwrap().unwrap();
+            assert_eq!(sent, expected);
+
+            for frame in [
+                order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted),
+                error_frame(7, 105, "uncertain modify"),
+            ] {
+                peer.write_all(&encode_raw_length(&frame)).await.unwrap();
+                bus.read_and_route_message().await.unwrap();
+            }
+            if fail_flush {
+                flush.store(2, Ordering::SeqCst);
+                assert!(matches!(modify.await, Err(Error::Io(_))));
+            }
+        }
+
+        assert!(matches!(bus.read_and_route_message().await, Err(Error::ConnectionReset)));
+        bus.reset_channels().await;
+        assert_eq!(placed.try_next_routed().map(routed_label).as_deref(), Some("OrderStatus"));
+        assert_eq!(placed.try_next_routed().map(routed_label).as_deref(), Some("notice 105"));
+        assert!(matches!(placed.try_next_routed(), Some(RoutedItem::Error(Error::ConnectionReset))));
+        assert!(placed.try_next_routed().is_none());
+    }
 }
 
 #[tokio::test]
@@ -2987,6 +3663,26 @@ async fn rate_limiter_awaits_without_blocking_runtime() -> Result<(), Error> {
     Ok(())
 }
 
+#[tokio::test(start_paused = true)]
+async fn throttled_modify_leaves_the_sent_order_rejection_terminal() {
+    let (stream, bus) = make_bus();
+    bus.set_rate_limiter(crate::RateLimiter::per_second(1));
+    let order_id = OrderId::from(7);
+    let mut placed = bus.send_order_request(order_id, b"place".to_vec()).await.unwrap();
+    let modify = bus.send_order_request(order_id, b"modify".to_vec());
+    tokio::pin!(modify);
+
+    assert!(futures::poll!(&mut modify).is_pending());
+    assert_eq!(count_frames(&stream.captured(), b"modify"), 0);
+    stream.push_inbound(error_frame(7, 201, "original rejection"));
+    bus.read_and_route_message().await.unwrap();
+
+    assert_eq!(
+        placed.try_next_routed().map(routed_label).as_deref(),
+        Some("error [201] original rejection")
+    );
+}
+
 /// A status that arrived before the stream opened — an order filled between
 /// `submit()` and `wait_for_fill` — is the stream's first item.
 #[tokio::test]
@@ -3130,10 +3826,7 @@ async fn foreign_execution_answers_requests_only() {
         "request got the unprompted one"
     );
     assert!(tokio::time::timeout(TICK, order_route.next()).await.is_err(), "order route got it");
-    while let Ok(Some(item)) = tokio::time::timeout(TICK, updates.next()).await {
-        let message_type = item.unwrap().message_type();
-        assert_ne!(message_type, IncomingMessages::ExecutionData, "update stream got it");
-    }
+    assert!(tokio::time::timeout(TICK, updates.next()).await.is_err(), "update stream got it");
 }
 
 #[tokio::test]

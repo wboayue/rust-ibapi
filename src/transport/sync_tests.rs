@@ -2295,7 +2295,7 @@ fn execution_data_routes_to_order_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
-    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, -1, 7, "exec-1"));
     bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("order sub got no message")?;
@@ -2305,7 +2305,7 @@ fn execution_data_routes_to_order_channel() -> Result<(), Error> {
 }
 
 #[test]
-fn execution_data_falls_back_to_request_channel() -> Result<(), Error> {
+fn execution_reply_routes_to_request_channel() -> Result<(), Error> {
     let (stream, bus) = make_bus();
     let request_id = RequestId::nth(99);
     let sub = bus.send_request(request_id, &[])?;
@@ -2315,6 +2315,199 @@ fn execution_data_falls_back_to_request_channel() -> Result<(), Error> {
 
     let msg = sub.next_timeout(TICK).expect("request sub got no message")?;
     assert_eq!(msg.request_id(), Some(request_id.raw()));
+    Ok(())
+}
+
+/// An `executions` reply carries its request's id: it and its commission
+/// report reach the request that asked, never the order route that got the
+/// live fill, nor the update stream, which already saw that fill.
+#[test]
+fn execution_reply_reaches_request_while_order_route_is_open() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let order_route = bus.send_order_request(OrderId::from(7), &[])?;
+    let updates = bus.create_order_update_subscription()?;
+    let request_id = RequestId::nth(99);
+    let request = bus.send_request(request_id, &[])?;
+
+    stream.push_inbound(execution_data_frame(CLIENT_ID, -1, 7, "exec-1"));
+    stream.push_inbound(commission_frame("exec-1"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, request_id.raw(), 7, "exec-1"));
+    stream.push_inbound(commission_frame("exec-1"));
+    stream.push_inbound(binary_proto(
+        IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd {
+            req_id: Some(request_id.raw()),
+        },
+    ));
+    for _ in 0..5 {
+        bus.dispatch()?;
+    }
+
+    let live = [
+        (IncomingMessages::ExecutionData, Some(-1)),
+        (IncomingMessages::CommissionsAndFeesReport, None),
+    ];
+    assert_eq!(frames(&order_route), live, "order route");
+    assert_eq!(frames(&updates), live, "update stream");
+    assert_eq!(
+        frames(&request),
+        [
+            (IncomingMessages::ExecutionData, Some(request_id.raw())),
+            (IncomingMessages::CommissionsAndFeesReport, None),
+            (IncomingMessages::ExecutionDataEnd, Some(request_id.raw())),
+        ],
+        "request"
+    );
+    Ok(())
+}
+
+#[test]
+fn overlapping_executions_deliver_each_distinct_commission() {
+    use crate::testdata::builders::orders::commission_and_fees_report;
+
+    let (stream, bus) = make_bus();
+    let first_id = RequestId::nth(97);
+    let second_id = RequestId::nth(98);
+    let unrelated_id = RequestId::nth(99);
+    let first = bus.send_request(first_id, &[]).unwrap();
+    let second = bus.send_request(second_id, &[]).unwrap();
+    let unrelated = bus.send_request(unrelated_id, &[]).unwrap();
+    let updates = bus.create_order_update_subscription().unwrap();
+
+    let report = commission_and_fees_report().execution_id("shared").commission_and_fees(1.25);
+    let report_frame = |report: crate::proto::CommissionAndFeesReport| binary_proto(IncomingMessages::CommissionsAndFeesReport as i32, &report);
+    let first_report = report_frame(report.to_proto());
+    let revised = report_frame(report.clone().commission_and_fees(2.75).to_proto());
+    let late_revision = report_frame(report.clone().commission_and_fees(3.5).to_proto());
+    let orphan = report_frame(report.execution_id("unknown").to_proto());
+    let no_id = report_frame(crate::proto::CommissionAndFeesReport::default());
+    let first_end = binary_proto(
+        IncomingMessages::ExecutionDataEnd as i32,
+        &crate::proto::ExecutionDetailsEnd {
+            req_id: Some(first_id.raw()),
+        },
+    );
+
+    for frame in [
+        execution_data_frame(CLIENT_ID + 1, first_id.raw(), 7, "shared"),
+        first_report.clone(),
+        execution_data_frame(CLIENT_ID + 1, second_id.raw(), 7, "shared"),
+        first_report.clone(),
+        execution_data_frame(CLIENT_ID + 1, second_id.raw(), 7, "shared"),
+        first_report,
+        revised.clone(),
+        revised,
+        first_end,
+        late_revision,
+        orphan,
+        no_id,
+    ] {
+        stream.push_inbound(frame);
+        bus.dispatch().unwrap();
+    }
+
+    let commissions = |subscription: &InternalSubscription| {
+        std::iter::from_fn(|| subscription.try_next_routed())
+            .filter_map(|item| match item {
+                RoutedItem::Response(message) if message.message_type() == IncomingMessages::CommissionsAndFeesReport => {
+                    let report = message.proto::<crate::proto::CommissionAndFeesReport>().unwrap();
+                    Some((report.exec_id.unwrap(), report.commission_and_fees.unwrap()))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let expected = [("shared".to_owned(), 1.25), ("shared".to_owned(), 2.75)];
+    assert_eq!(commissions(&first), expected);
+    assert_eq!(
+        commissions(&second),
+        [("shared".to_owned(), 1.25), ("shared".to_owned(), 2.75), ("shared".to_owned(), 3.5)]
+    );
+    assert!(unrelated.try_next_routed().is_none());
+    assert!(updates.try_next_routed().is_none());
+}
+
+#[test]
+fn expired_commission_alias_warns_for_reconciliation() {
+    let (stream, bus) = make_bus();
+    let request_id = RequestId::nth(99);
+    let request = bus.send_request(request_id, &[]).unwrap();
+    let updates = bus.create_order_update_subscription().unwrap();
+    stream.push_inbound(execution_data_frame(CLIENT_ID + 1, request_id.raw(), 7, "expired"));
+    bus.dispatch().unwrap();
+    stream.push_inbound(commission_frame("expired"));
+    bus.dispatch().unwrap();
+    stream.push_inbound(commission_frame("expired"));
+    bus.dispatch().unwrap();
+    assert!(!bus.live_executions.warned_unmapped());
+
+    drop(request);
+    let leases = bus.executions_requested.leases(&"expired".to_owned());
+    assert_eq!(leases.len(), 1, "the alias must still await cleanup");
+    assert!(!leases[0].is_live());
+    stream.push_inbound(commission_frame("expired"));
+    bus.dispatch().unwrap();
+
+    assert!(bus.live_executions.warned_unmapped());
+    assert!(updates.try_next_routed().is_none());
+}
+
+/// Every frame queued on `sub`, as message type and request id.
+fn frames(sub: &InternalSubscription) -> Vec<(IncomingMessages, Option<i32>)> {
+    std::iter::from_fn(|| sub.next_timeout(TICK))
+        .map(|m| m.unwrap())
+        .map(|m| (m.message_type(), m.request_id()))
+        .collect()
+}
+
+/// TWS sends one commission report per live fill and one per `executions`
+/// reply that lists it. A reply sent before the live report lists the fill
+/// without one, so the live report reaches the update stream and the order
+/// route exactly once, whatever the order, and is shared with the request.
+/// The request also receives one copy when TWS repeats the same report.
+#[test]
+fn commission_reports_follow_live_fills_and_replies() -> Result<(), Error> {
+    let request_id = RequestId::nth(99);
+    let live_exec = || execution_data_frame(CLIENT_ID, -1, 7, "exec-1");
+    let reply_exec = || execution_data_frame(CLIENT_ID, request_id.raw(), 7, "exec-1");
+    let report = || commission_frame("exec-1");
+    let cases = [
+        ("live exec, reply exec, report", vec![live_exec(), reply_exec(), report()]),
+        ("reply exec, live exec, report", vec![reply_exec(), live_exec(), report()]),
+        (
+            "live exec, live report, reply exec, reply report",
+            vec![live_exec(), report(), reply_exec(), report()],
+        ),
+        (
+            "live exec, reply exec, duplicate report",
+            vec![live_exec(), reply_exec(), report(), report()],
+        ),
+    ];
+    for (name, inbound) in cases {
+        let (stream, bus) = make_bus();
+        let order_route = bus.send_order_request(OrderId::from(7), &[])?;
+        let updates = bus.create_order_update_subscription()?;
+        let request = bus.send_request(request_id, &[])?;
+        let count = inbound.len();
+        for frame in inbound {
+            stream.push_inbound(frame);
+        }
+        for _ in 0..count {
+            bus.dispatch()?;
+        }
+
+        let live = vec![
+            (IncomingMessages::ExecutionData, Some(-1)),
+            (IncomingMessages::CommissionsAndFeesReport, None),
+        ];
+        let reply = [
+            (IncomingMessages::ExecutionData, Some(request_id.raw())),
+            (IncomingMessages::CommissionsAndFeesReport, None),
+        ];
+        assert_eq!(frames(&order_route), live, "{name}: order route");
+        assert_eq!(frames(&updates), live, "{name}: update stream");
+        assert_eq!(frames(&request), reply, "{name}: request");
+    }
     Ok(())
 }
 
@@ -2363,7 +2556,7 @@ fn commission_and_fees_report_routes_via_execution_id_mapping() -> Result<(), Er
     let (stream, bus) = make_bus();
     let sub = bus.send_order_request(OrderId::from(7), &[])?;
 
-    stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 7, "exec-abc"));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, -1, 7, "exec-abc"));
     stream.push_inbound(binary_proto(
         crate::messages::IncomingMessages::CommissionsAndFeesReport as i32,
         &crate::proto::CommissionAndFeesReport {
@@ -2381,6 +2574,91 @@ fn commission_and_fees_report_routes_via_execution_id_mapping() -> Result<(), Er
     let commission = sub.next_timeout(TICK).expect("commission report missing")?;
     assert_eq!(commission.message_type(), crate::messages::IncomingMessages::CommissionsAndFeesReport);
     Ok(())
+}
+
+/// `cancel_order` registers its own subscription under the order id. The
+/// `place_order` subscription keeps the order's frames that follow, the fill
+/// a cancel races included, and each subscription gets each frame once.
+#[test]
+fn order_subscription_keeps_frames_after_a_cancel_subscription_opens() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let place = bus.send_order_request(OrderId::from(7), &[])?;
+    let cancel = bus.send_order_request(OrderId::from(7), &[])?;
+
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::PendingCancel));
+    stream.push_inbound(execution_data_frame(CLIENT_ID, -1, 7, "exec-1"));
+    stream.push_inbound(commission_frame("exec-1"));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Cancelled));
+    stream.push_inbound(error_frame(7, 202, "Order Canceled - reason:"));
+    for _ in 0..5 {
+        bus.dispatch()?;
+    }
+
+    let expected = ["OrderStatus", "ExecutionData", "CommissionsAndFeesReport", "OrderStatus", "notice 202"];
+    for (name, sub) in [("place", &place), ("cancel", &cancel)] {
+        let items: Vec<String> = std::iter::from_fn(|| sub.next_timeout_routed(TICK)).map(routed_label).collect();
+        assert_eq!(items, expected, "{name}");
+    }
+    Ok(())
+}
+
+/// A refused modify draws a TWS error on the order id while the order goes on
+/// working. Only the newest subscription on the id, the modify's, ends on it;
+/// the `place_order` subscription receives it as a notice and keeps the
+/// order's frames that follow.
+#[test]
+fn order_error_ends_only_the_newest_subscription_on_the_order_id() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let place = bus.send_order_request(OrderId::from(7), &[])?;
+    let modify = bus.send_order_request(OrderId::from(7), &[])?;
+
+    stream.push_inbound(error_frame(7, 105, "Order being modified does not match original order."));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+    for _ in 0..2 {
+        bus.dispatch()?;
+    }
+
+    let place_items: Vec<String> = std::iter::from_fn(|| place.next_timeout_routed(TICK)).map(routed_label).collect();
+    let modify_first = modify.next_timeout_routed(TICK).map(routed_label);
+    assert_eq!(place_items, ["notice 105", "OrderStatus"]);
+    assert_eq!(
+        modify_first.as_deref(),
+        Some("error [105] Order being modified does not match original order.")
+    );
+    Ok(())
+}
+
+/// `let _ = client.cancel_order(id)?;` drops the cancel's subscription before
+/// TWS answers. Its refusal still reaches the `place_order` subscription as a
+/// notice: the later request superseded it, so it does not end on the error.
+#[test]
+fn order_error_after_the_newer_subscription_drops_is_a_notice() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let handle = bus.start_cleanup_thread();
+    let place = bus.send_order_request(OrderId::from(7), &[])?;
+    let cancel = bus.send_order_request(OrderId::from(7), &[])?;
+    drop(cancel);
+    drain_cleanup_signals(&bus);
+
+    stream.push_inbound(error_frame(7, 10148, "OrderId 7 that needs to be cancelled can not be cancelled."));
+    stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Filled));
+    for _ in 0..2 {
+        bus.dispatch()?;
+    }
+
+    let place_items: Vec<String> = std::iter::from_fn(|| place.next_timeout_routed(TICK)).map(routed_label).collect();
+    bus.request_shutdown();
+    handle.join().expect("cleanup thread join");
+    assert_eq!(place_items, ["notice 10148", "OrderStatus"]);
+    Ok(())
+}
+
+fn routed_label(item: RoutedItem) -> String {
+    match item {
+        RoutedItem::Response(message) => format!("{:?}", message.message_type()),
+        RoutedItem::Notice(notice) => format!("notice {}", notice.code),
+        RoutedItem::Error(e) => format!("error {e}"),
+    }
 }
 
 #[test]
@@ -2814,16 +3092,23 @@ fn execution_aliases_pruned_when_subscriptions_drop() -> Result<(), Error> {
     stream.push_inbound(execution_data_frame(CLIENT_ID, RequestId::nth(99).raw(), 0, "exec-request"));
     bus.dispatch()?;
     bus.dispatch()?;
-    assert_eq!(bus.executions.len(), 2, "both executions mapped");
+    assert!(bus.executions.contains(&"exec-order".to_string()), "order execution not mapped");
+    assert!(
+        bus.executions_requested.contains(&"exec-request".to_string()),
+        "request execution not mapped"
+    );
 
     drop(order);
     drain_cleanup_signals(&bus);
-    assert!(!bus.executions.contains(&"exec-order".to_string()), "order alias leaked");
-    assert!(bus.executions.contains(&"exec-request".to_string()), "live request alias pruned");
+    assert_eq!(bus.executions.len(), 0, "order alias leaked");
+    assert!(
+        bus.executions_requested.contains(&"exec-request".to_string()),
+        "live request alias pruned"
+    );
 
     drop(executions);
     drain_cleanup_signals(&bus);
-    assert_eq!(bus.executions.len(), 0, "request alias leaked");
+    assert_eq!(bus.executions_requested.len(), 0, "request alias leaked");
 
     bus.request_shutdown();
     handle.join().expect("cleanup thread join");
@@ -3342,6 +3627,10 @@ fn sends_are_refused_during_the_reconnect_handshake() -> Result<(), Error> {
     bus.connection_state.set_connected();
     assert!(matches!(bus.send_request(RequestId::nth(100), b"req-bytes"), Err(Error::Reconnecting)));
     assert_eq!(bus.requests.len(), 0, "a refused request must register nothing");
+    let order = bus.send_order_request(OrderId::from(42), b"order-bytes");
+    assert!(matches!(&order, Err(Error::Reconnecting)));
+    assert!(order.err().unwrap().is_unsent());
+    assert_eq!(bus.orders.len(), 0, "a refused order must register nothing");
     assert_eq!(
         stream.captured(),
         handler.format_handshake(),
@@ -3369,6 +3658,7 @@ fn sends_are_refused_during_the_reconnect_handshake() -> Result<(), Error> {
 struct HandoffSocket {
     stream: MemoryStream,
     marker: &'static [u8],
+    pause_after_write: bool,
     state: Arc<(Mutex<Handoff>, std::sync::Condvar)>,
 }
 
@@ -3397,6 +3687,7 @@ impl HandoffSocket {
         Self {
             stream,
             marker,
+            pause_after_write: false,
             state: Arc::default(),
         }
     }
@@ -3432,6 +3723,10 @@ impl Io for HandoffSocket {
         let (mutex, changed) = &*self.state;
         let mut state = mutex.lock().unwrap();
         let is_sender = carries(buf, self.marker);
+        let already_written = is_sender && self.pause_after_write;
+        if already_written {
+            self.stream.write_all(buf)?;
+        }
         if is_sender {
             state.sender_queued = true;
             changed.notify_all();
@@ -3447,7 +3742,11 @@ impl Io for HandoffSocket {
             changed.notify_all();
         }
         drop(state);
-        self.stream.write_all(buf)
+        if already_written {
+            Ok(())
+        } else {
+            self.stream.write_all(buf)
+        }
     }
 
     fn close(&self) {
@@ -3691,19 +3990,22 @@ fn wait_connected_returns_shutdown_when_the_bus_shuts_down() {
     assert!(start.elapsed() < Duration::from_secs(5), "wait_connected did not return on shutdown");
 }
 
-/// Writes fail, reads delegate to a `MemoryStream`. Stands in for a write
-/// refused after the registration went in: the session went down between the
-/// registering call's first state check and its write.
+/// Writes fail while the flag is set, reads delegate to a `MemoryStream`.
+/// Stands in for a write refused after the registration went in: the session
+/// went down between the registering call's first state check and its write.
 #[derive(Clone, Debug)]
-struct FailingWriteStream(MemoryStream);
+struct FailingWriteStream(MemoryStream, Arc<AtomicBool>);
 
 impl Io for FailingWriteStream {
     fn read_message(&self) -> Result<Vec<u8>, Error> {
         self.0.read_message()
     }
 
-    fn write_all(&self, _buf: &[u8]) -> Result<(), Error> {
-        Err(Error::ConnectionReset)
+    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        if self.1.load(Ordering::SeqCst) {
+            return Err(Error::ConnectionReset);
+        }
+        self.0.write_all(buf)
     }
 
     fn close(&self) {
@@ -3729,7 +4031,8 @@ impl Stream for FailingWriteStream {}
 /// and its write.
 #[test]
 fn failed_write_leaves_no_registration() {
-    let connection = Connection::stubbed(FailingWriteStream(MemoryStream::default()), 28);
+    let stream = FailingWriteStream(MemoryStream::default(), Arc::new(AtomicBool::new(true)));
+    let connection = Connection::stubbed(stream, 28);
     connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
     let bus = Arc::new(TcpMessageBus::new(connection));
     let mb: &dyn MessageBus = bus.as_ref();
@@ -3746,6 +4049,225 @@ fn failed_write_leaves_no_registration() {
         0,
         "a failed write must leave no shared subscription registered"
     );
+}
+
+#[test]
+fn order_rejection_during_write_follows_the_write_outcome() {
+    for fails in [true, false] {
+        let stream = MemoryStream::default();
+        let socket = HandoffSocket {
+            pause_after_write: !fails,
+            ..HandoffSocket::new(stream.clone(), b"modify")
+        };
+        let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+        connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+        let bus = Arc::new(TcpMessageBus::new(connection));
+        let order_id = OrderId::from(7);
+        let placed = bus.send_order_request(order_id, b"place").unwrap();
+        let modify = {
+            let bus = bus.clone();
+            thread::spawn(move || bus.send_order_request(order_id, b"modify"))
+        };
+
+        assert!(socket.wait(TEST_SOCKET_WAIT, |state| state.sender_queued));
+        assert_eq!(count_frames(&stream.captured(), b"modify"), usize::from(!fails));
+        stream.push_inbound(error_frame(7, 201, "overlapping rejection"));
+        bus.dispatch().unwrap();
+        let during_write = placed.try_next_routed().map(routed_label);
+        if fails {
+            stream.close();
+        }
+        socket.release();
+        let modified = modify.join().unwrap();
+
+        assert_eq!(during_write, None);
+        let observed = placed.try_next_routed().map(routed_label);
+        if fails {
+            assert!(matches!(modified, Err(Error::Shutdown)));
+            assert_eq!(observed.as_deref(), Some("error [201] overlapping rejection"));
+        } else {
+            let modified = modified.unwrap();
+            assert_eq!(observed.as_deref(), Some("notice 201"));
+            assert_eq!(
+                modified.try_next_routed().map(routed_label).as_deref(),
+                Some("error [201] overlapping rejection")
+            );
+        }
+    }
+}
+
+/// The fixture fails the modify's socket write before forwarding bytes.
+/// The original placement remains the newest subscription on the order id.
+#[test]
+fn failed_order_write_leaves_the_earlier_subscription_not_superseded() -> Result<(), Error> {
+    let inbound = MemoryStream::default();
+    let failing = Arc::new(AtomicBool::new(false));
+    let connection = Connection::stubbed(FailingWriteStream(inbound.clone(), failing.clone()), CLIENT_ID);
+    connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(TcpMessageBus::new(connection));
+    let place = bus.send_order_request(OrderId::from(7), &[])?;
+    failing.store(true, Ordering::SeqCst);
+    let modify = bus.send_order_request(OrderId::from(7), &[]);
+
+    inbound.push_inbound(error_frame(7, 201, "Order rejected - reason:"));
+    bus.dispatch()?;
+
+    let place_first = place.next_timeout_routed(TICK).map(routed_label);
+    assert!(matches!(&modify, Err(Error::ConnectionReset)), "{modify:?}");
+    assert!(!modify.err().unwrap().is_unsent());
+    assert_eq!(place_first.as_deref(), Some("error [201] Order rejected - reason:"));
+    Ok(())
+}
+
+#[test]
+fn execution_snapshot_completes_while_first_order_write_is_pending() {
+    let stream = MemoryStream::default();
+    let socket = HandoffSocket::new(stream.clone(), b"modify");
+    let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(TcpMessageBus::new(connection));
+    let request_id = RequestId::nth(7);
+    let snapshot = bus.send_request(request_id, b"executions").unwrap();
+    let order_id = OrderId::from(7);
+    let modify = {
+        let bus = bus.clone();
+        thread::spawn(move || bus.send_order_request(order_id, b"modify"))
+    };
+
+    assert!(socket.wait(TEST_SOCKET_WAIT, |state| state.sender_queued));
+    assert!(!bus.orders.contains(&order_id));
+    assert_eq!(count_frames(&stream.captured(), b"modify"), 0);
+    let execution_id = "snapshot-fill";
+    for frame in [
+        execution_data_frame(CLIENT_ID, request_id.raw(), 7, execution_id),
+        commission_frame(execution_id),
+        binary_proto(
+            IncomingMessages::ExecutionDataEnd as i32,
+            &crate::proto::ExecutionDetailsEnd {
+                req_id: Some(request_id.raw()),
+            },
+        ),
+    ] {
+        stream.push_inbound(frame);
+        bus.dispatch().unwrap();
+    }
+    let during_write: Vec<_> = std::iter::from_fn(|| snapshot.try_next_routed())
+        .map(|item| match item {
+            RoutedItem::Response(message) => (message.message_type(), message.execution_id(), message.request_id()),
+            item => panic!("unexpected snapshot item {item:?}"),
+        })
+        .collect();
+    stream.close();
+    socket.release();
+    let modified = modify.join().unwrap();
+
+    assert!(matches!(modified, Err(Error::Shutdown)));
+    assert_eq!(
+        during_write,
+        [
+            (IncomingMessages::ExecutionData, Some(execution_id.to_string()), Some(request_id.raw())),
+            (IncomingMessages::CommissionsAndFeesReport, Some(execution_id.to_string()), None),
+            (IncomingMessages::ExecutionDataEnd, None, Some(request_id.raw())),
+        ]
+    );
+    assert!(snapshot.try_next_routed().is_none());
+}
+
+#[test]
+fn pending_order_write_replays_facts_in_wire_order() {
+    for outcome in ["sent", "failed", "reset"] {
+        let stream = MemoryStream::default();
+        let socket = HandoffSocket::new(stream.clone(), b"modify");
+        let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+        connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+        let bus = Arc::new(TcpMessageBus::new(connection));
+        let order_id = OrderId::from(7);
+        let placed = bus.send_order_request(order_id, b"place").unwrap();
+        let other = bus.send_order_request(OrderId::from(8), b"place").unwrap();
+        let modify = {
+            let bus = bus.clone();
+            thread::spawn(move || bus.send_order_request(order_id, b"modify"))
+        };
+
+        assert!(socket.wait(TEST_SOCKET_WAIT, |state| state.sender_queued));
+        for frame in [
+            order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted),
+            execution_data_frame(CLIENT_ID, -1, 7, "ordered-fill"),
+            order_status_frame(CLIENT_ID, 8, OrderStatusKind::Cancelled),
+            commission_frame("ordered-fill"),
+            order_status_frame(CLIENT_ID, 7, OrderStatusKind::Filled),
+        ] {
+            stream.push_inbound(frame);
+            bus.dispatch().unwrap();
+        }
+        let unrelated = other.try_next_routed().map(routed_label);
+        if outcome == "reset" {
+            bus.reset();
+        }
+        if outcome != "sent" {
+            stream.close();
+        }
+        socket.release();
+        let modified = modify.join().unwrap();
+
+        let label = |item| match item {
+            RoutedItem::Response(message) if message.message_type() == IncomingMessages::OrderStatus => {
+                message.proto::<crate::proto::OrderStatus>().unwrap().status.unwrap()
+            }
+            item => routed_label(item),
+        };
+        let order_frames = ["Submitted", "ExecutionData", "CommissionsAndFeesReport", "Filled"];
+        assert_eq!(unrelated.as_deref(), Some("OrderStatus"));
+        let placed_frames: Vec<_> = std::iter::from_fn(|| placed.try_next_routed()).map(label).collect();
+        let mut expected = order_frames.map(str::to_owned).to_vec();
+        if outcome == "reset" {
+            expected.push(format!("error {}", Error::ConnectionReset));
+        }
+        assert_eq!(placed_frames, expected, "{outcome}");
+        if outcome == "sent" {
+            let modified = modified.unwrap();
+            let modified_frames: Vec<_> = std::iter::from_fn(|| modified.try_next_routed()).map(label).collect();
+            assert_eq!(modified_frames, order_frames);
+        } else {
+            assert!(matches!(modified, Err(Error::Shutdown)));
+        }
+    }
+}
+
+#[test]
+fn pending_order_write_overflow_is_reported_before_reset() {
+    let stream = MemoryStream::default();
+    let socket = HandoffSocket::new(stream.clone(), b"modify");
+    let connection = Connection::stubbed(socket.clone(), CLIENT_ID);
+    connection.set_server_version_for_test(crate::server_versions::PROTOBUF_REST_MESSAGES_3);
+    let bus = Arc::new(TcpMessageBus::new(connection));
+    let order_id = OrderId::from(7);
+    let placed = bus.send_order_request(order_id, b"place").unwrap();
+    let modify = {
+        let bus = bus.clone();
+        thread::spawn(move || bus.send_order_request(order_id, b"modify"))
+    };
+
+    assert!(socket.wait(TEST_SOCKET_WAIT, |state| state.sender_queued));
+    for _ in 0..1025 {
+        stream.push_inbound(order_status_frame(CLIENT_ID, 7, OrderStatusKind::Submitted));
+        bus.dispatch().unwrap();
+    }
+    bus.reset();
+    stream.close();
+    socket.release();
+    let modified = modify.join().unwrap();
+
+    for _ in 0..1022 {
+        assert_eq!(placed.try_next_routed().map(routed_label).as_deref(), Some("OrderStatus"));
+    }
+    assert!(matches!(
+        placed.try_next_routed(),
+        Some(RoutedItem::Error(Error::BufferLimitExceeded { limit: 1022 }))
+    ));
+    assert!(matches!(placed.try_next_routed(), Some(RoutedItem::Error(Error::ConnectionReset))));
+    assert!(placed.try_next_routed().is_none());
+    assert!(matches!(modified, Err(Error::Shutdown)));
 }
 
 #[test]
@@ -4101,6 +4623,29 @@ fn rate_limiter_reserves_a_slot_per_send() -> Result<(), Error> {
 }
 
 #[test]
+fn throttled_modify_leaves_the_sent_order_rejection_terminal() -> Result<(), Error> {
+    let limiter = crate::RateLimiter::per_second(1);
+    let (stream, bus) = rate_limited_bus(&limiter);
+    let order_id = OrderId::from(7);
+    let placed = bus.send_order_request(order_id, b"place")?;
+    let reserved = limiter.reserved_until();
+    let modified = {
+        let bus = bus.clone();
+        thread::spawn(move || bus.send_order_request(order_id, b"modify"))
+    };
+
+    helpers::wait_for("modify reserves a pacing slot", || limiter.reserved_until() > reserved);
+    assert_eq!(count_frames(&stream.captured(), b"modify"), 0);
+    stream.push_inbound(error_frame(7, 201, "original rejection"));
+    bus.dispatch()?;
+    let observed = placed.try_next_routed().map(routed_label);
+    modified.join().unwrap()?;
+
+    assert_eq!(observed.as_deref(), Some("error [201] original rejection"));
+    Ok(())
+}
+
+#[test]
 fn rate_limited_cancel_is_written_without_waiting() -> Result<(), Error> {
     // per_second(1): the first send spends the budget for a whole second.
     let limiter = crate::RateLimiter::per_second(1);
@@ -4283,10 +4828,7 @@ fn foreign_execution_answers_requests_only() -> Result<(), Error> {
         .collect();
     assert_eq!(types, [IncomingMessages::ExecutionData, IncomingMessages::CommissionsAndFeesReport]);
     assert!(order_route.next_timeout(TICK).is_none(), "order route got it");
-    let updates: Vec<_> = std::iter::from_fn(|| updates.next_timeout(TICK))
-        .map(|m| m.unwrap().message_type())
-        .collect();
-    assert!(!updates.contains(&IncomingMessages::ExecutionData), "update stream got {updates:?}");
+    assert!(updates.next_timeout(TICK).is_none(), "update stream got it");
     Ok(())
 }
 

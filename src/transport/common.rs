@@ -1,11 +1,12 @@
 //! Common utilities shared between sync and async transport implementations
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 use std::time::Duration;
 
-use log::info;
+use log::{info, warn};
 
-use crate::client::ids::WireId;
+use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::errors::Error;
 use crate::messages::{unknown_message_type_notice, IncomingMessages, Notice, ResponseMessage, MESSAGE_ID_LEN};
 use crate::subscriptions::common::RoutedItem;
@@ -60,6 +61,191 @@ pub(crate) fn log_orphan(id: WireId, item: &RoutedItem) {
         RoutedItem::Notice(n) => info!("no recipient for notice (id={id}): {n}"),
         RoutedItem::Error(e) => info!("no recipient for error (id={id}): {e}"),
         RoutedItem::Response(_) => {}
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct OrderWrites {
+    pending: Mutex<Option<PendingOrderWrite>>,
+}
+
+#[derive(Debug)]
+struct PendingOrderWrite {
+    id: OrderId,
+    frames: Vec<OrderFrame>,
+}
+
+#[derive(Debug)]
+pub(crate) enum OrderFrame {
+    Direct(RoutedItem),
+    Execution {
+        item: RoutedItem,
+        execution_id: Option<String>,
+        request_id: Option<RequestId>,
+    },
+    Commission {
+        item: RoutedItem,
+        execution_id: String,
+    },
+}
+
+impl OrderFrame {
+    /// Dispatches a frame after the pending-write gate, leaving the registry
+    /// and lock ordering to the runtime's delivery callbacks.
+    pub(crate) fn deliver(
+        self,
+        order: impl FnOnce(RoutedItem, Option<&String>) -> Result<(), RoutedItem>,
+        commission: impl FnOnce(&String, &RoutedItem) -> bool,
+    ) -> Result<(), RoutedItem> {
+        match self {
+            Self::Direct(item) => order(item, None),
+            Self::Execution {
+                item,
+                execution_id,
+                request_id,
+            } => {
+                debug_assert!(request_id.is_none());
+                order(item, execution_id.as_ref())
+            }
+            Self::Commission { item, execution_id } => {
+                if commission(&execution_id, &item) {
+                    Ok(())
+                } else {
+                    Err(item)
+                }
+            }
+        }
+    }
+
+    pub(crate) fn for_replay(self, uncertain: bool) -> Self {
+        match self {
+            Self::Direct(item) if uncertain => Self::Direct(item.for_earlier_subscription()),
+            frame => frame,
+        }
+    }
+}
+
+/// Whether a commission recipient is attached to the order being written.
+pub(crate) fn order_has_lease(order_leases: &[LeaseRef], lease: &LeaseRef) -> bool {
+    order_leases.iter().any(|candidate| candidate.is(lease))
+}
+
+/// Capacity floor for order-class request routes: one per order
+/// (`place_order`, `cancel_order`, `exercise_options`) and `executions`.
+/// Their traffic is per order or per request and ends, so this floor only
+/// keeps a small `ClientBuilder::channel_capacity` from shrinking them; see #896.
+pub(crate) const ORDER_CAPACITY: usize = 1024;
+
+// Leave slots for the overflow and reset errors.
+const ORDER_WRITE_BUFFER_LIMIT: usize = ORDER_CAPACITY - 2;
+
+impl OrderWrites {
+    pub(crate) fn begin<F>(&self, id: OrderId, connected: impl FnOnce() -> Result<(), Error>, finish: F) -> Result<OrderWrite<'_, F>, Error>
+    where
+        F: FnOnce(bool, OrderId, Vec<OrderFrame>),
+    {
+        let mut pending = lock(&self.pending);
+        connected()?;
+        debug_assert!(pending.is_none());
+        *pending = Some(PendingOrderWrite { id, frames: Vec::new() });
+        Ok(OrderWrite {
+            writes: self,
+            finish: Some(finish),
+        })
+    }
+
+    // Never hold this lock over I/O. The dispatcher must be able to read
+    // the disconnect that breaks a blocked writer.
+    pub(crate) fn deliver(
+        &self,
+        id: OrderId,
+        frame: OrderFrame,
+        deliver: impl FnOnce(OrderFrame) -> Result<(), RoutedItem>,
+    ) -> Result<(), RoutedItem> {
+        let mut writes = lock(&self.pending);
+        if let Some(pending) = writes.as_mut().filter(|pending| pending.id == id) {
+            pending.push(frame);
+            Ok(())
+        } else {
+            deliver(frame)
+        }
+    }
+
+    pub(crate) fn deliver_commission(
+        &self,
+        execution_id: String,
+        item: RoutedItem,
+        deliver: impl FnOnce(Option<OrderId>, &String, &RoutedItem) -> (bool, bool),
+    ) -> Result<(), RoutedItem> {
+        let mut writes = lock(&self.pending);
+        let (delivered, skipped) = deliver(writes.as_ref().map(|pending| pending.id), &execution_id, &item);
+        if let Some(pending) = writes.as_mut() {
+            if skipped || pending.accepts_commission(&execution_id) {
+                pending.push(OrderFrame::Commission { item, execution_id });
+                return Ok(());
+            }
+        }
+
+        if delivered {
+            Ok(())
+        } else {
+            Err(item)
+        }
+    }
+
+    pub(crate) fn drain(&self, deliver: impl FnOnce(OrderId, Vec<OrderFrame>)) -> bool {
+        let mut pending = lock(&self.pending);
+        let Some(write) = pending.take() else {
+            return false;
+        };
+        // New deliveries cannot pass frames still being replayed.
+        deliver(write.id, write.frames);
+        true
+    }
+}
+
+impl PendingOrderWrite {
+    fn push(&mut self, frame: OrderFrame) {
+        match self.frames.len() {
+            ORDER_WRITE_BUFFER_LIMIT => self.frames.push(OrderFrame::Direct(
+                Error::BufferLimitExceeded {
+                    limit: ORDER_WRITE_BUFFER_LIMIT,
+                }
+                .into(),
+            )),
+            count if count < ORDER_WRITE_BUFFER_LIMIT => self.frames.push(frame),
+            _ => {}
+        }
+    }
+
+    fn accepts_commission(&self, id: &str) -> bool {
+        self.frames
+            .iter()
+            .any(|frame| matches!(frame, OrderFrame::Execution { execution_id: Some(execution_id), .. } if execution_id == id))
+    }
+}
+
+pub(crate) struct OrderWrite<'a, F: FnOnce(bool, OrderId, Vec<OrderFrame>)> {
+    writes: &'a OrderWrites,
+    finish: Option<F>,
+}
+
+impl<F: FnOnce(bool, OrderId, Vec<OrderFrame>)> OrderWrite<'_, F> {
+    pub(crate) fn commit(mut self) -> bool {
+        self.finish(true)
+    }
+
+    fn finish(&mut self, sent: bool) -> bool {
+        let Some(finish) = self.finish.take() else {
+            return false;
+        };
+        self.writes.drain(|id, frames| finish(sent, id, frames))
+    }
+}
+
+impl<F: FnOnce(bool, OrderId, Vec<OrderFrame>)> Drop for OrderWrite<'_, F> {
+    fn drop(&mut self) {
+        self.finish(false);
     }
 }
 
@@ -230,6 +416,86 @@ impl FibonacciBackoff {
             self.current = next;
         }
         Duration::from_secs(self.current)
+    }
+}
+
+pub(crate) fn commission_version(message: &ResponseMessage) -> Option<(String, Vec<u8>)> {
+    let mut report = message.proto::<crate::proto::CommissionAndFeesReport>().ok()?;
+    let id = report.exec_id.take().filter(|id| !id.is_empty())?;
+    Some((id, prost::Message::encode_to_vec(&report)))
+}
+
+pub(crate) fn record_commission(previous: &mut Option<Vec<u8>>, payload: &[u8]) -> bool {
+    if previous.as_deref() == Some(payload) {
+        return false;
+    }
+    *previous = Some(payload.to_vec());
+    true
+}
+
+/// How many live executions can retain commission routing. Past it the
+/// oldest execution is dropped.
+pub(crate) const LIVE_EXECUTIONS_CAPACITY: usize = 10_000;
+
+/// Commission routing for execution ids observed on this client's live stream.
+///
+/// A report carries an execution id but no request or client id. An overlapping
+/// snapshot can repeat or update a commission for a known live fill.
+#[derive(Debug, Default)]
+pub(crate) struct LiveExecutions {
+    state: Mutex<LiveExecutionsState>,
+}
+
+#[derive(Debug, Default)]
+struct LiveExecutionsState {
+    ids: HashMap<String, Option<Vec<u8>>>,
+    /// `ids` in arrival order, oldest first, for eviction.
+    order: VecDeque<String>,
+    warned_unmapped: bool,
+}
+
+impl LiveExecutions {
+    /// Record an execution that can receive live commission updates.
+    pub(crate) fn insert(&self, execution_id: &str) {
+        let mut state = lock(&self.state);
+        if state.ids.contains_key(execution_id) {
+            return;
+        }
+        state.ids.insert(execution_id.to_owned(), None);
+        state.order.push_back(execution_id.to_owned());
+        if state.order.len() > LIVE_EXECUTIONS_CAPACITY {
+            let oldest = state.order.pop_front().expect("oldest execution");
+            state.ids.remove(&oldest);
+        }
+    }
+
+    pub(crate) fn record_commission(&self, execution_id: &str, payload: &[u8]) -> Option<bool> {
+        lock(&self.state)
+            .ids
+            .get_mut(execution_id)
+            .map(|previous| record_commission(previous, payload))
+    }
+
+    pub(crate) fn warn_unmapped(&self) {
+        let mut state = lock(&self.state);
+        if !state.warned_unmapped {
+            state.warned_unmapped = true;
+            warn!("commission report could not be matched to an execution; reconcile with executions()");
+        }
+    }
+
+    pub(crate) fn clear(&self) {
+        *lock(&self.state) = LiveExecutionsState::default();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn warned_unmapped(&self) -> bool {
+        lock(&self.state).warned_unmapped
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        lock(&self.state).ids.len()
     }
 }
 
