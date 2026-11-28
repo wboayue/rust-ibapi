@@ -33,6 +33,48 @@ Generic ticks, option computations, tick types and historical bars. Format: [REA
   the overnight session alike (2026-10-29 23:55 ET: AAPL/SPY/IBKR, real bid/ask). No -1 seen.
 - **Not probed:** a weekend (true no-quote) snapshot.
 
+### No-quote sides
+
+*Live 2026-11-23 Mon 18:47-19:00 ET (US equities and options closed, FX and CME Globex open,
+CBOT grains closed), paper TWS, server 223. Real-time data only for EUR.USD and XAUUSD; US
+stocks drew 10089 for every market data type, CME and CBOT 354 / 10167 (delayed only).*
+
+`reqMktData`, streaming and snapshot. A side with no quote arrives as a `TickPrice` with a size
+of `"0"`:
+
+| Contract                               | Data type               | Empty side (price, size) |
+| -------------------------------------- | ----------------------- | ------------------------ |
+| AAPL options, far strikes              | delayed                 | `-1`, `0`                |
+| SPX                                    | delayed                 | `-1`, `0` (bid and ask)  |
+| CBOT corn options (OZC, magnifier 100) | delayed                 | `-100`, `0`              |
+| AAPL put vertical (BAG)                | delayed, delayed-frozen | `0`, `0`                 |
+
+- The last price uses the same placeholder: `-1` / `-100` with size `0` where nothing traded.
+  EUR.USD sends a real last price with size `0`, so a zero size alone does not mean "no last".
+- Delayed-frozen on the AAPL 110 put: first `-1` / `0` for bid and ask, then
+  `MarketDataType::DelayedFrozen` and a real ask (`0.01` x `5`) with no new bid tick, so the bid
+  stays empty. The 425 put got a real frozen bid and ask.
+- Negative prices with sizes are real: an ES Dec/Mar calendar (BAG, delayed) quoted `-71` x `1` /
+  `-68.75` x `2`, and the reverse spread `68.75` / `71`.
+- Every bid, ask and last price tick carried its size. No price tick arrived without one.
+- Historical bid/ask ticks: an AAPL 110 put (2026-11-23 20:55-21:00 UTC) sent all 1009 ticks with
+  bid `0` x `0` and a real ask. AAPL (2166) and a corn option (1001) had no zero or negative
+  value; no tick carried `-1`.
+- Tick-by-tick bid/ask on EUR.USD (11 frames): real prices and sizes. AAPL drew 10089, ES 10189;
+  EUR.USD `last` drew 10189 ("No historical market data ... Last").
+- Price tick attributes: none of 170 delayed price ticks (ES, ZC, OZC, SPX, US stocks and options,
+  BAGs) set any flag, `can_auto_execute` included. Real-time EUR.USD bid and ask set
+  `can_auto_execute` (10 of 12 ticks; XAUUSD did not); `pre_open` was never set.
+- Real-time EUR.USD (IDEALPRO) for 10 minutes (*live 2026-11-26 16:28-16:38 UTC, US
+  Thanksgiving holiday, paper TWS, server 223*): 427 bid and ask `TickPrice` ticks and 1157
+  `BidSize` / `AskSize` ticks, none with size `0` and none with a price of `0` or below.
+- Settles that every placeholder price came with size `0`, and every real quote, negative ones
+  included, with a positive size. A positive price with size `0` on a bid or ask was never seen.
+- **Not probed:** `pre_open` during a real-time pre-open or halt (no such data on this account;
+  delayed ticks carry no attributes); empty sides in tick-by-tick bid/ask or last (no real-time
+  data on an illiquid contract); real-time equity and option quotes in US hours (this account has
+  no real-time US equity or option data; US markets were closed on the 2026-11-26 run).
+
 ### TickEFP is never sent
 
 *Live 2026-05-27, paper Gateway, server 220+; removed in v3.0 (#651).*

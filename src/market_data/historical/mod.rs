@@ -34,7 +34,7 @@ pub(crate) mod common;
 mod builder;
 pub use builder::{date_spec, HistoricalDataBuilder, HistoricalScheduleBuilder, HistoricalTicksBuilder};
 
-pub use super::{TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
+pub use super::{QuoteSide, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
 
 #[doc(hidden)]
 #[cfg(feature = "sync")]

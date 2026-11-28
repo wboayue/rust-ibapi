@@ -33,7 +33,7 @@ pub mod generic_tick;
 mod quote;
 pub use quote::Quote;
 
-pub use super::{TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
+pub use super::{QuoteSide, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
 
 // Feature-specific implementations
 #[doc(hidden)]
@@ -482,7 +482,7 @@ pub struct TickPrice {
 
 /// Attributes associated with price ticks.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct TickAttribute {
     /// Indicates if the order can be automatically executed.
     pub can_auto_execute: bool,
