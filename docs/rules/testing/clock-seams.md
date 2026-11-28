@@ -10,7 +10,7 @@ triggers:
   - production reads an env var or random value and branches on it
 symbols: [next_friday_from, third_friday_from, front_from, next_quarter_from, OffsetDateTime, date-macro]
 related: [coverage-floor]
-precedents: ["#554"]
+precedents: ["#554", "#1268"]
 ---
 
 Keep the public method a one-line wrapper that reads the clock and delegates to a private
@@ -37,7 +37,13 @@ to env vars and random values that production branches on.
 `(year, month, day)`. Either shape works. The helpers stay private; `types_tests.rs` reaches
 them through `use super::*;`.
 
+A public type whose callers must test their own timeouts exposes the seam: `FillMatcher`'s
+`push_execution_at` / `push_report_at` / `take_expired_at` are public, with the `now()`
+methods as one-line wrappers.
+
 ## Precedents
 
 - #554 — `contracts/types.rs` 61.4% → 99.6% line coverage; clock seams were the structural
   half, [coverage-floor](coverage-floor.md) mop-up the rest.
+- #1268 — `FillMatcher` made its `*_at(now: Instant)` twins public after its first consumer
+  could only test a 5 s timeout by sleeping; a seam the caller needs is API, not a test helper.

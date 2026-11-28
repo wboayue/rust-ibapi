@@ -500,6 +500,132 @@ fn executions() {
     );
 }
 
+fn executions_reply_rows() -> Vec<crate::messages::ResponseMessage> {
+    let request_id = crate::common::test_utils::helpers::TEST_REQ_ID_FIRST;
+    vec![
+        proto_response(
+            IncomingMessages::ExecutionData,
+            execution_data().request_id(request_id).execution_id("e1").encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::CommissionsAndFeesReport,
+            commission_and_fees_report().execution_id("e1").commission_and_fees(1.25).encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::ExecutionData,
+            execution_data().request_id(request_id).execution_id("e2").encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::ExecutionData,
+            execution_data()
+                .request_id(request_id)
+                .execution_id("x1")
+                .option_exercise_type(1)
+                .encode_proto(),
+        ),
+        proto_response(
+            IncomingMessages::CommissionsAndFeesReport,
+            commission_and_fees_report().execution_id("r9").commission_and_fees(0.5).encode_proto(),
+        ),
+    ]
+}
+
+#[test]
+fn executions_pair_to_fills() {
+    let mut responses = executions_reply_rows();
+    responses.push(proto_response(IncomingMessages::ExecutionDataEnd, execution_data_end().encode_proto()));
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let subscription = client.executions(ExecutionFilter::default()).expect("executions");
+    let rows = subscription
+        .collect_to_end_within(std::time::Duration::from_secs(5))
+        .expect("reply read to its end");
+    let (fills, unpaired) = crate::orders::FillMatcher::new().pair_executions(rows);
+
+    let fills: Vec<(&str, Option<f64>)> = fills
+        .iter()
+        .map(|fill| {
+            (
+                fill.execution.execution.execution_id.as_str(),
+                fill.commission.as_ref().map(|report| report.commission_and_fees),
+            )
+        })
+        .collect();
+    let unpaired_executions: Vec<&str> = unpaired.executions.iter().map(|data| data.execution.execution_id.as_str()).collect();
+    let unpaired_reports: Vec<&str> = unpaired.reports.iter().map(|report| report.execution_id.as_str()).collect();
+    assert_eq!(fills, vec![("e1", Some(1.25)), ("x1", None)]);
+    assert_eq!(unpaired_executions, vec!["e2"]);
+    assert_eq!(unpaired_reports, vec!["r9"]);
+}
+
+fn replayed_fill_stream() -> Vec<crate::messages::ResponseMessage> {
+    let execution = |execution_id: &str| {
+        proto_response(
+            IncomingMessages::ExecutionData,
+            execution_data().execution_id(execution_id).encode_proto(),
+        )
+    };
+    let report = |execution_id: &str| {
+        proto_response(
+            IncomingMessages::CommissionsAndFeesReport,
+            commission_and_fees_report()
+                .execution_id(execution_id)
+                .commission_and_fees(1.25)
+                .encode_proto(),
+        )
+    };
+    vec![
+        execution("e1"),
+        report("e1"),
+        execution("e1"),
+        report("e1"),
+        execution("e2"),
+        report("e2"),
+        report("e2"),
+        execution("e2"),
+    ]
+}
+
+#[test]
+fn order_update_stream_replayed_fills_pair_once() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(replayed_fill_stream()));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let stream = client.order_update_stream().expect("order update stream");
+    let mut matcher = crate::orders::FillMatcher::new();
+
+    let mut fills = Vec::new();
+    let mut duplicates = 0;
+    for _ in 0..8 {
+        match stream.next_data() {
+            Some(Ok(OrderUpdate::ExecutionData(execution))) => fills.extend(matcher.push_execution(execution)),
+            Some(Ok(OrderUpdate::CommissionAndFeesReport(report))) => match matcher.push_report(report) {
+                crate::orders::ReportMatch::Paired(fill) => fills.push(fill),
+                crate::orders::ReportMatch::Duplicate(_) => duplicates += 1,
+                other => panic!("unexpected {other:?}"),
+            },
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+    let leftovers = matcher.take_expired(std::time::Duration::ZERO);
+
+    let fill_ids: Vec<&str> = fills.iter().map(|fill| fill.execution.execution.execution_id.as_str()).collect();
+    assert_eq!(fill_ids, vec!["e1", "e2"]);
+    assert_eq!(duplicates, 2);
+    assert!(leftovers.executions.is_empty() && leftovers.reports.is_empty(), "{leftovers:?}");
+}
+
+#[test]
+fn executions_without_end_marker_is_an_error_not_fills() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(executions_reply_rows()));
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let subscription = client.executions(ExecutionFilter::default()).expect("executions");
+    let result = subscription.collect_to_end_within(std::time::Duration::from_secs(5));
+
+    assert!(matches!(result, Err(Error::UnexpectedEndOfStream)), "got {result:?}");
+}
+
 #[test]
 fn encode_limit_order() {
     let message_bus = Arc::new(MessageBusStub::default());
