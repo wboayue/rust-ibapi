@@ -484,9 +484,9 @@ impl Error {
     ///
     /// - [`ConnectionReset`](Error::ConnectionReset) means the connection dropped. A write it cut
     ///   off may have sent part of the frame. (The refusal while reconnecting is
-    ///   [`Reconnecting`](Error::Reconnecting), above.) A one-shot
-    ///   request retried after a reset also returns it when its last attempt was refused while
-    ///   reconnecting, since an earlier attempt may have been written.
+    ///   [`Reconnecting`](Error::Reconnecting), above.) A one-shot request retried after a reset
+    ///   also returns it when its last attempt was refused while reconnecting, since an earlier
+    ///   attempt may have been written.
     /// - [`ConnectionFailed`](Error::ConnectionFailed), [`Shutdown`](Error::Shutdown) and
     ///   [`Timeout`](Error::Timeout) refuse a request up front, but a closed socket fails a
     ///   pending write with `Shutdown`, and a one-shot request retried after a reset returns
