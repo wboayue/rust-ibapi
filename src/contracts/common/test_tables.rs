@@ -3,7 +3,7 @@
 #[cfg(feature = "sync")]
 use crate::common::test_utils::helpers::proto_error_response;
 use crate::common::test_utils::helpers::{proto_response, text_response, TEST_REQ_ID_FIRST};
-use crate::contracts::{Contract, ContractDetails, Currency, Exchange, OptionRight, SecurityType, Symbol};
+use crate::contracts::{Contract, ContractDetails, ContractMonth, Currency, Exchange, OptionRight, SecurityType, Symbol};
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::testdata::builders::contracts::{
     contract_data, contract_data_end, market_rule, option_chain, smart_components, symbol_samples, symbol_samples_entry,
@@ -203,6 +203,62 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
                 assert_eq!(contracts[0].long_name, "E-mini S&P 500");
                 assert_eq!(contracts[0].category, "Indices");
                 assert_eq!(contracts[0].settlement_method, "Cash");
+            }),
+        },
+        ContractDetailsTestCase {
+            // ES December 2026 puts (paper TWS, server 223, 2026-11-24): the month holds options
+            // on ESZ6 and on ESH7.
+            name: "futures options query",
+            contract: Contract::options_on(&Contract {
+                symbol: Symbol::from("ES"),
+                security_type: Some(SecurityType::Future),
+                exchange: Exchange::from("CME"),
+                currency: Currency::from("USD"),
+                contract_id: 515416632,
+                ..Default::default()
+            })
+            .expiring_in(ContractMonth::new(2026, 12).unwrap())
+            .puts()
+            .build(),
+            ordered_responses: vec![
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .symbol("ES")
+                        .security_type("FOP")
+                        .last_trade_date_or_contract_month("20261218 08:30:00 US/Central")
+                        .exchange("CME")
+                        .currency("USD")
+                        .trading_class("ES")
+                        .under_contract_id(515416632)
+                        .encode_proto(),
+                ),
+                proto_response(
+                    IncomingMessages::ContractData,
+                    contract_data()
+                        .request_id(9001)
+                        .symbol("ES")
+                        .security_type("FOP")
+                        .last_trade_date_or_contract_month("20261231 15:00:00 US/Central")
+                        .exchange("CME")
+                        .currency("USD")
+                        .trading_class("EW3")
+                        .under_contract_id(649180684)
+                        .encode_proto(),
+                ),
+                proto_response(IncomingMessages::ContractDataEnd, contract_data_end().request_id(9001).encode_proto()),
+            ],
+            expected_count: 2,
+            validations: Box::new(|contracts| {
+                let on_esz6: Vec<&str> = contracts
+                    .iter()
+                    .filter(|row| row.under_contract_id == 515416632)
+                    .map(|row| row.contract.trading_class.as_str())
+                    .collect();
+                assert_eq!(on_esz6, ["ES"]);
+                assert_eq!(contracts[1].under_contract_id, 649180684);
+                assert_eq!(contracts[0].contract.security_type, Some(SecurityType::FuturesOption));
             }),
         },
         ContractDetailsTestCase {

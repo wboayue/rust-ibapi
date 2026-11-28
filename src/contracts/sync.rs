@@ -268,6 +268,11 @@ impl Client {
     ///
     /// Terminal: [`OptionChainBuilder::subscribe`]. Optional narrowing via [`OptionChainBuilder::exchange`].
     ///
+    /// A chain lists expiries and strikes, not contracts, and most of their combinations are
+    /// not listed. To get the contracts, pass
+    /// [`Contract::options_on`](crate::contracts::Contract::options_on) to `contract_details`,
+    /// which returns every listed contract matching the query in one reply.
+    ///
     /// # Arguments
     /// * `symbol` - Symbol of the underlying.
     /// * `security_type` - Security type of the underlying, e.g. `SecurityType::Stock`.

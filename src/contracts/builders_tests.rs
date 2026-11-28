@@ -556,3 +556,88 @@ fn option_convenience_date_methods() {
     // Next quarter should be set
     assert!(matches!(next_quarter_future.last_trade_date_or_contract_month, Some(Expiry::Month(_))));
 }
+
+#[test]
+fn options_on_stock_queries_smart_with_no_strike() {
+    let mut aapl = Contract::stock("AAPL").on_exchange("NASDAQ").build();
+    aapl.contract_id = 265598;
+
+    let query = Contract::options_on(&aapl).build();
+
+    assert_eq!(
+        query,
+        Contract {
+            symbol: Symbol::from("AAPL"),
+            security_type: Some(SecurityType::Option),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
+            ..Default::default()
+        }
+    );
+}
+
+#[test]
+fn options_on_future_queries_futures_options_on_its_exchange() {
+    let month = ContractMonth::new(2026, 12).unwrap();
+    let es = Contract::futures("ES").on_exchange("CME").expires_in(month).build();
+
+    let query = Contract::options_on(&es).expiring_in(month).puts().trading_class("ES").build();
+
+    assert_eq!(
+        query,
+        Contract {
+            symbol: Symbol::from("ES"),
+            security_type: Some(SecurityType::FuturesOption),
+            exchange: Exchange::from("CME"),
+            currency: Currency::from("USD"),
+            last_trade_date_or_contract_month: Some(month.into()),
+            right: Some(OptionRight::Put),
+            trading_class: "ES".to_string(),
+            ..Default::default()
+        }
+    );
+}
+
+#[test]
+fn options_on_continuous_future_queries_futures_options_on_its_exchange() {
+    let es = Contract {
+        symbol: Symbol::from("ES"),
+        security_type: Some(SecurityType::ContinuousFuture),
+        exchange: Exchange::from("CME"),
+        currency: Currency::from("USD"),
+        ..Default::default()
+    };
+
+    let query = Contract::options_on(&es).build();
+
+    assert_eq!(
+        query,
+        Contract {
+            symbol: Symbol::from("ES"),
+            security_type: Some(SecurityType::FuturesOption),
+            exchange: Exchange::from("CME"),
+            currency: Currency::from("USD"),
+            ..Default::default()
+        }
+    );
+}
+
+#[test]
+fn options_on_index_sets_date_right_and_exchange() {
+    let spx = Contract {
+        symbol: Symbol::from("SPX"),
+        security_type: Some(SecurityType::Index),
+        exchange: Exchange::from("CBOE"),
+        currency: Currency::from("USD"),
+        ..Default::default()
+    };
+    let date = ExpirationDate::new(2026, 11, 24).unwrap();
+
+    let query = Contract::options_on(&spx).expiring(date).calls().on_exchange("CBOE").build();
+
+    assert_eq!(query.security_type, Some(SecurityType::Option));
+    assert_eq!(query.exchange, Exchange::from("CBOE"));
+    assert_eq!(query.last_trade_date_or_contract_month, Some(date.into()));
+    assert_eq!(query.right, Some(OptionRight::Call));
+    assert_eq!(query.trading_class, "");
+}

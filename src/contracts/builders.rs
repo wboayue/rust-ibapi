@@ -234,6 +234,106 @@ impl OptionBuilder<Symbol, f64, ExpirationDate> {
     }
 }
 
+/// Builder for a `contract_details` query that lists the option contracts of one underlying.
+///
+/// Made by [`Contract::options_on`]. The contract it builds names no strike, so TWS answers
+/// with every listed contract that matches the fields set here, in one reply.
+#[derive(Debug, Clone)]
+#[must_use = "OptionsQueryBuilder does nothing until you call .build()"]
+pub struct OptionsQueryBuilder {
+    symbol: Symbol,
+    security_type: SecurityType,
+    exchange: Exchange,
+    currency: Currency,
+    expiry: Option<Expiry>,
+    right: Option<OptionRight>,
+    trading_class: String,
+}
+
+impl OptionsQueryBuilder {
+    pub(crate) fn new(underlying: &Contract) -> Self {
+        let futures = matches!(underlying.security_type, Some(SecurityType::Future | SecurityType::ContinuousFuture));
+        OptionsQueryBuilder {
+            symbol: underlying.symbol.clone(),
+            security_type: if futures { SecurityType::FuturesOption } else { SecurityType::Option },
+            exchange: if futures { underlying.exchange.clone() } else { "SMART".into() },
+            currency: underlying.currency.clone(),
+            expiry: None,
+            right: None,
+            trading_class: String::new(),
+        }
+    }
+
+    /// Only the options expiring on `date`.
+    pub fn expiring(mut self, date: ExpirationDate) -> Self {
+        self.expiry = Some(date.into());
+        self
+    }
+
+    /// Only the options of one contract month. For stock and index options that is the month
+    /// they expire in. For futures options it is the option's own contract month, which can
+    /// differ: CBOT's January 2027 corn options (trading class `OZC`) expire on 2026-12-24 and
+    /// match `202701`, not `202612`.
+    pub fn expiring_in(mut self, month: ContractMonth) -> Self {
+        self.expiry = Some(month.into());
+        self
+    }
+
+    /// Only calls.
+    pub fn calls(mut self) -> Self {
+        self.right = Some(OptionRight::Call);
+        self
+    }
+
+    /// Only puts.
+    pub fn puts(mut self) -> Self {
+        self.right = Some(OptionRight::Put);
+        self
+    }
+
+    /// Only one trading class, such as `SPXW` for SPX's PM-settled options.
+    pub fn trading_class(mut self, class: impl Into<String>) -> Self {
+        self.trading_class = class.into();
+        self
+    }
+
+    /// Ask one exchange instead of the default: `SMART` for stock and index options, the
+    /// future's exchange for futures options. `SMART` was probed for US options only; for an
+    /// underlying listed outside the US, name its option exchange (VOD's options were listed on
+    /// `ICEEU`). An empty exchange returns each contract once per exchange that lists it.
+    pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.exchange = exchange.into();
+        self
+    }
+
+    /// Finalize the query contract.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, ContractMonth, SecurityType};
+    ///
+    /// let es = Contract::futures("ES").on_exchange("CME").expires_in(ContractMonth::new(2026, 12)?).build();
+    /// let query = Contract::options_on(&es).expiring_in(ContractMonth::new(2026, 12)?).puts().build();
+    /// assert_eq!(query.security_type, Some(SecurityType::FuturesOption));
+    /// assert_eq!(query.exchange.as_str(), "CME");
+    /// assert_eq!(query.strike, 0.0);
+    /// # Ok::<(), ibapi::Error>(())
+    /// ```
+    pub fn build(self) -> Contract {
+        Contract {
+            symbol: self.symbol,
+            security_type: Some(self.security_type),
+            last_trade_date_or_contract_month: self.expiry,
+            right: self.right,
+            exchange: self.exchange,
+            currency: self.currency,
+            trading_class: self.trading_class,
+            ..Default::default()
+        }
+    }
+}
+
 /// Futures contract builder with type states
 #[derive(Debug, Clone)]
 #[must_use = "FuturesBuilder does nothing until you call .build()"]
