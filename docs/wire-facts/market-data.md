@@ -152,6 +152,82 @@ ending now, regular hours; wire dates read from a recording.*
 - **Not probed:** daily bars in this run; a holiday on a period's last weekday, so the last
   trading day is not separated from the last weekday; other instruments; the Gateway.
 
+### Historical bar durations start at 30 S
+
+*Live 2026-11-23 22:21-22:23Z (Monday, after the US close), paper TWS, server 223. AAPL TRADES,
+regular hours.*
+
+- 1-second bars ending 21:00 and 19:00 UTC: 1, 10 and 29 S each draw 321 "Error validating
+  request.-'D' : cause - Historical data requested duration is invalid". 30, 59 and 60 S return
+  30, 59 and 60 bars, the last one stamped one second before the end date.
+- The same 321 for 29 S of 5-second, 1-minute and 1-hour bars. 30 S returns 6 five-second bars
+  and one 1-minute bar.
+- Settles that the minimum is 30 S for every bar size probed, so `between` asks for at least
+  30 S.
+- **Not probed:** 30 S of 1-hour bars; a minimum for `D`, `W`, `M` or `Y`; other instruments;
+  the Gateway.
+
+### Historical bar requests count back across closed hours
+
+*Live 2026-11-23 22:22Z (Monday, after the US close), paper TWS, server 223. AAPL 1-second
+TRADES, 2000 S.*
+
+- Regular hours, ending after the close (23:00 UTC): 2000 bars, 20:26:40 to 20:59:59 UTC that
+  day. Ending at Monday's open (14:30 UTC): Friday 2026-11-20 20:26:40 to 20:59:59. Ending at
+  14:40 UTC: Friday 20:36:40 to Monday 14:39:59, 1400 seconds of Friday and 600 of Monday.
+- A request ending at the earliest bar of the 14:40 reply (Friday 20:36:40) returns 20:03:20
+  to 20:36:39: the end second is excluded and the start second included, so the two replies
+  meet without a repeated or missing bar.
+- Extended hours, ending Monday 06:00 and 09:00 UTC (in the overnight closure and at the 04:00 ET
+  open): both return Saturday 00:26:40 to 00:59:59 UTC, the end of Friday's 20:00 ET session.
+- The reported window is wall clock (08:56:40 to 09:30 ET for the request ending at the open),
+  so it does not say where the bars start.
+- Eight requests chained this way, sent back to back from 21:00 UTC, took 3.1 s (six within
+  2.1 s); each returned 2000 bars with no pacing error.
+- Settles how `fetch` splits a 1-second `between` range: each request ends at the earliest bar
+  of the reply before, and the replies tile the range. Ends computed in wall-clock time would
+  repeat bars across a closure. The 2000 S limit itself is in "One-second bars reach back at
+  most 2000 S" (#1264).
+- Twelve requests through `between(..).fetch()`, 0.5 s apart (*live 2026-11-26 17:36 UTC, US
+  Thanksgiving holiday, same server*): EUR.USD `MIDPOINT` 1-second bars, extended hours, over the
+  24,000 s before now took 10.0 s and returned 24,000 bars, one per second, with no repeat, gap
+  or pacing error.
+- **Not probed:** count-back across futures session breaks, more than twelve requests in a row,
+  several clients paging at once, or Gateway.
+
+### Fixed-end historical bar requests can end with a no-data error
+
+*Live 2026-11-26 23:46-23:47 UTC (after US close), paper TWS, server 223; #1270.*
+
+- Three fixed-end requests for 2000 S of 1-second CME futures `TRADES` bars with extended hours
+  returned only error 162. ESZ7 ending 2026-11-25 16:00 UTC and 2026-11-26 06:00 UTC returned
+  `Historical Market Data Service error message:HMDS query returned no data: ESZ7@CME Trades`.
+  ESZ8 ending 2026-11-25 16:00 UTC returned the same message for ESZ8.
+- Two AAPL `TRADES` regular-hours controls with the same duration and bar size each returned
+  2000 bars in `HistoricalData` followed by `HistoricalDataEnd`. Both ended at 21:00 UTC,
+  one on 2026-11-25 and the other on 2025-11-25.
+- Split `between(..).fetch()` treats this no-data form of error 162 as an empty page and
+  continues paging.
+- **Not probed:** an empty page between populated pages of the same contract, an all-empty
+  split fetch, or Gateway.
+
+### Second-sized bar limits from 5 to 30 seconds
+
+*Live 2026-11-23 22:23-22:27Z (Monday, after the US close), paper TWS, server 223. AAPL TRADES,
+regular hours, ending 21:00 UTC.*
+
+- 86400 S: 5-second bars 17280 (27.7 s), 10-second 8640 (14.7 s), 15-second 5760 (14.7 s),
+  30-second 2880 (0.6 s). Each count is 86400 S over the bar size, so the duration counts
+  trading seconds and reaches back to 2026-11-18 16:30 UTC.
+- 2 D: 5-second bars 9360 (26.3 s), 10-second 4680, 15-second 3120, 30-second 1560, each from
+  Friday's open to Monday's close.
+- 10 D of 5-second bars returned nothing within 120 s; the probe cancelled it.
+- Settles that these sizes take any `S` duration `between` asks for (up to 86400 S, a range of
+  one day), so only 1-second bars are split.
+- **Not probed:** where these sizes' limits lie, including the 3 D and longer that `between`
+  asks for over a range of more than one day; whether the 10 D request ends in data or an
+  error; other instruments; the Gateway.
+
 ### Historical bars for a continuous future take no end date
 
 *Live 2026-11-16 Mon 02:20 ET (CME Globex open), paper, server 223.*
