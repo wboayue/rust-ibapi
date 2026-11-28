@@ -51,18 +51,21 @@ enum LastTradeDateSplit {
 }
 
 /// Splits `last_trade_date_or_contract_month`, which TWS sends as
-/// `date [time [zone]]` (on `-` if present, otherwise on whitespace), as C#
-/// `EDecoderUtils.SetLastTradeDate` does. The time goes to `last_trade_time`.
+/// `date [time [zone]]`, as C# `EDecoderUtils.SetLastTradeDate` does, except
+/// that text holding whitespace splits on whitespace and only text without it
+/// splits on `-`. C# splits on `-` whenever there is one, which cuts ICE
+/// Europe's `20261218 16:30:00 GB-Eire` inside the zone name
+/// (`docs/wire-facts/contracts.md#gb-eire-last-trade-dates`). The time goes to `last_trade_time`.
 /// A bond's date goes to `maturity` and its zone to `time_zone_id`, and its
 /// contract field is left as sent (a zoned value stays [`Expiry::Unknown`] and
 /// goes back to TWS byte for byte). Any other contract keeps only the date in
 /// that field, so a contract sent back carries what IB's own clients send, and
 /// its zone is dropped, as in C#.
 fn split_last_trade_date(details: &mut ContractDetails, raw: &str, split: LastTradeDateSplit) {
-    let parts: Vec<&str> = if raw.contains('-') {
-        raw.split('-').collect()
-    } else {
+    let parts: Vec<&str> = if raw.contains(char::is_whitespace) {
         raw.split_whitespace().collect()
+    } else {
+        raw.split('-').collect()
     };
     let mut parts = parts.into_iter();
     let (date, time, zone) = (parts.next(), parts.next(), parts.next());
