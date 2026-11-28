@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use super::common::fill::{completed_status, lists_order, lookup_wait, FillTracker};
 use super::common::{decoders, encoders, verify};
 use super::{
-    ApiOnly, AutoBind, CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OcaType, OrderBuilder, OrderCancel,
+    ApiOnly, AutoBind, CancelOrder, ClientBound, ExecutionFilter, Executions, ExerciseOptionsBuilder, OcaType, Order, OrderBuilder, OrderCancel,
     OrderOutcome, OrderStatus, OrderUpdate, Orders, PlaceOrder,
 };
 use crate::client::blocking::Subscription;
@@ -574,6 +574,27 @@ impl Client {
         let orders = verify::number_oca_orders(group.into(), oca_type, orders, || self.next_order_id())?;
         self.submit_orders(orders.iter().map(|(contract, order)| (OrderId::from(order.order_id), contract, order)))?;
         Ok(orders.iter().map(|(_, order)| order.order_id).collect())
+    }
+
+    /// Sends caller-linked orders in the supplied order and sets `transmit` on the last one only.
+    ///
+    /// Assign distinct, nonzero [`Order::order_id`] values and set the links, such as
+    /// [`Order::parent_id`], before calling this method. Keep those ids for reconciliation.
+    ///
+    /// # Errors
+    ///
+    /// An empty list returns [`Error::InvalidArgument`]. An unset or repeated order id returns
+    /// [`Error::Validation`]. Every order is checked and encoded before sending any, so any
+    /// validation or encoding failure leaves the whole list unsent.
+    ///
+    /// A send that stops partway returns [`Error::OrdersPartiallySent`]. Its `sent` ids may
+    /// be at TWS, including the order whose write failed. Its `not_sent` ids were never written.
+    /// If the client is reconnecting and refuses the first send before writing, the error is
+    /// [`Error::Reconnecting`]. Use the `sent` ids to cancel orders after reconnecting with the
+    /// same client id. Held orders are absent from [`Client::open_orders`].
+    pub fn submit_linked_orders(&self, mut orders: Vec<(Contract, Order)>) -> Result<(), Error> {
+        verify::prepare_linked_orders(&mut orders)?;
+        self.submit_orders(orders.iter().map(|(contract, order)| (OrderId::from(order.order_id), contract, order)))
     }
 
     /// Creates a subscription stream for receiving real-time order updates.

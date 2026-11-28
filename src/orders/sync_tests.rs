@@ -1,3 +1,4 @@
+use crate::orders::common::test_tables::{assert_linked_order_requests, linked_orders, LINKED_ORDER_IDS};
 use std::sync::Arc;
 
 use crate::common::test_utils::helpers::{
@@ -1110,6 +1111,70 @@ fn submit_all_reserves_three_ids_and_wires_the_bracket() {
     assert_eq!(orders[1].lmt_price, Some(55.0));
     assert_eq!(orders[2].order_type.as_deref(), Some("STP"));
     assert_eq!(orders[2].aux_price, Some(45.0));
+}
+
+#[test]
+fn submit_linked_orders_preserves_ids_and_transmits_only_the_last_order() {
+    let (client, bus) = create_blocking_test_client();
+    client.submit_linked_orders(linked_orders()).unwrap();
+
+    assert_linked_order_requests(&bus, 3);
+    assert_eq!(client.next_order_id(), 9410);
+}
+
+#[test]
+fn submit_linked_orders_checks_every_order_before_sending() {
+    let (client, bus) = create_blocking_test_client();
+    let empty = client.submit_linked_orders(Vec::new()).unwrap_err();
+    assert!(matches!(empty, Error::InvalidArgument(message) if message == "submit_linked_orders needs at least one order"));
+
+    for (id, reason) in [
+        (0, "0 is the unset order id"),
+        (LINKED_ORDER_IDS[0], "each linked order needs a distinct order id"),
+    ] {
+        let mut orders = linked_orders();
+        orders[2].1.order_id = id;
+        let e = client.submit_linked_orders(orders).unwrap_err();
+        assert!(
+            matches!(e, Error::Validation(ValidationError::InvalidField { field: "Order::order_id", value, reason: actual })
+            if value == id.to_string() && actual == reason),
+            "{id}"
+        );
+    }
+
+    let mut orders = linked_orders();
+    orders[2].1.order_id = REQUEST_ID_FLOOR;
+    let e = client.submit_linked_orders(orders).unwrap_err();
+    assert!(matches!(e, Error::OrderIdInRequestRange { order_id } if order_id == REQUEST_ID_FLOOR));
+    assert_eq!(request_message_count(&bus), 0);
+}
+
+#[test]
+fn submit_linked_orders_reports_ambiguous_writes_without_sending_cancels() {
+    for writes in 0..LINKED_ORDER_IDS.len() {
+        let bus = Arc::new(MessageBusStub::default().with_sends_failing_after(writes));
+        let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+        let e = client.submit_linked_orders(linked_orders()).unwrap_err();
+        let Error::OrdersPartiallySent { sent, not_sent, source } = e else {
+            panic!("expected a partial send, received {e:?}");
+        };
+        let (expected_sent, expected_not_sent) = LINKED_ORDER_IDS.split_at(writes + 1);
+        assert_eq!(sent, expected_sent);
+        assert_eq!(not_sent, expected_not_sent);
+        assert!(matches!(*source, Error::ConnectionReset));
+        assert_linked_order_requests(&bus, writes + 1);
+    }
+}
+
+#[test]
+fn submit_linked_orders_returns_refused_first_send_bare() {
+    let bus = Arc::new(MessageBusStub::default().with_refused_sends());
+    let client = Client::stubbed(bus.clone(), server_versions::SIZE_RULES);
+    let e = client.submit_linked_orders(linked_orders()).unwrap_err();
+
+    assert!(matches!(e, Error::Reconnecting));
+    assert!(e.is_unsent());
+    assert_eq!(request_message_count(&bus), 0);
 }
 
 #[test]

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::encoders;
 use crate::builder::ValidationError;
 use crate::client::id_generator::ClientIdManager;
@@ -40,7 +42,7 @@ pub(crate) fn prepare_place_order(
 /// The place-order requests for a batch, each order under the id paired with it, prepared with
 /// [`prepare_place_order`]. Every order is checked and encoded before the caller sends the
 /// first, so an order that fails sends nothing; only sending can then stop partway, which
-/// [`Error::OrdersPartiallySent`] reports. The OCA and bracket submits (sync and async) send through this.
+/// [`Error::OrdersPartiallySent`] reports. The OCA, bracket, and linked submits send through this.
 pub(crate) fn prepare_place_orders<'a>(
     ids: &ClientIdManager,
     server_version: i32,
@@ -76,6 +78,34 @@ pub(crate) fn number_oca_orders(
         order.oca_type = oca_type;
     }
     Ok(orders)
+}
+
+/// Checks the caller-assigned ids and enables transmission on the last linked order only.
+pub(crate) fn prepare_linked_orders(orders: &mut [(Contract, Order)]) -> Result<(), Error> {
+    let len = orders.len();
+    if len == 0 {
+        return Err(Error::InvalidArgument("submit_linked_orders needs at least one order".into()));
+    }
+
+    let mut seen = HashSet::with_capacity(len);
+    for (index, (_, order)) in orders.iter_mut().enumerate() {
+        let reason = if order.order_id == 0 {
+            Some("0 is the unset order id")
+        } else if !seen.insert(order.order_id) {
+            Some("each linked order needs a distinct order id")
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            return Err(Error::Validation(ValidationError::InvalidField {
+                field: "Order::order_id",
+                value: order.order_id.to_string(),
+                reason: reason.into(),
+            }));
+        }
+        order.transmit = index == len - 1;
+    }
+    Ok(())
 }
 
 /// The order ids `order` carries besides its own: the preset attached-order ids, which TWS
