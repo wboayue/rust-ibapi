@@ -49,7 +49,7 @@ fn example_streaming_with_tick_types(client: &Client, contract: &Contract) {
     // https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
     let subscription = client
         .market_data(contract)
-        .generic_ticks(&["233", "236", "293"]) // RTVolume, Shortable, Trade Count
+        .generic_ticks([GenericTick::RT_VOLUME, GenericTick::SHORTABLE, GenericTick::TRADE_COUNT])
         .subscribe()
         .expect("Failed to subscribe to market data");
 
@@ -115,7 +115,11 @@ fn example_builder_chaining(client: &Client, contract: &Contract) {
     // Later method calls override earlier ones for the same setting.
     let subscription = client
         .market_data(contract)
-        .generic_ticks(&["100", "101", "104"]) // Option Volume, Open Interest, Historical Vol
+        .generic_ticks([
+            GenericTick::OPTION_VOLUME,
+            GenericTick::OPTION_OPEN_INTEREST,
+            GenericTick::OPTION_HISTORICAL_VOLATILITY,
+        ])
         .snapshot() // Initially set to snapshot mode
         .streaming() // Override to streaming mode (this takes precedence)
         .subscribe()
@@ -154,7 +158,7 @@ fn example_observe_notices(client: &Client, contract: &Contract) {
 
     let subscription = client
         .market_data(contract)
-        .generic_ticks(&["233"])
+        .generic_ticks([GenericTick::RT_VOLUME])
         .subscribe()
         .expect("Failed to subscribe to market data");
 

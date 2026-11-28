@@ -28,7 +28,8 @@ pub(crate) mod common;
 mod builder;
 pub use builder::{MarketDataBuilder, MarketDepthBuilder, RealtimeBarsBuilder, TickByTickBuilder};
 
-pub mod generic_tick;
+mod generic_tick;
+pub use generic_tick::GenericTick;
 
 mod quote;
 pub use quote::Quote;

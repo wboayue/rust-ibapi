@@ -1778,3 +1778,48 @@ for update in subscription.iter_data() {
 
 A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
 Check `notice.code` to tell them apart.
+
+### 59. Generic tick ids are `GenericTick`, not strings
+
+A generic tick id is a number, and `market_data(..)` took it as text: `generic_ticks(&[&str])`
+and `add_generic_tick(impl AsRef<str>)` sent any string as written. Both now take
+`market_data::realtime::GenericTick` (also in the prelude), and the named ids are constants on
+that type.
+
+| 5.x | 6.0 |
+|---|---|
+| `generic_ticks(ticks: &[&str])` | `generic_ticks(ticks)`, any iterator of `GenericTick`s or `u16` numbers |
+| `add_generic_tick(tick: impl AsRef<str>)` | `add_generic_tick(tick: impl Into<GenericTick>)` |
+| `generic_tick::RT_VOLUME` (`&str`, and the other constants of that module) | `GenericTick::RT_VOLUME` |
+| `generic_tick::ETF_NAV_BID` (deprecated since 5.1.0) | removed, no replacement |
+| `generic_tick::ETF_NAV_FROZEN_LAST` (deprecated since 5.1.0) | removed; for the frozen NAV last price (tick 97) use `GenericTick::ETF_FROZEN_NAV_LAST` |
+| module `market_data::realtime::generic_tick` | removed |
+
+```rust,ignore
+// 5.x
+use ibapi::market_data::realtime::generic_tick;
+
+let ticks = client.market_data(&contract)
+    .generic_ticks(&[generic_tick::RT_VOLUME, "236"])
+    .add_generic_tick("258")
+    .subscribe()?;
+
+// 6.0
+use ibapi::market_data::realtime::GenericTick;
+
+let ticks = client.market_data(&contract)
+    .generic_ticks([GenericTick::RT_VOLUME, GenericTick::SHORTABLE])
+    .add_generic_tick(258) // a `u16` converts, for an id without a constant
+    .subscribe()?;
+```
+
+(`client` is a connected `Client`, `contract` a `Contract`.)
+
+The compiler reports every call that passes text and every use of a removed constant. Ids are
+sent as before, so nothing changes on the wire for a numeric id. What it does not catch:
+
+- A number that is not a generic tick id, or not one TWS accepts for the contract, still
+  compiles; TWS answers it with error 321.
+- The list can no longer carry text. `mdoff` and `292:<provider>`, which a news request puts in
+  the same field, cannot be sent through `market_data(..)`; `Client::contract_news` and
+  `Client::broad_tape_news` send them.

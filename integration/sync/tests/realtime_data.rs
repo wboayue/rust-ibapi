@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use ibapi::contracts::Contract;
+use ibapi::market_data::realtime::GenericTick;
 use ibapi::market_data::{IgnoreSize, MarketDataType, TradingHours};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi_integration_sync::connect;
@@ -44,7 +45,7 @@ fn market_data_generic_ticks() {
     let contract = Contract::stock("AAPL").build();
     let subscription = client
         .market_data(&contract)
-        .generic_ticks(&["233"])
+        .generic_ticks([GenericTick::RT_VOLUME])
         .subscribe()
         .expect("market_data generic_ticks failed");
 

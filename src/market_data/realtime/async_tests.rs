@@ -540,7 +540,12 @@ async fn basic_market_data() {
     // Test subscription creation
     let mut subscription = client
         .market_data(&contract)
-        .generic_ticks(generic_ticks)
+        .generic_ticks([
+            GenericTick::OPTION_VOLUME,
+            GenericTick::OPTION_OPEN_INTEREST,
+            GenericTick::OPTION_HISTORICAL_VOLATILITY,
+            GenericTick::OPTION_IMPLIED_VOLATILITY,
+        ])
         .subscribe()
         .await
         .expect("Failed to create market data subscription");
@@ -613,7 +618,11 @@ async fn market_data_with_combo_legs() {
     let generic_ticks: Vec<&str> = vec!["233", "456"];
 
     // Test subscription creation
-    let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe().await;
+    let result = client
+        .market_data(&contract)
+        .generic_ticks([GenericTick::RT_VOLUME, GenericTick::IB_DIVIDENDS])
+        .subscribe()
+        .await;
     assert!(result.is_ok(), "Failed to create market data subscription with combo legs");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -641,7 +650,7 @@ async fn market_data_with_delta_neutral() {
     let generic_ticks: Vec<&str> = vec![];
 
     // Test subscription creation
-    let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe().await;
+    let result = client.market_data(&contract).generic_ticks(Vec::<GenericTick>::new()).subscribe().await;
     assert!(result.is_ok(), "Failed to create market data subscription with delta neutral");
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -673,7 +682,7 @@ async fn market_data_regulatory_snapshot() {
     // Test subscription creation
     let result = client
         .market_data(&contract)
-        .generic_ticks(&generic_ticks)
+        .generic_ticks(Vec::<GenericTick>::new())
         .snapshot()
         .regulatory_snapshot()
         .subscribe()

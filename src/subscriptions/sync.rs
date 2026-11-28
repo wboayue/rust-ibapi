@@ -338,12 +338,13 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::GenericTick;
     /// use ibapi::subscriptions::SubscriptionItem;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("AAPL").build();
     /// let subscription = client.market_data(&contract)
-    ///     .generic_ticks(&["233"])
+    ///     .generic_ticks([GenericTick::RT_VOLUME])
     ///     .subscribe()
     ///     .expect("market data request failed");
     ///

@@ -100,17 +100,19 @@ pub(crate) fn encode_request_market_depth_exchanges() -> Result<Vec<u8>, Error> 
     ))
 }
 
-pub(crate) fn encode_request_market_data(
+/// `generic_ticks` are joined with `,`: [`GenericTick`](crate::market_data::realtime::GenericTick)s from
+/// `market_data`, or the text tokens the news subscriptions send (`mdoff`, `292:<provider>`).
+pub(crate) fn encode_request_market_data<T: std::fmt::Display>(
     request_id: i32,
     contract: &Contract,
-    generic_ticks: &[&str],
+    generic_ticks: &[T],
     snapshot: bool,
     regulatory_snapshot: bool,
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use crate::proto::encoders::{some_bool, some_str};
     use prost::Message;
-    let joined = generic_ticks.join(",");
+    let joined = generic_ticks.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
     let request = crate::proto::MarketDataRequest {
         req_id: Some(request_id),
         contract: Some(crate::proto::encoders::encode_contract(contract)),

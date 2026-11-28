@@ -462,26 +462,26 @@ To filter for regular trading hours only, you must filter client-side based on t
 comma-separated values passed via the `genericTickList` parameter on
 `reqMktData`. Each ID opts the stream into one or more *received* tick types
 that arrive on the `tickPrice` / `tickSize` / `tickString` / `tickGeneric`
-callbacks. Prefer the named constants in
-[`market_data::realtime::generic_tick`] over raw numeric strings:
+callbacks. An ID is a [`market_data::realtime::GenericTick`]: use its named
+constants, or pass the number itself for an ID without one (`.generic_ticks([258])`):
 
 ```rust
-use ibapi::market_data::realtime::generic_tick;
+use ibapi::market_data::realtime::GenericTick;
 
 let ticks = client.market_data(&contract)
-    .generic_ticks(&[generic_tick::RT_VOLUME, generic_tick::SHORTABLE])
+    .generic_ticks([GenericTick::RT_VOLUME, GenericTick::SHORTABLE])
     .subscribe()?;
 ```
 
 Generic tick request IDs (e.g. `100`, `233`, `236`) are **not** the same as
 received tick IDs (e.g. `BID_SIZE` = 0, `RT_VOLUME` = 48). Received tick IDs
-live on [`contracts::tick_types::TickType`]; each generic-tick constant's
+live on [`contracts::tick_types::TickType`]; each `GenericTick` constant's
 doc-comment names which received-tick types it subscribes to.
 
 See: <https://www.interactivebrokers.com/docs/tws-api/doc/market-data-live/available-tick-types/introduction> (the
 *Generic tick required* column on the IB docs page).
 
-[`market_data::realtime::generic_tick`]: https://docs.rs/ibapi/latest/ibapi/market_data/realtime/generic_tick/index.html
+[`market_data::realtime::GenericTick`]: https://docs.rs/ibapi/latest/ibapi/market_data/realtime/struct.GenericTick.html
 [`contracts::tick_types::TickType`]: https://docs.rs/ibapi/latest/ibapi/contracts/tick_types/enum.TickType.html
 
 ## Error Handling Patterns
