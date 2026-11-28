@@ -62,6 +62,10 @@ impl<'a, C> HistoricalTicksBuilder<'a, C> {
 impl<'a> HistoricalTicksBuilder<'a, crate::client::sync::Client> {
     /// Submit the request and return trade ticks.
     ///
+    /// A contract without trade ticks, such as a forex pair, a spot metal or an
+    /// index CFD, ends the stream with [`Error::UnexpectedTickKind`]: TWS answers
+    /// with midpoint ticks instead (live: 2026-11-24). Use `mid_point()` there.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -171,6 +175,10 @@ impl<'a> HistoricalTicksBuilder<'a, crate::client::sync::Client> {
 #[cfg(feature = "async")]
 impl<'a> HistoricalTicksBuilder<'a, crate::client::r#async::Client> {
     /// Submit the request and return trade ticks.
+    ///
+    /// A contract without trade ticks, such as a forex pair, a spot metal or an
+    /// index CFD, ends the stream with [`Error::UnexpectedTickKind`]: TWS answers
+    /// with midpoint ticks instead (live: 2026-11-24). Use `mid_point()` there.
     ///
     /// # Examples
     ///

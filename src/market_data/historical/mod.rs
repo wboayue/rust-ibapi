@@ -861,6 +861,8 @@ pub trait TickDecoder<T> {
     /// subscription drivers', not a third copy of it — a tick type happens to
     /// declare exactly one entry.
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages];
+    /// The kind of tick this decoder reads, as the request names it.
+    const WHAT_TO_SHOW: WhatToShow;
     /// Decode a batch of ticks, returning the payload and an end-of-stream flag.
     ///
     /// Every impl narrows with `message.expect_type(..)?` first: it is the
@@ -872,6 +874,7 @@ pub trait TickDecoder<T> {
 #[allow(private_interfaces)]
 impl TickDecoder<TickBidAsk> for TickBidAsk {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistoricalTickBidAsk];
+    const WHAT_TO_SHOW: WhatToShow = WhatToShow::BidAsk;
 
     fn decode(message: &ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
         common::decoders::decode_historical_ticks_bid_ask(message.expect_type(IncomingMessages::HistoricalTickBidAsk)?)
@@ -881,6 +884,7 @@ impl TickDecoder<TickBidAsk> for TickBidAsk {
 #[allow(private_interfaces)]
 impl TickDecoder<TickLast> for TickLast {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistoricalTickLast];
+    const WHAT_TO_SHOW: WhatToShow = WhatToShow::Trades;
 
     fn decode(message: &ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
         common::decoders::decode_historical_ticks_last(message.expect_type(IncomingMessages::HistoricalTickLast)?)
@@ -890,6 +894,7 @@ impl TickDecoder<TickLast> for TickLast {
 #[allow(private_interfaces)]
 impl TickDecoder<TickMidpoint> for TickMidpoint {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::HistoricalTick];
+    const WHAT_TO_SHOW: WhatToShow = WhatToShow::MidPoint;
 
     fn decode(message: &ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
         common::decoders::decode_historical_ticks_mid_point(message.expect_type(IncomingMessages::HistoricalTick)?)

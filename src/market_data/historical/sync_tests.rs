@@ -1420,6 +1420,56 @@ fn tick_subscription_is_terminated_false_while_nothing_has_arrived() {
     subscription.done.store(true, Ordering::Relaxed); // prevent cancel-on-drop noise
 }
 
+/// A TRADES request for a contract without trades (EUR.USD, XAUUSD, an index
+/// CFD) is answered with one midpoint frame, `done` set, and nothing more.
+fn eurusd_midpoints_for_trades() -> crate::messages::ResponseMessage {
+    proto_response(
+        IncomingMessages::HistoricalTick,
+        historical_ticks_response()
+            .tick(tick_midpoint(1_795_463_984, 1.09043))
+            .done(true)
+            .encode_proto(),
+    )
+}
+
+#[test]
+fn historical_ticks_last_answered_with_midpoints_fails() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![eurusd_midpoints_for_trades()]));
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
+    let contract = Contract::stock("MSFT").build();
+
+    let subscription = client.historical_ticks(&contract, 50).last().expect("subscription should be created");
+
+    let first = subscription.next();
+    let end = subscription.next();
+
+    assert!(
+        matches!(
+            first,
+            Some(Err(Error::UnexpectedTickKind {
+                requested: WhatToShow::Trades,
+                received: WhatToShow::MidPoint
+            }))
+        ),
+        "got {first:?}"
+    );
+    assert!(end.is_none(), "terminal error ends the stream, got {end:?}");
+}
+
+#[test]
+fn tick_subscription_of_another_kind_ends_while_channel_stays_open() {
+    // The dispatcher keeps the request's channel open after the frame, so a
+    // skipped frame left the reader blocked forever.
+    let (subscription, _signal_rx, _sender) = tick_sub_with_sender::<TickLast>(vec![RoutedItem::Response(eurusd_midpoints_for_trades())]);
+
+    let first = subscription.next_timeout(std::time::Duration::from_secs(1));
+
+    assert!(
+        matches!(first, Some(Err(Error::UnexpectedTickKind { .. }))),
+        "expected the error before the timeout, got {first:?}"
+    );
+}
+
 #[test]
 fn tick_subscription_none_when_channel_closes() {
     // Channel closes with no done=true → next_routed() yields None → next returns None.

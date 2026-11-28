@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::common::test_utils::helpers::proto_response;
-use crate::market_data::historical::TickLast;
+use crate::market_data::historical::{TickBidAsk, TickLast, TickMidpoint};
 use crate::messages::{IncomingMessages, Notice};
 use crate::testdata::builders::market_data::{historical_ticks_last_response, tick_last};
 use crate::testdata::builders::ResponseProtoEncoder;
@@ -79,5 +79,59 @@ fn classify_other_error_returns_error() {
     match classify::<TickLast>(RoutedItem::Error(Error::InvalidArgument("boom".into()))) {
         TickAction::Error(Error::InvalidArgument(msg)) => assert_eq!(msg, "boom"),
         _ => panic!("expected Error"),
+    }
+}
+
+fn tick_kind_error<T: TickDecoder<T>>(message_type: IncomingMessages) -> Option<(WhatToShow, WhatToShow)> {
+    match classify::<T>(RoutedItem::Response(proto_response(message_type, vec![]))) {
+        TickAction::Error(Error::UnexpectedTickKind { requested, received }) => Some((requested, received)),
+        _ => None,
+    }
+}
+
+#[test]
+fn classify_tick_of_another_kind_returns_error() {
+    // TWS answers a TRADES request for EUR.USD with a HistoricalTick (midpoint)
+    // frame and nothing after it; skipping it left the request waiting forever.
+    let cases = [
+        (
+            "last <- midpoint",
+            tick_kind_error::<TickLast>(IncomingMessages::HistoricalTick),
+            WhatToShow::Trades,
+            WhatToShow::MidPoint,
+        ),
+        (
+            "last <- bid/ask",
+            tick_kind_error::<TickLast>(IncomingMessages::HistoricalTickBidAsk),
+            WhatToShow::Trades,
+            WhatToShow::BidAsk,
+        ),
+        (
+            "bid/ask <- last",
+            tick_kind_error::<TickBidAsk>(IncomingMessages::HistoricalTickLast),
+            WhatToShow::BidAsk,
+            WhatToShow::Trades,
+        ),
+        (
+            "bid/ask <- midpoint",
+            tick_kind_error::<TickBidAsk>(IncomingMessages::HistoricalTick),
+            WhatToShow::BidAsk,
+            WhatToShow::MidPoint,
+        ),
+        (
+            "midpoint <- last",
+            tick_kind_error::<TickMidpoint>(IncomingMessages::HistoricalTickLast),
+            WhatToShow::MidPoint,
+            WhatToShow::Trades,
+        ),
+        (
+            "midpoint <- bid/ask",
+            tick_kind_error::<TickMidpoint>(IncomingMessages::HistoricalTickBidAsk),
+            WhatToShow::MidPoint,
+            WhatToShow::BidAsk,
+        ),
+    ];
+    for (name, actual, requested, received) in cases {
+        assert_eq!(actual, Some((requested, received)), "{name}");
     }
 }

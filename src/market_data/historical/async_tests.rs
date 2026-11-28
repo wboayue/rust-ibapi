@@ -1350,6 +1350,63 @@ async fn tick_subscription_skips_unexpected_message_then_yields() {
     assert!(subscription.next().await.is_none(), "should be done");
 }
 
+/// A TRADES request for a contract without trades (EUR.USD, XAUUSD, an index
+/// CFD) is answered with one midpoint frame, `done` set, and nothing more.
+fn eurusd_midpoints_for_trades() -> crate::messages::ResponseMessage {
+    proto_response(
+        IncomingMessages::HistoricalTick,
+        historical_ticks_response()
+            .tick(tick_midpoint(1_795_463_984, 1.09043))
+            .done(true)
+            .encode_proto(),
+    )
+}
+
+#[tokio::test]
+async fn historical_ticks_last_answered_with_midpoints_fails() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![eurusd_midpoints_for_trades()]));
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let mut subscription = client
+        .historical_ticks(&test_contract(), 50)
+        .last()
+        .await
+        .expect("subscription should be created");
+
+    let first = subscription.next().await;
+    let end = subscription.next().await;
+
+    assert!(
+        matches!(
+            first,
+            Some(Err(Error::UnexpectedTickKind {
+                requested: WhatToShow::Trades,
+                received: WhatToShow::MidPoint
+            }))
+        ),
+        "got {first:?}"
+    );
+    assert!(end.is_none(), "terminal error ends the stream, got {end:?}");
+}
+
+#[tokio::test]
+async fn tick_subscription_of_another_kind_ends_while_channel_stays_open() {
+    // The dispatcher keeps the request's channel open after the frame, so a
+    // skipped frame left the reader waiting forever.
+    let (tx, rx) = tokio::sync::broadcast::channel(16);
+    tx.send(RoutedItem::Response(eurusd_midpoints_for_trades())).unwrap();
+    let mut subscription: TickSubscription<TickLast> =
+        TickSubscription::new(AsyncInternalSubscription::new(rx), 9300, Arc::new(MessageBusStub::default()));
+
+    let first = tokio::time::timeout(std::time::Duration::from_secs(1), subscription.next()).await;
+
+    assert!(
+        matches!(first, Ok(Some(Err(Error::UnexpectedTickKind { .. })))),
+        "expected the error before the timeout, got {first:?}"
+    );
+    drop(tx);
+}
+
 #[tokio::test]
 async fn tick_subscription_error_surfaces_via_err_arm() {
     // #675 regression guard (async): a RoutedItem::Error must surface through the
