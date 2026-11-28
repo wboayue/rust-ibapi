@@ -486,8 +486,11 @@ for 15 s, 2 min, 20 min (Wi-Fi) and 2 min (router uplink); AAPL BUY 1 LMT 1.00; 
   1000320). A client that sent no request also read 1 both times.
 - The builder's `submit()` took the stale id 1 from `Client::next_order_id()` and returned
   `Ok(OrderId(1))`; the 103 arrived as a notice bound to order 1 on `order_update_stream()`.
-- Settles that `all_open_orders()` can leave this crate's order-id counter below the floor TWS
-  enforces for duplicates; `next_valid_order_id()` returns the raised value.
+- Settled, for the client as it was then, that `all_open_orders()` could leave its order-id
+  counter below the floor TWS enforces for duplicates; `next_valid_order_id()` returns the
+  raised value. The client now raises its counter past every order id an `all_open_orders()`
+  reply lists, so the builder's next `submit()` takes an id above them; the two bullets above
+  describe the client before that.
 - **Not probed:** whether `reqCompletedOrders` or `reqExecutions` raise the id within the same
   session (no `reqIds` between the listing and the disconnect); `reqOpenOrders` with rows to
   list (it listed nothing in both runs, so it had nothing to raise the id above); whether TWS
