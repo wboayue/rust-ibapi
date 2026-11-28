@@ -280,6 +280,7 @@ fn time_in_force_variants_encode_to_wire() {
         (TimeInForce::DayTillCanceled, "DTC"),
         (TimeInForce::Auction, "AUC"),
         (TimeInForce::GoodTillCrossing, "GTX"),
+        (TimeInForce::Minutes, "Minutes"),
     ];
 
     for (tif, wire) in cases {
@@ -321,6 +322,16 @@ fn day_till_canceled_sets_dtc() {
         .unwrap();
     assert_eq!(order.tif, TimeInForce::DayTillCanceled);
     assert_eq!(encode_order(&order).tif.as_deref(), Some("DTC"));
+}
+
+#[test]
+fn minutes_sets_minutes() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let order = OrderBuilder::new(&client, &contract).buy(100).limit(50.0).minutes().build().unwrap();
+    assert_eq!(order.tif, TimeInForce::Minutes);
+    assert_eq!(encode_order(&order).tif.as_deref(), Some("Minutes"));
 }
 
 #[test]
