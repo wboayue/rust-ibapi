@@ -3383,3 +3383,59 @@ async fn pending_orders_notice_does_not_end_order_subscription() {
         other => panic!("expected the 200 rejection, got {other:?}"),
     }
 }
+
+// ---- 2151: positions info not available yet (#1323) ----
+
+const POSITIONS_UNAVAILABLE_MSG: &str = "Positions info is not available yet.";
+
+fn position_end_frame() -> Vec<u8> {
+    binary_proto(crate::messages::IncomingMessages::PositionEnd as i32, &crate::proto::PositionEnd {})
+}
+
+/// A request-less 2151 ends a positions subscription still waiting for its
+/// `PositionEnd` and reaches a live one as a notice that leaves it open. The
+/// notice stream gets it; other shared requests don't.
+#[tokio::test]
+async fn positions_unavailable_ends_only_pending_positions() {
+    use crate::accounts::PositionUpdate;
+    use crate::messages::POSITIONS_UNAVAILABLE_CODE;
+
+    let (stream, bus) = make_bus();
+    let mut notice_stream = bus.notice_subscribe();
+    let mut live = positions_subscription(&bus).await;
+    stream.push_inbound(position_end_frame());
+    bus.read_and_route_message().await.unwrap();
+    assert!(matches!(
+        next_item(&mut live).await,
+        Some(Ok(SubscriptionItem::Data(PositionUpdate::PositionEnd)))
+    ));
+
+    let mut pending = positions_subscription(&bus).await;
+    let mut one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, vec![]).await.unwrap();
+    let mut open_orders = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, vec![]).await.unwrap();
+
+    stream.push_inbound(error_frame(-1, POSITIONS_UNAVAILABLE_CODE, POSITIONS_UNAVAILABLE_MSG));
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut pending).await {
+        Some(Err(Error::Notice(notice))) => assert_eq!(notice.code, POSITIONS_UNAVAILABLE_CODE),
+        other => panic!("pending: expected Err(Notice(2151)), got {other:?}"),
+    }
+    assert!(next_item(&mut pending).await.is_none(), "pending subscription did not end");
+
+    match next_item(&mut live).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => assert_eq!(notice.code, POSITIONS_UNAVAILABLE_CODE),
+        other => panic!("live: expected the 2151 notice, got {other:?}"),
+    }
+    stream.push_inbound(position_end_frame());
+    bus.read_and_route_message().await.unwrap();
+    assert!(
+        matches!(next_item(&mut live).await, Some(Ok(SubscriptionItem::Data(PositionUpdate::PositionEnd)))),
+        "live subscription did not stay open"
+    );
+
+    assert!(try_next_routed(&mut one_shot).await.is_none(), "2151 reached a one-shot");
+    assert!(try_next_routed(&mut open_orders).await.is_none(), "2151 reached open orders");
+    let notice = tokio::time::timeout(TICK, notice_stream.next()).await.unwrap().unwrap();
+    assert_eq!(notice.code, POSITIONS_UNAVAILABLE_CODE);
+}

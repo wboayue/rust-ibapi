@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use log::{debug, error, warn};
 
 use super::common::{
-    cancel_frame, collect_step, debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, notice_item, Bound, CollectStop,
+    cancel_frame, collect_step, debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, notice_outcome, Bound, CollectStop,
     DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
@@ -55,6 +55,9 @@ pub struct Subscription<T: StreamDecoder<T>> {
     cancelled: AtomicBool,
     snapshot_ended: AtomicBool,
     stream_ended: AtomicBool,
+    /// Set once an `is_batch_end` item is decoded: the initial batch is in,
+    /// so `notice_fails_initial_batch` no longer applies.
+    batch_ended: AtomicBool,
     /// Set only by the native end marker or an item that ends the request
     /// (`StreamDecoder::ends_request`), not by errors: TWS has finished the
     /// request, so there is nothing left to cancel.
@@ -94,6 +97,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             cancelled: AtomicBool::new(false),
             snapshot_ended: AtomicBool::new(false),
             stream_ended: AtomicBool::new(false),
+            batch_ended: AtomicBool::new(false),
             ended_natively: AtomicBool::new(false),
             rejected: OnceLock::new(),
         }
@@ -380,6 +384,9 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                     if val.is_snapshot_end(&self.context) {
                         self.snapshot_ended.store(true, Ordering::Relaxed);
                     }
+                    if val.is_batch_end() {
+                        self.batch_ended.store(true, Ordering::Relaxed);
+                    }
                     if val.ends_request() {
                         self.stream_ended.store(true, Ordering::Relaxed);
                         self.ended_natively.store(true, Ordering::Relaxed);
@@ -396,7 +403,13 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                     NextAction::Return(Some(Err(err)))
                 }
             },
-            Some(RoutedItem::Notice(notice)) => NextAction::Return(Some(Ok(notice_item(notice)))),
+            Some(RoutedItem::Notice(notice)) => {
+                let item = notice_outcome(notice, self.batch_ended.load(Ordering::Relaxed));
+                if item.is_err() {
+                    self.stream_ended.store(true, Ordering::Relaxed);
+                }
+                NextAction::Return(Some(item))
+            }
             Some(RoutedItem::Error(e)) => {
                 self.stream_ended.store(true, Ordering::Relaxed);
                 self.note_rejection(&e);

@@ -958,3 +958,24 @@ async fn account_summary_snapshots_cancel_sends_cancel_and_ends() {
     assert_eq!(request_message_count(&message_bus), 2);
     assert_request(&message_bus, 1, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST));
 }
+
+/// A positions request answered only by a request-less 2151 (#1323): the
+/// `filter_data()` loop ends with `Err(Error::Notice)` instead of waiting forever.
+#[tokio::test]
+async fn positions_unavailable_ends_filter_data() {
+    use crate::messages::POSITIONS_UNAVAILABLE_CODE;
+    use crate::subscriptions::SubscriptionItemStreamExt;
+    use prost::Message;
+
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_response(
+        IncomingMessages::Error,
+        error_envelope(Some(-1), Some(POSITIONS_UNAVAILABLE_CODE), "Positions info is not available yet.").encode_to_vec(),
+    )]));
+    let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
+
+    let items: Vec<_> = client.positions().await.expect("request positions failed").filter_data().collect().await;
+    match items.as_slice() {
+        [Err(crate::Error::Notice(notice))] => assert_eq!(notice.code, POSITIONS_UNAVAILABLE_CODE),
+        other => panic!("expected one Err(Notice(2151)), got {other:?}"),
+    }
+}

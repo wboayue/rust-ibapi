@@ -382,6 +382,19 @@ impl SharedChannels {
         self.send_to(|channel| channel.responses.contains(&message_type), || message.clone().into()) > 0
     }
 
+    /// Deliver `item` to `request`'s channel, if anybody has subscribed to it.
+    pub(super) fn send_to_request(&self, request: OutgoingMessages, item: RoutedItem) {
+        // Fails only with no receivers: nobody is subscribed.
+        if self
+            .channels()
+            .get(&request)
+            .and_then(|channel| channel.sender.get())
+            .is_none_or(|sender| sender.send(item).is_err())
+        {
+            trace!("no shared subscription for {request:?}");
+        }
+    }
+
     /// Deliver `item()` once to every channel.
     pub(super) fn notify_all(&self, item: impl Fn() -> RoutedItem) {
         self.send_to(|_| true, item);

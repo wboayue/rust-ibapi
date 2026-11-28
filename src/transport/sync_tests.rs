@@ -4764,3 +4764,61 @@ fn pending_orders_notice_does_not_end_order_subscription() -> Result<(), Error> 
     }
     Ok(())
 }
+
+// ---- 2151: positions info not available yet (#1323) ----
+
+const POSITIONS_UNAVAILABLE_MSG: &str = "Positions info is not available yet.";
+
+fn position_end_frame() -> Vec<u8> {
+    binary_proto(crate::messages::IncomingMessages::PositionEnd as i32, &crate::proto::PositionEnd {})
+}
+
+/// A request-less 2151 ends a positions subscription still waiting for its
+/// `PositionEnd` and reaches a live one as a notice that leaves it open. The
+/// notice stream gets it; other shared requests don't.
+#[test]
+fn positions_unavailable_ends_only_pending_positions() -> Result<(), Error> {
+    use crate::accounts::PositionUpdate;
+    use crate::messages::POSITIONS_UNAVAILABLE_CODE;
+    use crate::subscriptions::SubscriptionItem;
+
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+    let live = positions_subscription(&bus)?;
+    stream.push_inbound(position_end_frame());
+    bus.dispatch()?;
+    assert!(matches!(
+        live.next_timeout(TICK),
+        Some(Ok(SubscriptionItem::Data(PositionUpdate::PositionEnd)))
+    ));
+
+    let pending = positions_subscription(&bus)?;
+    let one_shot = bus.send_shared_request(OutgoingMessages::RequestIds, &[])?;
+    let open_orders = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, &[])?;
+
+    stream.push_inbound(error_frame(-1, POSITIONS_UNAVAILABLE_CODE, POSITIONS_UNAVAILABLE_MSG));
+    bus.dispatch()?;
+
+    match pending.next_timeout(TICK) {
+        Some(Err(Error::Notice(notice))) => assert_eq!(notice.code, POSITIONS_UNAVAILABLE_CODE),
+        other => panic!("pending: expected Err(Notice(2151)), got {other:?}"),
+    }
+    assert!(pending.next_timeout(TICK).is_none(), "pending subscription did not end");
+
+    match live.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Notice(notice))) => assert_eq!(notice.code, POSITIONS_UNAVAILABLE_CODE),
+        other => panic!("live: expected the 2151 notice, got {other:?}"),
+    }
+    stream.push_inbound(position_end_frame());
+    bus.dispatch()?;
+    assert!(
+        matches!(live.next_timeout(TICK), Some(Ok(SubscriptionItem::Data(PositionUpdate::PositionEnd)))),
+        "live subscription did not stay open"
+    );
+
+    assert!(one_shot.try_next_routed().is_none(), "2151 reached a one-shot");
+    assert!(open_orders.try_next_routed().is_none(), "2151 reached open orders");
+    let notice = notice_stream.next_timeout(TICK).expect("notice stream missed the 2151");
+    assert_eq!(notice.code, POSITIONS_UNAVAILABLE_CODE);
+    Ok(())
+}

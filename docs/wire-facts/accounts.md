@@ -57,3 +57,25 @@ Positions, PnL and account updates by model. End-marker behavior for account str
 - **Not probed:** a model code, an FA master account, later update frames (only the initial
   dump to the end marker was read), whether the Gateway applies a changed setting to an
   already-open subscription (each run reconnected).
+
+### A positions request during an internet outage gets 2151, then nothing
+
+*Live 2026-11-25 and 2026-11-26, paper TWS, server 223; internet outages that kept the API
+socket up (#1300, #1323).*
+
+- `reqPositions` sent after the 1100 drew one 2151 with request id -1, then no `Position` and no
+  `PositionEnd`. Nothing more came in 323 s, 1554 s and 348 s, and none came after the restore:
+
+  ```text
+  12:01:43.831 code=2151 "Positions info is not available yet." (request id -1)
+  ```
+
+- A positions request opened before the outage kept its subscription. At restore TWS re-sent the
+  open positions on it without a `PositionEnd`.
+- Sent 0.1 s after the network returned, `reqPositions` got the positions and `PositionEnd`.
+- `positions()` ends a subscription that is still waiting for its `PositionEnd` on a 2151, with
+  `Err(Error::Notice)`. A subscription that already has its `PositionEnd` yields the 2151 as a
+  `Notice` and stays open (`PositionUpdate::notice_fails_initial_batch`).
+- **Not probed:** two positions requests pending at once (one 2151 or one each); whether a
+  request sent after the 1102 completes on a client whose earlier request got 2151;
+  `positions_multi` (which has a request id) during an outage.

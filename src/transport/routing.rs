@@ -4,7 +4,7 @@ use log::warn;
 
 use crate::client::ids::{OrderId, WireId};
 use crate::errors::Error;
-use crate::messages::{is_informational_code, routes_by_request_id, IncomingMessages, Notice, ResponseMessage};
+use crate::messages::{is_informational_code, routes_by_request_id, IncomingMessages, Notice, ResponseMessage, POSITIONS_UNAVAILABLE_CODE};
 
 use super::RoutedItem;
 
@@ -237,6 +237,11 @@ pub(crate) enum ErrorDisposition {
     /// subscription and status streams. TWS has neither created nor refused
     /// those orders, so every copy is a `Notice`.
     NoticeAndOrders(Notice, Vec<OrderId>),
+    /// Request-less 2151, "Positions info is not available yet.": `NoticeStream`
+    /// and a copy to every `positions` subscription. Each subscription decides
+    /// (`StreamDecoder::notice_fails_initial_batch`): one still waiting for its
+    /// `PositionEnd` ends, a live one yields the `Notice`.
+    NoticeAndPositions(Notice),
     /// Deliver `RoutedItem` to the request or order subscription the id names.
     Route(WireId, RoutedItem),
 }
@@ -256,6 +261,9 @@ pub(crate) fn classify_error(payload: DecodedError) -> ErrorDisposition {
         None => {
             let notice = Notice::from(payload.clone());
             if is_informational {
+                if notice.code == POSITIONS_UNAVAILABLE_CODE {
+                    return ErrorDisposition::NoticeAndPositions(notice);
+                }
                 let orders = pending_orders(&notice);
                 if orders.is_empty() {
                     ErrorDisposition::NoticeOnly(notice)

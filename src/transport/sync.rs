@@ -238,6 +238,11 @@ impl SharedChannels {
         subscribers.clear();
     }
 
+    // Deliver `item()` to every live subscription of `request`.
+    fn send_to_request<I: Fn() -> RoutedItem>(&self, request: OutgoingMessages, item: I) {
+        self.send_to(|subscriber| subscriber.request == request, item);
+    }
+
     // Fail in-flight one-shot requests fast by delivering an error to the
     // one-shot subscriptions only. Used for request-less errors, which carry
     // no id to correlate. Streaming subscriptions are excluded so an
@@ -697,6 +702,12 @@ impl<S: Stream> TcpMessageBus<S> {
                     self.order_taps.publish_pending(*order_id, &notice);
                     let _ = self.orders.deliver(order_id, RoutedItem::Notice(notice.clone()));
                 }
+                self.connection.notice_broadcaster.broadcast(notice);
+            }
+            ErrorDisposition::NoticeAndPositions(notice) => {
+                notice.log();
+                self.shared_channels
+                    .send_to_request(OutgoingMessages::RequestPositions, || RoutedItem::Notice(notice.clone()));
                 self.connection.notice_broadcaster.broadcast(notice);
             }
             ErrorDisposition::Route(id, item) => {
