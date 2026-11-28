@@ -539,24 +539,32 @@ for item in client.resubscribing(|| client.realtime_bars(&contract).subscribe())
 
 `order_update_stream()` survives the client's automatic reconnects — the same
 subscription keeps delivering once the connection returns. Updates TWS emitted
-during the outage are **not** replayed, and no marker appears in the stream
-itself, so a quiet stream is indistinguishable from missed activity. Detect
-the gap on the notice stream and reconcile:
+during the outage are **not** replayed. Once the new session is live, the stream
+yields one notice with code `TRANSPORT_RECONNECT_CODE` to mark the gap; rebuild
+order state from snapshots when it arrives. The notice classifies as
+`NoticeCategory::ClientSynthesized`, so `is_error()` is false for it:
 
 ```rust
-let notices = client.notice_stream();
+let updates = client.order_update_stream()?;
 
-for notice in notices.iter() {
-    // 1100: connectivity lost; 1101/1102: restored (data lost / maintained);
-    // 1300: socket port reset.
-    if matches!(notice.code, 1101 | 1102) {
-        // The order update stream did not replay the outage window:
-        // rebuild open-order state and diff against your book.
-        let snapshot = client.open_orders()?;
-        reconcile(snapshot)?;
+for item in updates.iter() {
+    match item? {
+        SubscriptionItem::Data(update) => apply(update),
+        SubscriptionItem::Notice(n) if n.code == TRANSPORT_RECONNECT_CODE => {
+            // This client's open orders. Not `all_open_orders`: it also lists
+            // other clients' orders and raises this client's next valid order
+            // id past the highest id listed.
+            reconcile_open(client.open_orders()?)?;
+            reconcile_completed(client.completed_orders(ApiOnly::No)?)?;
+            reconcile_fills(client.executions(ExecutionFilter::default())?)?;
+        }
+        SubscriptionItem::Notice(n) => log::warn!("{n}"),
     }
 }
 ```
+
+The `order_update_stream` rustdoc lists the full recovery steps, including the
+client-id filter and idempotent updates.
 
 ## Common Patterns
 

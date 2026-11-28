@@ -189,16 +189,42 @@ fn notice_is_system_message() {
 
 #[test]
 fn notice_is_informational() {
-    // Informational includes cancellations, warnings, and system messages
-    let informational_codes = [202, 1100, 1101, 1102, 1300, *WARNING_CODE_RANGE.start(), 2107, *WARNING_CODE_RANGE.end()];
+    // Informational includes cancellations, warnings, system messages, and
+    // the client-synthesized notices about the client's own state.
+    let informational_codes = [
+        202,
+        1100,
+        1101,
+        1102,
+        1300,
+        *WARNING_CODE_RANGE.start(),
+        2107,
+        *WARNING_CODE_RANGE.end(),
+        TRANSPORT_RECONNECT_CODE,
+        SUBSCRIPTION_LAG_CODE,
+        NOTICE_STREAM_LAG_CODE,
+    ];
     for code in informational_codes {
         let notice = helpers::test_notice(code, "");
         assert!(notice.is_informational(), "Code {} should be informational", code);
         assert!(!notice.is_error(), "Code {} should not be an error", code);
     }
 
-    // Non-informational (actual errors)
-    let error_codes = [100, 200, 201, 316, 321, 354, 502, 10000];
+    // Non-informational (actual errors), the frames the client could not
+    // handle included.
+    let error_codes = [
+        100,
+        200,
+        201,
+        316,
+        321,
+        354,
+        502,
+        10000,
+        HANDSHAKE_UNKNOWN_FRAME_CODE,
+        HANDSHAKE_DECODE_FAILURE_CODE,
+        UNKNOWN_MESSAGE_TYPE_CODE,
+    ];
     for code in error_codes {
         let notice = helpers::test_notice(code, "");
         assert!(!notice.is_informational(), "Code {} should not be informational", code);
@@ -295,7 +321,8 @@ fn notice_is_request_error() {
 }
 
 /// Every category predicate is `category() == X`: at most one is true, and it
-/// names the category. `Error` has no predicate of its own.
+/// names the category. `Error`, `UnhandledFrame` and `ClientSynthesized` have
+/// no predicate of their own.
 #[test]
 fn notice_category_predicates_are_disjoint() {
     let messages = ["", "Order Message:\nWarning: outside RTH"];
@@ -314,10 +341,15 @@ fn notice_category_predicates_are_disjoint() {
             .filter_map(|(hit, category)| hit.then_some(category))
             .collect();
             let expected: Vec<NoticeCategory> = match notice.category() {
-                NoticeCategory::Error => vec![],
+                NoticeCategory::Error | NoticeCategory::UnhandledFrame | NoticeCategory::ClientSynthesized => vec![],
                 category => vec![category],
             };
             assert_eq!(hits, expected, "code {code} message {message:?}");
+            assert_eq!(
+                notice.is_client_synthesized(),
+                matches!(notice.category(), NoticeCategory::ClientSynthesized | NoticeCategory::UnhandledFrame),
+                "code {code} message {message:?}"
+            );
         }
     }
 }
@@ -325,6 +357,13 @@ fn notice_category_predicates_are_disjoint() {
 #[test]
 fn notice_category_partition() {
     let cases: &[(i32, NoticeCategory)] = &[
+        (TRANSPORT_RECONNECT_CODE, NoticeCategory::ClientSynthesized),
+        (SUBSCRIPTION_LAG_CODE, NoticeCategory::ClientSynthesized),
+        (NOTICE_STREAM_LAG_CODE, NoticeCategory::ClientSynthesized),
+        (-1, NoticeCategory::ClientSynthesized),
+        (HANDSHAKE_UNKNOWN_FRAME_CODE, NoticeCategory::UnhandledFrame),
+        (HANDSHAKE_DECODE_FAILURE_CODE, NoticeCategory::UnhandledFrame),
+        (UNKNOWN_MESSAGE_TYPE_CODE, NoticeCategory::UnhandledFrame),
         (ORDER_CANCELLED_CODE, NoticeCategory::Cancellation), // 202 — precedence over OrderRejection
         (0, NoticeCategory::Warning),                         // code-less frame: error_code absent on the wire
         (*WARNING_CODE_RANGE.start(), NoticeCategory::Warning),
@@ -640,6 +679,7 @@ fn log_level_follows_category() {
     .into_iter()
     .chain(farm_codes(ConnectivityStatus::Broken))
     .chain(DATA_ADVISORY_CODES.iter().copied())
+    .chain([TRANSPORT_RECONNECT_CODE, SUBSCRIPTION_LAG_CODE, NOTICE_STREAM_LAG_CODE])
     {
         assert_eq!(Notice::synthesized(code, String::new()).log_level(), log::Level::Warn, "code {code}");
     }
@@ -656,7 +696,7 @@ fn log_level_follows_category() {
         );
     }
     // Connectivity lost, socket reset, request errors (316, 354), order
-    // rejections (200, 201) and errors: error.
+    // rejections (200, 201), errors and unhandled frames: error.
     for code in [
         CONNECTIVITY_LOST_CODE,
         SOCKET_PORT_RESET_CODE,
@@ -666,6 +706,9 @@ fn log_level_follows_category() {
         354,
         *WARNING_CODE_RANGE.end() + 1,
         10000,
+        HANDSHAKE_UNKNOWN_FRAME_CODE,
+        HANDSHAKE_DECODE_FAILURE_CODE,
+        UNKNOWN_MESSAGE_TYPE_CODE,
     ] {
         assert_eq!(Notice::synthesized(code, String::new()).log_level(), log::Level::Error, "code {code}");
     }

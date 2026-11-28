@@ -105,7 +105,11 @@ pub(crate) fn is_warning_message(code: i32, message: &str) -> bool {
 /// [`Notice::category`] and [`is_informational_code`] both derive from it, so
 /// routing and the public partition cannot disagree.
 pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
-    if code == ORDER_CANCELLED_CODE {
+    if UNHANDLED_FRAME_CODES.contains(&code) {
+        NoticeCategory::UnhandledFrame
+    } else if code < 0 {
+        NoticeCategory::ClientSynthesized
+    } else if code == ORDER_CANCELLED_CODE {
         NoticeCategory::Cancellation
     } else if DATA_ADVISORY_CODES.contains(&code) {
         NoticeCategory::DataAdvisory
@@ -123,7 +127,9 @@ pub(crate) fn classify(code: i32, message: &str) -> NoticeCategory {
 }
 
 /// Check if an error code is informational: every [`NoticeCategory`] except
-/// `RequestError`, `OrderRejection` and `Error`.
+/// `RequestError`, `OrderRejection`, `Error` and `UnhandledFrame`.
+/// Client-synthesized codes never come off the wire, so for them this decides
+/// only [`Notice::is_error`].
 ///
 /// For these TWS proceeds with the request, the frame confirms an outcome the
 /// caller asked for, or the frame reports a connection-wide state change
@@ -141,8 +147,12 @@ pub(crate) fn is_informational_code(code: i32, message: &str) -> bool {
     // Exhaustive on purpose: a new `NoticeCategory` variant must decide its
     // routing disposition here, not inherit one from a wildcard.
     match classify(code, message) {
-        NoticeCategory::Cancellation | NoticeCategory::DataAdvisory | NoticeCategory::Warning | NoticeCategory::SystemMessage => true,
-        NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => false,
+        NoticeCategory::Cancellation
+        | NoticeCategory::DataAdvisory
+        | NoticeCategory::Warning
+        | NoticeCategory::SystemMessage
+        | NoticeCategory::ClientSynthesized => true,
+        NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error | NoticeCategory::UnhandledFrame => false,
     }
 }
 
@@ -297,6 +307,10 @@ pub const HANDSHAKE_DECODE_FAILURE_CODE: i32 = -4;
 /// recognized kinds with no typed startup variant.
 pub const UNKNOWN_MESSAGE_TYPE_CODE: i32 = -5;
 
+/// The client-synthesized codes that report a frame this client could not
+/// handle and dropped: [`NoticeCategory::UnhandledFrame`].
+const UNHANDLED_FRAME_CODES: [i32; 3] = [HANDSHAKE_UNKNOWN_FRAME_CODE, HANDSHAKE_DECODE_FAILURE_CODE, UNKNOWN_MESSAGE_TYPE_CODE];
+
 /// Build the [`UNKNOWN_MESSAGE_TYPE_CODE`] notice for `message`, and emit the
 /// matching `warn!`. The single owner of the wording, shared by steady-state
 /// routing and the handshake.
@@ -428,16 +442,17 @@ pub(crate) fn notice_stream_lag_notice(skipped: u64) -> Notice {
 /// set with `switch_market_data_type` needs no action: the reconnect re-sends
 /// it before this notice.
 ///
-/// `Client::resubscribing` also delivers it in-band, as a
-/// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice) before the first item
-/// of each subscription it reopens.
+/// Two streams also deliver it in-band, as a
+/// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice):
+/// `Client::resubscribing`, before the first item of each subscription it
+/// reopens, and `Client::order_update_stream`, once per reconnect, since that
+/// stream survives the reconnect but misses the updates TWS sent during it.
 ///
 /// Published once the reconnected session is live: the channel reset runs
 /// before the reconnect, so a consumer may resubscribe from inside its handler
-/// and land on the new session without racing either. Like the other
-/// client-synthesized codes this classifies as [`NoticeCategory::Error`]
-/// ("everything else"); consumers match the constant itself rather than the
-/// category.
+/// and land on the new session without racing either. Like the lag codes it
+/// classifies as [`NoticeCategory::ClientSynthesized`], so [`Notice::is_error`]
+/// is false; match the constant to tell it from them.
 pub const TRANSPORT_RECONNECT_CODE: i32 = -8;
 
 /// Build the [`TRANSPORT_RECONNECT_CODE`] notice. Emits no log line: the
@@ -458,30 +473,44 @@ pub(crate) fn resubscribed_notice() -> Notice {
     )
 }
 
+/// Build the in-band [`TRANSPORT_RECONNECT_CODE`] notice the order-update
+/// stream yields once the transport has reconnected.
+pub(crate) fn order_update_gap_notice() -> Notice {
+    Notice::synthesized(
+        TRANSPORT_RECONNECT_CODE,
+        "transport reconnected; order updates TWS sent during the outage are missing, so rebuild order state from open_orders, completed_orders and executions".to_string(),
+    )
+}
+
 /// Typed classification of a [`Notice`] by TWS error-code range.
 ///
 /// Returned by [`Notice::category`]. Forms a disjoint partition over all
 /// possible notices; when classifications overlap on the wire, the classifier
 /// resolves overlap by **precedence**:
 ///
-/// 1. [`Cancellation`](Self::Cancellation) — exact code 202.
-/// 2. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`]. Ahead of
+/// 1. [`UnhandledFrame`](Self::UnhandledFrame) — [`HANDSHAKE_UNKNOWN_FRAME_CODE`],
+///    [`HANDSHAKE_DECODE_FAILURE_CODE`] and [`UNKNOWN_MESSAGE_TYPE_CODE`].
+/// 2. [`ClientSynthesized`](Self::ClientSynthesized) — any other negative code.
+/// 3. [`Cancellation`](Self::Cancellation) — exact code 202.
+/// 4. [`DataAdvisory`](Self::DataAdvisory) — [`DATA_ADVISORY_CODES`]. Ahead of
 ///    the ranges: 317 is inside [`ORDER_REJECTION_CODE_RANGE`] and 2188 inside
 ///    [`WARNING_CODE_RANGE`].
-/// 3. [`Warning`](Self::Warning) — [`WARNING_CODE_RANGE`], code 399 with a `Warning:`
+/// 5. [`Warning`](Self::Warning) — [`WARNING_CODE_RANGE`], code 399 with a `Warning:`
 ///    line, code 10349 (order TIF set from the order preset), or code 0 (a frame
 ///    whose `error_code` field was absent on the wire).
-/// 4. [`SystemMessage`](Self::SystemMessage) — [`SYSTEM_MESSAGE_CODES`]: 1100, 1101, 1102,
+/// 6. [`SystemMessage`](Self::SystemMessage) — [`SYSTEM_MESSAGE_CODES`]: 1100, 1101, 1102,
 ///    1104, 1300.
-/// 5. [`RequestError`](Self::RequestError) — [`REQUEST_ERROR_CODES`]. Ahead of
+/// 7. [`RequestError`](Self::RequestError) — [`REQUEST_ERROR_CODES`]. Ahead of
 ///    [`ORDER_REJECTION_CODE_RANGE`], which they sit inside.
-/// 6. [`OrderRejection`](Self::OrderRejection) — [`ORDER_REJECTION_CODE_RANGE`],
+/// 8. [`OrderRejection`](Self::OrderRejection) — [`ORDER_REJECTION_CODE_RANGE`],
 ///    excluding the cases above.
-/// 7. [`Error`](Self::Error) — everything else.
+/// 9. [`Error`](Self::Error) — everything else.
 ///
 /// Each `Notice::is_*` category predicate ([`Notice::is_cancellation`],
 /// [`Notice::is_warning`], ...) is `category() == X` for its variant `X`, so the
-/// predicates are disjoint too.
+/// predicates are disjoint too. `Error`, `UnhandledFrame` and `ClientSynthesized`
+/// have no predicate of their own; [`Notice::is_client_synthesized`] covers the
+/// last two.
 ///
 /// Marked `#[non_exhaustive]` so IBKR can introduce new code ranges without a
 /// breaking release.
@@ -496,6 +525,7 @@ pub(crate) fn resubscribed_notice() -> Notice {
 ///     NoticeCategory::RequestError   => eprintln!("failed: {}",   notice),
 ///     NoticeCategory::Warning        => eprintln!("warn: {}",     notice),
 ///     NoticeCategory::Error          => eprintln!("error: {}",    notice),
+///     NoticeCategory::UnhandledFrame => eprintln!("dropped frame: {}", notice),
 ///     _ => {}
 /// }
 /// ```
@@ -522,6 +552,20 @@ pub enum NoticeCategory {
     DataAdvisory,
     /// Any other error code.
     Error,
+    /// Raised by this client, not TWS, about its own state: any negative code
+    /// other than the [`UnhandledFrame`](Self::UnhandledFrame) codes
+    /// ([`TRANSPORT_RECONNECT_CODE`], [`SUBSCRIPTION_LAG_CODE`],
+    /// [`NOTICE_STREAM_LAG_CODE`]). TWS uses codes 0 and up. Informational: a
+    /// stream delivers them as notices and goes on, except that readers which
+    /// assemble a complete result fail with [`SUBSCRIPTION_LAG_CODE`] as
+    /// `Err(Error::Notice)`; see that constant. Match the code to tell them apart.
+    ClientSynthesized,
+    /// Raised by this client, not TWS, for a frame it could not handle and
+    /// dropped: [`HANDSHAKE_UNKNOWN_FRAME_CODE`], [`HANDSHAKE_DECODE_FAILURE_CODE`]
+    /// and [`UNKNOWN_MESSAGE_TYPE_CODE`], the main sign of a desynchronized stream.
+    /// An error: [`Notice::is_error`] is true. These arrive on the notice stream,
+    /// not on a request's subscription.
+    UnhandledFrame,
 }
 
 /// Connectivity sub-state of a data-farm notice within [`WARNING_CODE_RANGE`].
@@ -721,7 +765,8 @@ impl Notice {
     /// Returns `true` if this is an informational notice (not an error).
     ///
     /// Informational notices include cancellation confirmations, warnings,
-    /// system/connectivity messages, and data advisories.
+    /// system/connectivity messages, data advisories, and the client-synthesized
+    /// notices in [`NoticeCategory::ClientSynthesized`].
     pub fn is_informational(&self) -> bool {
         is_informational_code(self.code, &self.message)
     }
@@ -795,9 +840,8 @@ impl Notice {
     /// Covers [`HANDSHAKE_UNKNOWN_FRAME_CODE`], [`HANDSHAKE_DECODE_FAILURE_CODE`],
     /// [`UNKNOWN_MESSAGE_TYPE_CODE`], [`SUBSCRIPTION_LAG_CODE`],
     /// [`NOTICE_STREAM_LAG_CODE`] and [`TRANSPORT_RECONNECT_CODE`], and any
-    /// code added later. These all classify as [`NoticeCategory::Error`], so
-    /// use this predicate or the constants, not [`Notice::category`], to tell
-    /// them apart from TWS errors.
+    /// code added later: [`NoticeCategory::ClientSynthesized`] and
+    /// [`NoticeCategory::UnhandledFrame`].
     ///
     /// # Examples
     ///
@@ -825,8 +869,12 @@ impl Notice {
     ///     NoticeCategory::Cancellation
     ///     | NoticeCategory::Warning
     ///     | NoticeCategory::DataAdvisory
-    ///     | NoticeCategory::SystemMessage => "informational",
-    ///     NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => "error",
+    ///     | NoticeCategory::SystemMessage
+    ///     | NoticeCategory::ClientSynthesized => "informational",
+    ///     NoticeCategory::RequestError
+    ///     | NoticeCategory::OrderRejection
+    ///     | NoticeCategory::Error
+    ///     | NoticeCategory::UnhandledFrame => "error",
     ///     _ => "unknown",
     /// };
     /// # let _ = kind;
@@ -941,7 +989,8 @@ impl Notice {
     /// System connectivity codes are graded by how much they matter: 1102
     /// (restored, data maintained) → info; 1101 (restored, data lost —
     /// resubscribe required) → warn; 1100 (connectivity lost) and 1300 (socket
-    /// reset) → error. Request errors, order rejections and errors log at `error`.
+    /// reset) → error. Request errors, order rejections, errors and unhandled
+    /// frames log at `error`.
     fn log_level(&self) -> log::Level {
         use log::Level;
         match self.category() {
@@ -955,13 +1004,13 @@ impl Notice {
                 Level::Info
             }
             NoticeCategory::Warning if self.code == HMDS_QUERY_MESSAGE_CODE => Level::Info,
-            NoticeCategory::Warning | NoticeCategory::DataAdvisory => Level::Warn,
+            NoticeCategory::Warning | NoticeCategory::DataAdvisory | NoticeCategory::ClientSynthesized => Level::Warn,
             NoticeCategory::SystemMessage => match self.code {
                 CONNECTIVITY_RESTORED_DATA_MAINTAINED_CODE => Level::Info,
                 CONNECTIVITY_RESTORED_DATA_LOST_CODE => Level::Warn,
                 _ => Level::Error,
             },
-            NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error => Level::Error,
+            NoticeCategory::RequestError | NoticeCategory::OrderRejection | NoticeCategory::Error | NoticeCategory::UnhandledFrame => Level::Error,
         }
     }
 

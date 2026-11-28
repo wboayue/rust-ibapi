@@ -1985,6 +1985,34 @@ async fn reconnect_publishes_reconnect_notice_to_notice_stream() {
     assert!(bus.is_connected(), "the notice must follow the session going live");
 }
 
+/// The order-update stream survives a reconnect and yields the gap notice
+/// once the session is live, so its consumer knows to rebuild order state.
+#[tokio::test]
+async fn reconnect_sends_gap_notice_to_order_update_stream() {
+    let (stream, bus) = make_bus();
+    let mut updates = bus.create_order_update_subscription().await.unwrap();
+
+    stream.push_inbound(b"xx".to_vec());
+    for frame in handshake_frames(server_versions::PROTOBUF_REST_MESSAGES_3, "EST", 5000) {
+        stream.push_inbound(frame);
+    }
+
+    bus.clone().process_messages().expect("process_messages");
+
+    let item = tokio::time::timeout(Duration::from_secs(2), updates.next_routed())
+        .await
+        .expect("no gap notice on the order update stream");
+    match item {
+        Some(RoutedItem::Notice(notice)) => {
+            assert_eq!(notice.code, TRANSPORT_RECONNECT_CODE, "{notice:?}");
+            assert_eq!(notice, crate::messages::order_update_gap_notice());
+        }
+        other => panic!("expected the gap notice, got {other:?}"),
+    }
+    assert!(bus.is_connected(), "the notice must follow the session going live");
+    assert!(updates.try_next_routed().is_none(), "one notice per reconnect");
+}
+
 /// A market data type sent through the bus is re-sent by the reconnect, on
 /// the wire before the reconnect notice: a consumer acting on the notice
 /// already sees the new session with the type applied.

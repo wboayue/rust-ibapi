@@ -1778,3 +1778,37 @@ for update in subscription.iter_data() {
 
 A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
 Check `notice.code` to tell them apart.
+
+### 67. Client-synthesized notices get their own categories
+
+A notice with a negative code is raised by this client, not TWS. These notices classified as
+`NoticeCategory::Error`, so `is_error()` was true and `is_informational()` false for all of them.
+They now classify ahead of every other rule, in two categories:
+
+| Category                            | Codes                                                                                               | `is_error()` |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------- | ------------ |
+| `NoticeCategory::ClientSynthesized` | `TRANSPORT_RECONNECT_CODE`, `SUBSCRIPTION_LAG_CODE`, `NOTICE_STREAM_LAG_CODE`, other negative codes | `false`      |
+| `NoticeCategory::UnhandledFrame`    | `HANDSHAKE_UNKNOWN_FRAME_CODE`, `HANDSHAKE_DECODE_FAILURE_CODE`, `UNKNOWN_MESSAGE_TYPE_CODE`        | `true`       |
+
+`UnhandledFrame` notices report a frame the client could not handle and dropped;
+`UNKNOWN_MESSAGE_TYPE_CODE` is the main sign of a desynchronized stream. They stay errors.
+`ClientSynthesized` notices report the client's own state and are informational. A stream
+delivers them as notices and goes on, but readers that assemble a complete result
+(`collect_to_end_within`, `next_batch`, and what is built on them) still fail with
+`SUBSCRIPTION_LAG_CODE` as `Err(Error::Notice)`.
+
+```rust,ignore
+// 5.x: the reconnect and lag notices reached the is_error() branch
+if notice.is_error() { /* TWS errors, plus reconnect, lag and unhandled-frame notices */ }
+
+// 6.0: the reconnect and lag notices need their own branch
+if notice.is_error() { /* TWS errors and unhandled-frame notices */ }
+if notice.category() == NoticeCategory::ClientSynthesized { /* match notice.code: reconnect, lag */ }
+```
+
+The compiler catches none of this. Code that relied on `is_error()` or `NoticeCategory::Error`
+to see the reconnect and lag notices must match their codes or `NoticeCategory::ClientSynthesized`.
+Code that matched `NoticeCategory::Error` to see unhandled frames must match
+`NoticeCategory::UnhandledFrame`. `Notice::is_client_synthesized()` is true for the same codes as
+before, any negative code. A match on `NoticeCategory` with a wildcard arm sees the new variants
+there; the enum is `#[non_exhaustive]`, so no new arm is required.
