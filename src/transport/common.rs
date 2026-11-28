@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use log::info;
 
-use crate::client::ids::WireId;
+use crate::client::ids::{OrderId, RequestId, WireId};
 use crate::errors::Error;
 use crate::messages::{unknown_message_type_notice, IncomingMessages, Notice, ResponseMessage, MESSAGE_ID_LEN};
 use crate::subscriptions::common::RoutedItem;
@@ -60,6 +60,155 @@ pub(crate) fn log_orphan(id: WireId, item: &RoutedItem) {
         RoutedItem::Notice(n) => info!("no recipient for notice (id={id}): {n}"),
         RoutedItem::Error(e) => info!("no recipient for error (id={id}): {e}"),
         RoutedItem::Response(_) => {}
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct OrderWrites {
+    pending: Mutex<Option<PendingOrderWrite>>,
+}
+
+#[derive(Debug)]
+struct PendingOrderWrite {
+    id: OrderId,
+    frames: Vec<OrderFrame>,
+}
+
+#[derive(Debug)]
+pub(crate) enum OrderFrame {
+    Direct(RoutedItem),
+    Execution {
+        item: RoutedItem,
+        execution_id: Option<String>,
+        request_id: Option<RequestId>,
+    },
+    Commission {
+        item: RoutedItem,
+        execution_id: String,
+    },
+}
+
+/// Capacity floor for order-class request routes: one per order
+/// (`place_order`, `cancel_order`, `exercise_options`) and `executions`.
+/// Their traffic is per order or per request and ends, so this floor only
+/// keeps a small `ClientBuilder::channel_capacity` from shrinking them; see #896.
+pub(crate) const ORDER_CAPACITY: usize = 1024;
+
+// Leave slots for the overflow and reset errors.
+const ORDER_WRITE_BUFFER_LIMIT: usize = ORDER_CAPACITY - 2;
+
+impl OrderWrites {
+    pub(crate) fn begin<F>(&self, id: OrderId, connected: impl FnOnce() -> Result<(), Error>, finish: F) -> Result<OrderWrite<'_, F>, Error>
+    where
+        F: FnOnce(bool, OrderId, Vec<OrderFrame>),
+    {
+        let mut pending = lock(&self.pending);
+        connected()?;
+        debug_assert!(pending.is_none());
+        *pending = Some(PendingOrderWrite { id, frames: Vec::new() });
+        Ok(OrderWrite {
+            writes: self,
+            finish: Some(finish),
+        })
+    }
+
+    // Never hold this lock over I/O. The dispatcher must be able to read
+    // the disconnect that breaks a blocked writer.
+    pub(crate) fn deliver(
+        &self,
+        id: OrderId,
+        frame: OrderFrame,
+        has_order_recipient: impl FnOnce() -> bool,
+        deliver: impl FnOnce(OrderFrame, bool) -> Result<(), RoutedItem>,
+    ) -> Result<(), RoutedItem> {
+        let mut writes = lock(&self.pending);
+        let Some(pending) = writes.as_mut().filter(|pending| pending.id == id) else {
+            return deliver(frame, true);
+        };
+
+        // A pending write cannot claim a snapshot row ahead of its commission and end marker
+        if matches!(frame, OrderFrame::Execution { request_id: Some(_), .. }) && !has_order_recipient() {
+            return deliver(frame, false);
+        }
+        pending.push(frame);
+        Ok(())
+    }
+
+    pub(crate) fn deliver_commission(
+        &self,
+        execution_id: String,
+        item: RoutedItem,
+        deliver: impl FnOnce(Option<OrderId>, &String, &RoutedItem) -> (bool, bool),
+    ) -> Result<(), RoutedItem> {
+        let mut writes = lock(&self.pending);
+        let (delivered, skipped) = deliver(writes.as_ref().map(|pending| pending.id), &execution_id, &item);
+        if let Some(pending) = writes.as_mut() {
+            if skipped || pending.accepts_commission(&execution_id) {
+                pending.push(OrderFrame::Commission { item, execution_id });
+                return Ok(());
+            }
+        }
+
+        if delivered {
+            Ok(())
+        } else {
+            Err(item)
+        }
+    }
+
+    pub(crate) fn drain(&self, deliver: impl FnOnce(OrderId, Vec<OrderFrame>)) -> bool {
+        let mut pending = lock(&self.pending);
+        let Some(write) = pending.take() else {
+            return false;
+        };
+        // New deliveries cannot pass frames still being replayed.
+        deliver(write.id, write.frames);
+        true
+    }
+}
+
+impl PendingOrderWrite {
+    fn push(&mut self, frame: OrderFrame) {
+        match self.frames.len() {
+            ORDER_WRITE_BUFFER_LIMIT => self.frames.push(OrderFrame::Direct(
+                Error::BufferLimitExceeded {
+                    limit: ORDER_WRITE_BUFFER_LIMIT,
+                }
+                .into(),
+            )),
+            count if count < ORDER_WRITE_BUFFER_LIMIT => self.frames.push(frame),
+            _ => {}
+        }
+    }
+
+    fn accepts_commission(&self, id: &str) -> bool {
+        self.frames
+            .iter()
+            .any(|frame| matches!(frame, OrderFrame::Execution { execution_id: Some(execution_id), .. } if execution_id == id))
+    }
+}
+
+pub(crate) struct OrderWrite<'a, F: FnOnce(bool, OrderId, Vec<OrderFrame>)> {
+    writes: &'a OrderWrites,
+    finish: Option<F>,
+}
+
+impl<F: FnOnce(bool, OrderId, Vec<OrderFrame>)> OrderWrite<'_, F> {
+    pub(crate) fn commit(mut self) -> bool {
+        self.finish(true)
+    }
+
+    fn finish(&mut self, sent: bool) -> bool {
+        let Some(finish) = self.finish.take() else {
+            return false;
+        };
+        self.writes.drain(|id, frames| finish(sent, id, frames))
+    }
+}
+
+impl<F: FnOnce(bool, OrderId, Vec<OrderFrame>)> Drop for OrderWrite<'_, F> {
+    fn drop(&mut self) {
+        self.finish(false);
     }
 }
 

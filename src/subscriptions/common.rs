@@ -195,6 +195,18 @@ impl RoutedItem {
             RoutedItem::Notice(_) => None,
         }
     }
+
+    /// The item as a subscription receives it once a newer one has been registered under the
+    /// same order id. A TWS error frame on the id can answer that later request, such as a
+    /// refused modify or cancel, while the order goes on working, so it ends only the newest
+    /// subscription; the earlier ones receive it as a notice, also after the newer one is
+    /// dropped.
+    pub(crate) fn for_earlier_subscription(&self) -> RoutedItem {
+        match self {
+            RoutedItem::Error(Error::Notice(notice)) => RoutedItem::Notice(notice.clone()),
+            item => item.clone(),
+        }
+    }
 }
 
 /// The cancel frame for a `T` stream, or `None` when the type has none. An

@@ -8,6 +8,7 @@ use std::fmt;
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,12 +27,15 @@ use crate::transport::raw_capture::RawFrameTap;
 pub(crate) trait AsyncIo {
     async fn read_message(&self) -> Result<Vec<u8>, Error>;
     /// Write `buf` whole. A caller dropped before any byte is written sends
-    /// nothing. A write that stops partway (its caller dropped, or a failure)
-    /// leaves the connection unusable, since TWS would read any later frame
-    /// from the middle of the cut-off one: later writes must fail, and reads
-    /// must fail with a connection-lost error (pending ones included), because
-    /// only a read error makes the dispatcher reconnect. `reconnect` clears it.
+    /// nothing. An unfinished write that handed any bytes to the writer
+    /// breaks the connection, including an unfinished flush. A buffered
+    /// writer may have sent only part of the frame to its peer.
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
+    async fn write_all_tracked(&self, buf: &[u8], started: &AtomicBool) -> Result<(), Error> {
+        self.write_all(buf).await?;
+        started.store(true, Ordering::Relaxed);
+        Ok(())
+    }
     /// Release the physical stream, even while owners still hold it: pending
     /// and later reads and writes fail with [`Error::Shutdown`], and
     /// `reconnect` refuses. Idempotent.
@@ -237,22 +241,25 @@ impl AsyncSocket {
     }
 }
 
-/// How much of a frame `write_all` has handed to the socket. Dropped partway,
-/// with its caller cancelled or after a failed write, it breaks the connection:
-/// the wire now ends mid-frame, and the next frame would be misread from there.
+/// Tracks bytes accepted by the writer before its flush succeeds.
 struct FrameProgress<'a> {
     socket: &'a AsyncSocket,
     len: usize,
     /// The bytes not yet written; `write_all_buf` advances it as it goes,
     /// cancelled or not.
     remaining: &'a [u8],
+    started: &'a AtomicBool,
+    flushed: bool,
 }
 
 impl Drop for FrameProgress<'_> {
     fn drop(&mut self) {
         let written = self.len - self.remaining.len();
-        if written > 0 && !self.remaining.is_empty() {
-            warn!("write stopped after {written} of {} bytes; resetting the connection", self.len);
+        if written > 0 {
+            self.started.store(true, Ordering::Relaxed);
+        }
+        if written > 0 && !self.flushed {
+            warn!("write stopped before flushing {written} of {} bytes; resetting the connection", self.len);
             self.socket.set_state(SocketState::Broken);
         }
     }
@@ -291,6 +298,10 @@ impl AsyncIo for AsyncSocket {
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        self.write_all_tracked(buf, &AtomicBool::new(false)).await
+    }
+
+    async fn write_all_tracked(&self, buf: &[u8], started: &AtomicBool) -> Result<(), Error> {
         let mut writer = self.writer.lock().await;
         let writer = self.open_half(&mut writer)?;
         // Declared after `writer`, so it drops first: a break lands while the
@@ -299,6 +310,8 @@ impl AsyncIo for AsyncSocket {
             socket: self,
             len: buf.len(),
             remaining: buf,
+            started,
+            flushed: false,
         };
         // Biased: a break or close landing after `open_half` still fails
         // before the write sends a byte. Later, `close` wakes a backpressured
@@ -309,6 +322,7 @@ impl AsyncIo for AsyncSocket {
             result = async {
                 writer.write_all_buf(&mut progress.remaining).await?;
                 writer.flush().await?;
+                progress.flushed = true;
                 Ok(())
             } => result,
         }

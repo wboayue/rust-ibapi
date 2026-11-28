@@ -31,6 +31,12 @@ pub(super) struct Route {
     pub(super) sender: BroadcastSender,
     pub(super) lease: LeaseRef,
     bound: Option<RouteBound>,
+    /// Another route was registered under this route's key after it and its
+    /// request was written, so an error frame on the key may answer that later
+    /// request: it reaches this route as
+    /// [`RoutedItem::for_earlier_subscription`], also once the later route is
+    /// gone.
+    superseded: bool,
 }
 
 #[derive(Debug)]
@@ -52,7 +58,12 @@ impl RouteBound {
 
 impl Route {
     pub(super) fn unbounded(sender: BroadcastSender, lease: LeaseRef) -> Self {
-        Self { sender, lease, bound: None }
+        Self {
+            sender,
+            lease,
+            bound: None,
+            superseded: false,
+        }
     }
 
     /// A bounded route's channel has one slot more than `bound.limit`, for the
@@ -69,6 +80,7 @@ impl Route {
             sender,
             lease,
             bound: Some(bound),
+            superseded: false,
         }
     }
 
@@ -108,10 +120,12 @@ impl Route {
     }
 }
 
-/// Routes keyed by request id, order id, or execution id.
+/// Routes keyed by request id, order id, or execution id. A key can hold
+/// several routes: every subscription opened on one order id (`place_order`,
+/// a modify, `cancel_order`) receives that order's frames.
 #[derive(Debug)]
 pub(super) struct SenderHash<K> {
-    routes: RwLock<HashMap<K, Route>>,
+    routes: RwLock<HashMap<K, Vec<Route>>>,
 }
 
 impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
@@ -121,33 +135,74 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         }
     }
 
-    fn read(&self) -> RwLockReadGuard<'_, HashMap<K, Route>> {
+    fn read(&self) -> RwLockReadGuard<'_, HashMap<K, Vec<Route>>> {
         read_lock(&self.routes)
     }
 
-    fn write(&self) -> RwLockWriteGuard<'_, HashMap<K, Route>> {
+    fn write(&self) -> RwLockWriteGuard<'_, HashMap<K, Vec<Route>>> {
         write_lock(&self.routes)
     }
 
-    /// Registers `route` under `id`, replacing any earlier registration.
+    /// Registers `route` under `id` beside the routes already there. A route
+    /// with the same lease is replaced, so one subscription never holds two
+    /// routes under a key and never receives a frame twice.
     pub(super) fn insert(&self, id: K, route: Route) {
-        self.write().insert(id, route);
+        let mut routes = self.write();
+        let registered = routes.entry(id).or_default();
+        registered.retain(|other| !other.lease.is(&route.lease));
+        registered.push(route);
     }
 
-    /// Run `f` on `id`'s route while holding the read lock, so no removal can
-    /// land between the lookup and `f`.
+    /// Mark the routes registered under `id` before the one holding `lease`
+    /// as superseded, once that route's request is written. Until then they
+    /// already receive [`RoutedItem::for_earlier_subscription`] as earlier
+    /// routes; the mark keeps it so after the newer route is gone. A request
+    /// whose write fails marks nothing.
+    pub(super) fn supersede_earlier(&self, id: &K, lease: &LeaseRef) {
+        let mut routes = self.write();
+        let Some(registered) = routes.get_mut(id) else {
+            return;
+        };
+        let Some(position) = registered.iter().position(|route| route.lease.is(lease)) else {
+            return;
+        };
+        for route in &mut registered[..position] {
+            route.superseded = true;
+        }
+    }
+
+    /// Run `f` on the newest of `id`'s routes while holding the read lock, so
+    /// no removal can land between the lookup and `f`.
     #[cfg(test)]
     pub(super) fn with_route<R>(&self, id: &K, f: impl FnOnce(&Route) -> R) -> Option<R> {
-        self.read().get(id).map(f)
+        self.read().get(id).and_then(|routes| routes.last()).map(f)
     }
 
-    /// Deliver `item` to `id`'s route; hands it back when nothing is
+    pub(super) fn leases(&self, id: &K) -> Vec<LeaseRef> {
+        self.read().get(id).into_iter().flatten().map(|route| route.lease.clone()).collect()
+    }
+
+    pub(super) fn deliver_selected(&self, id: &K, item: &RoutedItem, selected: impl Fn(&LeaseRef) -> bool) -> (bool, bool) {
+        let (mut delivered, mut skipped) = (false, false);
+        let routes = self.read();
+        for route in routes.get(id).into_iter().flatten().filter(|route| route.lease.is_live()) {
+            if selected(&route.lease) {
+                route.deliver(id, item.clone());
+                delivered = true;
+            } else {
+                skipped = true;
+            }
+        }
+        (delivered, skipped)
+    }
+
+    /// Deliver `item` to each of `id`'s routes; hands it back when nothing is
     /// registered under `id`.
     pub(super) fn deliver(&self, id: &K, item: RoutedItem) -> Result<(), RoutedItem> {
         self.deliver_then(id, item, |_| {})
     }
 
-    /// Deliver `item` to `id`'s route, then alias that route under `alias`
+    /// Deliver `item` to each of `id`'s routes, then alias each under `alias`
     /// in `aliases` while still holding `id`'s read lock, so a concurrent
     /// clear can't land between the delivery and the alias. Lock order:
     /// `self` (read), then `aliases` (write); nothing takes them the other
@@ -166,15 +221,22 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         })
     }
 
-    /// Deliver `item` to `id`'s route and run `then` on it, both under the
-    /// read lock.
-    fn deliver_then(&self, id: &K, item: RoutedItem, then: impl FnOnce(&Route)) -> Result<(), RoutedItem> {
+    /// Deliver `item` to each of `id`'s routes and run `then` on each, all
+    /// under the read lock. Superseded routes, every one but the newest and
+    /// the newest too once a later route was removed, receive
+    /// [`RoutedItem::for_earlier_subscription`].
+    fn deliver_then(&self, id: &K, item: RoutedItem, then: impl Fn(&Route)) -> Result<(), RoutedItem> {
         let routes = self.read();
-        let Some(route) = routes.get(id) else {
+        let Some((newest, earlier)) = routes.get(id).and_then(|registered| registered.split_last()) else {
             return Err(item);
         };
-        route.deliver(id, item);
-        then(route);
+        for route in earlier {
+            route.deliver(id, item.for_earlier_subscription());
+            then(route);
+        }
+        let item = if newest.superseded { item.for_earlier_subscription() } else { item };
+        newest.deliver(id, item);
+        then(newest);
         Ok(())
     }
 
@@ -184,25 +246,29 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
         self.read().contains_key(id)
     }
 
-    /// Remove `id`'s registration if it matches `pred`; returns whether it
-    /// was removed.
-    fn remove_if(&self, id: K, pred: impl FnOnce(&Route) -> bool) -> bool {
-        match self.write().entry(id) {
-            Entry::Occupied(route) if pred(route.get()) => {
-                route.remove();
-                true
-            }
-            _ => false,
+    /// Remove `id`'s routes that match `pred`, and `id` once none is left;
+    /// returns whether any was removed.
+    fn remove_if(&self, id: K, pred: impl Fn(&Route) -> bool) -> bool {
+        let mut routes = self.write();
+        let Entry::Occupied(mut registered) = routes.entry(id) else {
+            return false;
+        };
+        let before = registered.get().len();
+        registered.get_mut().retain(|route| !pred(route));
+        let removed = registered.get().len() < before;
+        if registered.get().is_empty() {
+            registered.remove();
         }
+        removed
     }
 
-    /// Remove `id`'s registration only if it holds `lease`, so a newer
-    /// registration under the same id survives.
+    /// Remove `id`'s route that holds `lease`, so another registration under
+    /// the same id survives.
     pub(super) fn remove_if_same(&self, id: K, lease: &LeaseRef) {
         self.remove_if(id, |route| route.lease.is(lease));
     }
 
-    /// Remove `id`'s registration only if it holds `lease` and that lease is
+    /// Remove `id`'s route that holds `lease`, only if that lease is
     /// dead — every subscription and clone holding it is gone. A stale drop
     /// signal that finds a replacement under the same key, or a clone's drop
     /// while others live, is a no-op; the last holder's signal performs the
@@ -222,9 +288,14 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
             return;
         }
         let mut routes = self.write();
-        let before = routes.len();
-        routes.retain(|_, route| route.lease.is_live());
-        debug!("pruned {} dead routes", before - routes.len());
+        let mut pruned = 0;
+        routes.retain(|_, registered| {
+            let before = registered.len();
+            registered.retain(|route| route.lease.is_live());
+            pruned += before - registered.len();
+            !registered.is_empty()
+        });
+        debug!("pruned {pruned} dead routes");
     }
 
     /// Send `item()` to every route, then clear them all, under one write lock
@@ -232,7 +303,7 @@ impl<K: Hash + Eq + Display + Debug> SenderHash<K> {
     /// bounded route is skipped: its stream already ended.
     pub(super) fn fail_all(&self, item: impl Fn() -> RoutedItem) {
         let mut routes = self.write();
-        for route in routes.values().filter(|route| !route.closed()) {
+        for route in routes.values().flatten().filter(|route| !route.closed()) {
             let _ = route.sender.send(item());
         }
         routes.clear();

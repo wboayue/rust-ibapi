@@ -271,6 +271,48 @@ impl Client {
     /// Submits an [`crate::orders::Order`] using [Client] for the given [Contract].
     /// Upon successful submission, the client will start receiving events related to the order's activity via the subscription, including order status updates and execution reports.
     ///
+    /// The subscription keeps receiving the order's events after
+    /// [`cancel_order`](Self::cancel_order) or a modify (another `place_order`
+    /// with the same ID): each opens its own subscription beside this one, and
+    /// every subscription on the order ID receives each event once. After a
+    /// cancel, this subscription yields the `Cancelled` status and the 202
+    /// notice too, as well as fills and commission reports that arrive after
+    /// the cancel was sent.
+    ///
+    /// To modify a working order, call `place_order` again with its order ID, its contract and
+    /// the full order with the changed fields: clone the order you placed, or take
+    /// [`order`](crate::orders::OrderData::order) and [`contract`](crate::orders::OrderData::contract)
+    /// from [`open_orders`](Self::open_orders). TWS keeps the order's perm ID and answers an
+    /// accepted modify with the order's open order and status. Only the client that placed the
+    /// order can modify it: TWS reads the same ID from another client as a new order. TWS
+    /// (live: 2026-11-24, server 223; `docs/wire-facts/orders.md#modifying-an-order`):
+    ///
+    /// - accepts a new limit price, quantity or time in force;
+    /// - refuses another action or contract with 105, and another order type with 329;
+    /// - refuses a zero quantity with 321, so send every field, not only the changed ones;
+    /// - reads the quantity as the order's total, filled shares included: on a partly filled
+    ///   order it refuses the filled quantity with 434, and a smaller one with 355 sent under
+    ///   order ID 0, which reaches no subscription on the order, only
+    ///   [`order_update_stream`](Self::order_update_stream);
+    /// - refuses the ID of a filled, cancelled or rejected order with 104, and of an order it
+    ///   has not acknowledged yet with 103. A modify that a fill overtakes draws 201 ("Order is
+    ///   already filled") after the `Filled` status; until then the order echoes the new terms
+    ///   with status `PendingSubmit` while it fills on the old ones;
+    /// - sends nothing for a modify of a held order (`transmit` false); the modify that sets
+    ///   `transmit` releases it with the new terms.
+    ///
+    /// A refused modify leaves the order working. TWS sends its error on the order ID, which
+    /// does not say which request it answers. An error ends the subscription for the most
+    /// recently written request. An error that arrives during a socket write follows the
+    /// newer request if the write succeeds, or the earlier request if the write fails
+    /// before sending the frame. If the write's outcome is uncertain and the connection
+    /// resets, queued order errors are delivered as notices before the connection error.
+    /// Earlier subscriptions receive order errors as notices and keep receiving events
+    /// after the newer subscription is dropped. A modify sent with [`submit_order`](Self::submit_order) opens no subscription:
+    /// if this is the order's only subscription, a refusal of that modify ends it with the
+    /// error while the order goes on working. Send modifies with `place_order` to keep this
+    /// subscription open.
+    ///
     /// # Orders placed during an outage
     ///
     /// When TWS loses its connection to IB (notice 1100) the API socket stays up, and an order
@@ -346,6 +388,15 @@ impl Client {
     /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem);
     /// the subscription stays open until dropped, so break once cancellation
     /// is observed.
+    ///
+    /// The order's [`place_order`](Self::place_order) subscription, if one is
+    /// open, keeps receiving the order's events. Both subscriptions yield the
+    /// order's statuses, `Cancelled` included, and the 202 notice; fills and
+    /// commission reports reach only the `place_order` subscription, since
+    /// [`CancelOrder`] has no variant for them. A refused cancel (10147 for an
+    /// unknown order, 10148 for a finished one) ends only this subscription;
+    /// the `place_order` subscription receives the error as a notice, also when
+    /// this subscription is dropped before TWS answers.
     ///
     /// Sends an immediate cancel with default [`OrderCancel`] fields (no manual cancel
     /// time, operator ID or manual order indicator). To set any of them, use

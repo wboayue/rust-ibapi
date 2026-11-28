@@ -18,7 +18,7 @@ pub(crate) use shutdown::ShutdownSignal;
 
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
@@ -37,7 +37,7 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{is_cancel_frame, transport_reconnect_notice, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
-use super::common::{lock, log_orphan, report_unroutable_frame, Lease, LeaseRef};
+use super::common::{lock, log_orphan, report_unroutable_frame, Lease, LeaseRef, OrderFrame, OrderWrites, ORDER_CAPACITY};
 use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::routing::{
@@ -52,12 +52,6 @@ use super::{BufferBound, RoutedItem, SharedTicket};
 /// more than the capacity, the channel evicts the oldest frames and a data
 /// subscription receives a `SUBSCRIPTION_LAG_CODE` notice naming the count.
 pub(crate) const BROADCAST_CHANNEL_CAPACITY: usize = 1024;
-
-/// Capacity floor for order-class request routes: one per order
-/// (`place_order`, `cancel_order`, `exercise_options`) and `executions`.
-/// Their traffic is per order or per request and ends, so this floor only
-/// keeps a small `ClientBuilder::channel_capacity` from shrinking them; see #896.
-pub(crate) const ORDER_CAPACITY: usize = 1024;
 
 /// Capacity floor for the order-class streams that aggregate every order's
 /// traffic for the session: the order update stream and the shared
@@ -535,6 +529,8 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncSocket> {
     /// starts, or is refused: none reaches the socket the reconnect installs
     /// until the handshake on it is done.
     session: tokio::sync::RwLock<()>,
+    outbound_writer: tokio::sync::Mutex<()>,
+    order_writes: OrderWrites,
 }
 
 impl<S: AsyncStream> Drop for AsyncTcpMessageBus<S> {
@@ -585,6 +581,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             rate_limiter: OnceLock::new(),
             connection_state: Arc::new(ConnectionSignal::default()),
             session: tokio::sync::RwLock::new(()),
+            outbound_writer: tokio::sync::Mutex::new(()),
+            order_writes: OrderWrites::default(),
         };
 
         // Start cleanup task
@@ -858,11 +856,18 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// progress, whatever the state signal says yet, so the write is refused
     /// as `ensure_connected` would refuse it once the signal catches up.
     async fn write_now(&self, message: &[u8]) -> Result<(), Error> {
-        let Ok(_session) = self.session.try_read() else {
+        let _session = self.session_for_write()?;
+        let _writer = self.outbound_writer.lock().await;
+        self.ensure_connected()?;
+        self.connection.write_message(message).await
+    }
+
+    fn session_for_write(&self) -> Result<tokio::sync::RwLockReadGuard<'_, ()>, Error> {
+        let Ok(session) = self.session.try_read() else {
             return Err(self.ended_reason(Error::Reconnecting));
         };
         self.ensure_connected()?;
-        self.connection.write_message(message).await
+        Ok(session)
     }
 
     /// Fail all registered channels with `Error::ConnectionReset`, before a
@@ -873,6 +878,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         // already sees the new generation.
         self.session_generation.fetch_add(1, Ordering::AcqRel);
 
+        self.order_writes.drain(|id, frames| self.drain_order_write(id, frames, true));
         self.requests.fail_all(|| Error::ConnectionReset.into());
         self.orders.fail_all(|| Error::ConnectionReset.into());
         // Aliases of the routes just failed.
@@ -908,6 +914,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         // Fail every subscription, then drop its sender so it ends; the
         // sync bus does the same. Notice streams just end.
+        self.order_writes.drain(|id, frames| self.drain_order_write(id, frames, true));
         self.requests.fail_all(|| Error::Shutdown.into());
         self.orders.fail_all(|| Error::Shutdown.into());
         // Execution aliases hold sender clones; clear them or the channels stay open.
@@ -964,12 +971,77 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     async fn deliver(&self, id: WireId, item: RoutedItem, sent_to_update_stream: bool) {
         let unrouted = match id {
             WireId::Request(request_id) => self.requests.deliver(&request_id, item),
-            WireId::Order(order_id) => self.orders.deliver(&order_id, item),
+            WireId::Order(order_id) => self.deliver_order(order_id, item),
         };
         if let Err(item) = unrouted {
             if !sent_to_update_stream {
                 log_orphan(id, &item);
             }
+        }
+    }
+
+    fn deliver_order(&self, order_id: OrderId, item: RoutedItem) -> Result<(), RoutedItem> {
+        self.dispatch_order_frame(order_id, OrderFrame::Direct(item))
+    }
+
+    fn dispatch_order_frame(&self, order_id: OrderId, frame: OrderFrame) -> Result<(), RoutedItem> {
+        self.order_writes.deliver(
+            order_id,
+            frame,
+            || self.orders.leases(&order_id).iter().any(LeaseRef::is_live),
+            |frame, try_order| self.deliver_order_frame(order_id, frame, try_order),
+        )
+    }
+
+    fn deliver_order_frame(&self, order_id: OrderId, frame: OrderFrame, try_order: bool) -> Result<(), RoutedItem> {
+        match frame {
+            OrderFrame::Direct(item) => self.orders.deliver(&order_id, item),
+            OrderFrame::Execution {
+                item,
+                execution_id,
+                request_id,
+            } => {
+                let delivery = if try_order {
+                    self.orders.deliver_aliased(&order_id, item, execution_id.as_ref(), &self.executions)
+                } else {
+                    Err(item)
+                };
+                if let Some(request_id) = request_id {
+                    delivery.or_else(|item| self.requests.deliver_aliased(&request_id, item, execution_id.as_ref(), &self.executions))
+                } else {
+                    delivery
+                }
+            }
+            OrderFrame::Commission { item, execution_id } => {
+                let leases = self.orders.leases(&order_id);
+                let (delivered, _) = self
+                    .executions
+                    .deliver_selected(&execution_id, &item, |lease| leases.iter().any(|order_lease| order_lease.is(lease)));
+                if delivered {
+                    Ok(())
+                } else {
+                    Err(item)
+                }
+            }
+        }
+    }
+
+    fn deliver_order_commission(&self, execution_id: String, item: RoutedItem) -> Result<(), RoutedItem> {
+        self.order_writes
+            .deliver_commission(execution_id, item, |pending_id, execution_id, item| {
+                let leases = pending_id.map_or_else(Vec::new, |id| self.orders.leases(&id));
+                self.executions
+                    .deliver_selected(execution_id, item, |lease| !leases.iter().any(|order_lease| order_lease.is(lease)))
+            })
+    }
+
+    fn drain_order_write(&self, order_id: OrderId, frames: Vec<OrderFrame>, uncertain: bool) {
+        for frame in frames {
+            let frame = match frame {
+                OrderFrame::Direct(item) if uncertain => OrderFrame::Direct(item.for_earlier_subscription()),
+                frame => frame,
+            };
+            let _ = self.deliver_order_frame(order_id, frame, true);
         }
     }
 
@@ -1013,7 +1085,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             OrderRoutingStrategy::OrderAndShared => {
                 let shared = self.shared_channels.send_message(message.message_type(), &message);
                 let unrouted = match message_order_id {
-                    Some(order_id) => self.orders.deliver(&order_id, message.into()).err(),
+                    Some(order_id) => self.deliver_order(order_id, message.into()).err(),
                     None => Some(message.into()),
                 };
                 if let Some(item) = unrouted {
@@ -1024,7 +1096,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
             OrderRoutingStrategy::ByExecutionId => {
                 let unrouted = match message.execution_id() {
-                    Some(execution_id) => self.executions.deliver(&execution_id, message.into()),
+                    Some(execution_id) => self.deliver_order_commission(execution_id, message.into()),
                     None => Err(message.into()),
                 };
                 if let Err(item) = unrouted {
@@ -1047,7 +1119,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             OrderRoutingStrategy::Ignore => {}
             OrderRoutingStrategy::ByOrderId => {
                 let unrouted = if order_id >= 0 {
-                    self.orders.deliver(&OrderId::from(order_id), message.into())
+                    self.deliver_order(OrderId::from(order_id), message.into())
                 } else {
                     Err(message.into())
                 };
@@ -1072,14 +1144,21 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         item: RoutedItem,
         execution_id: Option<&String>,
     ) -> Result<(), RoutedItem> {
-        match order_id {
-            Some(id) => self.orders.deliver_aliased(&id, item, execution_id, &self.executions),
-            None => Err(item),
+        if let Some(id) = order_id {
+            return self.dispatch_order_frame(
+                id,
+                OrderFrame::Execution {
+                    item,
+                    execution_id: execution_id.cloned(),
+                    request_id,
+                },
+            );
         }
-        .or_else(|item| match request_id {
+
+        match request_id {
             Some(id) => self.requests.deliver_aliased(&id, item, execution_id, &self.executions),
             None => Err(item),
-        })
+        }
     }
 
     /// Register a channel of `class` under `id` in `routes`, optionally with
@@ -1132,6 +1211,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             routes.remove_if_same(id, &lease_ref);
             return Err(e);
         }
+        routes.supersede_earlier(&id, &lease_ref);
 
         Ok(subscription)
     }
@@ -1196,8 +1276,38 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     }
 
     async fn send_order_request(&self, order_id: OrderId, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
-        self.open_route(&self.orders, order_id, RouteKey::Order, message, ChannelClass::Order, None)
-            .await
+        self.ensure_connected()?;
+        self.throttle(&message).await;
+        let _session = self.session_for_write()?;
+        let _writer = self.outbound_writer.lock().await;
+        let session = self.session_generation();
+
+        let class = ChannelClass::Order;
+        let (sender, receiver) = broadcast::channel(class.capacity(self.channel_capacity));
+        let lease = Lease::new();
+        let lease_ref = lease.downgrade();
+        let started = AtomicBool::new(false);
+        let write = self.order_writes.begin(
+            order_id,
+            || self.ensure_connected(),
+            |sent, id, frames| {
+                if sent {
+                    self.orders.insert(id, Route::unbounded(sender, lease_ref.clone()));
+                    self.orders.supersede_earlier(&id, &lease_ref);
+                }
+                let uncertain = !sent && started.load(Ordering::Relaxed);
+                self.drain_order_write(id, frames, uncertain);
+            },
+        )?;
+        self.connection.write_message_tracked(&message, &started).await?;
+        if !write.commit() {
+            return Err(self.ended_reason(Error::ConnectionReset));
+        }
+
+        Ok(AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone())
+            .leased(lease, RouteKey::Order(order_id))
+            .in_session(session)
+            .class(class))
     }
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
