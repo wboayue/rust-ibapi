@@ -27,6 +27,13 @@ pub mod helpers {
         (client, message_bus)
     }
 
+    /// Creates a test client backed by [`MessageBusStub::with_responses_per_request`].
+    pub fn create_test_client_with_responses_per_request(responses: Vec<Vec<crate::messages::ResponseMessage>>) -> (Client, Arc<MessageBusStub>) {
+        let message_bus = Arc::new(MessageBusStub::with_responses_per_request(responses));
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        (client, message_bus)
+    }
+
     #[cfg(feature = "sync")]
     pub fn create_blocking_test_client() -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
         create_blocking_test_client_with_version(server_versions::SIZE_RULES)
@@ -45,6 +52,16 @@ pub mod helpers {
         responses: Vec<crate::messages::ResponseMessage>,
     ) -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(responses));
+        let client = crate::client::blocking::Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        (client, message_bus)
+    }
+
+    /// Sync sibling of [`create_test_client_with_responses_per_request`].
+    #[cfg(feature = "sync")]
+    pub fn create_blocking_test_client_with_responses_per_request(
+        responses: Vec<Vec<crate::messages::ResponseMessage>>,
+    ) -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
+        let message_bus = Arc::new(MessageBusStub::with_responses_per_request(responses));
         let client = crate::client::blocking::Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         (client, message_bus)
     }

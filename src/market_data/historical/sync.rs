@@ -1,6 +1,8 @@
 use std::collections::VecDeque;
+use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use log::error;
 use time::OffsetDateTime;
@@ -18,10 +20,11 @@ use crate::transport::{InternalSubscription, MessageBus};
 use crate::{client::sync::Client, Error};
 
 use super::common::tick::{classify, TickAction};
+use super::common::tick_pages::{PagedTick, TickPages};
 use super::common::{self, encoders};
 use super::{
-    BarRequest, BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalData, HistoricalDataFrame, Schedule,
-    ScheduleRequest, TickDecoder, WhatToShow,
+    BarRequest, BarSize, Duration, HeadTimestampRequest, HistogramEntry, HistogramRequest, HistoricalData, HistoricalDataFrame, PagingStop, Schedule,
+    ScheduleRequest, TickDecoder, TicksBetween, TicksBetweenError, WhatToShow,
 };
 use crate::market_data::TradingHours;
 
@@ -342,6 +345,80 @@ pub(crate) fn historical_ticks<T: TickDecoder<T>>(
     let subscription = builder.send_raw(request)?;
 
     Ok(TickSubscription::new(subscription, request_id, Arc::clone(&client.message_bus)))
+}
+
+// Pages `historical_ticks` backward from `end`, back to `start` or until `limit` ticks; see
+// `TickPages` for the rules. Same builder-to-encoder seam as `historical_ticks`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn historical_ticks_between<T: TickDecoder<T> + PagedTick>(
+    client: &Client,
+    contract: &Contract,
+    start: Option<OffsetDateTime>,
+    end: OffsetDateTime,
+    limit: Option<usize>,
+    number_of_ticks: i32,
+    what_to_show: WhatToShow,
+    trading_hours: TradingHours,
+    ignore_size: bool,
+) -> Result<TicksBetween<T>, TicksBetweenError<T>> {
+    let mut pages = TickPages::new(start, end, limit)?;
+
+    loop {
+        if pages.limit_reached() {
+            return Ok(pages.finish(PagingStop::LimitReached));
+        }
+
+        // Each page has its own deadline, as each request of a split bar range does
+        let deadline = request_helpers::blocking::one_shot_deadline(client);
+        let page = historical_ticks::<T>(
+            client,
+            contract,
+            None,
+            Some(pages.request_end()),
+            number_of_ticks,
+            what_to_show,
+            trading_hours,
+            ignore_size,
+        )
+        .and_then(|subscription| tick_page(&subscription, deadline));
+
+        match page {
+            Ok(page) => {
+                if let ControlFlow::Break(stop) = pages.push(page) {
+                    return Ok(pages.finish(stop));
+                }
+            }
+            Err(error) => return Err(pages.fail(error)),
+        }
+    }
+}
+
+/// The ticks of one page, read until TWS's last batch. `deadline` passing first is
+/// `Error::Timeout`; dropping the subscription then cancels the request at TWS.
+fn tick_page<T: TickDecoder<T>>(subscription: &TickSubscription<T>, deadline: Option<Instant>) -> Result<Vec<T>, Error> {
+    let mut page = Vec::new();
+    loop {
+        let item = match deadline {
+            None => subscription.next(),
+            Some(deadline) => {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(Error::Timeout);
+                }
+                // `next_timeout` returns `None` for a timeout and for an ended stream
+                match subscription.next_timeout(remaining) {
+                    None if !subscription.is_terminated() && Instant::now() >= deadline => return Err(Error::Timeout),
+                    item => item,
+                }
+            }
+        };
+        match item {
+            None => return Ok(page),
+            Some(Ok(SubscriptionItem::Data(tick))) => page.push(tick),
+            Some(Ok(SubscriptionItem::Notice(_))) => {}
+            Some(Err(error)) => return Err(error),
+        }
+    }
 }
 
 pub(crate) fn historical_schedule(

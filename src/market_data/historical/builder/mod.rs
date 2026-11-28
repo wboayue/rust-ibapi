@@ -11,4 +11,4 @@ pub mod schedule;
 pub mod ticks;
 pub use data::HistoricalDataBuilder;
 pub use schedule::HistoricalScheduleBuilder;
-pub use ticks::HistoricalTicksBuilder;
+pub use ticks::{HistoricalTicksBetweenBuilder, HistoricalTicksBuilder, PagingStop, TicksBetween, TicksBetweenError};
