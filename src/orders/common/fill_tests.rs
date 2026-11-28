@@ -1,5 +1,5 @@
 use super::*;
-use crate::orders::OrderStatusKind;
+use crate::orders::{OrderData, OrderStatusKind};
 use crate::Notice;
 
 fn status(kind: OrderStatusKind, filled: f64, remaining: f64) -> OrderStatus {

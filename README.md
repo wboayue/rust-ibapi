@@ -451,7 +451,7 @@ fn main() {
                 }
                 Ok(OrderUpdate::OpenOrder(data)) => {
                     println!("Open Order {}: {} {}",
-                             data.order_id, data.order.action, data.contract.symbol);
+                             data.order.order_id, data.order.action, data.contract.symbol);
                 }
                 Ok(OrderUpdate::ExecutionData(exec)) => {
                     println!("Execution: {} shares @ {}",
@@ -517,7 +517,7 @@ async fn main() {
                 }
                 Ok(OrderUpdate::OpenOrder(data)) => {
                     println!("Open Order {}: {} {}",
-                             data.order_id, data.order.action, data.contract.symbol);
+                             data.order.order_id, data.order.action, data.contract.symbol);
                 }
                 Ok(OrderUpdate::ExecutionData(exec)) => {
                     println!("Execution: {} shares @ {}",

@@ -668,7 +668,7 @@ async fn order_update_stream_survives_unknown_condition() {
         other => panic!("expected OpenOrder, got {other:?}"),
     }
     match stream.next().await {
-        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => assert_eq!(o.order_id, 2),
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => assert_eq!(o.order.order_id, 2),
         other => panic!("stream did not survive the unknown condition, got {other:?}"),
     }
 }
@@ -779,7 +779,7 @@ async fn order_update_stream_survives_unknown_security_id_type() {
         other => panic!("expected OpenOrder with Unknown security_id_type, got {other:?}"),
     }
     match stream.next().await {
-        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => assert_eq!(o.order_id, 2),
+        Some(Ok(SubscriptionItem::Data(OrderUpdate::OpenOrder(o)))) => assert_eq!(o.order.order_id, 2),
         other => panic!("stream did not survive the unknown security_id_type, got {other:?}"),
     }
 }

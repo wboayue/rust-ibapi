@@ -58,8 +58,8 @@ pub enum StartupMessage {
     CommissionAndFeesReport(CommissionAndFeesReport),
     /// Completed (terminal-state) order — TWS replays the closed-order history
     /// at handshake time when a prior session requested
-    /// `reqCompletedOrders`. The contained [`OrderData::order_id`] is the
-    /// legacy sentinel `-1` (no live order id for completed orders).
+    /// `reqCompletedOrders`. The order's id is `order.order_id`, which can be `0`;
+    /// `order.perm_id` identifies the order.
     CompletedOrder(OrderData),
     /// End-of-executions marker. No payload.
     ExecutionDataEnd,

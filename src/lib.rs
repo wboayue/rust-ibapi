@@ -140,7 +140,7 @@ async fn main() {
         .address("127.0.0.1:4002")
         .client_id(100)
         .startup_callback(move |msg| if let StartupMessage::OpenOrder(o) = msg {
-            order_ids_clone.lock().unwrap().push(o.order_id);
+            order_ids_clone.lock().unwrap().push(o.order.order_id);
         })
         .connect()
         .await
@@ -165,7 +165,7 @@ fn main() {
         .address("127.0.0.1:4002")
         .client_id(100)
         .startup_callback(move |msg| if let StartupMessage::OpenOrder(o) = msg {
-            order_ids_clone.lock().unwrap().push(o.order_id);
+            order_ids_clone.lock().unwrap().push(o.order.order_id);
         })
         .connect()
         .expect("connection failed");
