@@ -2,7 +2,6 @@
 
 use super::{RequestEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
-use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
 use crate::proto;
 use crate::scanner::{encode_subscription_params, ScannerSubscription};
@@ -23,15 +22,13 @@ single_req_id_request_builder!(
 pub struct ScannerSubscriptionRequestBuilder {
     pub request_id: i32,
     pub subscription: ScannerSubscription,
-    pub filter: Vec<TagValue>,
 }
 
 impl Default for ScannerSubscriptionRequestBuilder {
     fn default() -> Self {
         Self {
             request_id: TEST_REQ_ID_FIRST,
-            subscription: ScannerSubscription::default(),
-            filter: Vec::new(),
+            subscription: ScannerSubscription::new("STK", "TOP_PERC_GAIN"),
         }
     }
 }
@@ -45,10 +42,6 @@ impl ScannerSubscriptionRequestBuilder {
         self.subscription = v.clone();
         self
     }
-    pub fn filter(mut self, v: &[TagValue]) -> Self {
-        self.filter = v.to_vec();
-        self
-    }
 }
 
 impl RequestEncoder for ScannerSubscriptionRequestBuilder {
@@ -58,7 +51,7 @@ impl RequestEncoder for ScannerSubscriptionRequestBuilder {
     fn to_proto(&self) -> Self::Proto {
         proto::ScannerSubscriptionRequest {
             req_id: Some(self.request_id),
-            scanner_subscription: Some(encode_subscription_params(&self.subscription, &self.filter)),
+            scanner_subscription: Some(encode_subscription_params(&self.subscription)),
         }
     }
 }

@@ -5,7 +5,6 @@ use super::*;
 use crate::client::blocking::{ClientRequestBuilders, Subscription};
 use crate::client::sync::Client;
 use crate::common::request_helpers::{self, expect_proto};
-use crate::contracts::TagValue;
 use crate::messages::OutgoingMessages;
 use crate::Error;
 
@@ -40,25 +39,19 @@ impl Client {
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::scanner::ScannerSubscription;
-    /// use ibapi::contracts::TagValue;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let mut sub = ScannerSubscription::default();
-    /// sub.instrument = Some("STK".to_string());
+    /// let mut sub = ScannerSubscription::new("STK", "TOP_PERC_GAIN");
     /// sub.location_code = Some("STK.US.MAJOR".to_string());
-    /// sub.scan_code = Some("TOP_PERC_GAIN".to_string());
     /// // Further customize the subscription object as needed, for example:
     /// // sub.above_price = Some(1.0);
     /// // sub.below_price = Some(100.0);
     /// // sub.number_of_rows = 20;
+    /// // Filters without a field of their own go in `filter_options`:
+    /// // sub.filter_options.push(TagValue { tag: "marketCapAbove".to_string(), value: "1000000000".to_string() });
     ///
-    /// // Filter options are advanced and not always needed. Pass an empty Vec if not used.
-    /// let mut filter_options: Vec<TagValue> = Vec::new();
-    /// // Example of adding a filter:
-    /// // filter_options.push(TagValue { tag: "marketCapAbove".to_string(), value: "1000000000".to_string() });
-    ///
-    /// match client.scanner_subscription(&sub, &filter_options) {
+    /// match client.scanner_subscription(&sub) {
     ///     Ok(subscription) => {
     ///         // Iterate over received scanner data.
     ///         // Note: Scanner subscriptions can be continuous or return a snapshot.
@@ -84,9 +77,9 @@ impl Client {
     ///     }
     /// };
     /// ```
-    pub fn scanner_subscription(&self, subscription: &ScannerSubscription, filter: &[TagValue]) -> Result<Subscription<Vec<ScannerData>>, Error> {
+    pub fn scanner_subscription(&self, subscription: &ScannerSubscription) -> Result<Subscription<Vec<ScannerData>>, Error> {
         let builder = self.request();
-        let request = encoders::encode_scanner_subscription(builder.request_id(), subscription, filter)?;
+        let request = encoders::encode_scanner_subscription(builder.request_id(), subscription)?;
         builder.send(request)
     }
 }

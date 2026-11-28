@@ -33,3 +33,21 @@ Scanner subscriptions and their data rows. Format: [README](README.md).
   `historical_schedule`, `historical_ticks`). With 165 a warning, such a call would wait for an
   answer, and on async without a limit unless `one_shot_timeout` is set. Every 165 seen so far
   was followed by data or an end marker.
+
+### Scanner required fields and maturity filters
+
+*Live 2026-11-15 weekend (Sunday 08:08 and 12:03 ET), paper, server 226; #1363.*
+
+- No instrument → 162 "Historical Market Data Service error message:No instrument specified".
+  No location → accepted, rows returned. No scan code → 162 "... Scanner type with code null is
+  disabled."
+- Bond scan (instrument BOND, location BOND.US, scan NEAR_MATURITY_DATE, `numberOfRows` 5):
+  no maturity filter → 165 "5 out of 18957 items retrieved"; `maturityDateAbove` `20300101` /
+  `maturityDateBelow` `20351231` → "5 out of 6952 items retrieved", so `YYYYMMDD` is applied.
+- `01/2030`, `4` / `10`, `2030-01-01`, `203001` and `garbage` each → 162 "... Invalid Maturity
+  Date Filter". The scanner parameters XML describes `maturityDateAbove` as "Interval in years
+  or date in the form mm/yyyy (or yyyymmdd)"; only the last form was accepted.
+- `market_cap_above` 1e12 with TOP_PERC_GAIN → 165 "no items retrieved".
+- This is why `ScannerSubscription::new` takes the instrument and the scan code, `location_code`
+  stays optional, and the maturity dates are `time::Date`s sent as `YYYYMMDD`.
+- **Not probed:** other date-valued filters.

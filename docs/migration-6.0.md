@@ -1778,3 +1778,54 @@ for update in subscription.iter_data() {
 
 A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
 Check `notice.code` to tell them apart.
+
+### 60. `ScannerSubscription::new` takes the instrument and scan code; filters move into the struct
+
+TWS rejects a scan that has no instrument or no scan code (error 162,
+[wire facts](wire-facts/scanner.md#scanner-required-fields-and-maturity-filters)), and
+`ScannerSubscription::default()` was such a scan. The two are now required by the constructor,
+and the other fields that did not match what TWS reads are retyped.
+
+| 5.x | 6.0 |
+|---|---|
+| `ScannerSubscription::default()`, `..Default::default()` | `ScannerSubscription::new(instrument, scan_code)`; no `Default` |
+| `instrument: Option<String>`, `scan_code: Option<String>` | `String` |
+| `above_volume: Option<i32>`, `average_option_volume_above: Option<i32>` | `Option<i64>` |
+| `maturity_date_above: Option<String>`, `maturity_date_below: Option<String>` | `Option<time::Date>` |
+| `scanner_subscription(&subscription, &filter)` (sync and async) | `scanner_subscription(&subscription)`, with the tag-values in `subscription.filter_options` |
+
+```rust,ignore
+// 5.x
+let subscription = ScannerSubscription {
+    instrument: Some("BOND".to_string()),
+    location_code: Some("BOND.US".to_string()),
+    scan_code: Some("NEAR_MATURITY_DATE".to_string()),
+    maturity_date_above: Some("20300101".to_string()),
+    ..Default::default()
+};
+let filter = vec![TagValue { tag: "couponRateAbove".to_string(), value: "2".to_string() }];
+let rows = client.scanner_subscription(&subscription, &filter)?;
+
+// 6.0
+let subscription = ScannerSubscription {
+    location_code: Some("BOND.US".to_string()),
+    maturity_date_above: Some(date!(2030 - 01 - 01)), // time::macros::date
+    filter_options: vec![TagValue { tag: "couponRateAbove".to_string(), value: "2".to_string() }],
+    ..ScannerSubscription::new("BOND", "NEAR_MATURITY_DATE")
+};
+let rows = client.scanner_subscription(&subscription)?;
+```
+
+(`client` is a connected `Client`.)
+
+The compiler reports each of these: a `Default` use, an `Option` for the instrument or scan
+code, a maturity date given as text, and the second argument. An integer literal for a volume
+compiles unchanged; an `i32` variable needs `i64::from(..)`. What it does not catch:
+
+- A maturity date is sent as `YYYYMMDD`, the one form TWS applied. In 5.x any text was sent as
+  written, and TWS answered another form with error 162 "Invalid Maturity Date Filter".
+- `ScannerSubscription` derives `Serialize` / `Deserialize`. JSON written by 5.x still
+  deserializes unless `instrument` or `scan_code` is `null` or a maturity date is set: a date is
+  now an array of year and day of year (`[2030, 1]` for 2030-01-01) where it was `"20300101"`.
+  `filter_options` is a new key, empty when missing.
+- `location_code` stays optional: TWS accepts a scan without one.

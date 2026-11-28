@@ -17,10 +17,9 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let scanner_subscription = most_active_stocks(10);
-    let filter = Vec::new();
 
     let subscription = client
-        .scanner_subscription(&scanner_subscription, &filter)
+        .scanner_subscription(&scanner_subscription)
         .expect("request scanner parameters failed");
 
     match subscription.next_data() {
@@ -40,9 +39,7 @@ fn main() {
 fn most_active_stocks(number_of_rows: i32) -> scanner::ScannerSubscription {
     scanner::ScannerSubscription {
         number_of_rows,
-        instrument: Some("STK".to_string()),
         location_code: Some("STK.US.MAJOR".to_string()),
-        scan_code: Some("MOST_ACTIVE".to_string()),
-        ..Default::default()
+        ..scanner::ScannerSubscription::new("STK", "MOST_ACTIVE")
     }
 }

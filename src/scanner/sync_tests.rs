@@ -12,6 +12,7 @@ use crate::testdata::builders::scanner::{
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
+use time::macros::date;
 
 #[test]
 fn scanner165_keeps_queued_batches() {
@@ -19,7 +20,7 @@ fn scanner165_keeps_queued_batches() {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(hmds_query_then_batches(message)));
         let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
         let parameters = hmds_query_parameters();
-        let subscription = client.scanner_subscription(&parameters, &[]).unwrap();
+        let subscription = client.scanner_subscription(&parameters).unwrap();
 
         match subscription.next() {
             Some(Ok(SubscriptionItem::Notice(notice))) => assert_hmds_query_notice(&notice, message),
@@ -50,7 +51,7 @@ fn scanner_errors_remain_terminal() {
     for &(code, message) in TERMINAL_SCANNER_ERRORS {
         let message_bus = Arc::new(MessageBusStub::with_ordered_responses(error_then_empty_batch(code, message)));
         let client = Client::stubbed(message_bus, server_versions::PROTOBUF_REST_MESSAGES_3);
-        let subscription = client.scanner_subscription(&ScannerSubscription::default(), &[]).unwrap();
+        let subscription = client.scanner_subscription(&ScannerSubscription::new("STK", "TOP_PERC_GAIN")).unwrap();
         assert!(
             matches!(subscription.next(), Some(Err(crate::Error::Notice(notice))) if notice.code == code && notice.message == message),
             "code {code} must end the stream"
@@ -94,9 +95,9 @@ fn scanner_subscription() {
 
     let subscription_params = ScannerSubscription {
         number_of_rows: 10,
-        instrument: Some("FUT".to_string()),
+        instrument: "FUT".to_string(),
         location_code: Some("FUT.US".to_string()),
-        scan_code: Some("TOP_PERC_GAIN".to_string()),
+        scan_code: "TOP_PERC_GAIN".to_string(),
         above_price: Some(50.0),
         below_price: Some(100.0),
         above_volume: Some(1000),
@@ -107,28 +108,27 @@ fn scanner_subscription() {
         moody_rating_below: Some("AAA".to_string()),
         sp_rating_above: Some("A".to_string()),
         sp_rating_below: Some("AAA".to_string()),
-        maturity_date_above: Some("20230101".to_string()),
-        maturity_date_below: Some("20231231".to_string()),
+        maturity_date_above: Some(date!(2023 - 01 - 01)),
+        maturity_date_below: Some(date!(2023 - 12 - 31)),
         coupon_rate_above: Some(2.0),
         coupon_rate_below: Some(5.0),
         exclude_convertible: true,
         scanner_setting_pairs: Some("Annual,true".to_string()),
         stock_type_filter: Some("CORP".to_string()),
+        filter_options: vec![
+            TagValue {
+                tag: "scannerType".to_string(),
+                value: "TOP_PERC_GAIN".to_string(),
+            },
+            TagValue {
+                tag: "numberOfRows".to_string(),
+                value: "10".to_string(),
+            },
+        ],
     };
 
-    let filter = vec![
-        TagValue {
-            tag: "scannerType".to_string(),
-            value: "TOP_PERC_GAIN".to_string(),
-        },
-        TagValue {
-            tag: "numberOfRows".to_string(),
-            value: "10".to_string(),
-        },
-    ];
-
     let subscription = client
-        .scanner_subscription(&subscription_params, &filter)
+        .scanner_subscription(&subscription_params)
         .expect("request scanner subscription failed");
 
     let scanner_data: Vec<Vec<ScannerData>> = subscription.iter_data().map(|r| r.expect("error getting scanner results")).collect();
@@ -161,8 +161,7 @@ fn scanner_subscription() {
         0,
         &scanner_subscription_request()
             .request_id(TEST_REQ_ID_FIRST)
-            .subscription(&subscription_params)
-            .filter(&filter),
+            .subscription(&subscription_params),
     );
     assert_request(&message_bus, 1, &cancel_scanner_subscription_request().request_id(TEST_REQ_ID_FIRST));
 }
