@@ -69,7 +69,7 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T>,
     {
-        let bound = BufferBound::for_stream::<T>(buffer_limit)?;
+        let bound = BufferBound::for_stream::<T>(buffer_limit, &context)?;
         SubscriptionBuilder::new(self.client)
             .with_context(context)
             .send_with_request_id_capped(self.request_id, message, bound)
@@ -133,7 +133,7 @@ where
     /// Sends a request with a specific request ID and builds the subscription,
     /// capping unread items when `bound` is set.
     pub fn send_with_request_id_capped(self, request_id: RequestId, message: Vec<u8>, bound: Option<BufferBound>) -> Result<Subscription<T>, Error> {
-        log::debug!("send_message({request_id:?}), buffer limit {:?}", bound.map(|bound| bound.limit));
+        log::debug!("send_message({request_id:?}), buffer limit {:?}", bound.as_ref().map(|bound| bound.limit));
         let subscription = self.client.message_bus.send_request_capped(request_id, &message, bound)?;
         Ok(self.build(subscription))
     }

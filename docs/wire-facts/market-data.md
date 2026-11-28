@@ -301,3 +301,85 @@ server 223.*
   drops size-only updates here too.
 - ES and EUR.USD tick-by-tick sizes, all sent: [Size fields are always sent](#size-fields-are-always-sent).
 - **Not probed:** live stock ticks during RTH, live accounts, TWS rather than the Gateway.
+
+### 10299 `whatToShow` substitution
+
+*Live 2026-11-24 10:20-10:35 UTC, paper TWS, server 223; #1286.*
+
+10299 names the `whatToShow` TWS expects: "Expected what to show is AGGTRADES, please use that
+instead of TRADES" on crypto, "Expected what to show is TRADES ..." on others. What follows it:
+
+| Request | Contract, `whatToShow` | After 10299 |
+| --- | --- | --- |
+| Historical bars (`fetch`, `subscribe`) | BTC, ETH (PAXOS) `TRADES` | the bars and `HistoricalDataEnd`; bars identical to an `AGGTRADES` request |
+| Historical bars | AAPL, ES `AGGTRADES` | the `TRADES` bars and `HistoricalDataEnd` |
+| Historical bars | EUR.USD `AGGTRADES` | 162 "No historical market data" |
+| `keepUpToDate` bars (`subscribe_with_updates`) | BTC, ETH `TRADES` | the bars, `HistoricalDataEnd`, then updates every few seconds; a cancel draws 162 (cancelled) |
+| `keepUpToDate` bars | AAPL, EUR.USD, ES `AGGTRADES` | 321 "Source price not supported with live updates" at once (AAPL, again 2026-11-26: same millisecond, then nothing for 65 s); a cancel draws 366 |
+| Historical ticks | BTC, ETH `TRADES` | nothing for 20 s; a cancel draws no reply |
+
+- Without 10299: crypto `AGGTRADES` bars come with no notice; crypto `AGGTRADES` with
+  `keepUpToDate` draws 321 and nothing else, so `TRADES` is the only way to stream crypto bars.
+- `head_timestamp` with crypto `TRADES` or `AGGTRADES` answers with no 10299 (2019-03-13 for
+  BTC). With `AGGTRADES` on AAPL, EUR.USD and ES it draws 162. `histogram_data` takes no
+  `whatToShow` and answers for BTC and ETH.
+- A cancel sent within ~1 ms of the 10299 on a crypto `TRADES` `keepUpToDate` request (earlier
+  run) drew 366 while the updates kept coming: TWS had not yet set up the substituted query.
+  One sent seconds later drew 162 and stopped them.
+- **Not probed:** other crypto venues (ZEROHASH), RTH equities, bar sizes other than 1 hour
+  and 1 minute.
+
+### Streams across an internet outage
+
+*Live 2026-11-25 12:40-13:08 UTC and 2026-11-26 12:00-12:35 UTC (US pre-market, FX open), paper
+TWS, server 223; EUR.USD IDEALPRO; Wi-Fi off for 15 s, 2 min, 6 min and 20 min, router uplink
+unplugged for 2 min; one client never cancelled or re-requested; #1300.*
+
+- `reqMktData`, tick-by-tick, depth and realtime bars resumed on the same request 0.5 to 1.5 s
+  before the 1102. A re-request at the last farm OK or the 1102 delivered 3.4 to 4.4 s later.
+  2026-11-26: they resumed within [-2.2, +0.9] s of the 1102; tick-by-tick 0.1 to 0.9 s after it.
+- Realtime bars: TWS sent every missed 5-second bar on the original request in one burst (5, 30,
+  81 bars, no slot missing; 2026-11-26: 244 bars from 12:00:50 to 12:21:05 and 27 bars, no slot
+  missing). A re-request delivers only new bars. Across a TWS restart nothing is back-filled; see
+  [TWS restart and reconnect](protocol.md#tws-restart-and-reconnect).
+- No tick-by-tick tick stamped more than 5 s before arrival; rate after restore was normal.
+- Depth: 317 arrived in the same millisecond as 2103 for `cashfarm`, at the loss. Rows resumed on
+  the same request with no second 317. 2026-11-26: the first rows after the restore inserted all
+  10 rows, so the book refills from empty.
+- Keep-up-to-date bars: 10182 "Failed to request live updates (disconnected)." arrived in the
+  same millisecond as 2105 for `cashhmds`, after it, every run, every client (one also got 165);
+  2026-11-26, about 1 ms after it. No frame followed in 270 s, 389 s, 635 s, 1587 s and 390 s.
+  On 2026-11-26, a cancel after the 10182 drew 366 within 3 ms (4 of 4). The stream sends no
+  cancel because the request has ended. A new
+  request after the restore returned a batch covering every outage minute, 2.5 to 3.7 s after
+  the 1102. One sent at the first HMDS OK was answered 0.6 s after the 1102, one sent at the
+  second HMDS OK 0.1 s before it. `Client::resubscribing` reopens the request once no HMDS farm
+  reports broken, and once more if TWS confirms the farms back later and the reopened request
+  has delivered no bar.
+- The second reopen ran live in the 20-minute run: the reopen at the 15-minute limit, with the
+  HMDS farms still broken, got no frame; at the `cashhmds` OK the wrapper cancelled it and
+  reopened, and the batch held all 21 outage minutes:
+
+  ```text
+  12:01:30.656 [10182] on 1500000003; the wrapper yields it and drops the request
+  12:16:30.660 reqHistoricalData 1500000007 (15 min after the 10182; farms still broken)
+  12:21:11.428 2106 cashhmds OK; cancel 1500000007, reqHistoricalData 1500000008
+  12:21:11.960 [366] for the cancel of 1500000007
+  12:21:12.490 batch on 1500000008, 21 of 21 outage minutes, 0.1 s before the 1102
+  ```
+
+- On 2026-11-27 (paper TWS 223, EUR/USD IDEALPRO, 5-minute Wi-Fi cut), 10182 arrived just
+  after `cashhmds` 2105 and 12.2 s before 1100. A new keep-up-to-date request sent 5 s after
+  that 10182, with HMDS still down, stayed outstanding. Its first batch arrived after 2106 and
+  0.24 s after 1102: 121 one-minute bars covering all six affected minute closes, followed by
+  further updates. An explicit cancel of the ended request 1 s after 10182 had no matching 366
+  in that run. The active re-request probe separately saw 366 on other request IDs.
+- 10197 "No market data during competing live session" does not end a market data request: drawn
+  51 s into the 6-minute outage on all clients; on the client that sent no cancel, ticks resumed
+  on the same id at restore (2233 to the end). Tick-by-tick, depth and realtime bars got no 10197.
+  A market data subscription yields it as a notice and keeps reading
+  (`TickTypes::error_continues_request`).
+- **Not probed:** 1101, and whether streams resume on their own ids after it (a reopen after 1101
+  loses the realtime bar back-fill if they do); the path where an HMDS farm goes inactive
+  (2107) instead of reporting OK; stocks,
+  futures, RTH; depth update rows after restore; 10197 during a real competing session.
