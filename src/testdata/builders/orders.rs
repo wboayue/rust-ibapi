@@ -356,6 +356,10 @@ impl ExecutionDataResponse {
         self.shares = v;
         self
     }
+    pub fn time(mut self, v: impl Into<String>) -> Self {
+        self.time = v.into();
+        self
+    }
     pub fn price(mut self, v: f64) -> Self {
         self.price = v;
         self
