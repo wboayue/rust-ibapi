@@ -239,8 +239,8 @@ fn rejection_ends_request_only_for_verified_codes() {
     struct Case {
         decoder: &'static str,
         ends: fn(i32) -> bool,
-        /// Verified live to end the request at TWS; `None` = no opt-in.
-        verified: Option<i32>,
+        /// Verified live to end the request at TWS; empty = no opt-in.
+        verified: &'static [i32],
         /// Another terminal code, which must still cancel.
         other: i32,
     }
@@ -254,23 +254,23 @@ fn rejection_ends_request_only_for_verified_codes() {
     // independently of the names. `other` is the code a leak would come from
     // where one is known (10197 on market data).
     let cases = [
-        case("TickTypes", rejection_ends::<TickTypes>, Some(200), 10197),
-        case("Bar", rejection_ends::<Bar>, Some(200), 10197),
-        case("TickLast", rejection_ends::<TickLast>, Some(200), 10197),
-        case("TickBidAsk", rejection_ends::<TickBidAsk>, Some(200), 10197),
-        case("TickMidpoint", rejection_ends::<TickMidpoint>, Some(200), 10197),
-        case("MarketDepths", rejection_ends::<MarketDepths>, Some(200), 10197),
+        case("TickTypes", rejection_ends::<TickTypes>, &[200, 354, 10168], 10197),
+        case("Bar", rejection_ends::<Bar>, &[200, 354, 420], 10197),
+        case("TickLast", rejection_ends::<TickLast>, &[200, 10189], 10197),
+        case("TickBidAsk", rejection_ends::<TickBidAsk>, &[200, 10189], 10197),
+        case("TickMidpoint", rejection_ends::<TickMidpoint>, &[200, 10189], 10197),
+        case("MarketDepths", rejection_ends::<MarketDepths>, &[200, 354], 10197),
         case(
             "HistoricalDataFrame, keep_up_to_date",
             |code| rejection_ends_with::<HistoricalDataFrame>(code, &DecoderContext::default().with_keep_up_to_date(true)),
-            Some(200),
+            &[200, 321],
             162,
         ),
-        case("PnL", rejection_ends::<PnL>, Some(321), 200),
-        case("PnLSingle", rejection_ends::<PnLSingle>, Some(321), 200),
-        case("Vec<ScannerData>", rejection_ends::<Vec<ScannerData>>, Some(162), 309),
+        case("PnL", rejection_ends::<PnL>, &[321], 200),
+        case("PnLSingle", rejection_ends::<PnLSingle>, &[321], 200),
+        case("Vec<ScannerData>", rejection_ends::<Vec<ScannerData>>, &[162], 309),
         // Silent cancel live (no 366-style reply): nothing to gain, keep the safety net.
-        case("ContractDetails", rejection_ends::<ContractDetails>, None, 200),
+        case("ContractDetails", rejection_ends::<ContractDetails>, &[], 200),
     ];
     for Case {
         decoder,
@@ -279,7 +279,7 @@ fn rejection_ends_request_only_for_verified_codes() {
         other,
     } in cases
     {
-        if let Some(code) = verified {
+        for &code in verified {
             assert!(ends(code), "{decoder}: {code} is verified to end the request");
         }
         assert!(!ends(other), "{decoder}: {other} must still cancel");
@@ -318,6 +318,19 @@ fn drain_outcome_stops_on_a_session_that_is_down() {
             other => panic!("{expected}: expected the error back, got {other:?}"),
         }
     }
+}
+
+/// Only the historical bar decoders read on after 10299: TWS sends their series anyway. Another
+/// terminal code still ends them, and other decoders still end on 10299.
+#[test]
+fn error_continues_request_only_for_10299_on_historical_bars() {
+    use crate::market_data::historical::HistoricalDataFrame;
+    use crate::market_data::realtime::TickTypes;
+
+    let continues = |hook: fn(&Notice, &DecoderContext) -> bool, code| hook(&Notice::synthesized(code, String::new()), &DecoderContext::default());
+    assert!(continues(HistoricalDataFrame::error_continues_request, 10299));
+    assert!(!continues(HistoricalDataFrame::error_continues_request, 162));
+    assert!(!continues(TickTypes::error_continues_request, 10299));
 }
 
 /// `notice_outcome`: only an opted-in notice before the batch end becomes a

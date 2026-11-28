@@ -95,3 +95,20 @@ fn bar_default_is_zero_at_epoch() {
     assert_eq!((open, high, low, close), (0.0, 0.0, 0.0, 0.0));
     assert_eq!((volume, wap, count), (None, None, None));
 }
+
+#[test]
+fn what_to_show_trades_for_security_type() {
+    let cases = [
+        (SecurityType::Crypto, Some(WhatToShow::AggTrades)),
+        (SecurityType::ForexPair, None),
+        (SecurityType::Commodity, None),
+        (SecurityType::CFD, None),
+        (SecurityType::Stock, Some(WhatToShow::Trades)),
+        (SecurityType::Future, Some(WhatToShow::Trades)),
+        (SecurityType::Index, Some(WhatToShow::Trades)),
+        (SecurityType::Other("XYZ".into()), Some(WhatToShow::Trades)),
+    ];
+    for (security_type, expected) in cases {
+        assert_eq!(WhatToShow::trades_for(&security_type), expected, "{security_type:?}");
+    }
+}

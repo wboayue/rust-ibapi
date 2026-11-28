@@ -1099,11 +1099,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let session = self.session_generation();
         self.ensure_connected()?;
 
-        let capacity = bound.map_or(class.capacity(self.channel_capacity), |bound| bound.limit + 1);
+        let capacity = bound.as_ref().map_or(class.capacity(self.channel_capacity), |bound| bound.limit + 1);
         let (sender, receiver) = broadcast::channel(capacity);
         let lease = Lease::new();
         let lease_ref = lease.downgrade();
-        let reads = bound.map(|_| Arc::new(AtomicUsize::new(0)));
+        let reads = bound.as_ref().map(|_| Arc::new(AtomicUsize::new(0)));
         let route = match (bound, &reads) {
             (Some(bound), Some(reads)) => Route::bounded(sender, lease_ref.clone(), bound, reads.clone()),
             _ => Route::unbounded(sender, lease_ref.clone()),
