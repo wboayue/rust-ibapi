@@ -40,6 +40,7 @@ pub mod builder;
 /// Order condition types for conditional orders.
 pub mod conditions;
 mod exercise_options_builder;
+mod fills;
 mod order_type;
 
 /// Convenience re-export for low-level order builder helpers.
@@ -51,6 +52,7 @@ pub use crate::client::ids::OrderId;
 pub use builder::order_builder::{AttachedOrdersBuilder, BracketOrderBuilder, ClientBound, Detached, OrderBuilder};
 pub use builder::types::{AttachedOrderIds, BracketOrderIds};
 pub use exercise_options_builder::ExerciseOptionsBuilder;
+pub use fills::{Fill, FillMatcher, ReportMatch, Unpaired};
 pub use order_type::OrderType;
 
 // Re-export condition types and builders
@@ -64,7 +66,7 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 
-use crate::contracts::Contract;
+use crate::contracts::{Contract, SecurityType};
 
 // Public types - always available regardless of feature flags
 
@@ -1441,40 +1443,36 @@ impl_wire_enum!(OrderOpenClose, fallback Unknown);
 /// adjacent. Both arrive on the same streams
 /// ([`executions`](crate::Client::executions),
 /// [`place_order`](crate::Client::place_order), and
-/// [`order_update_stream`](crate::Client::order_update_stream)); index
-/// commissions by `execution_id` rather than by position in the stream.
+/// [`order_update_stream`](crate::Client::order_update_stream)).
+///
+/// [`FillMatcher`] does the join on a stream, in either arrival order, and
+/// [`FillMatcher::pair_executions`] on a whole `executions` reply. Both yield a [`Fill`]. TWS sends no
+/// report for some executions; see [`FillMatcher::expects_report`].
 ///
 /// # Examples
 ///
 /// ```
-/// use ibapi::orders::{CommissionAndFeesReport, Execution};
-/// use std::collections::HashMap;
+/// use ibapi::orders::{CommissionAndFeesReport, Execution, ExecutionData, FillMatcher};
 ///
-/// // The execution arrives first: index it by execution_id.
-/// let mut executions: HashMap<String, Execution> = HashMap::new();
-/// let execution = Execution {
-///     execution_id: "0000e1a7.0001.01".to_string(),
-///     shares: 100.0,
+/// let mut matcher = FillMatcher::new();
+/// let execution = ExecutionData {
+///     execution: Execution { execution_id: "0000e1a7.0001.01".to_string(), shares: 100.0, ..Default::default() },
 ///     ..Default::default()
 /// };
-/// executions.insert(execution.execution_id.clone(), execution);
+/// assert!(matcher.push_execution(execution).is_none());
 ///
-/// // The commission follows: join it to its execution by execution_id.
 /// let report = CommissionAndFeesReport {
 ///     execution_id: "0000e1a7.0001.01".to_string(),
 ///     commission_and_fees: 1.25,
 ///     ..Default::default()
 /// };
-/// if let Some(execution) = executions.remove(&report.execution_id) {
-///     println!("{} shares, commissions and fees {}", execution.shares, report.commission_and_fees);
-/// }
+/// println!("{:?}", matcher.push_report(report));
 /// ```
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default)]
 pub struct CommissionAndFeesReport {
-    /// The [`Execution::execution_id`] this commission belongs to. Use it to
-    /// join the commission to its execution deterministically (see the
-    /// type-level docs).
+    /// The [`Execution::execution_id`] this commission belongs to; [`FillMatcher`]
+    /// joins on it (see the type-level docs).
     pub execution_id: String,
     /// The commissions and fees charged for the execution.
     pub commission_and_fees: f64,
@@ -1621,6 +1619,40 @@ pub struct ExecutionData {
     pub contract: Contract,
     /// The execution details.
     pub execution: Execution,
+}
+
+impl ExecutionData {
+    /// Whether TWS sends a [`CommissionAndFeesReport`] for this execution.
+    ///
+    /// `false` for an option exercise ([`OptionExerciseType::Exercise`]): TWS sent no report
+    /// for either execution of an exercise, within 40 s or from `executions` later the same day
+    /// (live 2026-11-13, paper TWS, server 223). `false` for a combo's own execution (contract
+    /// security type [`SecurityType::Spread`]): TWS reports the
+    /// commissions on the leg executions only (live 2026-11-23, ES calendars on CME, paper
+    /// TWS, server 223). `true` for every other execution, including lapses, assignments and
+    /// the other exercise types, which have not been checked.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, SecurityType};
+    /// use ibapi::orders::{Execution, ExecutionData, OptionExerciseType};
+    ///
+    /// let exercise = ExecutionData {
+    ///     execution: Execution { option_exercise_type: OptionExerciseType::Exercise, ..Default::default() },
+    ///     ..Default::default()
+    /// };
+    /// let combo = ExecutionData {
+    ///     contract: Contract { security_type: Some(SecurityType::Spread), ..Default::default() },
+    ///     ..Default::default()
+    /// };
+    /// assert!(!exercise.expects_commission_report());
+    /// assert!(!combo.expects_commission_report());
+    /// assert!(ExecutionData::default().expects_commission_report());
+    /// ```
+    pub fn expects_commission_report(&self) -> bool {
+        self.execution.option_exercise_type != OptionExerciseType::Exercise && self.contract.security_type != Some(SecurityType::Spread)
+    }
 }
 
 /// Responses from placing an order.

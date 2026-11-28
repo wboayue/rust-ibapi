@@ -48,10 +48,10 @@ impl Client {
     /// `filter_data()` drops them (logging at `warn!` level), so match on
     /// notices explicitly when monitoring fire-and-forget orders for rejection.
     ///
-    /// To pair a [`CommissionAndFeesReport`] with the
-    /// [`ExecutionData`] it belongs to, join on
-    /// `execution_id` — the commission follows its execution and shares that key. See
-    /// the [`CommissionAndFeesReport`] docs for the idiom.
+    /// To pair each [`CommissionAndFeesReport`] with the
+    /// [`ExecutionData`] it belongs to, feed both to a
+    /// [`FillMatcher`]: they share `execution_id`, and the
+    /// matcher joins them in either arrival order.
     ///
     /// # Gaps and recovery
     ///
@@ -655,8 +655,8 @@ impl Client {
     ///
     /// Both [`ExecutionData`] and
     /// [`CommissionAndFeesReport`] are delivered on this
-    /// stream. Join a commission to its execution by `execution_id`
-    /// (see the [`CommissionAndFeesReport`] docs) — the commission follows its execution.
+    /// stream. To join each commission to its execution, read the reply with
+    /// `collect_to_end_within` and pass it to [`FillMatcher::pair_executions`].
     ///
     /// # Examples
     ///

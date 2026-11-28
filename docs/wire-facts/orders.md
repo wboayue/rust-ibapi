@@ -142,6 +142,82 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
     sorts alphabetically); three or more legs; other order types (MKT, REL) on a stock combo;
     whether a single-underlying stock combo needs `NonGuaranteed`.
 
+### Combo (BAG) executions and commissions
+
+*Live 2026-11-23 23:11-23:39 UTC (CME Globex evening session), paper TWS, server 223; ES
+calendars ESZ6/ESH7 (1x1 and 1x2) and an ES put vertical (P6500/P6450 Dec) as BAGs on CME,
+market orders of 1 to 5 combos and a passive 10-lot limit cancelled after its first fill; 14
+fills, each read on `place_order`, `order_update_stream` and `executions`. Guard:
+`FillMatcher::add_combo`, `orders/fills_tests.rs`.*
+
+- **Shape**: each fill of a combo order is one execution for the combo, then one per leg. The
+  combo-level execution has security type `BAG`, the per-exchange placeholder contract id
+  (16472979 on CME, recorded in #1271), `local_symbol` `ES`, no `combo_legs` and an empty
+  `combo_legs_description`. Its `shares` is the combo
+  quantity of the fill and its `price` the net price per combo: -7397 = 7260 - 2 x 7328.5 on
+  the 1x2. Each leg execution carries the leg contract, `shares` = combo shares x ratio (2 on
+  the ratio-2 leg) and the leg's own price.
+- **Order**: combo-level execution first in all 13 fills read live, then the legs, the three
+  within 8 to 14 ms. The leg with the higher con id came first every time (ESH7 before ESZ6,
+  P6450 before P6500), on buys and sells and with the legs sent in either order. An OpenOrder
+  and OrderStatus pair follows each execution; the OrderStatus that reports the fill follows
+  the combo-level execution, before the legs.
+- **Link**: the three executions share `order_id`, `client_id` and `perm_id`. Their
+  `execution_id`s share the first two fields and differ in the third: `0000e1a7.6b0717ad.01.01`
+  (combo), `.02.01` (first leg), `.03.01` (second leg). Each fill of a partly filled order gets
+  a new second field: a 4-lot order filled 2 + 2 as `0000e1a7.6b0719db.*` and
+  `0000e1a7.6b0719de.*`, 11 s apart.
+- **Commissions**: one report per leg execution, 1 to 31 ms after the second leg's execution,
+  in leg order: 2.16 USD per ES future, 4.32 for the ratio-2 leg's 2 contracts, 1.41 per ES
+  option. No report for the combo-level execution, live or in `executions`. `realized_pnl` is
+  set on closing legs only.
+- **Partial fills**: a combo-level execution and its legs per fill, sized to that fill.
+  `cumulative_quantity` and `average_price` run per order and per contract: the combo 2 then
+  4, each leg 2 then 4 with the leg's running average (ESH7 7325.55 then 7325.925).
+- **`executions` replay**: the same executions in the same order (per fill: combo, then legs;
+  fills in time order), then all reports, none for a combo-level execution; the combo-level
+  contract carries no legs there either. The replay was read on a connection with no live
+  `place_order` subscription for the order: while one is open, the client delivers that
+  order's executions to it and they are missing from the reply.
+- **Legs from the reply alone** (*live 2026-11-24 09:16 UTC, paper TWS, server 223,
+  `last_n_days` 7*): 91 executions and 77 reports. Every one of the 14 combo-level executions
+  had exactly two executions with its `perm_id` and its first two id fields, both leg
+  contracts (ES futures or options). Every execution with a combo order's `perm_id` was a
+  combo-level execution or a leg of one: the orders filled in 2 and 3 parts gave 2 and 3 such
+  groups, one per second field. The 14 missing reports were the combo-level executions'.
+- **Legs against the order echo** (*live 2026-11-24 11:20 UTC, paper TWS, server 223,
+  `last_n_days` 7*): for each of the 14 combo fills, the legs `Fill::combo_legs` derives (ratio
+  = leg shares / combo shares, `Buy` when the leg executed on the combo execution's side) equal
+  the legs TWS echoed on that order's `openOrder` frames when it was placed (contract id, ratio
+  and action; 1x1 and 1x2 ES calendars and an ES put vertical, bought and sold, fills of 1, 2
+  and 3 parts). Each leg execution's contract carried exchange `CME`, as the echo's legs do.
+  `completed_orders` no longer listed those orders; it listed one cancelled ES calendar order,
+  legs sorted by contract id with ratio 1 and `CME`.
+- **Executions missing once**: on one fill (1 of a 4-lot market sell, 23:26:39 UTC) the client
+  got the two leg reports on both streams but none of the three executions; the OrderStatus
+  for the fill came 8 s later with `last_fill_price` 0, and `executions` afterwards listed all
+  three. A raw capture of the next order (3 fills) showed the normal shape, so whether TWS
+  skipped the frames or the client dropped them is not settled.
+- **US option combos on `SMART`** (*live 2026-11-24 16:06-16:09 UTC, US market open, paper
+  TWS, server 223; AAPL Dec 2026 350/355 call vertical, BAG on `SMART` with `SMART` legs,
+  market orders of 1, sold then bought back*): the same shape and order as on CME. Combo-level
+  execution first, then both legs within 14 ms, the higher con id first (the 355 call,
+  927346994, before the 350 call, 692808279); execution ids `.01.01`, `.02.01`, `.03.01`; one
+  commission report per leg (1.03 to 1.05 USD) 1 to 9 ms after the second leg, none for the combo.
+  The combo-level contract id was 28812380 for both fills and for another client's AAPL combo
+  that executed on BOX.
+- **Executing venue, not `SMART`**: each fill's three executions carry the venue that executed
+  it as the contract's exchange, `PHLX` for the sale and `EDGX` for the buy-back, so
+  `Fill::combo_legs` gave the legs with `PHLX` and then `EDGX`. `completed_orders` echoed both
+  orders' legs with exchange `SMART`, contract ids sorted, ratio 1, `Buy` 350 and `Sell` 355,
+  which match the derived legs except for the exchange.
+- A `SMART` combo buy sent while a single-leg sell of one of its legs was still working drew 201
+  "Order rejected - reason:Cannot have open orders on both sides of the same US Option
+  contract." (Inactive, then the 201).
+- **Not probed:** SMART-routed futures combos, more than two
+  legs, a leg filled by more than one execution within one combo fill, a leg execution before its combo-level execution, a combo-level report, execution
+  corrections (an id ending `.02`), several combo fills interleaved, Gateway.
+
 ### `use_price_mgmt_algo` / `route_marketable_to_bbo` echo and acceptance
 
 *Live 2026-11-05 off-hours (23:43 ET), paper Gateway, server 226; AAPL BUY 1 LMT 1.00; #1191.*
