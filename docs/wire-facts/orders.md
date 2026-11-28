@@ -72,6 +72,29 @@ Placement, echoes, status, executions and completed orders. Format: [README](REA
   Trailing Amount".
 - C# `Order.cs` documents percent as 1; wrong. The OrderSamples comments (100) are right.
 
+### Trailing order echo
+
+*Live 2026-11-23 23:13-23:14Z, paper TWS, server 223; EUR.USD SELL 20000 GTC, placed with
+`trailing_stop` and `trailing_stop_limit`.*
+
+| Placed | `order_type` | `aux_price` | `trailing_percent` | `trail_stop_price` | `limit_price_offset` | `limit_price` |
+| ------ | ------------ | ----------- | ------------------ | ------------------ | -------------------- | ------------- |
+| `TrailBy::Amount(0.3)`, stop 0.7 | `TRAIL` | 0.3 | absent | 0.7, then 0.79043 | absent | 0 |
+| `TrailBy::Percent(20.0)`, stop 0.7 | `TRAIL` | absent | 20 | 0.7 | absent | 1.09047 |
+| `TrailBy::Amount(0.3)`, stop 0.7, offset 0.007 | `TRAIL LIMIT` | 0.3 | absent | 0.7 | 0.007 | 0 |
+
+- The echo carries the fields the builder sets, so `TrailBy` reads back from `aux_price` or
+  `trailing_percent`. TWS trails the stop: within a second of placement the amount order's stop
+  moved from 0.7 to 0.79043 (market 1.0905 less 0.3), and each later echo carried the new stop.
+- The percent order echoed `limit_price` 1.09047, about the market price, where the amount orders
+  echoed 0.
+- Plain AAPL LMT orders echoed `trail_stop_price` 2.0 on the first echoes and none after a
+  modify; the field is not a sign of a trailing order.
+- A modify of the stop price alone draws 10067 "Stop price must be changed together with the
+  trailing amount for a trailing order", and the order keeps working unchanged.
+- **Not probed:** stocks or futures, trailing percent on `TRAIL LIMIT`, the percent order's stop
+  after it starts to trail, and the echo after a trigger.
+
 ### What-if and additional order params
 
 *Live 2026-10-27 RTH, paper Gateway, server 226, SPY BUY LMT SMART DAY; #1065.*

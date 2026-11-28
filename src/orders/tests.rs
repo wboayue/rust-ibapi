@@ -516,6 +516,94 @@ fn order_type_serde_round_trips_as_plain_string() {
     assert!(serde_json::from_str::<OrderType>("\"\"").is_err());
 }
 
+/// Decode an open-order echo with the trailing fields TWS sent in the live probe
+/// (`docs/wire-facts/orders.md#trailing-order-echo`).
+fn decoded_echo(order_type: &str, aux: Option<f64>, percent: Option<f64>, stop: Option<f64>, offset: Option<f64>, limit: Option<f64>) -> Order {
+    use crate::testdata::builders::orders::open_order;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let mut proto = open_order().to_proto();
+    let order = proto.order.as_mut().unwrap();
+    order.order_type = Some(order_type.to_string());
+    order.aux_price = aux;
+    order.trailing_percent = percent;
+    order.trail_stop_price = stop;
+    order.lmt_price_offset = offset;
+    order.lmt_price = limit;
+    crate::orders::common::decoders::decode_open_order_proto(proto).unwrap().order
+}
+
+#[test]
+fn trailing_reads_back_a_decoded_echo() {
+    let cases = [
+        (
+            "TRAIL by amount",
+            decoded_echo("TRAIL", Some(0.3), None, Some(0.79045), None, Some(0.0)),
+            Some(Trailing {
+                trail: builder::TrailBy::Amount(0.3),
+                stop_price: Some(0.79045),
+                limit_offset: None,
+            }),
+        ),
+        (
+            "TRAIL by percent, limit price echoed",
+            decoded_echo("TRAIL", None, Some(20.0), Some(0.7), None, Some(1.09047)),
+            Some(Trailing {
+                trail: builder::TrailBy::Percent(20.0),
+                stop_price: Some(0.7),
+                limit_offset: None,
+            }),
+        ),
+        (
+            "TRAIL LIMIT by amount",
+            decoded_echo("TRAIL LIMIT", Some(0.3), None, Some(0.7), Some(0.007), Some(0.0)),
+            Some(Trailing {
+                trail: builder::TrailBy::Amount(0.3),
+                stop_price: Some(0.7),
+                limit_offset: Some(0.007),
+            }),
+        ),
+        ("TRAIL with no trail", decoded_echo("TRAIL", None, None, Some(0.7), None, None), None),
+        (
+            "LMT echoing a trail stop price",
+            decoded_echo("LMT", Some(0.0), None, Some(2.0), None, Some(1.0)),
+            None,
+        ),
+    ];
+    for (label, order, expected) in cases {
+        assert_eq!(order.trailing(), expected, "{label}");
+    }
+}
+
+#[test]
+fn trailing_inverts_the_builder() {
+    use builder::TrailBy;
+
+    for trail in [TrailBy::Amount(2.0), TrailBy::Percent(1.5)] {
+        let stop = Order::builder().sell(100).trailing_stop(trail, 148.0).build().unwrap();
+        let stop_limit = Order::builder().sell(100).trailing_stop_limit(trail, 148.0, 0.5).build().unwrap();
+
+        assert_eq!(
+            stop.trailing(),
+            Some(Trailing {
+                trail,
+                stop_price: Some(148.0),
+                limit_offset: None
+            }),
+            "{trail:?}"
+        );
+        assert_eq!(
+            stop_limit.trailing(),
+            Some(Trailing {
+                trail,
+                stop_price: Some(148.0),
+                limit_offset: Some(0.5)
+            }),
+            "{trail:?}"
+        );
+    }
+}
+
 #[test]
 fn order_type_fields_serde_unset_is_null_and_reads_legacy_strings() {
     // An unset order-type field serializes as null. 5.x JSON holds "" for an unset
