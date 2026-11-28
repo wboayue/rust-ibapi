@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::test_utils::helpers::{
-    assert_request, assert_request_proto, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
+    assert_request, assert_request_proto, proto_error_response, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
 };
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, LegAction, SecurityType, Symbol};
@@ -9,11 +9,12 @@ use crate::market_data::{IgnoreSize, MarketDataType, SmartDepth, TradingHours};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::subscriptions::SubscriptionItem;
 use crate::testdata::builders::market_data::{
     depth_market_data_description, market_data_request, market_depth_exchanges_request, market_depth_request, market_depth_response,
     mkt_depth_exchanges_response, realtime_bar_tick, realtime_bars_request, reroute_market_data, reroute_market_depth, tick_bid_ask,
     tick_by_tick_bid_ask_response, tick_by_tick_last_response, tick_by_tick_midpoint_response, tick_by_tick_request, tick_generic, tick_last,
-    tick_midpoint, tick_price, tick_size, tick_string,
+    tick_midpoint, tick_price, tick_size, tick_snapshot_end, tick_string,
 };
 use crate::testdata::builders::ResponseProtoEncoder;
 use std::sync::Arc;
@@ -718,4 +719,77 @@ fn market_depth_reroute_ends_without_cancel() {
     assert!(subscription.is_terminated());
     subscription.cancel();
     assert_eq!(message_bus.request_messages().len(), 1, "TWS ended the request: no cancel");
+}
+
+/// 10089 ends the request at TWS: the subscription yields it as its terminal error, ends, and
+/// its drop writes no cancel (TWS would answer one with 300).
+fn assert_10089_ends_without_cancel<T: StreamDecoder<T> + std::fmt::Debug>(message_bus: &MessageBusStub, subscription: Subscription<T>) {
+    match subscription.next() {
+        Some(Err(Error::Notice(notice))) => assert_eq!(notice.code, 10089),
+        other => panic!("expected the 10089 error, got {other:?}"),
+    }
+    assert!(subscription.is_terminated());
+    drop(subscription);
+    assert_eq!(message_bus.request_messages().len(), 1, "TWS ended the request: no cancel");
+}
+
+fn client_answering_10089() -> (Arc<MessageBusStub>, Client) {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![proto_error_response(
+        TEST_REQ_ID_FIRST,
+        10089,
+        "Requested market data requires additional subscription for API. Delayed market data is available.",
+    )]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    (message_bus, client)
+}
+
+#[test]
+fn market_data_10089_ends_the_subscription() {
+    let (message_bus, client) = client_answering_10089();
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.market_data(&contract).subscribe().expect("subscribe failed");
+    assert_10089_ends_without_cancel(&message_bus, subscription);
+}
+
+#[test]
+fn market_data_snapshot_10089_ends_the_subscription() {
+    let (message_bus, client) = client_answering_10089();
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.market_data(&contract).snapshot().subscribe().expect("subscribe failed");
+    assert_10089_ends_without_cancel(&message_bus, subscription);
+}
+
+#[test]
+fn realtime_bars_10089_ends_the_subscription() {
+    let (message_bus, client) = client_answering_10089();
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.realtime_bars(&contract).subscribe().expect("subscribe failed");
+    assert_10089_ends_without_cancel(&message_bus, subscription);
+}
+
+#[test]
+fn tick_by_tick_10089_ends_the_subscription() {
+    let (message_bus, client) = client_answering_10089();
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.tick_by_tick(&contract, 0).mid_point().expect("subscribe failed");
+    assert_10089_ends_without_cancel(&message_bus, subscription);
+}
+
+/// 10167 reports the delayed data that follows it: the stream stays open and yields the ticks.
+#[test]
+fn market_data_10167_is_a_notice_before_delayed_ticks() {
+    let message_bus = Arc::new(MessageBusStub::with_ordered_responses(vec![
+        proto_error_response(
+            TEST_REQ_ID_FIRST,
+            10167,
+            "Requested market data is not subscribed. Displaying delayed market data.",
+        ),
+        proto_response(IncomingMessages::TickSnapshotEnd, tick_snapshot_end().encode_proto()),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::PROTOBUF_REST_MESSAGES_3);
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client.market_data(&contract).snapshot().subscribe().expect("subscribe failed");
+
+    assert!(matches!(subscription.next(), Some(Ok(SubscriptionItem::Notice(n))) if n.code == 10167));
+    assert!(matches!(subscription.next(), Some(Ok(SubscriptionItem::Data(TickTypes::SnapshotEnd)))));
 }

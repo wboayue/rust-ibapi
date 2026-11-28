@@ -40,5 +40,7 @@ its entry.
 ## Precedents
 
 - #681 — adopted Keep a Changelog 1.1.0.
-- #677 — the model bullet quoted above: effect first, codes for searchability.
+- #677 — the model bullet quoted above: effect first, codes for searchability. Its 10089 half
+  was later reversed by a live probe (10089 ends the request; nothing follows it); the bullet
+  stays the model for form, not for the claim.
 - #716 — the fractional-size fix, whose entries say what users saw (`0.5` decoded as `0`).

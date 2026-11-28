@@ -301,3 +301,39 @@ server 223.*
   drops size-only updates here too.
 - ES and EUR.USD tick-by-tick sizes, all sent: [Size fields are always sent](#size-fields-are-always-sent).
 - **Not probed:** live stock ticks during RTH, live accounts, TWS rather than the Gateway.
+
+### Market data type and permission notices
+
+*Live 2026-11-24 10:00-10:30 UTC (US pre-market, CME Globex and FX open), paper TWS, server 223;
+#677.*
+
+Each request under each market data type set with `switch_market_data_type`, read for 10-15 s;
+"nothing" means no tick or bar for that time. A cancel sent afterwards shows whether TWS still
+held the request (300: it did not).
+
+| Request | Type 1 live / 2 frozen | Type 3 delayed / 4 delayed frozen |
+| --- | --- | --- |
+| AAPL market data, snapshot, realtime bars, tick-by-tick | 10089, nothing; cancel 300 | the same (10089, nothing, 300) |
+| MSFT, IBM market data and snapshot | 10089, nothing; cancel 300 | `MarketDataType(Delayed)`, 10167, delayed ticks; snapshot ends |
+| ES market data and snapshot | 354 | `MarketDataType(Delayed)`, 10167, delayed ticks |
+| VOD (LSE) market data | 10090, then 354 (frozen snapshot: 10168) | 10090, 10167, delayed ticks |
+| ES, VOD realtime bars | 420 | 420 |
+| ES, VOD tick-by-tick | 354 | 354 |
+| EUR.USD, all four | real-time data, `MarketDataType(Realtime)` | the same: real-time data |
+
+- **10089 is never followed by data.** It ended the request in 36 of 36 requests across all
+  four types and four request kinds; every later cancel drew 300. On types 3 and 4 TWS sends
+  10167 instead when it has delayed data for the contract (MSFT, IBM), and still sends 10089
+  when it does not (AAPL on this account, at this time; AAPL had delayed data at 09:22 UTC the
+  same day). So the market data type does not decide what 10089 means.
+- **10167 is followed by delayed data**, after a `MarketDataType(Delayed)` tick.
+- **10090 is followed by whatever else the request gets**: 354 on types 1 and 2, delayed data
+  on types 3 and 4.
+- Generic ticks 233, 236, 258, 456 drew 10358 (fundamentals) on stocks and futures and 321 on
+  forex before any notice above.
+- Market depth (*live 2026-11-26 16:27 UTC, US Thanksgiving holiday, same server, type 1*): AAPL
+  `ISLAND`, 5 rows, drew 10089 ("... AAPL NASDAQ.NMS/DEEP") 0.5 s after the request, then no row
+  for 65 s; the cancel then drew 310 "Can't find the subscribed market depth with tickerId", so
+  TWS had ended it.
+- **Not probed:** 10091; RTH; an account with real-time US equity data; options; depth on other
+  contracts.
