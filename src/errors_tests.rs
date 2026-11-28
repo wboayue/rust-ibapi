@@ -1,6 +1,7 @@
 use super::*;
 use crate::builder::ValidationError;
 use crate::common::test_utils::helpers::tws_error_notice;
+use crate::market_data::historical::HistoricalData;
 use crate::messages::ResponseMessage;
 use crate::proto::decoders::DecodeProto;
 use crate::transport::routing::DecodedError;
@@ -352,6 +353,24 @@ fn orders_partially_sent_is_connection_lost_when_its_send_failure_is() {
     assert!(!partially_sent(Error::Shutdown).is_connection_lost());
 }
 
+fn bars_between(error: Error) -> Error {
+    Error::BarsBetween(Box::new(BarsBetweenError {
+        error,
+        fetched: HistoricalData {
+            start: time::macros::datetime!(2026-11-26 15:00 UTC),
+            end: time::macros::datetime!(2026-11-26 15:30 UTC),
+            bars: Vec::new(),
+        },
+    }))
+}
+
+#[test]
+fn bars_between_is_connection_lost_when_its_failed_request_is() {
+    assert!(bars_between(Error::ConnectionReset).is_connection_lost());
+    assert!(bars_between(Error::Reconnecting).is_connection_lost());
+    assert!(!bars_between(Error::Shutdown).is_connection_lost());
+}
+
 #[test]
 fn error_is_non_exhaustive() {
     fn assert_non_exhaustive<T: StdError>() {}
@@ -451,6 +470,7 @@ fn is_unsent_only_for_errors_raised_before_a_write() {
         (tws_error_notice(201, "Order rejected"), false),
         (protobuf_decode_error(), false),
         (partially_sent(Error::ConnectionReset), false),
+        (bars_between(Error::InvalidArgument("second page".into())), false),
     ];
 
     for (error, unsent) in cases {

@@ -424,7 +424,8 @@ impl Error {
     /// before resubscribing: it returns once the session is back, or with
     /// `ConnectionFailed` / `Shutdown` if it never will be.
     ///
-    /// [`Error::OrdersPartiallySent`] returns `true` when its `source` does.
+    /// [`Error::OrdersPartiallySent`] returns `true` when its `source` does, and
+    /// [`Error::BarsBetween`] when the failed request's error does.
     ///
     /// # Examples
     ///
@@ -457,6 +458,7 @@ impl Error {
             ),
             Error::ConnectionReset | Error::Reconnecting | Error::InvalidFrame(_) => true,
             Error::OrdersPartiallySent { source, .. } => source.is_connection_lost(),
+            Error::BarsBetween(partial) => partial.error.is_connection_lost(),
             _ => false,
         }
     }
