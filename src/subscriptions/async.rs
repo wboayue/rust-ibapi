@@ -13,12 +13,13 @@ use futures::StreamExt;
 use log::{debug, warn};
 
 use super::common::{
-    cancel_frame, collect_step, drain_outcome, filter_notice, is_undeclared, notice_outcome, Bound, CollectStop, DecoderContext, Drained, RoutedItem,
-    SubscriptionItem,
+    cancel_frame, collect_step, continuing_error_as_notice, drain_outcome, filter_notice, is_undeclared, notice_outcome, Bound, CollectStop,
+    DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
 use crate::messages::Notice;
 use crate::transport::common::lock;
+use crate::transport::farm_watch::FarmMark;
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus, SharedTicket};
 use crate::Error;
 
@@ -138,6 +139,7 @@ struct RequestState<T: StreamDecoder<T>> {
     /// `cancel_and_drain`. Skips the cancel only where the decoder's
     /// `rejection_ends_request` says TWS ended the request too.
     rejected: OnceLock<Notice>,
+    farm_disconnect_mark: OnceLock<FarmMark>,
     /// `fn() -> T` rather than `T`: keeps the struct `Send` and `Sync`
     /// regardless of `T`.
     phantom: PhantomData<fn() -> T>,
@@ -185,6 +187,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             batch_ended: AtomicBool::new(false),
             ended_natively: AtomicBool::new(false),
             rejected: OnceLock::new(),
+            farm_disconnect_mark: OnceLock::new(),
             phantom: PhantomData,
         });
         Self {
@@ -621,7 +624,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                 Poll::Pending => return Poll::Pending,
             };
 
-            match routed {
+            match continuing_error_as_notice::<T>(routed, context) {
                 RoutedItem::Response(message) => {
                     if is_undeclared(T::RESPONSE_MESSAGE_IDS, &message) {
                         log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
@@ -661,6 +664,13 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                         stream_ended.store(true, Ordering::Relaxed);
                     }
                     return Poll::Ready(Some(item));
+                }
+                RoutedItem::FarmDisconnected(notice, mark) => {
+                    let _ = request.farm_disconnect_mark.set(mark);
+                    let e = Error::Notice(notice);
+                    stream_ended.store(true, Ordering::Relaxed);
+                    request.note_rejection(&e);
+                    return Poll::Ready(Some(Err(e)));
                 }
                 RoutedItem::Error(e) => {
                     stream_ended.store(true, Ordering::Relaxed);
@@ -714,6 +724,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Nothing follows it, though the channel stays open and `next` waits.
     pub(crate) fn snapshot_ended(&self) -> bool {
         self.request.snapshot_ended.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn farm_disconnect_mark(&self) -> Option<FarmMark> {
+        self.request.farm_disconnect_mark.get().copied()
     }
 }
 

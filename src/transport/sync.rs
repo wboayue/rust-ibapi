@@ -20,6 +20,7 @@ use crate::connection::common::STARTUP_STALL;
 use crate::connection::sync::Connection;
 
 use super::common::{lock, log_orphan, read_lock, report_unroutable_frame, validate_frame_length, write_lock, Lease, LeaseRef};
+use super::farm_watch::sync_impl::FarmWatch;
 use super::order_taps::{NewTap, OrderTaps};
 use super::rate_limiter::RateLimiter;
 use super::raw_capture::RawFrameTap;
@@ -264,6 +265,8 @@ impl SharedChannels {
 pub(crate) struct NoticeBroadcaster {
     /// `None` once closed.
     senders: Mutex<Option<Vec<Sender<Notice>>>>,
+    /// Fed every notice before the fan-out; reset by the bus on a transport drop.
+    pub(crate) farms: FarmWatch,
 }
 
 impl super::common::NoticeSink for NoticeBroadcaster {
@@ -276,6 +279,7 @@ impl NoticeBroadcaster {
     pub(crate) fn new() -> Self {
         Self {
             senders: Mutex::new(Some(Vec::new())),
+            farms: FarmWatch::default(),
         }
     }
 
@@ -290,6 +294,7 @@ impl NoticeBroadcaster {
     }
 
     pub(crate) fn broadcast(&self, notice: Notice) {
+        self.farms.observe(&notice);
         if let Some(senders) = lock(&self.senders).as_mut() {
             senders.retain(|s| {
                 let sent = s.send(notice.clone()).is_ok();
@@ -305,6 +310,7 @@ impl NoticeBroadcaster {
     /// every later subscription on arrival.
     pub(crate) fn close(&self) {
         *lock(&self.senders) = None;
+        self.farms.close();
     }
 }
 
@@ -497,6 +503,7 @@ impl<S: Stream> TcpMessageBus<S> {
         // Aliases of the routes just failed.
         self.executions.clear();
         self.order_taps.reset();
+        self.connection.notice_broadcaster.farms.reset();
     }
 
     // The three cleanup handlers below remove a registration only when it
@@ -747,7 +754,10 @@ impl<S: Stream> TcpMessageBus<S> {
     /// subscription its id names.
     fn deliver(&self, id: WireId, item: RoutedItem, sent_to_update_stream: bool) {
         let unrouted = match id {
-            WireId::Request(request_id) => self.requests.deliver(&request_id, item),
+            WireId::Request(request_id) => self.requests.deliver(
+                &request_id,
+                item.with_farm_disconnect_mark(|| self.connection.notice_broadcaster.farms.mark()),
+            ),
             WireId::Order(order_id) => self.orders.deliver(&order_id, item),
         };
         if let Err(item) = unrouted {
@@ -1103,6 +1113,10 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
     fn session_generation(&self) -> u64 {
         self.session_generation.load(Ordering::Acquire)
+    }
+
+    fn farm_watch(&self) -> &FarmWatch {
+        &self.connection.notice_broadcaster.farms
     }
 }
 

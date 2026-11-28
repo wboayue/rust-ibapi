@@ -75,6 +75,55 @@ pub(crate) const HMDS_ERROR_CODE: i32 = 162;
 /// "Error validating request" (e.g. an invalid account code).
 pub(crate) const REQUEST_VALIDATION_CODE: i32 = 321;
 
+/// "Requested market data is not subscribed": a market data, realtime bars
+/// or market depth request without the exchange's data permission.
+pub(crate) const MARKET_DATA_NOT_SUBSCRIBED_CODE: i32 = 354;
+
+/// "Invalid Real-time Query": a realtime bars request without the exchange's
+/// data permission, or with a `whatToShow` the contract has no data for
+/// (`TRADES` on a forex pair).
+pub(crate) const REALTIME_QUERY_INVALID_CODE: i32 = 420;
+
+/// "Requested market data is not subscribed. Delayed market data is not
+/// enabled." A market data request without the permission.
+pub(crate) const MARKET_DATA_DELAYED_NOT_ENABLED_CODE: i32 = 10168;
+
+/// "Failed to request tick-by-tick data" (e.g. no market data permission).
+pub(crate) const TICK_BY_TICK_FAILED_CODE: i32 = 10189;
+
+/// "Expected what to show is AGGTRADES, please use that instead of TRADES" (or the reverse
+/// for non-crypto). On a historical bar request TWS goes on with the `whatToShow` it names
+/// and sends that series (`docs/wire-facts/market-data.md#10299-whattoshow-substitution`).
+pub(crate) const WHAT_TO_SHOW_SUBSTITUTED_CODE: i32 = 10299;
+
+/// "Failed to request live updates (disconnected)." TWS ends a keep-up-to-date historical bar
+/// request with it when its HMDS farm breaks during an internet outage; it sends nothing more
+/// for the request and answers a cancel with 366
+/// (`docs/wire-facts/market-data.md#streams-across-an-internet-outage`).
+///
+/// `Client::resubscribing` yields it as a
+/// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice) marking the gap
+/// and reopens the request once the farm is back. A consumer that completes bars on a timer
+/// should stop on this notice until the reopened stream's first bars arrive.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::subscriptions::SubscriptionItem;
+/// use ibapi::SUBSCRIPTION_DISCONNECTED_CODE;
+///
+/// fn is_farm_gap<T>(item: &SubscriptionItem<T>) -> bool {
+///     matches!(item, SubscriptionItem::Notice(notice) if notice.code == SUBSCRIPTION_DISCONNECTED_CODE)
+/// }
+/// # let _ = is_farm_gap::<()>;
+/// ```
+pub const SUBSCRIPTION_DISCONNECTED_CODE: i32 = 10182;
+
+/// "No market data during competing live session". On a market data request TWS resumes
+/// ticks on the same request afterwards
+/// (`docs/wire-facts/market-data.md#streams-across-an-internet-outage`).
+pub(crate) const COMPETING_LIVE_SESSION_CODE: i32 = 10197;
+
 /// Range of error codes that are considered warnings: the whole `21xx` band.
 ///
 /// IB's published table stops at 2169, but the gateway keeps adding codes above

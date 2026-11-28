@@ -59,6 +59,7 @@ pub(crate) fn log_orphan(id: WireId, item: &RoutedItem) {
     match item {
         RoutedItem::Notice(n) => info!("no recipient for notice (id={id}): {n}"),
         RoutedItem::Error(e) => info!("no recipient for error (id={id}): {e}"),
+        RoutedItem::FarmDisconnected(notice, _) => info!("no recipient for error (id={id}): {notice}"),
         RoutedItem::Response(_) => {}
     }
 }

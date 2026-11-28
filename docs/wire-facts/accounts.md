@@ -81,3 +81,29 @@ Positions, PnL and account updates by model. End-marker behavior for account str
   still mid-dump when a newer request draws the 2151, which `positions()` also ends; whether a
   request sent after the 1102 completes on a client whose earlier request got 2151;
   `positions_multi` (which has a request id) during an outage.
+
+### Account streams across an internet outage
+
+*Live 2026-11-25 and 2026-11-26, paper TWS, server 223; Wi-Fi off for 15 s, 2 min, 6 min and
+20 min, router uplink unplugged for 2 min; #1300.*
+
+- Account summary, positions and PnL resumed on the same subscription with no action. Positions
+  re-sent the 4 open positions, no `PositionEnd`, 2.0 to 3.3 s before the 1102; account summary
+  pushed 0.1 to 1.9 s after it.
+- PnL pushed twice during the 6-minute outage. At restore one client's stream carried one value
+  far off (unrealized -63,090 between values near -86,000); a `reqPnL` sent at restore first
+  answered all zeros.
+- 2026-11-26: at the restore every PnL stream, old or new, carried one item with all values zero,
+  then normal values within 1 s (2 of 2 runs). Skip a lone zero item after the 1102:
+
+  ```text
+  12:34:01.191 [pnl/raw] data n=1 last=daily=Some(0.0) unrealized=Some(0.0) realized=Some(0.0)
+  12:34:02.192 [pnl/raw] data n=1 last=daily=Some(16966.52181) unrealized=Some(-21835.02651958752) realized=Some(-227.25718285)
+  ```
+
+- `reqAccountUpdates` resumed on the same subscription 2.1 s before the 1102, positions 2.2 s
+  before it, account summary 0.1 s after it.
+- A `reqPositions` sent after the 1100 never ended: one global 2151 "Positions info is not
+  available yet." and nothing more in 1554 s and 348 s, through the restore; see
+  [Requests held during an internet outage](protocol.md#requests-held-during-an-internet-outage).
+- **Not probed:** model variants; a positions change during the outage.
