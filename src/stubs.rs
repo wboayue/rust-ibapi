@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashSet, VecDeque},
     sync::{
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         LazyLock, Mutex, RwLock,
@@ -38,6 +38,9 @@ pub(crate) struct MessageBusStub {
     pub request_messages: RwLock<Vec<Vec<u8>>>,
     /// Pre-built responses, served in order.
     pub ordered_responses: Vec<ResponseMessage>,
+    /// Responses for each request in turn, served before `ordered_responses`. See
+    /// [`MessageBusStub::with_responses_per_request`].
+    request_responses: Mutex<VecDeque<Vec<ResponseMessage>>>,
     /// The `limit` of each bounded `send_request_capped` call, in order. The stub
     /// doesn't enforce it; overflow is tested on the real buses.
     pub buffer_limits: RwLock<Vec<usize>>,
@@ -105,6 +108,7 @@ impl Default for MessageBusStub {
         Self {
             request_messages: RwLock::new(vec![]),
             ordered_responses: vec![],
+            request_responses: Mutex::default(),
             buffer_limits: RwLock::new(vec![]),
             #[cfg(feature = "async")]
             executions_requests: RwLock::new(vec![]),
@@ -149,6 +153,14 @@ impl MessageBusStub {
     pub fn with_ordered_responses(ordered_responses: Vec<ResponseMessage>) -> Self {
         let mut stub = Self::default();
         stub.ordered_responses = ordered_responses;
+        stub
+    }
+
+    /// Answer the first requests with their own responses, one entry per request in order; later
+    /// requests get none. For a request API that pages over several requests.
+    pub fn with_responses_per_request(responses: Vec<Vec<ResponseMessage>>) -> Self {
+        let stub = Self::default();
+        *stub.request_responses.lock().unwrap() = responses.into();
         stub
     }
 
@@ -257,11 +269,16 @@ impl MessageBusStub {
     /// [`Self::with_connection_resets`], in which case the leading requests get
     /// a reset instead — the transport delivers one to every in-flight
     /// subscription when the socket drops, and delivers no responses at all.
+    /// After the resets, a stub built with [`Self::with_responses_per_request`]
+    /// gives the leading requests their own responses.
     fn routed_items_for_request(&self) -> Vec<RoutedItem> {
         let remaining = self.connection_resets.load(Ordering::SeqCst);
         if remaining > 0 {
             self.connection_resets.store(remaining - 1, Ordering::SeqCst);
             return vec![RoutedItem::Error(Error::ConnectionReset)];
+        }
+        if let Some(responses) = self.request_responses.lock().unwrap().pop_front() {
+            return responses.into_iter().map(classify_like_dispatcher).collect();
         }
         self.routed_items()
     }

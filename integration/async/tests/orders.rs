@@ -156,7 +156,7 @@ async fn open_orders_include_order_with_live_subscription() {
             .unwrap_or_else(|e| panic!("{name} did not end: {e}"));
         let found = rows
             .iter()
-            .any(|row| matches!(row, Orders::OrderData(data) if data.order_id == order_id && data.order.client_id == client.client_id()));
+            .any(|row| matches!(row, Orders::OrderData(data) if data.order.order_id == order_id && data.order.client_id == client.client_id()));
         assert!(found, "{name} is missing order {order_id}: {rows:?}");
     }
 
@@ -479,7 +479,7 @@ async fn preset_attached_orders_accepted() {
     let outcome = timeout(Duration::from_secs(15), async {
         while let Some(item) = updates.next().await {
             match item.expect("order update stream error") {
-                SubscriptionItem::Data(OrderUpdate::OpenOrder(o)) if children.contains(&o.order_id) => {
+                SubscriptionItem::Data(OrderUpdate::OpenOrder(o)) if children.contains(&o.order.order_id) => {
                     assert_eq!(o.order.parent_id, ids.parent, "child should point at the parent");
                     return "attached";
                 }

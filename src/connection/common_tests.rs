@@ -867,7 +867,7 @@ fn dispatch_unsolicited_commission_and_fees_report_typed() {
 fn dispatch_unsolicited_completed_order_typed() {
     use crate::testdata::builders::orders::CompletedOrderResponse;
 
-    let builder = CompletedOrderResponse::default();
+    let builder = CompletedOrderResponse::default().order_id(17);
     let message = proto_frame(IncomingMessages::CompletedOrder, &builder);
 
     let captured: Arc<Mutex<Option<crate::orders::OrderData>>> = Arc::new(Mutex::new(None));
@@ -879,8 +879,7 @@ fn dispatch_unsolicited_completed_order_typed() {
 
     dispatch_unsolicited_message(&message, &startup_ctx(&cb));
     let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
-    // Completed orders carry the sentinel order_id = -1 per decode_completed_order_proto.
-    assert_eq!(got.order_id, -1);
+    assert_eq!(got.order.order_id, 17);
 }
 
 #[test]

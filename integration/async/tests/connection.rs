@@ -26,7 +26,7 @@ async fn builder_startup_callback_fires_during_handshake() {
     let client = client_builder(&client_id)
         .startup_callback(move |msg| {
             if let StartupMessage::OpenOrder(ref o) = msg {
-                assert!(o.order_id >= 0);
+                assert!(o.order.order_id >= 0);
             }
             *count_clone.lock().unwrap() += 1;
         })

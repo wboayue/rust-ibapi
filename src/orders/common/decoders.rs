@@ -60,10 +60,13 @@ pub(crate) fn decode_completed_order(message: &ResponseMessage) -> Result<OrderD
 
 pub(crate) fn decode_open_order_proto(p: crate::proto::OpenOrder) -> Result<OrderData, Error> {
     let contract_proto = required(p.contract.as_ref(), "contract", "OpenOrder")?;
-    let mut order = decode_order(required(p.order.as_ref(), "order", "OpenOrder")?)?;
+    let order_proto = required(p.order.as_ref(), "order", "OpenOrder")?;
+    let mut order = decode_order(order_proto)?;
+    // OpenOrder also carries the id at the top level; the order's own id wins, as in the
+    // reference client.
+    order.order_id = order_proto.order_id.or(p.order_id).unwrap_or_default();
     order.order_combo_legs = decode_order_combo_legs(contract_proto);
     Ok(OrderData {
-        order_id: p.order_id.unwrap_or_default(),
         contract: crate::proto::decoders::decode_contract(contract_proto)?,
         order,
         order_state: decode_order_state(required(p.order_state.as_ref(), "order_state", "OpenOrder")?)?,
@@ -102,9 +105,6 @@ pub(crate) fn decode_completed_order_proto(p: crate::proto::CompletedOrder) -> R
     let order_state = decode_order_state(required(p.order_state.as_ref(), "order_state", "CompletedOrder")?)?;
 
     Ok(OrderData {
-        // Completed orders carry no live order_id; preserve the legacy text-decoder
-        // sentinel so v2 → v3 consumers see the same value.
-        order_id: -1,
         contract,
         order,
         order_state,

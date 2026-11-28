@@ -35,7 +35,6 @@ fn decode_open_order_proto_works() {
     };
 
     let result = decode_open_order_proto(proto_msg).unwrap();
-    assert_eq!(result.order_id, 42);
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.contract.symbol.to_string(), "AAPL");
     assert_eq!(result.order.order_id, 42);
@@ -44,6 +43,24 @@ fn decode_open_order_proto_works() {
     assert_eq!(result.order.order_type, Some(OrderType::Limit));
     assert_eq!(result.order.limit_price, Some(150.0));
     assert_eq!(result.order_state.status, OrderStatusKind::Submitted);
+}
+
+/// `OpenOrder` carries the id twice, at the top level and on the order: the order's own
+/// id wins, and the top-level id fills it when the order leaves it out.
+#[test]
+fn decode_open_order_id_prefers_order_then_top_level() {
+    for (label, top_level, on_order, expected) in [
+        ("both", Some(7), Some(13), 13),
+        ("top level only", Some(7), None, 7),
+        ("order only", None, Some(13), 13),
+        ("neither", None, None, 0),
+    ] {
+        let mut proto_msg = crate::testdata::builders::orders::open_order().to_proto();
+        proto_msg.order_id = top_level;
+        proto_msg.order.as_mut().unwrap().order_id = on_order;
+        let result = decode_open_order_proto(proto_msg).unwrap();
+        assert_eq!(result.order.order_id, expected, "{label}");
+    }
 }
 
 /// TWS leaves `refFuturesConId` out of a stock order's frame (live, server 226); absent
@@ -215,8 +232,6 @@ fn decode_completed_order_proto_works() {
     };
 
     let result = decode_completed_order_proto(proto_msg).unwrap();
-    // Completed orders always report `order_id = -1` (legacy text-decoder sentinel).
-    assert_eq!(result.order_id, -1);
     assert_eq!(result.order.order_id, 200);
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.contract.symbol, Symbol::from("AAPL"));
@@ -244,7 +259,7 @@ fn decode_open_order_proto_via_builder() {
         .to_proto();
 
     let result = super::decode_open_order_proto(p).unwrap();
-    assert_eq!(result.order_id, 42);
+    assert_eq!(result.order.order_id, 42);
     assert_eq!(result.contract.contract_id, 265598);
     assert_eq!(result.contract.symbol, Symbol::from("AAPL"));
     assert_eq!(result.order.action, Action::Buy);

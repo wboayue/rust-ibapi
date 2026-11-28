@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 SubscriptionItem::Data(OrderUpdate::OpenOrder(o)) => {
                     println!(
                         "open order {} (parent {}): {:?} {:?}",
-                        o.order_id, o.order.parent_id, o.order.order_type, o.order_state.status
+                        o.order.order_id, o.order.parent_id, o.order.order_type, o.order_state.status
                     );
                 }
                 SubscriptionItem::Data(OrderUpdate::OrderStatus(s)) => println!("status {}: {}", s.order_id, s.status),

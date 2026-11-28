@@ -33,6 +33,7 @@
 
 // Common implementation modules
 pub(crate) mod common;
+pub use common::lookup::{OrderEvidence, OrderEvidenceMatch, OrderKey, OrderRows};
 
 /// Fluent builder APIs for constructing orders.
 pub mod builder;
@@ -1291,14 +1292,59 @@ pub struct SoftDollarTier {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderData {
-    /// The order's unique id
-    pub order_id: i32,
     /// The order's Contract.
     pub contract: Contract,
-    /// The currently active order
+    /// The order. Its `order_id` is per API client: pair it with `order.client_id` to
+    /// identify an order across clients. A completed order can carry `order_id` `0`;
+    /// `order.perm_id` identifies it.
     pub order: Order,
     /// The order's OrderState
     pub order_state: OrderState,
+}
+
+impl OrderData {
+    /// The [`OrderStatus`] of a completed-order record, as `completed_orders` returns it.
+    ///
+    /// A completed order's `order.total_quantity` is the quantity left unfilled, not the
+    /// size ordered, so it is `remaining` as is: `0` once filled, `400` for a 1000-share
+    /// order cancelled after 600 filled. The size ordered is `filled + remaining`. The
+    /// record has no fill prices, so `average_fill_price` and `last_fill_price` are
+    /// `None`. Use it on completed records only: an open order's status arrives as its
+    /// own [`Orders::OrderStatus`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::orders::{Order, OrderData, OrderState, OrderStatusKind};
+    ///
+    /// // 1000 shares ordered, cancelled after 600 filled.
+    /// let data = OrderData {
+    ///     order: Order { total_quantity: 400.0, filled_quantity: 600.0, ..Default::default() },
+    ///     order_state: OrderState { status: OrderStatusKind::Cancelled, ..Default::default() },
+    ///     ..Default::default()
+    /// };
+    ///
+    /// let status = data.completed_order_status();
+    /// assert_eq!(status.status, OrderStatusKind::Cancelled);
+    /// assert_eq!((status.filled, status.remaining), (600.0, 400.0));
+    /// assert_eq!(status.filled + status.remaining, 1000.0);
+    /// ```
+    pub fn completed_order_status(&self) -> OrderStatus {
+        let order = &self.order;
+        OrderStatus {
+            order_id: order.order_id,
+            status: self.order_state.status.clone(),
+            filled: order.filled_quantity,
+            remaining: order.total_quantity,
+            average_fill_price: None,
+            perm_id: order.perm_id,
+            parent_id: order.parent_id,
+            last_fill_price: None,
+            client_id: order.client_id,
+            why_held: String::new(),
+            market_cap_price: None,
+        }
+    }
 }
 
 /// Provides an active order's current state.
@@ -1773,6 +1819,39 @@ pub enum OrderOutcome {
     PendingCreation(crate::Notice),
 }
 
+/// What TWS reports about one order, as `Client::find_order` and
+/// `Client::find_order_by_perm_id` return it.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
+pub enum OrderLookup {
+    /// This client's open orders list the order, with a status that is not
+    /// [terminal](OrderStatusKind::is_terminal). Carries the last open-order
+    /// record and the last status they listed for it; at least one is set.
+    Working {
+        /// The open-order record.
+        order: Option<OrderData>,
+        /// The order's status.
+        status: Option<OrderStatus>,
+    },
+    /// Completed orders list the order. `status` is
+    /// [`order.completed_order_status()`](OrderData::completed_order_status):
+    /// its `status` is [`Filled`](OrderStatusKind::Filled) for a filled order
+    /// and [`Cancelled`](OrderStatusKind::Cancelled) for one cancelled or
+    /// rejected (a rejection with error 201 is listed as `Cancelled`, filled
+    /// `0`); `filled` and `remaining` give the fill. TWS's reason is in
+    /// `order.order_state.completed_status`, such as `"Cancelled by Trader"`
+    /// or `"Rejected by System:"` followed by the rejection text.
+    Finished {
+        /// The completed-order record.
+        order: OrderData,
+        /// The order's final status, built from `order`.
+        status: OrderStatus,
+    },
+    /// Neither this client's open orders nor completed orders listed the order.
+    NotFound,
+}
+
 /// Enumerates possible results from cancelling an order.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
@@ -2003,4 +2082,5 @@ mod sync;
 mod r#async;
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod tests;

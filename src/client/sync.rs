@@ -454,6 +454,12 @@ impl Client {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_client_id(mut self, client_id: i32) -> Client {
+        self.client_id = client_id;
+        self
+    }
+
     /// [`stubbed`](Self::stubbed) with `ClientBuilder::one_shot_timeout` set.
     #[cfg(test)]
     pub(crate) fn with_one_shot_timeout(mut self, timeout: Duration) -> Client {

@@ -1778,3 +1778,31 @@ for update in subscription.iter_data() {
 
 A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
 Check `notice.code` to tell them apart.
+
+### 58. `OrderData::order_id` is removed; read `order.order_id`
+
+`OrderData::order_id` duplicated `order.order_id`. For an open order both held the same id; for a
+completed order it was always `-1`, because the `CompletedOrder` message has no top-level id and
+3.0 kept `-1` from the text decoder. The field is gone, so there is one place to read the id.
+`OpenOrder` still sends a top-level id: the decoder uses it for `order.order_id` when the order
+itself leaves the id out.
+
+```rust,ignore
+// 5.x
+let id = data.order_id;          // -1 on a completed record
+if data.order_id == -1 { /* completed record */ }
+
+// 6.0
+let id = data.order.order_id;
+```
+
+The compiler flags every read of the removed field. Code that tested `order_id == -1` to tell a
+completed record from an open one must track which request a record came from instead.
+
+Order ids are per API client, so pair `order.order_id` with `order.client_id`: a second client can
+see another client's order under a low id such as `1`. A completed record can carry
+`order.order_id` `0` (cancelled orders listed with `order.client_id` `0`), so match a completed
+record on `order.perm_id`.
+
+To read a completed record's status and quantities, use `OrderData::completed_order_status()`.
+A completed order's `order.total_quantity` is the quantity left unfilled, not the size ordered.

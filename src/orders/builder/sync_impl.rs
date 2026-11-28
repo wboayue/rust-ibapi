@@ -43,7 +43,7 @@ impl OrderBuilder<ClientBound<'_, Client>, Action, OrderType> {
         // caller saw `UnexpectedEndOfStream` instead of TWS's reason (#735).
         for response in responses.iter_data() {
             if let PlaceOrder::OpenOrder(order_data) = response? {
-                if order_data.order_id == order_id {
+                if order_data.order.order_id == order_id {
                     return Ok(order_data.order_state);
                 }
             }

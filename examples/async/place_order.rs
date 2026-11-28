@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 Ok(OrderUpdate::OpenOrder(o)) => {
                     println!(
                         "[Monitor] open order {}: {} {} of {}",
-                        o.order_id, o.order.action, o.order.total_quantity, o.contract.symbol
+                        o.order.order_id, o.order.action, o.order.total_quantity, o.contract.symbol
                     );
                 }
                 Ok(OrderUpdate::ExecutionData(e)) => {
