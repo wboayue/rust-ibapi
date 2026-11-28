@@ -366,6 +366,14 @@ let contract = Contract::stock("AAPL")
 
 IBKR supports trading in many currencies. The Currency type provides constants for major currencies and supports any currency code.
 
+`Currency::default()` is empty, and so is the currency of a `Contract` struct literal that ends in
+`..Default::default()`: TWS resolves it when the other fields name one listing. A stock on `SMART`
+listed in several currencies is ambiguous without one; market data and orders on it fail with
+error 200. The stock, option and futures builders default to USD.
+
+A `..Default::default()` literal also takes exchange `SMART` and leaves the security type unset.
+`ContractBuilder::new()` leaves the exchange empty unless `.exchange(..)` sets one.
+
 ```rust
 use ibapi::contracts::Currency;
 
