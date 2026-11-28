@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use log::{debug, error, warn};
 
 use super::common::{
-    cancel_frame, collect_step, debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared, notice_outcome, Bound, CollectStop,
-    DecoderContext, Drained, RoutedItem, SubscriptionItem,
+    cancel_frame, collect_step, continuing_error_as_notice, debug_assert_request_id_routable, drain_outcome, filter_notice, is_undeclared,
+    notice_outcome, Bound, CollectStop, DecoderContext, Drained, RoutedItem, SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
 use crate::client::ids::RequestId;
@@ -369,7 +369,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     }
 
     fn handle_response(&self, response: Option<RoutedItem>) -> NextAction<Result<SubscriptionItem<T>, Error>> {
-        match response {
+        match response.map(|item| continuing_error_as_notice::<T>(item, &self.context)) {
             Some(RoutedItem::Response(message)) if is_undeclared(T::RESPONSE_MESSAGE_IDS, &message) => {
                 log::trace!("skipping {:?} — not declared by this subscription's decoder", message.message_type());
                 NextAction::Skip

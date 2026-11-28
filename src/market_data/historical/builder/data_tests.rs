@@ -1,8 +1,10 @@
-use crate::common::test_utils::helpers::proto_response;
+use crate::common::test_utils::helpers::{proto_error_response, proto_response, TEST_REQ_ID_FIRST};
 use crate::market_data::historical::{BarTimestamp, HistoricalData};
 use crate::messages::IncomingMessages;
 use crate::messages::ResponseMessage;
-use crate::testdata::builders::market_data::{historical_data_bar, historical_data_end_response, historical_data_response, HistoricalDataBarFields};
+use crate::testdata::builders::market_data::{
+    historical_data_bar, historical_data_end_response, historical_data_response, historical_data_update_response, HistoricalDataBarFields,
+};
 use crate::testdata::builders::ResponseProtoEncoder;
 use time::macros::datetime;
 use time::OffsetDateTime;
@@ -26,6 +28,27 @@ fn response_pair(bars: Vec<HistoricalDataBarFields>) -> Vec<ResponseMessage> {
                 .encode_proto(),
         ),
     ]
+}
+
+/// 10299 ahead of the bars: TWS substitutes the `whatToShow` the error names and sends that
+/// series, as for crypto `TRADES` (live 2026-11-24).
+const SUBSTITUTED_MESSAGE: &str = "Expected what to show is AGGTRADES, please use that instead of TRADES.";
+
+fn substituted_response_pair() -> Vec<ResponseMessage> {
+    let mut responses = vec![proto_error_response(TEST_REQ_ID_FIRST, 10299, SUBSTITUTED_MESSAGE)];
+    responses.extend(historical_data_response_pair());
+    responses
+}
+
+fn substituted_stream_responses() -> Vec<ResponseMessage> {
+    let mut responses = substituted_response_pair();
+    responses.push(proto_response(
+        IncomingMessages::HistoricalDataUpdate,
+        historical_data_update_response()
+            .bar(historical_data_bar(1_678_890_000).ohlc(186.0, 186.5, 185.9, 186.25))
+            .encode_proto(),
+    ));
+    responses
 }
 
 // Issue #835: IBKR counts durations in trading time, so `.between` over-fetches
@@ -454,6 +477,89 @@ mod sync_tests {
         assert!(subscription.next().is_none());
         assert_eq!(request_message_count(&bus), 1, "subscribe never resends");
     }
+
+    #[test]
+    fn subscribe_yields_10299_as_a_notice_then_the_bars() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(super::substituted_response_pair()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::crypto("BTC").build();
+
+        let subscription = client.historical_data(&contract, BarSize::Hour).duration(1.days()).subscribe().unwrap();
+        let notice = subscription.next();
+        let bars = subscription.next();
+        let end = subscription.next();
+        let after = subscription.next();
+        drop(subscription);
+
+        assert!(
+            matches!(&notice, Some(Ok(SubscriptionItem::Notice(n))) if n.code == 10299),
+            "got {notice:?}"
+        );
+        assert!(
+            matches!(&bars, Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(b)))) if b.len() == 1),
+            "got {bars:?}"
+        );
+        assert!(
+            matches!(&end, Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. })))),
+            "got {end:?}"
+        );
+        assert!(after.is_none());
+        assert_eq!(cancels(&bus), 0, "no cancel after End");
+    }
+
+    #[test]
+    fn fetch_returns_the_bars_after_10299() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(super::substituted_response_pair()));
+        let client = Client::stubbed(bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::crypto("BTC").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .fetch()
+            .expect("10299 must not fail the fetch");
+
+        assert_eq!(data.bars.len(), 1);
+        assert_eq!(data.bars[0].close, 185.75);
+    }
+
+    #[test]
+    fn stream_yields_10299_as_a_notice_then_bars_and_updates() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(super::substituted_stream_responses()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::crypto("BTC").build();
+
+        let subscription = client
+            .historical_data(&contract, BarSize::Min)
+            .duration(1.days())
+            .subscribe_with_updates()
+            .unwrap();
+        let mut items = Vec::new();
+        for _ in 0..4 {
+            items.push(subscription.next());
+        }
+
+        assert!(
+            matches!(&items[0], Some(Ok(SubscriptionItem::Notice(n))) if n.code == 10299),
+            "got {:?}",
+            items[0]
+        );
+        assert!(
+            matches!(&items[1], Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(b)))) if b.len() == 1),
+            "got {:?}",
+            items[1]
+        );
+        assert!(
+            matches!(&items[2], Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. })))),
+            "got {:?}",
+            items[2]
+        );
+        assert!(
+            matches!(&items[3], Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Update(b)))) if b.close == 186.25),
+            "got {:?}",
+            items[3]
+        );
+    }
 }
 
 #[cfg(feature = "async")]
@@ -825,5 +931,95 @@ mod async_tests {
         assert!(matches!(subscription.next().await, Some(Err(Error::ConnectionReset))));
         assert!(subscription.next().await.is_none());
         assert_eq!(request_message_count(&bus), 1, "subscribe never resends");
+    }
+
+    #[tokio::test]
+    async fn subscribe_yields_10299_as_a_notice_then_the_bars() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(super::substituted_response_pair()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::crypto("BTC").build();
+
+        let mut subscription = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .subscribe()
+            .await
+            .unwrap();
+        let notice = subscription.next().await;
+        let bars = subscription.next().await;
+        let end = subscription.next().await;
+        let after = subscription.next().await;
+        drop(subscription);
+
+        assert!(
+            matches!(&notice, Some(Ok(SubscriptionItem::Notice(n))) if n.code == 10299),
+            "got {notice:?}"
+        );
+        assert!(
+            matches!(&bars, Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(b)))) if b.len() == 1),
+            "got {bars:?}"
+        );
+        assert!(
+            matches!(&end, Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. })))),
+            "got {end:?}"
+        );
+        assert!(after.is_none());
+        assert_eq!(cancels(&bus), 0, "no cancel after End");
+    }
+
+    #[tokio::test]
+    async fn fetch_returns_the_bars_after_10299() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(super::substituted_response_pair()));
+        let client = Client::stubbed(bus, server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::crypto("BTC").build();
+
+        let data = client
+            .historical_data(&contract, BarSize::Hour)
+            .duration(1.days())
+            .fetch()
+            .await
+            .expect("10299 must not fail the fetch");
+
+        assert_eq!(data.bars.len(), 1);
+        assert_eq!(data.bars[0].close, 185.75);
+    }
+
+    #[tokio::test]
+    async fn stream_yields_10299_as_a_notice_then_bars_and_updates() {
+        let bus = Arc::new(MessageBusStub::with_ordered_responses(super::substituted_stream_responses()));
+        let client = Client::stubbed(bus.clone(), server_versions::PROTOBUF_HISTORICAL_DATA);
+        let contract = Contract::crypto("BTC").build();
+
+        let mut subscription = client
+            .historical_data(&contract, BarSize::Min)
+            .duration(1.days())
+            .subscribe_with_updates()
+            .await
+            .unwrap();
+        let mut items = Vec::new();
+        for _ in 0..4 {
+            items.push(subscription.next().await);
+        }
+
+        assert!(
+            matches!(&items[0], Some(Ok(SubscriptionItem::Notice(n))) if n.code == 10299),
+            "got {:?}",
+            items[0]
+        );
+        assert!(
+            matches!(&items[1], Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Bars(b)))) if b.len() == 1),
+            "got {:?}",
+            items[1]
+        );
+        assert!(
+            matches!(&items[2], Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::End { .. })))),
+            "got {:?}",
+            items[2]
+        );
+        assert!(
+            matches!(&items[3], Some(Ok(SubscriptionItem::Data(HistoricalDataFrame::Update(b)))) if b.close == 186.25),
+            "got {:?}",
+            items[3]
+        );
     }
 }

@@ -74,7 +74,7 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        let bound = BufferBound::for_stream::<T>(buffer_limit)?;
+        let bound = BufferBound::for_stream::<T>(buffer_limit, &context)?;
         let message_bus = self.client.message_bus.clone();
         SubscriptionBuilder::<T>::new_with_components(context, message_bus)
             .send_with_request_id_capped(self.request_id, message, bound)
