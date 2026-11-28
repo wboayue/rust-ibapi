@@ -24,6 +24,10 @@ impl Client {
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
     ///
+    /// # Errors
+    /// [`Error::InvalidArgument`], without sending, for a [`SecurityType::Spread`]
+    /// (BAG) contract: TWS has no contract details for one and answers code 321.
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -55,6 +59,9 @@ impl Client {
     ///
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts.
+    ///
+    /// A [`SecurityType::Spread`] (BAG) contract makes
+    /// `subscribe` return [`Error::InvalidArgument`] without sending.
     ///
     /// # Examples
     ///
@@ -271,8 +278,9 @@ impl Client {
     /// # Arguments
     /// * `symbol` - Symbol of the underlying.
     /// * `security_type` - Security type of the underlying, e.g. `SecurityType::Stock`.
-    /// * `contract_id` - Contract id of the underlying. Required; TWS rejects `0` with
-    ///   code 321 "Invalid contract id".
+    /// * `contract_id` - Contract id of the underlying. Required: `subscribe` returns
+    ///   [`Error::Validation`] for `0` without sending, which TWS would reject with code 321
+    ///   "Invalid contract id".
     ///
     /// # Examples
     ///

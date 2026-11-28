@@ -150,8 +150,37 @@ STK LSE, VOD OPT ICEEU Dec 2026 100 C, Z FUT 202612):
 
 - The field is TWS's `futFopExchange`. Stock underlyings must leave it unset; a named exchange
   returns an empty chain, silently.
-- `contract_id` is required; "0 for underlying" was wrong.
-- **Not probed:** a real FOP underlying (e.g. ES on CME).
+- `contract_id` is required; "0 for underlying" was wrong. Re-run 2026-11-23 18:43 ET
+  (off-hours), paper TWS, server 223: AAPL with contract id 0 still drew `321 Error validating
+  request.-'ao' : cause - Invalid contract id`. `option_chain` now returns
+  `Error::Validation(ValidationError::InvalidField { .. })` for `contract_id` 0 without sending.
+- Same run: ES futures options on `CME` (underlying ESZ6, contract id 515416632) returned a
+  chain with trading class `ES`.
+- **Not probed:** futures options on other exchanges.
+
+### No contract details for a BAG
+
+*Live 2026-11-23 Mon 18:43 ET (off-hours), paper TWS, server 223.*
+
+- `reqContractDetails` with `secType` `BAG` (AAPL, `SMART`, `USD`), with one combo leg and with
+  none, drew `321 Error validating request.-'y' : cause - 'BAG' isn't supported for contract
+  data request. Please enter a valid security type` both times, and no rows.
+- `contract_details` and `contract_details_stream` now return `Error::InvalidArgument` for a
+  `SecurityType::Spread` contract without sending.
+- **Not probed:** futures calendar BAGs, BAGs on other exchanges, and the combo placeholder
+  contract id without a `secType`.
+
+### `f64::MAX` strike is read as unset in contract details
+
+*Live 2026-11-23 Mon 18:43 ET (off-hours), paper TWS, server 223.*
+
+- The Python client marks an unset strike with `UNSET_DOUBLE` (`sys.float_info.max`); this crate
+  encodes any non-zero strike, so `f64::MAX` goes on the wire as a strike.
+- `reqContractDetails` for AAPL `OPT` 20261127 calls on `SMART` returned the same 78 rows
+  (strikes [110, 425]) with strike `0.0` (not sent) and with `f64::MAX`. ES `FOP` 20261218
+  puts on `CME`, trading class `ES`, returned the same 359 rows (strikes [100, 12000]) either way.
+- Settles leaving `f64::MAX` as it is: TWS already treats it as unset in this request.
+- **Not probed:** `f64::MAX` on orders, market data, or other requests that carry a contract.
 
 ### `underSecType` is a security type code
 

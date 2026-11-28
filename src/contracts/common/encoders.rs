@@ -1,10 +1,17 @@
 use super::super::{Contract, SecurityType};
+use crate::builder::ValidationError;
 use crate::messages::OutgoingMessages;
 use crate::Error;
 
 pub(crate) fn encode_request_contract_data(request_id: i32, contract: &Contract) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use prost::Message;
+    // TWS answers 321 for any BAG, with or without legs: docs/wire-facts/contracts.md#no-contract-details-for-a-bag
+    if contract.is_bag() {
+        return Err(Error::InvalidArgument(
+            "contract details are not available for a BAG (spread); request them per leg".into(),
+        ));
+    }
     let request = crate::proto::ContractDataRequest {
         req_id: Some(request_id),
         contract: Some(crate::proto::encoders::encode_contract(contract)),
@@ -111,6 +118,14 @@ pub(in crate::contracts) fn encode_request_option_chain(
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
     use prost::Message;
+    // TWS answers 321 "Invalid contract id": docs/wire-facts/contracts.md#option-chain-exchange-is-a-futures-options-filter
+    if contract_id == 0 {
+        return Err(Error::Validation(ValidationError::InvalidField {
+            field: "contract_id",
+            value: "0".into(),
+            reason: format!("the option chain for {symbol} needs the underlying's contract id; TWS rejects 0"),
+        }));
+    }
     let request = crate::proto::SecDefOptParamsRequest {
         req_id: Some(request_id),
         underlying_symbol: Some(symbol.to_string()),

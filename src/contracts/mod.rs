@@ -182,7 +182,9 @@ pub struct Contract {
     /// The option's strike price. For a contract whose
     /// [`price_magnifier`](ContractDetails::price_magnifier) is above 1, TWS expects it in the
     /// market-data sub-unit (`450` cents for a corn option struck at $4.50) but reports it in
-    /// contract details in the currency unit (`4.5`).
+    /// contract details in the currency unit (`4.5`). `0.0` is not sent. `f64::MAX`, the Python
+    /// client's unset value, is sent, and TWS reads it as unset in contract details (live:
+    /// 2026-11-23, paper).
     pub strike: f64,
     /// Option type (only meaningful when `security_type == Some(SecurityType::Option)`).
     /// `None` on non-option contracts. Wire values are `"C"` (Call) and `"P"` (Put).

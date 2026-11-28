@@ -1,4 +1,5 @@
 use super::*;
+use crate::builder::ValidationError;
 use crate::common::request_helpers::OneShot;
 use crate::common::test_utils::helpers::{
     assert_request, assert_tws_error_message, proto_error_response, proto_response, request_message_count, text_response, TEST_REQ_ID_FIRST,
@@ -790,4 +791,32 @@ async fn option_chain_buffer_limit_reaches_the_bus() {
         "only the bounded request carries a limit"
     );
     assert_eq!(request_message_count(&message_bus), 2, "the rejected request sends nothing");
+}
+
+/// Requests TWS answers with 321 fail before anything is sent.
+#[tokio::test]
+async fn known_invalid_requests_are_rejected_before_sending() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    let bag = Contract {
+        security_type: Some(SecurityType::Spread),
+        ..Contract::stock("AAPL").build()
+    };
+
+    let details = client.contract_details(&bag).await;
+    let stream = client.contract_details_stream(&bag).subscribe().await;
+    let chain = client.option_chain("AAPL", SecurityType::Stock, 0).subscribe().await;
+
+    assert!(matches!(details, Err(Error::InvalidArgument(_))), "contract_details: {details:?}");
+    assert!(
+        matches!(stream, Err(Error::InvalidArgument(_))),
+        "contract_details_stream: {:?}",
+        stream.err()
+    );
+    assert!(
+        matches!(chain, Err(Error::Validation(ValidationError::InvalidField { field: "contract_id", .. }))),
+        "option_chain: {:?}",
+        chain.err()
+    );
+    assert_eq!(request_message_count(&message_bus), 0);
 }
