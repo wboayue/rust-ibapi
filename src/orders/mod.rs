@@ -1976,7 +1976,7 @@ pub struct ExecutionFilter {
 
 /// Enumerates possible results from querying an [Execution].
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Executions {
     /// Execution data payload.
