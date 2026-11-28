@@ -949,17 +949,19 @@ fn decode_order_rejects_unknown_action() {
 
 #[test]
 fn decode_order_preserves_unknown_string_codes() {
-    // rule80_a and open_close are open: an unrecognized value survives the
-    // decode as Unknown(raw) instead of failing the order stream (tif is
-    // covered by decode_order_preserves_unknown_tif above).
+    // rule80_a and the two open/close fields are open: an unrecognized value
+    // survives the decode as Unknown(raw) instead of failing the order stream
+    // (tif is covered by decode_order_preserves_unknown_tif above).
     let proto_order = proto::Order {
         rule80_a: Some("Z".into()),
         open_close: Some("X".into()),
+        delta_neutral_open_close: Some("Y".into()),
         ..proto_order()
     };
     let order = decode_order(&proto_order).unwrap();
     assert_eq!(order.rule_80_a, Some(Rule80A::Unknown("Z".into())));
     assert_eq!(order.open_close, Some(OrderOpenClose::Unknown("X".into())));
+    assert_eq!(order.delta_neutral_open_close, Some(OrderOpenClose::Unknown("Y".into())));
 }
 
 #[test]
@@ -967,11 +969,29 @@ fn decode_order_empty_optional_strings_are_none() {
     let proto_order = proto::Order {
         rule80_a: Some(String::new()),
         open_close: Some(String::new()),
+        delta_neutral_open_close: Some(String::new()),
         ..proto_order()
     };
     let order = decode_order(&proto_order).unwrap();
     assert_eq!(order.rule_80_a, None);
     assert_eq!(order.open_close, None);
+    assert_eq!(order.delta_neutral_open_close, None);
+}
+
+#[test]
+fn decode_order_open_close_fields() {
+    let absent = decode_order(&proto_order()).unwrap();
+    assert_eq!(absent.open_close, None);
+    assert_eq!(absent.delta_neutral_open_close, None);
+
+    let proto_order = proto::Order {
+        open_close: Some("O".into()),
+        delta_neutral_open_close: Some("C".into()),
+        ..proto_order()
+    };
+    let order = decode_order(&proto_order).unwrap();
+    assert_eq!(order.open_close, Some(OrderOpenClose::Open));
+    assert_eq!(order.delta_neutral_open_close, Some(OrderOpenClose::Close));
 }
 
 #[test]

@@ -179,7 +179,7 @@ pub(crate) fn encode_order(order: &Order) -> proto::Order {
         delta_neutral_order_type: order.delta_neutral_order_type.as_ref().and_then(|t| some_str(t.as_str())),
         delta_neutral_aux_price: order.delta_neutral_aux_price,
         delta_neutral_con_id: some_i32_ne(order.delta_neutral_con_id, 0),
-        delta_neutral_open_close: some_str(&order.delta_neutral_open_close),
+        delta_neutral_open_close: order.delta_neutral_open_close.as_ref().and_then(|oc| some_str(oc.as_str())),
         delta_neutral_short_sale: some_bool(order.delta_neutral_short_sale),
         delta_neutral_short_sale_slot: some_i32_ne(i32::from(order.delta_neutral_short_sale_slot), 0),
         delta_neutral_designated_location: some_str(&order.delta_neutral_designated_location),

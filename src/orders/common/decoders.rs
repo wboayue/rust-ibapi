@@ -203,7 +203,7 @@ pub(crate) fn decode_order(proto: &proto::Order) -> Result<Order, Error> {
     order.delta_neutral_order_type = parse_order_type(proto.delta_neutral_order_type.as_deref(), "delta_neutral_order_type")?;
     order.delta_neutral_aux_price = optional_f64(proto.delta_neutral_aux_price);
     order.delta_neutral_con_id = proto.delta_neutral_con_id.unwrap_or_default();
-    order.delta_neutral_open_close = s(&proto.delta_neutral_open_close);
+    order.delta_neutral_open_close = parse_optional::<OrderOpenClose>(proto.delta_neutral_open_close.as_deref(), "delta_neutral_open_close")?;
     order.delta_neutral_short_sale = proto.delta_neutral_short_sale.unwrap_or_default();
     order.delta_neutral_short_sale_slot = ShortSaleSlot::from(proto.delta_neutral_short_sale_slot.unwrap_or_default());
     order.delta_neutral_designated_location = s(&proto.delta_neutral_designated_location);
