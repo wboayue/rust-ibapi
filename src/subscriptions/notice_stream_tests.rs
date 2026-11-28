@@ -147,7 +147,8 @@ mod async_tests {
         // The lag surfaces in-band: a gap notice naming the dropped count...
         let gap = stream.next().await.expect("gap notice");
         assert_eq!(gap.code, crate::NOTICE_STREAM_LAG_CODE, "{gap}");
-        assert_eq!(gap.category(), crate::NoticeCategory::Error, "{gap}");
+        assert_eq!(gap.category(), crate::NoticeCategory::ClientSynthesized, "{gap}");
+        assert!(!gap.is_error(), "{gap}");
         assert!(gap.message.contains("2 notices"), "gap notice should name the dropped count: {gap}");
 
         // ...and the retained notices follow, in order, with nothing else skipped.
