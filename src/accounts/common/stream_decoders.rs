@@ -4,7 +4,7 @@
 //! between sync and async versions, avoiding code duplication.
 
 use crate::accounts::*;
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, REQUEST_VALIDATION_CODE};
+use crate::messages::{IncomingMessages, Notice, ResponseMessage, POSITIONS_UNAVAILABLE_CODE, REQUEST_VALIDATION_CODE};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -87,6 +87,13 @@ impl StreamDecoder<PositionUpdate> for PositionUpdate {
 
     fn is_batch_end(&self) -> bool {
         matches!(self, PositionUpdate::PositionEnd)
+    }
+
+    /// Live, paper TWS 223: a request sent after a 1100 drew 2151 and then
+    /// nothing, also after the restore. A request opened before the outage
+    /// kept streaming, so only one still waiting for `PositionEnd` ends.
+    fn notice_fails_initial_batch(notice: &Notice) -> bool {
+        notice.code == POSITIONS_UNAVAILABLE_CODE
     }
 
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Option<Vec<u8>>, Error> {

@@ -945,6 +945,12 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 }
                 self.connection.notice_broadcaster.broadcast(notice);
             }
+            ErrorDisposition::NoticeAndPositions(notice) => {
+                notice.log();
+                self.shared_channels
+                    .send_to_request(OutgoingMessages::RequestPositions, || RoutedItem::Notice(notice.clone()));
+                self.connection.notice_broadcaster.broadcast(notice);
+            }
             ErrorDisposition::Route(id, item) => {
                 self.order_taps.publish_rejection(id, &item);
                 self.deliver(id, item, sent_to_update_stream).await;

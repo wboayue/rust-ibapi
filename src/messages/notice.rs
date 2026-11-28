@@ -44,6 +44,12 @@ pub const ORDER_MESSAGE_CODE: i32 = 399;
 /// not created. [`Notice::pending_order_ids`] reads the ids.
 pub const ORDER_CREATION_PENDING_CODE: i32 = 1104;
 
+/// "Positions info is not available yet.": sent with no request id in answer to a positions
+/// request TWS can't serve (seen live after a 1100); TWS sends nothing more for that request.
+/// A [`WARNING_CODE_RANGE`] code; a `positions()` subscription still waiting for its first
+/// `PositionEnd` ends with it as `Err(Error::Notice)`.
+pub const POSITIONS_UNAVAILABLE_CODE: i32 = 2151;
+
 /// "Market depth data has been RESET". A [`DATA_ADVISORY_CODES`] entry; a
 /// depth subscription yields it as [`MarketDepths::Reset`](crate::market_data::realtime::MarketDepths::Reset).
 pub(crate) const MARKET_DEPTH_RESET_CODE: i32 = 317;

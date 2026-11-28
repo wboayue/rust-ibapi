@@ -231,6 +231,21 @@ pub(crate) fn notice_item<T: StreamDecoder<T>>(notice: Notice) -> SubscriptionIt
     }
 }
 
+/// What a notice bound to this subscription yields: `Err(Error::Notice)`, which
+/// ends the stream, when the decoder says it fails a pending initial batch
+/// ([`StreamDecoder::notice_fails_initial_batch`]) and none has ended yet;
+/// otherwise [`notice_item`].
+///
+/// Shared by both drivers for the same reason as [`is_undeclared`].
+pub(crate) fn notice_outcome<T: StreamDecoder<T>>(notice: Notice, batch_ended: bool) -> Result<SubscriptionItem<T>, Error> {
+    if !batch_ended && T::notice_fails_initial_batch(&notice) {
+        log::warn!("subscription terminated by TWS notice {notice}");
+        Err(Error::Notice(notice))
+    } else {
+        Ok(notice_item(notice))
+    }
+}
+
 /// Context for decoding responses, providing all necessary state for decoders.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct DecoderContext {
@@ -333,6 +348,15 @@ pub(crate) trait StreamDecoder<T> {
     /// `None`, the notice is yielded as `SubscriptionItem::Notice`.
     fn data_from_notice(_notice: &Notice) -> Option<T> {
         None
+    }
+
+    /// Whether a notice bound to this subscription means TWS will never send
+    /// the initial batch, so it ends the stream as `Err(Error::Notice)` until
+    /// the first [`is_batch_end`](Self::is_batch_end) item. After that the
+    /// stream is live and the notice is yielded as usual. Opt in only where
+    /// wire-verified (2151 on positions). Default: `false`.
+    fn notice_fails_initial_batch(_notice: &Notice) -> bool {
+        false
     }
 
     /// The cancel message for this stream, or `Ok(None)` when TWS has none

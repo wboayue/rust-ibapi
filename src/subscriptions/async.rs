@@ -13,7 +13,7 @@ use futures::StreamExt;
 use log::{debug, warn};
 
 use super::common::{
-    cancel_frame, collect_step, drain_outcome, filter_notice, is_undeclared, notice_item, Bound, CollectStop, DecoderContext, Drained, RoutedItem,
+    cancel_frame, collect_step, drain_outcome, filter_notice, is_undeclared, notice_outcome, Bound, CollectStop, DecoderContext, Drained, RoutedItem,
     SubscriptionItem,
 };
 use super::{log_cancel_error, StreamDecoder};
@@ -127,6 +127,9 @@ struct RequestState<T: StreamDecoder<T>> {
     /// Set once a snapshot-end sentinel is observed, so drop/cancel skips the
     /// redundant cancel for an already-completed snapshot (mirrors the sync side).
     snapshot_ended: AtomicBool,
+    /// Set once any clone decodes an `is_batch_end` item: the initial batch is
+    /// in, so `notice_fails_initial_batch` no longer applies.
+    batch_ended: AtomicBool,
     /// Set only by the native end marker or an item that ends the request
     /// (`StreamDecoder::ends_request`), not by errors: once any clone has
     /// seen it, TWS has finished the request and there is nothing left to cancel.
@@ -179,6 +182,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             cancelled: AtomicBool::new(false),
             stop: StopSignal::default(),
             snapshot_ended: AtomicBool::new(false),
+            batch_ended: AtomicBool::new(false),
             ended_natively: AtomicBool::new(false),
             rejected: OnceLock::new(),
             phantom: PhantomData,
@@ -601,6 +605,7 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
         let RequestState {
             context,
             snapshot_ended,
+            batch_ended,
             ended_natively,
             ..
         } = &**request;
@@ -632,6 +637,9 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                             if val.is_snapshot_end(context) {
                                 snapshot_ended.store(true, Ordering::Relaxed);
                             }
+                            if val.is_batch_end() {
+                                batch_ended.store(true, Ordering::Relaxed);
+                            }
                             if val.ends_request() {
                                 stream_ended.store(true, Ordering::Relaxed);
                                 ended_natively.store(true, Ordering::Relaxed);
@@ -645,7 +653,15 @@ impl<T: StreamDecoder<T> + Send + 'static> Stream for Subscription<T> {
                         }
                     }
                 }
-                RoutedItem::Notice(notice) => return Poll::Ready(Some(Ok(notice_item(notice)))),
+                RoutedItem::Notice(notice) => {
+                    let item = notice_outcome(notice, batch_ended.load(Ordering::Relaxed));
+                    // No `note_rejection`: that TWS ended the request is unverified,
+                    // so drop still writes the cancel.
+                    if item.is_err() {
+                        stream_ended.store(true, Ordering::Relaxed);
+                    }
+                    return Poll::Ready(Some(item));
+                }
                 RoutedItem::Error(e) => {
                     stream_ended.store(true, Ordering::Relaxed);
                     request.note_rejection(&e);

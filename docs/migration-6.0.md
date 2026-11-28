@@ -1746,3 +1746,35 @@ Code that indexed `SYSTEM_MESSAGE_CODES` by position, or matched `is_system_mess
 mean "connectivity changed", sees 1104 too. Check `notice.code` to tell them apart. A loop
 that ends an order subscription on any `SubscriptionItem::Notice` now ends it on a 1104, while
 the order may still be pending at TWS.
+
+### 57. `positions()` ends on notice 2151 before its `PositionEnd`
+
+During an internet outage (after a 1100) TWS answers a new positions request with 2151,
+"Positions info is not available yet.", with no request id. After that it sends nothing more
+for the request, even after connectivity returns. In 5.x the 2151 reached only `notice_stream`,
+and the `positions()` subscription waited for a `PositionEnd` that never came (#1323).
+
+In 6.0 a positions subscription that has not yet received its `PositionEnd` ends with
+`Err(Error::Notice(notice))`, where `notice.code == POSITIONS_UNAVAILABLE_CODE`. A subscription
+that already has its `PositionEnd` is a live stream that TWS resumes after the outage. It yields
+the 2151 as `SubscriptionItem::Notice` and stays open. `notice_stream` still gets the 2151.
+
+```rust,ignore
+// 5.x: during an outage this loop never reached PositionEnd or an error
+// 6.0: it gets Err(Notice(2151)) instead
+for update in subscription.iter_data() {
+    match update {
+        Ok(PositionUpdate::Position(position)) => println!("{position:?}"),
+        Ok(PositionUpdate::PositionEnd) => break,
+        Err(Error::Notice(n)) if n.code == POSITIONS_UNAVAILABLE_CODE => {
+            // TWS will not answer this request. Request positions again after the 1102
+            // (expected to be answered; unverified on this client after a 2151).
+            break;
+        }
+        Err(e) => return Err(e),
+    }
+}
+```
+
+A loop that treated every `Err` from `positions()` as a lost connection now also sees the 2151.
+Check `notice.code` to tell them apart.

@@ -299,7 +299,9 @@ fn classify_like_dispatcher(message: ResponseMessage) -> RoutedItem {
             // Request-less: a warning is informational, a hard error fails the
             // in-flight one-shot. The stub has exactly one channel, so both
             // land here rather than on a notice broadcaster.
-            ErrorDisposition::NoticeOnly(notice) | ErrorDisposition::NoticeAndOrders(notice, _) => RoutedItem::Notice(notice),
+            ErrorDisposition::NoticeOnly(notice) | ErrorDisposition::NoticeAndOrders(notice, _) | ErrorDisposition::NoticeAndPositions(notice) => {
+                RoutedItem::Notice(notice)
+            }
             ErrorDisposition::NoticeAndFailOneShots(_, error) => RoutedItem::Error(error),
         },
         // Ends the dispatcher loop on a real transport, so it never reaches a

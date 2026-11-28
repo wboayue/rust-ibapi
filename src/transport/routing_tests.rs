@@ -798,3 +798,33 @@ fn classify_error_unreadable_pending_orders_is_notice_only() {
         assert!(order_update_notice(&payload).is_none(), "{message:?}");
     }
 }
+
+/// A request-less 2151 goes to the positions subscriptions (#1323). With a
+/// request id it routes like any warning; another request-less 21xx is
+/// notice-only.
+#[test]
+fn classify_error_positions_unavailable() {
+    use crate::messages::POSITIONS_UNAVAILABLE_CODE;
+
+    let request_less = DecodedError {
+        error_code: POSITIONS_UNAVAILABLE_CODE,
+        error_message: "Positions info is not available yet.".into(),
+        ..Default::default()
+    };
+    match classify_error(request_less.clone()) {
+        ErrorDisposition::NoticeAndPositions(notice) => assert_eq!(notice.code, POSITIONS_UNAVAILABLE_CODE),
+        other => panic!("expected NoticeAndPositions, got {other:?}"),
+    }
+
+    let routed = DecodedError {
+        request_id: crate::client::ids::REQUEST_ID_FLOOR,
+        ..request_less.clone()
+    };
+    assert!(matches!(classify_error(routed), ErrorDisposition::Route(_, RoutedItem::Notice(_))));
+
+    let other_warning = DecodedError {
+        error_code: 2150,
+        ..request_less
+    };
+    assert!(matches!(classify_error(other_warning), ErrorDisposition::NoticeOnly(_)));
+}
